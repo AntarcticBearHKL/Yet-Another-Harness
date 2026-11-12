@@ -9,6 +9,7 @@ const api = window.miniharness;
 const $ = (id) => document.getElementById(id);
 
 const dom = {
+  app: $('app'),
   sidebar: $('sidebar'),
   messages: $('messages'),
   input: $('input'),
@@ -105,6 +106,7 @@ function applySettings() {
 function applySidebar() {
   state.sidebarCollapsed = state.settings.sidebarCollapsed === true;
   dom.sidebar.classList.toggle('collapsed', state.sidebarCollapsed);
+  dom.app.classList.toggle('sidebar-open', !state.sidebarCollapsed);
 }
 
 function toggleSidebar() {
@@ -134,95 +136,252 @@ function isNearBottom() {
   );
 }
 
+function appendRow(card) {
+  const row = el('div', 'msg');
+  row.append(card);
+  dom.messages.append(row);
+}
+
+function makeCard(opts) {
+  const card = el('div', `message-card ${opts.kind}`);
+  if (opts.collapsed) card.classList.add('collapsed');
+
+  const head = el('div', 'card-head');
+  head.setAttribute('role', 'button');
+  head.tabIndex = 0;
+  head.setAttribute('aria-expanded', String(!opts.collapsed));
+  head.append(el('span', 'card-dot'));
+  head.append(el('span', 'card-title', opts.title));
+  head.append(el('span', 'card-meta', opts.meta || ''));
+  if (opts.badge) {
+    const badge = el('span', 'card-badge', opts.badge.text);
+    if (opts.badge.error) badge.classList.add('error');
+    head.append(badge);
+  }
+  const chevron = el('span', 'card-chevron');
+  chevron.innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  head.append(chevron);
+
+  const toggle = () => {
+    opts.onToggle();
+    renderMessages();
+  };
+  head.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggle();
+  });
+  head.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    toggle();
+  });
+
+  card.append(head);
+  return card;
+}
+
+function textCard({ kind, title, meta, text, collapsed, onToggle, streaming }) {
+  const card = makeCard({ kind, title, meta, collapsed, onToggle });
+  const body = el('div', 'card-body');
+  if (text) body.append(el('div', 'card-text', text));
+  card.append(body);
+  if (streaming) card.classList.add('streaming');
+  return card;
+}
+
+function parseStructured(text) {
+  const raw = String(text ?? '').trim();
+  if (!raw || (raw[0] !== '{' && raw[0] !== '[')) return null;
+  try {
+    const value = JSON.parse(raw);
+    return value && typeof value === 'object' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function jsonValueSpan(value) {
+  if (value === null) return el('span', 'json-null', 'null');
+  if (typeof value === 'string') {
+    return el('span', 'json-string', JSON.stringify(value));
+  }
+  if (typeof value === 'number') {
+    return el('span', 'json-number', String(value));
+  }
+  if (typeof value === 'boolean') {
+    return el('span', 'json-boolean', String(value));
+  }
+  return el('span', 'json-string', String(value));
+}
+
+function jsonPrimitiveRow(value, key, comma) {
+  const row = el('div', 'json-row');
+  row.append(el('span', 'json-spacer'));
+  if (key !== null) {
+    row.append(
+      el(
+        'span',
+        typeof key === 'number' ? 'json-index' : 'json-key',
+        String(key)
+      )
+    );
+    row.append(el('span', 'json-punct', ': '));
+  }
+  row.append(jsonValueSpan(value));
+  if (comma) row.append(el('span', 'json-punct', ','));
+  return row;
+}
+
+function jsonBranch(value, key, comma) {
+  const isArray = Array.isArray(value);
+  const entries = isArray
+    ? value.map((item, index) => [index, item])
+    : Object.entries(value);
+
+  const node = el('div', 'json-node');
+  const head = el('div', 'json-row');
+  const toggle = el('button', 'json-toggle');
+  toggle.type = 'button';
+  toggle.setAttribute('aria-expanded', 'true');
+  toggle.innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  head.append(toggle);
+  if (key !== null) {
+    head.append(el('span', 'json-key', String(key)));
+    head.append(el('span', 'json-punct', ': '));
+  }
+  head.append(el('span', 'json-punct', isArray ? '[' : '{'));
+  head.append(el('span', 'json-count', String(entries.length)));
+  node.append(head);
+
+  const children = el('div', 'json-children');
+  entries.forEach(([childKey, childValue], index) => {
+    const last = index === entries.length - 1;
+    if (childValue !== null && typeof childValue === 'object') {
+      children.append(jsonBranch(childValue, childKey, !last));
+    } else {
+      children.append(jsonPrimitiveRow(childValue, childKey, !last));
+    }
+  });
+  node.append(children);
+
+  const close = el('div', 'json-row');
+  close.append(el('span', 'json-spacer'));
+  close.append(el('span', 'json-punct', isArray ? ']' : '}'));
+  if (comma) close.append(el('span', 'json-punct', ','));
+  node.append(close);
+
+  toggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    node.classList.toggle('json-collapsed');
+    toggle.setAttribute(
+      'aria-expanded',
+      String(!node.classList.contains('json-collapsed'))
+    );
+  });
+
+  return node;
+}
+
+function jsonView(value) {
+  const view = el('div', 'json-view');
+  if (value !== null && typeof value === 'object') {
+    view.append(jsonBranch(value, null, false));
+  } else {
+    view.append(jsonPrimitiveRow(value, null, false));
+  }
+  return view;
+}
+
+function renderToolCard(step) {
+  const call = step.kind === 'call';
+  const card = makeCard({
+    kind: call ? 'tool-call' : 'tool-result',
+    title: call ? '工具调用' : '工具返回',
+    meta: step.name || 'tool',
+    badge: call
+      ? null
+      : { text: step.ok === false ? 'error' : 'ok', error: step.ok === false },
+    collapsed: step.collapsed === true,
+    onToggle: () => {
+      step.collapsed = step.collapsed !== true;
+    },
+  });
+  if (!call && step.ok === false) card.classList.add('error');
+
+  const body = el('div', 'card-body');
+  const raw = call ? step.arguments : step.output;
+  const structured = parseStructured(raw);
+  if (structured) {
+    body.append(jsonView(structured));
+  } else {
+    body.append(el('pre', 'tool-text', String(raw ?? '')));
+  }
+  card.append(body);
+  return card;
+}
+
 function renderAgentMessage(msg) {
   const steps = Array.isArray(msg.steps) ? msg.steps : [];
   const rich = steps.some(
-    (step) => step.kind === 'text' || step.kind === 'call' || step.kind === 'result'
+    (step) =>
+      step.kind === 'text' || step.kind === 'call' || step.kind === 'result'
   );
   const streaming = state.streaming && msg === state.streamMessage;
 
   if (!rich) {
-    // 旧消息或普通回复：一个气泡，旧的工具过程行显示在文字上方
-    const bubble = el('div', 'bubble agent');
-    const statuses = steps.filter((step) => step.kind === 'status');
-    if (statuses.length > 0) {
-      const wrap = el('div', 'bubble-steps');
-      for (const step of statuses) {
-        const line = el('div', 'bubble-step', step.label);
-        if (step.ok === false) line.classList.add('error');
-        wrap.append(line);
-      }
-      bubble.append(wrap);
+    // 旧消息或普通回复：一个卡片，旧的工具过程行显示在文字上方
+    const card = makeCard({
+      kind: 'agent',
+      title: '对话',
+      meta: '助手',
+      collapsed: msg.collapsed === true,
+      onToggle: () => {
+        msg.collapsed = msg.collapsed !== true;
+      },
+    });
+    const body = el('div', 'card-body');
+    for (const step of steps) {
+      if (step.kind !== 'status') continue;
+      const line = el('div', 'card-status-line', step.label);
+      if (step.ok === false) line.classList.add('error');
+      body.append(line);
     }
-    if (msg.text) bubble.append(el('div', 'bubble-text', msg.text));
-    if (streaming) bubble.classList.add('streaming');
-    const row = el('div', 'msg');
-    row.append(bubble);
-    dom.messages.append(row);
+    if (msg.text) body.append(el('div', 'card-text', msg.text));
+    card.append(body);
+    if (streaming) card.classList.add('streaming');
+    appendRow(card);
     return;
   }
 
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i];
-    let bubble = null;
-
     if (step.kind === 'text') {
       if (!step.text && !(streaming && i === steps.length - 1)) continue;
-      bubble = el('div', 'bubble agent');
-      if (step.text) bubble.append(el('div', 'bubble-text', step.text));
+      appendRow(
+        textCard({
+          kind: 'agent',
+          title: '对话',
+          meta: '助手',
+          text: step.text,
+          collapsed: step.collapsed === true,
+          onToggle: () => {
+            step.collapsed = step.collapsed !== true;
+          },
+          streaming: streaming && i === steps.length - 1,
+        })
+      );
     } else if (step.kind === 'call' || step.kind === 'result') {
-      bubble = toolStepBubble(step);
-    } else {
-      continue;
+      appendRow(renderToolCard(step));
     }
-
-    if (streaming && i === steps.length - 1 && step.kind === 'text') {
-      bubble.classList.add('streaming');
-    }
-    const row = el('div', 'msg');
-    row.append(bubble);
-    dom.messages.append(row);
   }
-}
-
-function prettyArguments(raw) {
-  try {
-    return JSON.stringify(JSON.parse(raw), null, 2);
-  } catch {
-    return String(raw ?? '');
-  }
-}
-
-function toolStepBubble(step) {
-  const call = step.kind === 'call';
-  const bubble = el('div', `bubble tool ${call ? 'tool-call' : 'tool-result'}`);
-  if (!call && step.ok === false) bubble.classList.add('error');
-  const head = el('div', 'tool-head');
-  head.append(el('span', 'tool-kind', call ? 'TOOL CALL' : 'TOOL RESULT'));
-  head.append(el('span', 'tool-name', step.name));
-  if (!call) {
-    head.append(
-      el(
-        'span',
-        `tool-state ${step.ok === false ? 'error' : 'ok'}`,
-        step.ok === false ? 'error' : 'ok'
-      )
-    );
-  }
-  bubble.append(head);
-
-  const body = el(
-    'pre',
-    'tool-body',
-    call ? prettyArguments(step.arguments) : step.output
-  );
-  bubble.append(body);
-  return bubble;
 }
 
 function renderMessages() {
   const session = currentSession();
   const stick = state.forceScroll || isNearBottom();
+  const prevTop = dom.messages.scrollTop;
   state.forceScroll = false;
 
   dom.messages.replaceChildren();
@@ -241,18 +400,24 @@ function renderMessages() {
       continue;
     }
 
-    const bubble = el('div', 'bubble user');
-    if (msg.text) bubble.append(el('div', 'bubble-text', msg.text));
-    const row = el('div', 'msg');
-    row.append(bubble);
-    dom.messages.append(row);
+    appendRow(
+      textCard({
+        kind: 'user',
+        title: '对话',
+        meta: '你',
+        text: msg.text,
+        collapsed: msg.collapsed === true,
+        onToggle: () => {
+          msg.collapsed = msg.collapsed !== true;
+        },
+      })
+    );
   }
 
-  if (stick) {
-    requestAnimationFrame(() => {
-      dom.messages.scrollTop = dom.messages.scrollHeight;
-    });
-  }
+  requestAnimationFrame(() => {
+    if (stick) dom.messages.scrollTop = dom.messages.scrollHeight;
+    else dom.messages.scrollTop = prevTop;
+  });
 }
 
 function renderSessions() {
@@ -415,7 +580,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .session-row, .overlay';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .session-row, .card-head, .overlay';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {

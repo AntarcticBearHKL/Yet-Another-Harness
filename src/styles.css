@@ -134,26 +134,36 @@ button {
 
 /* ---------------------------------------------------------------- shell */
 #shell {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
 }
 
+/* 浮动侧边栏：不占布局列，盖在对话左边距上 */
 #sidebar {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 8;
   display: flex;
   flex-direction: column;
-  width: 250px;
-  flex: 0 0 250px;
-  padding: 12px 14px;
-  background: var(--panel);
-  border-right: 1px solid var(--line);
-  transition: width 160ms ease, flex-basis 160ms ease, padding 160ms ease;
+  width: 240px;
+  max-height: calc(100% - 126px);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(252, 246, 238, 0.96);
+  box-shadow: 0 18px 46px rgba(60, 40, 25, 0.16);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  overflow: hidden;
+  transition: width 160ms ease, padding 160ms ease;
 }
 
 #sidebar.collapsed {
-  width: 56px;
-  flex-basis: 56px;
-  padding: 12px 8px;
+  width: 52px;
+  padding: 10px 6px;
 }
 
 .sidebar-head {
@@ -365,132 +375,200 @@ button {
   overflow-y: auto;
 }
 
+/* 浮动侧边栏展开时，对话仍然在窗口里居中，只是给侧边栏让出对称的边距 */
+#app.sidebar-open .messages {
+  padding-left: max(14px, calc((100% - 760px) / 2), 268px);
+  padding-right: max(14px, calc((100% - 760px) / 2), 268px);
+}
+
 .msg {
   display: flex;
   justify-content: flex-start;
   width: 100%;
 }
 
-.bubble {
-  max-width: min(600px, 100%);
-  padding: 10px 13px;
+.message-card {
+  width: fit-content;
+  max-width: min(680px, 100%);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  font-size: 13.5px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.bubble.agent {
+  border-radius: 14px;
   background: var(--bubble-agent);
-}
-
-.bubble.user {
-  background: var(--bubble-user);
-}
-
-.bubble-text {
-  white-space: pre-wrap;
-}
-
-.bubble-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 6px;
-}
-
-.bubble-steps + .bubble-text {
-  margin-top: 4px;
-}
-
-.bubble-step {
+  box-shadow: 0 3px 14px rgba(60, 40, 25, 0.05);
   overflow: hidden;
-  color: var(--faint);
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
-.bubble-step::before {
-  content: "↳ ";
-  color: var(--accent);
+.message-card.user {
+  background: var(--bubble-user);
+  border-color: rgba(185, 111, 61, 0.26);
 }
 
-.bubble-step.error {
-  color: #b23a2f;
-}
-
-/* 工具调用 / 返回：完整参数和输出，按顺序作为独立气泡显示 */
-.bubble.tool {
+.message-card.tool-call {
+  width: fit-content;
   max-width: min(760px, 100%);
-  padding: 9px 12px 10px;
-  background: rgba(74, 54, 40, 0.055);
-  border-color: rgba(74, 54, 40, 0.16);
+  background: rgba(247, 235, 218, 0.86);
+  border-color: rgba(185, 111, 61, 0.22);
 }
 
-.bubble.tool-result {
-  background: rgba(185, 111, 61, 0.07);
+.message-card.tool-result {
+  width: min(760px, 100%);
+  max-width: 100%;
+  background: rgba(235, 240, 228, 0.82);
+  border-color: rgba(93, 118, 82, 0.24);
 }
 
-.bubble.tool-result.error {
-  border-color: rgba(178, 58, 47, 0.38);
+.message-card.tool-result.error {
+  background: rgba(246, 227, 223, 0.85);
+  border-color: rgba(178, 58, 47, 0.34);
 }
 
-.tool-head {
+.card-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  padding: 9px 13px 8px;
+  cursor: pointer;
+  user-select: none;
 }
 
-.tool-kind {
+.card-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.card-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.message-card.user .card-dot {
+  background: var(--accent);
+}
+
+.message-card.tool-call .card-dot {
+  background: #c08a3e;
+}
+
+.message-card.tool-result .card-dot {
+  background: #6f8a5c;
+}
+
+.message-card.tool-result.error .card-dot {
+  background: #b23a2f;
+}
+
+.card-title {
   color: var(--accent);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
 }
 
-.tool-name {
+.message-card.agent .card-title {
+  color: var(--dim);
+}
+
+.message-card.tool-result .card-title {
+  color: #5d7351;
+}
+
+.message-card.tool-result.error .card-title {
+  color: #b23a2f;
+}
+
+.card-meta {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--dim);
-  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color: var(--faint);
   font-size: 11.5px;
 }
 
-.tool-state {
-  color: var(--faint);
+.message-card.tool-call .card-meta,
+.message-card.tool-result .card-meta {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+.card-badge {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgba(93, 118, 82, 0.14);
+  color: #4f6b43;
   font-size: 9.5px;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
-.tool-state.error {
+.card-badge.error {
+  background: rgba(178, 58, 47, 0.14);
   color: #b23a2f;
 }
 
-.tool-body {
-  margin: 0;
-  max-height: 280px;
-  padding: 8px 9px;
-  overflow: auto;
-  border-radius: 7px;
-  background: rgba(255, 252, 247, 0.72);
-  color: var(--dim);
-  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.5;
+.card-chevron {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--faint);
+}
+
+.card-chevron svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 140ms ease;
+}
+
+.message-card.collapsed .card-chevron svg {
+  transform: rotate(-90deg);
+}
+
+.card-body {
+  padding: 0 13px 12px;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.message-card.collapsed .card-body {
+  display: none;
+}
+
+.card-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.bubble.streaming::after {
+.card-status-line {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.card-status-line::before {
+  content: "↳ ";
+  color: var(--accent);
+}
+
+.card-status-line.error {
+  color: #b23a2f;
+}
+
+.message-card.streaming .card-text::after {
   content: "▍";
   margin-left: 2px;
   color: var(--accent);
@@ -501,6 +579,126 @@ button {
   50% {
     opacity: 0;
   }
+}
+
+/* JSON 查看器：语法着色 + 节点折叠 */
+.json-view {
+  max-height: 380px;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid rgba(74, 54, 40, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 253, 249, 0.94);
+  color: var(--text);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+
+.json-row {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.json-children {
+  margin-left: 8px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(74, 54, 40, 0.12);
+}
+
+.json-spacer {
+  flex: none;
+  width: 16px;
+}
+
+.json-toggle {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-left: -4px;
+  border-radius: 4px;
+  color: var(--faint);
+}
+
+.json-toggle:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.json-toggle svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 120ms ease;
+}
+
+.json-collapsed > .json-children {
+  display: none;
+}
+
+.json-collapsed > .json-row:first-child .json-toggle svg {
+  transform: rotate(-90deg);
+}
+
+.json-key {
+  color: #a4572a;
+  font-weight: 600;
+}
+
+.json-index {
+  color: var(--faint);
+}
+
+.json-string {
+  color: #2f6a4c;
+}
+
+.json-number {
+  color: #2c5f9e;
+}
+
+.json-boolean {
+  color: #7a3fa8;
+}
+
+.json-null {
+  color: var(--faint);
+  font-style: italic;
+}
+
+.json-punct {
+  color: #8a7565;
+}
+
+.json-count {
+  margin-left: 4px;
+  color: var(--faint);
+  font-size: 10.5px;
+}
+
+.tool-text {
+  max-height: 380px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid rgba(74, 54, 40, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 253, 249, 0.94);
+  color: var(--dim);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .empty {
@@ -518,6 +716,10 @@ button {
   width: min(760px, calc(100% - 28px));
   transform: translateX(-50%);
   pointer-events: none;
+}
+
+#app.sidebar-open #composer {
+  width: min(760px, calc(100% - 536px));
 }
 
 .composer-box {
@@ -682,18 +884,14 @@ button {
 }
 
 /* ---------------------------------------------------------------- scrollbars */
+/* 所有区域都不显示滚动条，滚动能力保留 */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 8px;
-  background: rgba(120, 95, 75, 0.32);
-  background-clip: content-box;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
+  width: 0;
+  height: 0;
+  display: none;
 }
