@@ -50,7 +50,6 @@ const state = {
   streaming: false,
   requestId: null,
   streamMessage: null,
-  textOpen: false,
   pendingDelete: -1,
   deleteTimer: null,
   saveTimer: null,
@@ -431,7 +430,10 @@ function renderToolCard(step, msg, key) {
 function isRichTrace(steps) {
   return steps.some(
     (step) =>
-      step.kind === 'text' || step.kind === 'call' || step.kind === 'result'
+      step.kind === 'text' ||
+      step.kind === 'thinking' ||
+      step.kind === 'call' ||
+      step.kind === 'result'
   );
 }
 
@@ -503,14 +505,15 @@ function renderAgentMessage(msg, msgIndex) {
 
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i];
-    if (step.kind === 'text') {
+    if (step.kind === 'text' || step.kind === 'thinking') {
       if (!step.text && !(streaming && i === steps.length - 1)) continue;
+      const thinking = step.kind === 'thinking';
       appendRow(
         textCard({
           key: stepCardKey(msgIndex, i),
-          kind: 'agent',
-          title: '对话',
-          meta: 'response',
+          kind: thinking ? 'thinking' : 'agent',
+          title: thinking ? '思考' : '对话',
+          meta: thinking ? 'thinking' : 'response',
           text: step.text,
           streaming: streaming && i === steps.length - 1,
           onInspect: () => inspectStep(msg, step),
@@ -946,7 +949,6 @@ function sendMessage() {
   session.msgs.push(agent);
 
   state.streamMessage = agent;
-  state.textOpen = false;
   state.forceScroll = true;
   dom.input.value = '';
   updateSendState();
@@ -956,7 +958,6 @@ function sendMessage() {
     agent.request = null; // 本地提示不算模型历史
     agent.steps = [{ kind: 'status', label: 'local note (no API key)', ok: false }];
     state.streamMessage = null;
-    state.textOpen = false;
     state.streaming = false;
     saveChatsSoon();
     renderAll();
@@ -982,7 +983,6 @@ function finishStream() {
   state.streaming = false;
   state.requestId = null;
   state.streamMessage = null;
-  state.textOpen = false;
   state.forceScroll = false;
 
   dom.messages
@@ -1307,25 +1307,21 @@ function bindEvents() {
     closeSettings();
   });
 
-  api.onChatDelta(({ requestId, text, round }) => {
+  api.onChatDelta(({ requestId, text, round, reasoning }) => {
     if (requestId !== state.requestId || !state.streamMessage) return;
     const msg = state.streamMessage;
-    msg.text += text;
+    const isReasoning = Boolean(reasoning);
+    if (!isReasoning) msg.text += text;
     if (!Array.isArray(msg.steps)) msg.steps = [];
 
     const stepRound = Number.isInteger(round) ? round : 0;
+    const stepKind = isReasoning ? 'thinking' : 'text';
     const last = msg.steps[msg.steps.length - 1];
     let newStep = false;
-    if (
-      state.textOpen &&
-      last &&
-      last.kind === 'text' &&
-      last.round === stepRound
-    ) {
+    if (last && last.kind === stepKind && last.round === stepRound) {
       last.text += text;
     } else {
-      msg.steps.push({ kind: 'text', text, round: stepRound });
-      state.textOpen = true;
+      msg.steps.push({ kind: stepKind, text, round: stepRound });
       newStep = true;
     }
 
@@ -1397,7 +1393,6 @@ function bindEvents() {
       arguments: String(args ?? ''),
       round: Number.isInteger(round) ? round : 0,
     });
-    state.textOpen = false;
     saveChatsSoon();
 
     const session = currentSession();
@@ -1418,7 +1413,6 @@ function bindEvents() {
       ok: ok !== false,
       round: Number.isInteger(round) ? round : 0,
     });
-    state.textOpen = false;
     saveChatsSoon();
 
     const session = currentSession();

@@ -47,11 +47,65 @@ test('request body includes tools and streaming', () => {
   assert.equal(body.tools[0].function.name, 'web_search');
 });
 
+test('messages from history include thinking steps in order', () => {
+  const messages = deepseek.messagesFromHistory(
+    [
+      { role: 'User', text: 'hi', request: null },
+      {
+        role: 'Agent',
+        text: 'answer',
+        request: '',
+        steps: [
+          { kind: 'thinking', text: 'reasoning', round: 0 },
+          {
+            kind: 'call',
+            name: 'web_search',
+            arguments: '{}',
+            round: 0,
+          },
+          { kind: 'text', text: 'answer', round: 1 },
+        ],
+      },
+    ],
+    ''
+  );
+  assert.equal(messages[1].role, 'assistant');
+  assert.equal(messages[1].content, 'reasoning\n\nanswer');
+});
+
+test('messages from history fall back to text without steps', () => {
+  const messages = deepseek.messagesFromHistory(
+    [
+      { role: 'User', text: 'hi', request: null },
+      { role: 'Agent', text: 'plain answer', request: '' },
+    ],
+    ''
+  );
+  assert.equal(messages[1].content, 'plain answer');
+});
+
 test('SSE content delta is parsed', () => {
   const events = deepseek.parseSseLine(
     'data: {"choices":[{"delta":{"content":"hello"}}]}'
   );
   assert.deepEqual(events, [{ type: 'content', text: 'hello' }]);
+});
+
+test('SSE reasoning delta is kept separate from content', () => {
+  const events = deepseek.parseSseLine(
+    'data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}'
+  );
+  assert.deepEqual(events, [{ type: 'reasoning', text: 'thinking' }]);
+});
+
+test('SSE chunk with reasoning and content emits both', () => {
+  const events = deepseek.parseSseLine(
+    'data: {"choices":[{"delta":{"reasoning_content":"a","content":"b"}}]}'
+  );
+  assert.deepEqual(events, [
+    { type: 'reasoning', text: 'a' },
+    { type: 'content', text: 'b' },
+  ]);
 });
 
 test('SSE tool delta is parsed', () => {

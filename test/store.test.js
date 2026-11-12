@@ -175,6 +175,7 @@ test('sqlite round-trips sessions, steps and raw requests', () => {
               text: 'hello',
               request: '',
               steps: [
+                { kind: 'thinking', text: 'pondering', round: 0 },
                 { kind: 'text', text: 'hello', round: 0 },
                 {
                   kind: 'call',
@@ -204,7 +205,12 @@ test('sqlite round-trips sessions, steps and raw requests', () => {
     const loaded = store.loadChats();
     assert.equal(loaded.sessions.length, 1);
     assert.equal(loaded.sessions[0].msgs.length, 2);
-    assert.deepEqual(loaded.sessions[0].msgs[1].steps[1], {
+    assert.deepEqual(loaded.sessions[0].msgs[1].steps[0], {
+      kind: 'thinking',
+      text: 'pondering',
+      round: 0,
+    });
+    assert.deepEqual(loaded.sessions[0].msgs[1].steps[2], {
       kind: 'call',
       name: 'web_search',
       arguments: '{"query":"hi"}',

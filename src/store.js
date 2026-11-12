@@ -86,6 +86,10 @@ function normalizeStep(step) {
     const text = String(step.text ?? '');
     return text ? { kind: 'text', text, round } : null;
   }
+  if (kind === 'thinking') {
+    const text = String(step.text ?? '');
+    return text ? { kind: 'thinking', text, round } : null;
+  }
   if (kind === 'call') {
     const name = String(step.name ?? '');
     return name
@@ -425,6 +429,8 @@ function readChats() {
     const round = Number(row.round) || 0;
     if (row.kind === 'text') {
       msg.steps.push({ kind: 'text', text: String(row.text ?? ''), round });
+    } else if (row.kind === 'thinking') {
+      msg.steps.push({ kind: 'thinking', text: String(row.text ?? ''), round });
     } else if (row.kind === 'call') {
       msg.steps.push({
         kind: 'call',

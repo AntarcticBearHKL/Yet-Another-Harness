@@ -560,6 +560,11 @@ button {
   background: #b23a2f;
 }
 
+.message-card.thinking .card-dot {
+  background: transparent;
+  border: 1.5px solid #b09a84;
+}
+
 .card-title {
   color: var(--accent);
   font-size: 11px;
@@ -570,6 +575,10 @@ button {
 
 .message-card.agent .card-title {
   color: var(--dim);
+}
+
+.message-card.thinking .card-title {
+  color: #8a7767;
 }
 
 .message-card.tool-result .card-title {
@@ -649,6 +658,12 @@ button {
 .card-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.message-card.thinking .card-text {
+  color: var(--dim);
+  font-size: 12.5px;
+  line-height: 1.55;
 }
 
 .card-status-line {

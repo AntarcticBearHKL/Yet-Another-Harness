@@ -12,6 +12,19 @@ const USER_AGENT = 'miniharness-electron/0.3.0';
 const MAX_HISTORY = 40;
 const MAX_TOOL_ROUNDS = 6;
 
+function messageContext(msg) {
+  const steps = Array.isArray(msg?.steps) ? msg.steps : [];
+  const parts = [];
+  for (const step of steps) {
+    if (!step) continue;
+    if (step.kind !== 'text' && step.kind !== 'thinking') continue;
+    const text = String(step.text ?? '');
+    if (text) parts.push(text);
+  }
+  if (parts.length > 0) return parts.join('\n\n');
+  return String(msg?.text ?? '');
+}
+
 function messagesFromHistory(history, system, maxHistory = MAX_HISTORY) {
   const messages = [];
   if (system && system.trim()) {
@@ -26,7 +39,7 @@ function messagesFromHistory(history, system, maxHistory = MAX_HISTORY) {
   for (const msg of usable.slice(start)) {
     messages.push({
       role: msg.role === 'User' || msg.role === 'user' ? 'user' : 'assistant',
-      content: String(msg.text ?? ''),
+      content: messageContext(msg),
     });
   }
   return messages;
@@ -66,9 +79,11 @@ function parseSseLine(line) {
   const delta = value.choices?.[0]?.delta || {};
   const events = [];
 
-  const content = delta.content ?? delta.reasoning_content;
-  if (content) {
-    events.push({ type: 'content', text: String(content) });
+  if (delta.reasoning_content) {
+    events.push({ type: 'reasoning', text: String(delta.reasoning_content) });
+  }
+  if (delta.content) {
+    events.push({ type: 'content', text: String(delta.content) });
   }
 
   if (Array.isArray(delta.tool_calls)) {
@@ -141,13 +156,17 @@ async function streamChat({ apiKey, body, onDelta, signal, sessionId }) {
   const builder = new ToolCallBuilder();
   let buffer = '';
   let content = '';
+  let reasoning = '';
   let done = false;
 
   const handleLine = (line) => {
     for (const event of parseSseLine(line)) {
       if (event.type === 'content') {
         content += event.text;
-        onDelta?.(event.text);
+        onDelta?.(event.text, false);
+      } else if (event.type === 'reasoning') {
+        reasoning += event.text;
+        onDelta?.(event.text, true);
       } else if (event.type === 'tool') {
         builder.push(event);
       } else if (event.type === 'done') {
@@ -178,10 +197,10 @@ async function streamChat({ apiKey, body, onDelta, signal, sessionId }) {
   }
 
   const toolCalls = builder.finish();
-  if (!content && toolCalls.length === 0) {
+  if (!content && !reasoning && toolCalls.length === 0) {
     throw new Error('model returned an empty reply');
   }
-  return { content, toolCalls };
+  return { content, reasoning, toolCalls };
 }
 
 /**
@@ -204,10 +223,10 @@ async function runAgent({
   let finalText = '';
   let activeRound = 0;
 
-  const emitDelta = (text) => {
+  const emitDelta = (text, reasoning) => {
     if (!text) return;
-    finalText += text;
-    onDelta?.(text, activeRound);
+    if (!reasoning) finalText += text;
+    onDelta?.(text, activeRound, Boolean(reasoning));
   };
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
@@ -227,9 +246,12 @@ async function runAgent({
       return finalText;
     }
 
+    const assistantText = [result.reasoning, result.content]
+      .filter(Boolean)
+      .join('\n\n');
     messages.push({
       role: 'assistant',
-      content: result.content || null,
+      content: assistantText || null,
       tool_calls: result.toolCalls.map((call) => ({
         id: call.id,
         type: 'function',
