@@ -110,13 +110,9 @@ function createWindow() {
     title: 'MINIHARNESS',
     icon: path.join(__dirname, '..', 'assets', 'miniharness.ico'),
     frame: false,
-    // 透明窗口 + CSS 圆角：不依赖系统 acrylic/setShape，缩放时不会出现
-    // 灰色框，圆角外也不会露出方角的背景材质。
-    // 不透明 acrylic + Windows 11 原生圆角：没有透明窗口的方角黑底，
-    // 也不需要 setShape（setShape 会在缩放时拖影）。
+    // 扁平纯色页面 + Windows 11 原生圆角；不使用 acrylic 或 setShape。
     transparent: false,
     backgroundColor: '#f9f1e7',
-    backgroundMaterial: process.platform === 'win32' ? 'acrylic' : 'none',
     roundedCorners: true,
     thickFrame: true,
     hasShadow: true,

@@ -7,7 +7,6 @@ const NO_KEY_HINT =
 
 const api = window.miniharness;
 const $ = (id) => document.getElementById(id);
-const TAB_HOLD_MS = 280;
 
 const dom = {
   messages: $('messages'),
@@ -47,7 +46,6 @@ const state = {
   peekPointerX: 0,
   peekPointerY: 0,
   tabHeld: false,
-  tabTimer: null,
   streaming: false,
   requestId: null,
   streamMessage: null,
@@ -215,10 +213,6 @@ function makeCard(opts) {
     if (opts.badge.error) badge.classList.add('error');
     head.append(badge);
   }
-  const chevron = el('span', 'card-chevron');
-  chevron.innerHTML =
-    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
-  head.append(chevron);
 
   card.title = opts.onInspect
     ? 'Hold Space to peek · double-click to view raw request body'
@@ -678,8 +672,6 @@ function renderSwitcher() {
 
 function cancelTabHold() {
   state.tabHeld = false;
-  clearTimeout(state.tabTimer);
-  state.tabTimer = null;
 }
 
 function cardAtPointer() {
@@ -1058,11 +1050,7 @@ function bindEvents() {
 
       endSpacePeek();
       state.tabHeld = true;
-      clearTimeout(state.tabTimer);
-      state.tabTimer = setTimeout(() => {
-        state.tabTimer = null;
-        if (state.tabHeld) openSwitcher();
-      }, TAB_HOLD_MS);
+      openSwitcher();
       return;
     }
 
