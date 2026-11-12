@@ -7,6 +7,7 @@
 - tool calling loop（模型 → 工具 → 模型）
 - 免费 `web_search`（DuckDuckGo HTML，不需要 API key）
 - 所有气泡靠左
+- 没有标题栏：窗口控制按钮浮动在右上角，顶部只留透明拖拽区
 - 没有聊天顶栏：会话内容铺满窗口，输入框悬浮在底部
 - 左侧栏可展开/折叠，折叠状态记在 `settings.json`
 - tool loop 的每次工具调用会作为一行过程显示在回复气泡里

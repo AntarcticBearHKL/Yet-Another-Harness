@@ -12,26 +12,25 @@
   </head>
   <body>
     <div id="app">
-      <header id="titlebar">
-        <div class="brand">MINIHARNESS</div>
-        <div class="window-buttons">
-          <button id="win-min" class="win-btn" aria-label="Minimize">
-            <svg viewBox="0 0 10 10" aria-hidden="true">
-              <path d="M1 5h8" />
-            </svg>
-          </button>
-          <button id="win-max" class="win-btn" aria-label="Maximize">
-            <svg viewBox="0 0 10 10" aria-hidden="true">
-              <rect x="1" y="1" width="8" height="8" />
-            </svg>
-          </button>
-          <button id="win-close" class="win-btn close" aria-label="Close">
-            <svg viewBox="0 0 10 10" aria-hidden="true">
-              <path d="M1 1l8 8M9 1L1 9" />
-            </svg>
-          </button>
-        </div>
-      </header>
+      <div id="drag-strip" aria-hidden="true"></div>
+
+      <div id="window-controls">
+        <button id="win-min" class="win-btn" aria-label="Minimize">
+          <svg viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M1 5h8" />
+          </svg>
+        </button>
+        <button id="win-max" class="win-btn" aria-label="Maximize">
+          <svg viewBox="0 0 10 10" aria-hidden="true">
+            <rect x="1" y="1" width="8" height="8" />
+          </svg>
+        </button>
+        <button id="win-close" class="win-btn close" aria-label="Close">
+          <svg viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M1 1l8 8M9 1L1 9" />
+          </svg>
+        </button>
+      </div>
 
       <div id="shell">
         <aside id="sidebar">

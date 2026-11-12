@@ -70,6 +70,7 @@ button {
 }
 
 #app {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -83,38 +84,45 @@ button {
     radial-gradient(120% 90% at 10% 0%, rgba(185, 111, 61, 0.10), transparent 55%);
 }
 
-/* ---------------------------------------------------------------- titlebar */
-#titlebar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 42px;
-  flex: 0 0 42px;
-  padding: 0 8px 0 14px;
+/* ---------------------------------------------------------------- window chrome */
+/* 顶部无标题栏：只留一条透明拖拽区 + 右上角浮动窗口按钮 */
+#drag-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 38px;
+  z-index: 10;
   -webkit-app-region: drag;
-  user-select: none;
 }
 
-.brand {
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.window-buttons {
+#window-controls {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 20;
   display: flex;
-  gap: 4px;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
   -webkit-app-region: no-drag;
+  opacity: 0.55;
+  transition: opacity 140ms ease;
+}
+
+#window-controls:hover,
+#window-controls:focus-within {
+  opacity: 1;
 }
 
 .win-btn {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 28px;
-  border-radius: 6px;
+  width: 30px;
+  height: 26px;
+  border-radius: 7px;
   color: var(--dim);
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .win-btn svg {
@@ -147,7 +155,7 @@ button {
   flex-direction: column;
   width: 250px;
   flex: 0 0 250px;
-  padding: 12px 14px;
+  padding: 40px 14px 12px;
   background: var(--panel);
   border-right: 1px solid var(--line);
   transition: width 160ms ease, flex-basis 160ms ease, padding 160ms ease;
@@ -156,7 +164,7 @@ button {
 #sidebar.collapsed {
   width: 56px;
   flex-basis: 56px;
-  padding: 12px 8px;
+  padding: 40px 8px 12px;
 }
 
 .sidebar-head {
@@ -405,7 +413,7 @@ button {
   align-items: flex-start;
   gap: 10px;
   min-height: 0;
-  padding: 18px 14px 180px;
+  padding: 44px 14px 180px;
   overflow-y: auto;
 }
 
