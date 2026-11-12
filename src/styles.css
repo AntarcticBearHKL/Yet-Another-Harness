@@ -93,9 +93,13 @@ button {
   display: flex;
   gap: 2px;
   padding: 2px;
-  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 10px;
+  background: rgba(255, 252, 247, 0.34);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  backdrop-filter: blur(18px) saturate(1.3);
   -webkit-app-region: no-drag;
-  opacity: 0.55;
+  opacity: 0.7;
   transition: opacity 140ms ease;
 }
 
@@ -151,12 +155,14 @@ button {
   flex-direction: column;
   width: 240px;
   padding: 10px 12px 104px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 16px;
-  background: rgba(252, 246, 238, 0.96);
-  box-shadow: 0 18px 46px rgba(60, 40, 25, 0.16);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
+  background: rgba(252, 246, 238, 0.52);
+  box-shadow:
+    0 24px 60px rgba(60, 40, 25, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(30px) saturate(1.4);
+  backdrop-filter: blur(30px) saturate(1.4);
   overflow: hidden;
   transition: width 160ms ease, padding 160ms ease;
 }
@@ -373,12 +379,83 @@ button {
   min-height: 0;
   padding: 24px max(14px, calc((100% - 760px) / 2)) 180px;
   overflow-y: auto;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 26px,
+    #000 calc(100% - 26px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 26px,
+    #000 calc(100% - 26px),
+    transparent 100%
+  );
 }
 
 .msg {
   display: flex;
   justify-content: flex-start;
   width: 100%;
+}
+
+/* 滚动内容接近窗口上下边缘时渐进模糊、融进背景 */
+.edge-blur {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(16px) saturate(1.2);
+}
+
+.edge-blur-top {
+  top: 0;
+  height: 88px;
+  background: linear-gradient(
+    to bottom,
+    rgba(249, 241, 231, 0.8) 0%,
+    rgba(249, 241, 231, 0.26) 48%,
+    rgba(249, 241, 231, 0) 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    rgba(0, 0, 0, 0.65) 40%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    rgba(0, 0, 0, 0.65) 40%,
+    transparent 100%
+  );
+}
+
+.edge-blur-bottom {
+  bottom: 0;
+  height: 180px;
+  background: linear-gradient(
+    to top,
+    rgba(249, 241, 231, 0.86) 0%,
+    rgba(249, 241, 231, 0.3) 45%,
+    rgba(249, 241, 231, 0) 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to top,
+    #000 0%,
+    rgba(0, 0, 0, 0.65) 40%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to top,
+    #000 0%,
+    rgba(0, 0, 0, 0.65) 40%,
+    transparent 100%
+  );
 }
 
 .message-card {
@@ -711,10 +788,14 @@ button {
 .composer-box {
   position: relative;
   height: 77px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 14px;
-  background: var(--card);
-  box-shadow: 0 14px 40px rgba(60, 40, 25, 0.18);
+  background: rgba(255, 252, 247, 0.62);
+  box-shadow:
+    0 18px 48px rgba(60, 40, 25, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  backdrop-filter: blur(28px) saturate(1.4);
   pointer-events: auto;
 }
 
@@ -785,10 +866,14 @@ button {
   flex-direction: column;
   gap: 10px;
   padding: 18px 20px 16px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 14px;
-  background: var(--solid);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  background: rgba(251, 246, 239, 0.78);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.3);
+  backdrop-filter: blur(28px) saturate(1.3);
 }
 
 .settings-panel {
