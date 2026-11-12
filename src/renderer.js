@@ -3,17 +3,20 @@
 const DEFAULT_SYSTEM_PROMPT =
   'You are miniharness, a terse terminal coding assistant. Answer in plain text.';
 const NO_KEY_HINT =
-  'No OpenCode Go API key yet. Open Settings at the bottom of the sidebar and paste your key to start chatting.';
+  'No OpenCode Go API key yet. Press Tab and open Settings to paste your key.';
 
 const api = window.miniharness;
 const $ = (id) => document.getElementById(id);
 
 const dom = {
-  sidebar: $('sidebar'),
   messages: $('messages'),
   input: $('input'),
   send: $('send'),
-  sessionList: $('session-list'),
+  switcher: $('switcher'),
+  switcherList: $('switcher-list'),
+  switcherNew: $('switcher-new'),
+  switcherSettings: $('switcher-settings'),
+  switcherClose: $('switcher-close'),
   settingsOverlay: $('settings-overlay'),
   apiKey: $('api-key'),
   apiKeyState: $('api-key-state'),
@@ -25,9 +28,9 @@ const state = {
   seq: 1,
   settings: {
     apiKey: '',
-    sidebarCollapsed: false,
   },
-  sidebarCollapsed: false,
+  switcherOpen: false,
+  switcherIndex: 0,
   streaming: false,
   requestId: null,
   streamMessage: null,
@@ -76,8 +79,8 @@ function saveChatsSoon() {
 }
 
 function settingsPayload() {
-  const { apiKey, sidebarCollapsed } = state.settings;
-  return { apiKey, sidebarCollapsed };
+  const { apiKey } = state.settings;
+  return { apiKey };
 }
 
 function saveSettingsNow() {
@@ -99,25 +102,13 @@ function applySettings() {
   if (document.activeElement !== dom.apiKey) {
     dom.apiKey.value = s.apiKey;
   }
-  applySidebar();
-}
-
-function applySidebar() {
-  state.sidebarCollapsed = state.settings.sidebarCollapsed === true;
-  dom.sidebar.classList.toggle('collapsed', state.sidebarCollapsed);
-}
-
-function toggleSidebar() {
-  state.settings.sidebarCollapsed = !state.sidebarCollapsed;
-  applySidebar();
-  saveSettingsSoon();
 }
 
 function updateControls() {
   const session = currentSession();
   if (!session) {
     dom.input.disabled = true;
-    dom.input.placeholder = 'Create a chat first';
+    dom.input.placeholder = 'Press Tab to create a chat';
     updateSendState();
     return;
   }
@@ -384,7 +375,7 @@ function renderMessages() {
 
   dom.messages.replaceChildren();
   if (!session) {
-    dom.messages.append(el('div', 'empty', 'No chats yet. Click New chat.'));
+    dom.messages.append(el('div', 'empty', 'No chats yet. Press Tab to create one.'));
     return;
   }
   if (session.msgs.length === 0) {
@@ -418,15 +409,44 @@ function renderMessages() {
   });
 }
 
-function renderSessions() {
-  dom.sessionList.replaceChildren();
+function sessionPreview(session) {
+  for (let i = session.msgs.length - 1; i >= 0; i -= 1) {
+    const text = String(session.msgs[i].text || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text) return text.slice(0, 140);
+  }
+  return 'No messages yet';
+}
+
+function renderSwitcher() {
+  dom.switcherList.replaceChildren();
+
+  if (state.sessions.length === 0) {
+    dom.switcherList.append(
+      el('div', 'switcher-empty', 'No chats yet. Click New chat to start one.')
+    );
+    return;
+  }
+
+  state.switcherIndex = Math.max(
+    0,
+    Math.min(state.switcherIndex, state.sessions.length - 1)
+  );
 
   state.sessions.forEach((session, index) => {
-    const row = el('div', 'session-row');
-    if (index === state.current) row.classList.add('active');
+    const card = el('div', 'switch-card');
+    if (index === state.current) card.classList.add('current');
+    if (index === state.switcherIndex) card.classList.add('selected');
 
-    const title = el('span', 'session-title', session.title);
-    const trash = el('button', 'trash');
+    const top = el('div', 'switch-top');
+    top.append(el('span', 'switch-title', session.title || `Chat ${index + 1}`));
+    if (index === state.current) {
+      top.append(el('span', 'switch-badge', 'CURRENT'));
+    }
+
+    const preview = el('div', 'switch-preview', sessionPreview(session));
+    const trash = el('button', 'trash switch-trash');
     trash.type = 'button';
     trash.title = 'Delete chat';
     trash.setAttribute('aria-label', 'Delete chat');
@@ -434,16 +454,13 @@ function renderSessions() {
     trash.innerHTML =
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6H20M9 6V4H15V6M6 6L7 20H17L18 6M10 10V17M14 10V17"/></svg>';
 
-    row.addEventListener('click', () => {
-      if (state.streaming) {
-        /* 允许切换查看，流仍指向原会话 */
-      }
-      state.pendingDelete = -1;
-      clearTimeout(state.deleteTimer);
-      state.current = index;
-      state.forceScroll = true;
-      saveChatsSoon();
-      renderAll();
+    card.addEventListener('click', () => selectSession(index));
+    card.addEventListener('mouseenter', () => {
+      if (state.switcherIndex === index) return;
+      state.switcherIndex = index;
+      dom.switcherList
+        .querySelectorAll('.switch-card')
+        .forEach((node, i) => node.classList.toggle('selected', i === index));
     });
 
     trash.addEventListener('click', (event) => {
@@ -458,18 +475,71 @@ function renderSessions() {
       clearTimeout(state.deleteTimer);
       state.deleteTimer = setTimeout(() => {
         state.pendingDelete = -1;
-        renderSessions();
-      }, 4000);
-      renderSessions();
+        renderSwitcher();
+      }, 3000);
+      renderSwitcher();
     });
 
-    row.append(title, trash);
-    dom.sessionList.append(row);
+    card.append(top, preview, trash);
+    dom.switcherList.append(card);
   });
+
+  if (state.switcherOpen) {
+    const selected = dom.switcherList.querySelector('.switch-card.selected');
+    if (selected) selected.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function openSwitcher() {
+  if (!dom.settingsOverlay.classList.contains('hidden')) return;
+  state.switcherOpen = true;
+  state.switcherIndex = state.current;
+  state.pendingDelete = -1;
+  dom.switcher.classList.remove('hidden');
+  dom.input.blur();
+  renderSwitcher();
+}
+
+function closeSwitcher() {
+  if (!state.switcherOpen) return;
+  state.switcherOpen = false;
+  state.pendingDelete = -1;
+  clearTimeout(state.deleteTimer);
+  dom.switcher.classList.add('hidden');
+  dom.input.focus();
+}
+
+function toggleSwitcher() {
+  if (state.switcherOpen) closeSwitcher();
+  else openSwitcher();
+}
+
+function moveSwitcher(delta) {
+  if (state.sessions.length === 0) return;
+  state.switcherIndex =
+    (state.switcherIndex + delta + state.sessions.length) %
+    state.sessions.length;
+  renderSwitcher();
+}
+
+function selectSession(index) {
+  if (index < 0 || index >= state.sessions.length) return;
+  state.current = index;
+  state.forceScroll = true;
+  state.pendingDelete = -1;
+  clearTimeout(state.deleteTimer);
+  saveChatsSoon();
+  closeSwitcher();
+  renderAll();
+}
+
+function createChatFromSwitcher() {
+  closeSwitcher();
+  newSession();
 }
 
 function renderAll() {
-  renderSessions();
+  if (state.switcherOpen) renderSwitcher();
   renderMessages();
   updateControls();
 }
@@ -580,7 +650,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .session-row, .card-head, .overlay';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .card-head, .overlay';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -629,7 +699,6 @@ function bindEvents() {
   // 整体禁用鼠标右键菜单与框选；只有输入控件保留文本选择
   document.addEventListener('contextmenu', (event) => {
     event.preventDefault();
-    if (dom.settingsOverlay.classList.contains('hidden')) toggleSidebar();
   });
   document.addEventListener('selectstart', (event) => {
     const target = event.target;
@@ -642,8 +711,13 @@ function bindEvents() {
   document.addEventListener('mouseup', onWindowDragEnd);
   window.addEventListener('blur', onWindowDragEnd);
 
-  $('new-session').addEventListener('click', newSession);
-  $('open-settings').addEventListener('click', openSettings);
+  dom.switcherNew.addEventListener('click', createChatFromSwitcher);
+  dom.switcherSettings.addEventListener('click', () => {
+    closeSwitcher();
+    openSettings();
+  });
+  dom.switcherClose.addEventListener('click', closeSwitcher);
+
   $('close-settings').addEventListener('click', closeSettings);
   $('done-settings').addEventListener('click', closeSettings);
 
@@ -667,17 +741,55 @@ function bindEvents() {
   });
 
   $('reset-settings').addEventListener('click', () => {
-    state.settings = {
-      apiKey: '',
-      sidebarCollapsed: state.settings.sidebarCollapsed === true,
-    };
+    state.settings = { apiKey: '' };
     applySettings();
     saveSettingsSoon();
   });
 
   document.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape') return;
-    if (!dom.settingsOverlay.classList.contains('hidden')) closeSettings();
+    if (event.key === 'Tab') {
+      if (!dom.settingsOverlay.classList.contains('hidden')) return;
+      event.preventDefault();
+      toggleSwitcher();
+      return;
+    }
+
+    if (!state.switcherOpen) {
+      if (
+        event.key === 'Escape' &&
+        !dom.settingsOverlay.classList.contains('hidden')
+      ) {
+        closeSettings();
+      }
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeSwitcher();
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveSwitcher(1);
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveSwitcher(-1);
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      const target = event.target;
+      if (target instanceof Element && target.closest('button, input, textarea')) {
+        return;
+      }
+      event.preventDefault();
+      selectSession(state.switcherIndex);
+    }
   });
 
   // 点击遮罩空白处关闭；面板本身阻止冒泡

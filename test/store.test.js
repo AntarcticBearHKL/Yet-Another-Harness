@@ -91,10 +91,7 @@ test('legacy tool status lines become status steps', () => {
   ]);
 });
 
-test('sidebar collapsed is preserved in settings normalization', () => {
-  const settings = store.normalizeSettings({
-    apiKey: '',
-    sidebarCollapsed: true,
-  });
-  assert.equal(settings.sidebarCollapsed, true);
+test('legacy api_key is normalized', () => {
+  const settings = store.normalizeSettings({ api_key: 'oc_test' });
+  assert.equal(settings.apiKey, 'oc_test');
 });

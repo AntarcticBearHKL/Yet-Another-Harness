@@ -32,7 +32,6 @@ function legacyFile(name) {
 function defaultSettings() {
   return {
     apiKey: '',
-    sidebarCollapsed: false,
     window: null,
   };
 }
@@ -64,7 +63,6 @@ function normalizeSettings(raw) {
 
   return {
     apiKey: String(raw.apiKey ?? raw.api_key ?? ''),
-    sidebarCollapsed: raw.sidebarCollapsed === true,
     window,
   };
 }

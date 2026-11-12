@@ -31,33 +31,6 @@
       </div>
 
       <div id="shell">
-        <aside id="sidebar">
-          <div class="sidebar-head">
-            <span class="sidebar-caption">CHATS</span>
-          </div>
-
-          <button id="new-session" class="pill primary wide">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            <span class="label">New chat</span>
-          </button>
-          <div class="divider"></div>
-          <div id="session-list" class="session-list"></div>
-          <div class="sidebar-bottom">
-            <div class="divider"></div>
-            <button id="open-settings" class="pill wide">
-              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
-                />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-              <span class="label">Settings</span>
-            </button>
-          </div>
-        </aside>
-
         <main id="main">
           <section id="messages" class="messages" aria-live="polite"></section>
 
@@ -75,6 +48,30 @@
             </div>
           </footer>
         </main>
+      </div>
+    </div>
+
+    <div
+      id="switcher"
+      class="overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="switcher-title"
+    >
+      <div class="switcher-head">
+        <div>
+          <div class="switcher-kicker">CONVERSATIONS</div>
+          <h2 id="switcher-title">切换对话</h2>
+        </div>
+        <div class="switcher-actions">
+          <button id="switcher-new" class="pill primary">New chat</button>
+          <button id="switcher-settings" class="pill">Settings</button>
+          <button id="switcher-close" class="pill compact">Close</button>
+        </div>
+      </div>
+      <div id="switcher-list" class="switcher-list"></div>
+      <div class="switcher-foot">
+        Tab / Esc 关闭 · ↑↓ 选择 · Enter 切换
       </div>
     </div>
 

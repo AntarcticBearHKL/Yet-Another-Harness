@@ -9,14 +9,14 @@
 - 所有对话卡片同宽，默认占满居中的内容通道
 - 没有标题栏：窗口控制按钮浮动在右上角，按住任意非交互区域都能拖动窗口
 - 没有聊天顶栏：会话内容铺满窗口，输入框悬浮在底部
-- 左侧栏是占满高度的浮动圆角面板，右键展开/折叠，盖在对话上但不占布局宽度
-- 浮动面板（侧边栏、输入框、设置、窗口按钮）统一使用半透明磨砂玻璃质感
+- 没有侧边栏；按 Tab 打开全屏对话切换界面，支持键盘选择、删除、新建和打开设置
+- 浮动面板（输入框、设置、全屏切换界面、窗口按钮）统一使用半透明磨砂玻璃质感
 - 聊天内容接近窗口上下边缘时渐进模糊、淡出，不会生硬地被边界切断
 - 每条消息、工具调用和工具返回都是可折叠卡片，用颜色区分
 - 工具调用的 JSON 参数和 JSON 输出用带语法着色、可折叠节点的查看器展示
 - 所有区域隐藏滚动条，滚轮/触控板仍然可以滚动
 - 会话、设置、API key 落盘；可以删光所有对话，空状态不会自动补一个新对话
-- 全局禁用鼠标框选；右键任意位置切换侧边栏；只有输入框保留文本选择
+- 全局禁用鼠标框选和右键菜单；只有输入框保留文本选择
 
 旧的 Rust/Slint 版已经删除；新开发都在这个目录。
 
@@ -47,7 +47,7 @@ src/preload.js    contextBridge 暴露给渲染进程的 API
 src/deepseek.js   OpenCode Go SSE + tool_calls 累积 + agent loop
 src/tools.js      免费 web_search（DuckDuckGo HTML）
 src/store.js      chats.json / settings.json 原子写 + 旧版迁移
-src/renderer.js   聊天、会话、设置浮层
+src/renderer.js   聊天、全屏对话切换、设置浮层
 src/index.html    页面骨架
 src/styles.css    主题、气泡、浮层、输入区
 ```
@@ -65,12 +65,14 @@ src/styles.css    主题、气泡、浮层、输入区
 
 ## 数据
 
-- `%APPDATA%\miniharness-electron\chats.json`
-- `%APPDATA%\miniharness-electron\settings.json`
+- `%APPDATA%\miniharness-electron\chats.json`：所有对话数据
+  - `sessions[]`：每个会话的 `id`、`title`、`system`、`msgs[]`
+  - `msgs[]`：消息角色、文字、以及工具调用/返回的 `steps`
+  - `current` / `seq`：当前选中的会话索引和标题序号
+- `%APPDATA%\miniharness-electron\settings.json`：API key、窗口位置和尺寸
 
 第一次启动时，如果新目录没有数据，会尝试从旧版 `%APPDATA%\miniharness` 迁移
 `chats.json` 和 `settings.json`（`api_key` → `apiKey`，`window.w/h` → `width/height`）。
-你原来的 `Chat 3` 会直接出现在新窗口里。
 
 API key 和旧版一样是明文存在 `settings.json` 里；本地应用，没接 Windows Credential
 Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key。
