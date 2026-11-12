@@ -6,7 +6,6 @@ const NO_KEY_HINT =
   'No DeepSeek API key yet. Open Settings at the bottom of the sidebar and paste your key to start chatting.';
 
 const api = window.miniharness;
-const contextTools = window.MiniharnessContext;
 const $ = (id) => document.getElementById(id);
 
 const dom = {
@@ -15,12 +14,8 @@ const dom = {
   messages: $('messages'),
   input: $('input'),
   send: $('send'),
-  openContext: $('open-context'),
   sessionList: $('session-list'),
   settingsOverlay: $('settings-overlay'),
-  contextOverlay: $('context-overlay'),
-  contextText: $('context-text'),
-  contextStatus: $('context-status'),
   transparency: $('transparency'),
   transparencyValue: $('transparency-value'),
   apiKey: $('api-key'),
@@ -129,7 +124,6 @@ function applySidebar() {
 function updateControls() {
   const session = currentSession();
   if (!session) {
-    dom.openContext.disabled = true;
     dom.input.disabled = true;
     dom.input.placeholder = 'Create a chat first';
     updateSendState();
@@ -138,7 +132,6 @@ function updateControls() {
 
   dom.input.disabled = false;
   dom.input.placeholder = '';
-  dom.openContext.disabled = state.streaming;
   updateSendState();
 }
 
@@ -345,53 +338,6 @@ function finishStream() {
   renderAll();
 }
 
-function openContext() {
-  if (state.streaming || !currentSession()) return;
-  dom.contextText.value = contextTools.formatContext(currentSession());
-  dom.contextStatus.textContent = 'SYSTEM / USER / ASSISTANT begin a block';
-  dom.contextStatus.classList.remove('error');
-  dom.contextOverlay.classList.remove('hidden');
-  dom.contextText.focus();
-  // 打开时看 SYSTEM 开头，而不是直接跳到最底部的 caret
-  dom.contextText.setSelectionRange(0, 0);
-  dom.contextText.scrollTop = 0;
-}
-
-function closeContext() {
-  dom.contextOverlay.classList.add('hidden');
-}
-
-function applyContext() {
-  const session = currentSession();
-  if (!session) return;
-  let parsed;
-  try {
-    parsed = contextTools.parseContext(dom.contextText.value);
-  } catch (error) {
-    dom.contextStatus.textContent = error.message;
-    dom.contextStatus.classList.add('error');
-    return;
-  }
-
-  const old = session.msgs.slice();
-  session.msgs = parsed.msgs.map((msg, index) => {
-    const prev = old[index];
-    let request = null;
-    if (prev && prev.role === msg.role && prev.text === msg.text) {
-      request = prev.request;
-    } else if (msg.role === 'Agent') {
-      request = ''; // 改过的助手消息仍然算真正的模型历史
-    }
-    const steps = prev && prev.role === msg.role ? prev.steps || [] : [];
-    return { role: msg.role, text: msg.text, request, steps };
-  });
-  session.system = parsed.system ?? session.system;
-  state.forceScroll = true;
-  saveChatsSoon();
-  closeContext();
-  renderAll();
-}
-
 function openSettings() {
   applySettings();
   dom.settingsOverlay.classList.remove('hidden');
@@ -423,10 +369,6 @@ function bindEvents() {
   $('open-settings').addEventListener('click', openSettings);
   $('close-settings').addEventListener('click', closeSettings);
   $('done-settings').addEventListener('click', closeSettings);
-  dom.openContext.addEventListener('click', openContext);
-  $('close-context').addEventListener('click', closeContext);
-  $('cancel-context').addEventListener('click', closeContext);
-  $('apply-context').addEventListener('click', applyContext);
 
   dom.send.addEventListener('click', sendMessage);
   dom.input.addEventListener('input', updateSendState);
@@ -465,17 +407,13 @@ function bindEvents() {
 
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    if (!dom.contextOverlay.classList.contains('hidden')) closeContext();
-    else if (!dom.settingsOverlay.classList.contains('hidden')) closeSettings();
+    if (!dom.settingsOverlay.classList.contains('hidden')) closeSettings();
   });
 
   // 点击遮罩空白处关闭；面板本身阻止冒泡
-  [dom.settingsOverlay, dom.contextOverlay].forEach((overlay) => {
-    overlay.addEventListener('click', (event) => {
-      if (event.target !== overlay) return;
-      overlay.classList.add('hidden');
-      if (overlay === dom.settingsOverlay) saveSettingsNow();
-    });
+  dom.settingsOverlay.addEventListener('click', (event) => {
+    if (event.target !== dom.settingsOverlay) return;
+    closeSettings();
   });
 
   api.onChatDelta(({ requestId, text }) => {

@@ -11,7 +11,6 @@
 - 没有聊天顶栏：会话内容铺满窗口，输入框悬浮在底部
 - 左侧栏可展开/折叠，折叠状态记在 `settings.json`
 - tool loop 的每次工具调用会作为一行过程显示在回复气泡里
-- 整段上下文可编辑（侧边栏 `Context`）
 - 会话、设置、API key 落盘；可以删光所有对话，空状态不会自动补一个新对话
 - 全局禁用鼠标框选和右键菜单；只有输入框/上下文编辑框保留文本选择
 
@@ -43,9 +42,8 @@ src/main.js       BrowserWindow、IPC、窗口控制、chat:send
 src/preload.js    contextBridge 暴露给渲染进程的 API
 src/deepseek.js   DeepSeek SSE + tool_calls 累积 + agent loop
 src/tools.js      免费 web_search（DuckDuckGo HTML）
-src/context.js    上下文摊平/解析（SYSTEM / USER / ASSISTANT）
 src/store.js      chats.json / settings.json 原子写 + 旧版迁移
-src/renderer.js   聊天、会话、设置浮层、上下文浮层
+src/renderer.js   聊天、会话、设置浮层
 src/index.html    页面骨架
 src/styles.css    主题、气泡、浮层、输入区
 ```
@@ -95,7 +93,7 @@ Windows 11 的活动窗口可能有一条 1px 的系统 accent 边框，这是 D
 - 用 Chromium 渲染，字体/布局与 Slint 版略有差异。
 - 背景是系统亚克力 + DWM 圆角，不再是桌面截图快照；因此没有“快照过期”的问题，
   模糊强度由系统 acrylic 决定，页面只控制深色 tint 的透明度。
-- 没有 `jsonview` / 点气泡看 raw request：主界面和 Context 已经展示全部上下文。
+- 没有 `jsonview` / 点气泡看 raw request：界面上只显示对话本身。
 - 仍然没有取消在途请求的按钮；一次只允许一个请求。
 
 ## 已知限制

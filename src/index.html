@@ -58,13 +58,6 @@
           <div id="session-list" class="session-list"></div>
           <div class="sidebar-bottom">
             <div class="divider"></div>
-            <button id="open-context" class="pill wide" disabled>
-              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M7 3h7l4 4v14H7z" />
-                <path d="M14 3v5h5" />
-              </svg>
-              <span class="label">Context</span>
-            </button>
             <button id="open-settings" class="pill wide">
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path
@@ -130,25 +123,6 @@
       </div>
     </div>
 
-    <div id="context-overlay" class="overlay hidden">
-      <div class="overlay-panel context-panel">
-        <div class="overlay-head">
-          <h2>CONTEXT</h2>
-          <span id="context-status" class="muted small">
-            SYSTEM / USER / ASSISTANT begin a block
-          </span>
-          <button id="close-context" class="pill compact">Close</button>
-        </div>
-        <div class="divider"></div>
-        <textarea id="context-text" class="context-text" spellcheck="false"></textarea>
-        <div class="overlay-actions">
-          <button id="cancel-context" class="pill">Cancel</button>
-          <button id="apply-context" class="pill primary">Apply</button>
-        </div>
-      </div>
-    </div>
-
-    <script src="context.js" defer></script>
     <script src="renderer.js" defer></script>
   </body>
 </html>
