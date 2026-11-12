@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MINIHARNESS</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="titlebar">
+        <div class="brand">MINIHARNESS</div>
+        <div class="window-buttons">
+          <button id="win-min" class="win-btn" aria-label="Minimize">
+            <svg viewBox="0 0 10 10" aria-hidden="true">
+              <path d="M1 5h8" />
+            </svg>
+          </button>
+          <button id="win-max" class="win-btn" aria-label="Maximize">
+            <svg viewBox="0 0 10 10" aria-hidden="true">
+              <rect x="1" y="1" width="8" height="8" />
+            </svg>
+          </button>
+          <button id="win-close" class="win-btn close" aria-label="Close">
+            <svg viewBox="0 0 10 10" aria-hidden="true">
+              <path d="M1 1l8 8M9 1L1 9" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div id="shell">
+        <aside id="sidebar">
+          <button id="new-session" class="pill primary wide">New chat</button>
+          <div class="divider"></div>
+          <div id="session-list" class="session-list"></div>
+          <div class="sidebar-bottom">
+            <div class="divider"></div>
+            <button id="open-settings" class="pill wide">Settings</button>
+          </div>
+        </aside>
+
+        <main id="main">
+          <header id="chat-header">
+            <h1 id="chat-title">Chat 1</h1>
+            <span id="chat-status" class="muted small"></span>
+            <button id="open-context" class="pill compact">Context</button>
+          </header>
+
+          <section id="messages" class="messages" aria-live="polite"></section>
+
+          <footer id="composer">
+            <div class="composer-box">
+              <textarea id="input" rows="3" spellcheck="false"></textarea>
+              <button id="send" class="send-btn" aria-label="Send">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M2 21L23 12L2 3L2 10L17 12L2 14Z" />
+                </svg>
+              </button>
+            </div>
+          </footer>
+        </main>
+      </div>
+    </div>
+
+    <div id="settings-overlay" class="overlay hidden">
+      <div class="overlay-panel settings-panel">
+        <div class="overlay-head">
+          <h2>SETTINGS</h2>
+          <button id="close-settings" class="pill compact">Close</button>
+        </div>
+        <div class="divider"></div>
+
+        <label class="setting-row slider-row">
+          <span>Transparency</span>
+          <span id="transparency-value" class="muted small">25%</span>
+          <input id="transparency" type="range" min="0" max="100" step="1" />
+        </label>
+
+        <div class="setting-col">
+          <div class="setting-row">
+            <span>DeepSeek API key</span>
+            <span id="api-key-state" class="muted small">not set</span>
+          </div>
+          <input
+            id="api-key"
+            type="password"
+            class="text-input"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+
+        <div class="spacer"></div>
+        <div class="overlay-actions">
+          <button id="reset-settings" class="pill">Reset</button>
+          <button id="done-settings" class="pill primary">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="context-overlay" class="overlay hidden">
+      <div class="overlay-panel context-panel">
+        <div class="overlay-head">
+          <h2>CONTEXT</h2>
+          <span id="context-status" class="muted small">
+            SYSTEM / USER / ASSISTANT begin a block
+          </span>
+          <button id="close-context" class="pill compact">Close</button>
+        </div>
+        <div class="divider"></div>
+        <textarea id="context-text" class="context-text" spellcheck="false"></textarea>
+        <div class="overlay-actions">
+          <button id="cancel-context" class="pill">Cancel</button>
+          <button id="apply-context" class="pill primary">Apply</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="context.js" defer></script>
+    <script src="renderer.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "miniharness-electron",
+  "productName": "miniharness",
+  "version": "0.3.0",
+  "description": "miniharness rewritten in Electron",
+  "main": "src/main.js",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "electron": "^45.3.0"
+  }
+}
