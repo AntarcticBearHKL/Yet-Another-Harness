@@ -416,7 +416,7 @@ button {
   align-items: flex-start;
   gap: 10px;
   min-height: 0;
-  padding: 24px max(14px, calc((100% - 760px) / 2)) 180px;
+  padding: 24px 24px 180px;
   overflow-y: auto;
   -webkit-mask-image: linear-gradient(
     to bottom,
@@ -499,7 +499,7 @@ button {
 
 .message-card {
   width: 100%;
-  max-width: min(760px, 100%);
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--bubble-agent);
@@ -819,7 +819,7 @@ button {
   left: 50%;
   bottom: 24px;
   z-index: 9;
-  width: min(760px, calc(100% - 28px));
+  width: calc(100% - 48px);
   transform: translateX(-50%);
   pointer-events: none;
 }
@@ -991,6 +991,35 @@ button {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
+}
+
+/* 双击卡片打开的原始请求查看器 */
+#raw-overlay {
+  z-index: 40;
+}
+
+.raw-panel {
+  width: min(1180px, calc(100vw - 48px));
+  height: min(820px, calc(100vh - 48px));
+}
+
+.raw-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.raw-body .json-view {
+  max-height: none;
+  padding: 14px 16px;
+  overflow: visible;
+  font-size: 14px;
+}
+
+.raw-empty {
+  padding: 20px 4px;
+  color: var(--faint);
+  font-size: 13px;
 }
 
 /* ---------------------------------------------------------------- scrollbars */

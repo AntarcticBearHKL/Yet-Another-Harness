@@ -18,6 +18,9 @@ const dom = {
   switcherSettings: $('switcher-settings'),
   switcherClose: $('switcher-close'),
   settingsOverlay: $('settings-overlay'),
+  rawOverlay: $('raw-overlay'),
+  rawBody: $('raw-body'),
+  rawMeta: $('raw-meta'),
   apiKey: $('api-key'),
   apiKeyState: $('api-key-state'),
 };
@@ -154,7 +157,8 @@ function makeCard(opts) {
 
   const toggle = () => {
     opts.onToggle();
-    renderMessages();
+    const collapsed = card.classList.toggle('collapsed');
+    head.setAttribute('aria-expanded', String(!collapsed));
   };
   head.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -166,12 +170,33 @@ function makeCard(opts) {
     toggle();
   });
 
+  if (typeof opts.onInspect === 'function') {
+    card.title = 'Double-click to view raw request body';
+    card.addEventListener('dblclick', (event) => {
+      if (event.target instanceof Element && event.target.closest('button')) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      opts.onInspect();
+    });
+  }
+
   card.append(head);
   return card;
 }
 
-function textCard({ kind, title, meta, text, collapsed, onToggle, streaming }) {
-  const card = makeCard({ kind, title, meta, collapsed, onToggle });
+function textCard({
+  kind,
+  title,
+  meta,
+  text,
+  collapsed,
+  onToggle,
+  streaming,
+  onInspect,
+}) {
+  const card = makeCard({ kind, title, meta, collapsed, onToggle, onInspect });
   const body = el('div', 'card-body');
   if (text) body.append(el('div', 'card-text', text));
   card.append(body);
@@ -283,7 +308,41 @@ function jsonView(value) {
   return view;
 }
 
-function renderToolCard(step) {
+function rawRoundLabel(round) {
+  return `OpenCode Go · round ${round + 1} · POST /chat/completions`;
+}
+
+function requestAt(msg, round) {
+  if (!msg || !Array.isArray(msg.requests)) return null;
+  return msg.requests[round] || null;
+}
+
+function inspectStep(msg, step) {
+  let round = Number.isInteger(step?.round) ? step.round : 0;
+  if (step && step.kind === 'result') round += 1;
+  openRawRequest(requestAt(msg, round), rawRoundLabel(round));
+}
+
+function nextAgentForUser(msg) {
+  const session = currentSession();
+  if (!session) return null;
+  const index = session.msgs.indexOf(msg);
+  if (index < 0) return null;
+  for (let i = index + 1; i < session.msgs.length; i += 1) {
+    if (session.msgs[i].role === 'Agent') return session.msgs[i];
+  }
+  return null;
+}
+
+function inspectUserMessage(msg) {
+  const agent = nextAgentForUser(msg);
+  openRawRequest(
+    agent ? requestAt(agent, 0) : null,
+    rawRoundLabel(0)
+  );
+}
+
+function renderToolCard(step, msg) {
   const call = step.kind === 'call';
   const card = makeCard({
     kind: call ? 'tool-call' : 'tool-result',
@@ -296,6 +355,7 @@ function renderToolCard(step) {
     onToggle: () => {
       step.collapsed = step.collapsed !== true;
     },
+    onInspect: () => inspectStep(msg, step),
   });
   if (!call && step.ok === false) card.classList.add('error');
 
@@ -329,6 +389,9 @@ function renderAgentMessage(msg) {
       onToggle: () => {
         msg.collapsed = msg.collapsed !== true;
       },
+      onInspect: () => {
+        openRawRequest(requestAt(msg, 0), rawRoundLabel(0));
+      },
     });
     const body = el('div', 'card-body');
     for (const step of steps) {
@@ -359,10 +422,11 @@ function renderAgentMessage(msg) {
             step.collapsed = step.collapsed !== true;
           },
           streaming: streaming && i === steps.length - 1,
+          onInspect: () => inspectStep(msg, step),
         })
       );
     } else if (step.kind === 'call' || step.kind === 'result') {
-      appendRow(renderToolCard(step));
+      appendRow(renderToolCard(step, msg));
     }
   }
 }
@@ -399,6 +463,7 @@ function renderMessages() {
         onToggle: () => {
           msg.collapsed = msg.collapsed !== true;
         },
+        onInspect: () => inspectUserMessage(msg),
       })
     );
   }
@@ -592,7 +657,7 @@ function sendMessage() {
   const session = currentSession();
   if (!session) return;
   session.msgs.push({ role: 'User', text, request: null, steps: [] });
-  const agent = { role: 'Agent', text: '', request: '', steps: [] };
+  const agent = { role: 'Agent', text: '', request: '', steps: [], requests: [] };
   session.msgs.push(agent);
 
   state.streamMessage = agent;
@@ -636,6 +701,29 @@ function finishStream() {
   updateSendState();
   saveChatsSoon();
   renderAll();
+}
+
+function openRawRequest(body, label) {
+  dom.rawMeta.textContent = label || '';
+  dom.rawBody.replaceChildren();
+  if (body && typeof body === 'object') {
+    dom.rawBody.append(jsonView(body));
+  } else {
+    dom.rawBody.append(
+      el(
+        'div',
+        'raw-empty',
+        'No raw request body recorded for this card. Capture starts with new messages.'
+      )
+    );
+  }
+  dom.input.blur();
+  dom.rawOverlay.classList.remove('hidden');
+}
+
+function closeRawRequest() {
+  dom.rawOverlay.classList.add('hidden');
+  dom.input.focus();
 }
 
 function openSettings() {
@@ -720,6 +808,10 @@ function bindEvents() {
 
   $('close-settings').addEventListener('click', closeSettings);
   $('done-settings').addEventListener('click', closeSettings);
+  $('close-raw').addEventListener('click', closeRawRequest);
+  dom.rawOverlay.addEventListener('click', (event) => {
+    if (event.target === dom.rawOverlay) closeRawRequest();
+  });
 
   dom.send.addEventListener('click', sendMessage);
   dom.input.addEventListener('input', updateSendState);
@@ -747,6 +839,14 @@ function bindEvents() {
   });
 
   document.addEventListener('keydown', (event) => {
+    if (!dom.rawOverlay.classList.contains('hidden')) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeRawRequest();
+      }
+      return;
+    }
+
     if (event.key === 'Tab') {
       if (!dom.settingsOverlay.classList.contains('hidden')) return;
       event.preventDefault();
@@ -798,17 +898,23 @@ function bindEvents() {
     closeSettings();
   });
 
-  api.onChatDelta(({ requestId, text }) => {
+  api.onChatDelta(({ requestId, text, round }) => {
     if (requestId !== state.requestId || !state.streamMessage) return;
     const msg = state.streamMessage;
     msg.text += text;
     if (!Array.isArray(msg.steps)) msg.steps = [];
 
+    const stepRound = Number.isInteger(round) ? round : 0;
     const last = msg.steps[msg.steps.length - 1];
-    if (state.textOpen && last && last.kind === 'text') {
+    if (
+      state.textOpen &&
+      last &&
+      last.kind === 'text' &&
+      last.round === stepRound
+    ) {
       last.text += text;
     } else {
-      msg.steps.push({ kind: 'text', text });
+      msg.steps.push({ kind: 'text', text, round: stepRound });
       state.textOpen = true;
     }
 
@@ -816,7 +922,16 @@ function bindEvents() {
     renderMessages();
   });
 
-  api.onChatToolCall(({ requestId, name, arguments: args }) => {
+  api.onChatRequest(({ requestId, round, body }) => {
+    if (requestId !== state.requestId || !state.streamMessage) return;
+    if (!body || typeof body !== 'object') return;
+    const msg = state.streamMessage;
+    if (!Array.isArray(msg.requests)) msg.requests = [];
+    const index = Number.isInteger(round) ? round : 0;
+    msg.requests[index] = body;
+  });
+
+  api.onChatToolCall(({ requestId, name, arguments: args, round }) => {
     if (requestId !== state.requestId || !state.streamMessage) return;
     if (!Array.isArray(state.streamMessage.steps)) {
       state.streamMessage.steps = [];
@@ -825,13 +940,14 @@ function bindEvents() {
       kind: 'call',
       name: String(name || 'tool'),
       arguments: String(args ?? ''),
+      round: Number.isInteger(round) ? round : 0,
     });
     state.textOpen = false;
     state.forceScroll = true;
     renderMessages();
   });
 
-  api.onChatToolResult(({ requestId, name, output, ok }) => {
+  api.onChatToolResult(({ requestId, name, output, ok, round }) => {
     if (requestId !== state.requestId || !state.streamMessage) return;
     if (!Array.isArray(state.streamMessage.steps)) {
       state.streamMessage.steps = [];
@@ -841,6 +957,7 @@ function bindEvents() {
       name: String(name || 'tool'),
       output: String(output ?? ''),
       ok: ok !== false,
+      round: Number.isInteger(round) ? round : 0,
     });
     state.textOpen = false;
     state.forceScroll = true;

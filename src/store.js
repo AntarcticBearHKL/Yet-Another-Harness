@@ -75,14 +75,20 @@ function normalizeRole(role) {
 function normalizeStep(step) {
   if (!step || typeof step !== 'object') return null;
   const kind = String(step.kind ?? '');
+  const round = Number.isInteger(step.round) ? step.round : 0;
   if (kind === 'text') {
     const text = String(step.text ?? '');
-    return text ? { kind: 'text', text } : null;
+    return text ? { kind: 'text', text, round } : null;
   }
   if (kind === 'call') {
     const name = String(step.name ?? '');
     return name
-      ? { kind: 'call', name, arguments: String(step.arguments ?? '') }
+      ? {
+          kind: 'call',
+          name,
+          arguments: String(step.arguments ?? ''),
+          round,
+        }
       : null;
   }
   if (kind === 'result') {
@@ -93,6 +99,7 @@ function normalizeStep(step) {
           name,
           output: String(step.output ?? ''),
           ok: step.ok !== false,
+          round,
         }
       : null;
   }
@@ -124,6 +131,12 @@ function normalizeChats(raw) {
                 // 工具循环的完整过程（调用参数 + 返回内容，只用于展示，不发给模型）
                 steps: Array.isArray(msg.steps)
                   ? msg.steps.map(normalizeStep).filter(Boolean)
+                  : [],
+                // 每一轮实际发给模型的原始请求 body（用于双击查看）
+                requests: Array.isArray(msg.requests)
+                  ? msg.requests.filter(
+                      (body) => body && typeof body === 'object'
+                    )
                   : [],
               };
             })

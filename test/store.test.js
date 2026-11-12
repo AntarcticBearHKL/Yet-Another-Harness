@@ -61,9 +61,20 @@ test('tool trace survives normalization', () => {
     seq: 4,
   });
   assert.deepEqual(chats.sessions[0].msgs[0].steps, [
-    { kind: 'text', text: 'let me check' },
-    { kind: 'call', name: 'web_search', arguments: '{"query":"rust"}' },
-    { kind: 'result', name: 'web_search', output: 'Rust 1.90', ok: true },
+    { kind: 'text', text: 'let me check', round: 0 },
+    {
+      kind: 'call',
+      name: 'web_search',
+      arguments: '{"query":"rust"}',
+      round: 0,
+    },
+    {
+      kind: 'result',
+      name: 'web_search',
+      output: 'Rust 1.90',
+      ok: true,
+      round: 0,
+    },
   ]);
 });
 
@@ -89,6 +100,35 @@ test('legacy tool status lines become status steps', () => {
   assert.deepEqual(chats.sessions[0].msgs[0].steps, [
     { kind: 'status', label: 'web_search: rust', ok: false },
   ]);
+});
+
+test('raw request bodies survive normalization', () => {
+  const chats = store.normalizeChats({
+    sessions: [
+      {
+        title: 'Chat 5',
+        system: 'sys',
+        msgs: [
+          {
+            role: 'Agent',
+            text: 'answer',
+            request: '',
+            requests: [
+              { model: 'deepseek-v4.1-flash', messages: [] },
+              { model: 'deepseek-v4.1-flash', messages: [{ role: 'user' }] },
+            ],
+          },
+        ],
+      },
+    ],
+    current: 0,
+    seq: 5,
+  });
+  assert.equal(chats.sessions[0].msgs[0].requests.length, 2);
+  assert.equal(
+    chats.sessions[0].msgs[0].requests[1].messages[0].role,
+    'user'
+  );
 });
 
 test('legacy api_key is normalized', () => {

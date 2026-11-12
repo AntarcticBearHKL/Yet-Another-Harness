@@ -186,13 +186,15 @@ async function streamChat({ apiKey, body, onDelta, signal, sessionId }) {
 
 /**
  * 跑完整的一轮用户请求：模型 → 工具 → 模型，最多 MAX_TOOL_ROUNDS 轮。
- * onDelta 收正文增量；onToolCall / onToolResult 收每次工具调用的参数和返回内容。
+ * onRequest 收每一轮实际发出去的请求 body；onDelta 收正文增量；
+ * onToolCall / onToolResult 收每次工具调用的参数和返回内容。
  */
 async function runAgent({
   apiKey,
   system,
   history,
   onDelta,
+  onRequest,
   onToolCall,
   onToolResult,
   signal,
@@ -200,15 +202,18 @@ async function runAgent({
 }) {
   const messages = messagesFromHistory(history, system);
   let finalText = '';
+  let activeRound = 0;
 
   const emitDelta = (text) => {
     if (!text) return;
     finalText += text;
-    onDelta?.(text);
+    onDelta?.(text, activeRound);
   };
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+    activeRound = round;
     const body = requestBody(messages);
+    onRequest?.(structuredClone(body), round);
 
     const result = await streamChat({
       apiKey,
@@ -241,6 +246,7 @@ async function runAgent({
       onToolCall?.({
         name: call.name,
         arguments: call.arguments,
+        round,
       });
       const output = await tools.execute(call.name, call.arguments);
       onToolResult?.({
@@ -248,6 +254,7 @@ async function runAgent({
         arguments: call.arguments,
         output,
         ok: !/^tool error/i.test(output),
+        round,
       });
       messages.push({
         role: 'tool',

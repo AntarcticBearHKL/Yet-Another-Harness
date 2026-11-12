@@ -6,7 +6,7 @@
 - DeepSeek V4.1 Flash 流式对话（通过 OpenCode Go 的 OpenAI 兼容端点）
 - tool calling loop（模型 → 工具 → 模型）
 - 免费 `web_search`（DuckDuckGo HTML，不需要 API key）
-- 所有对话卡片同宽，默认占满居中的内容通道
+- 所有对话卡片同宽，占满窗口宽度，只留很窄的左右边距
 - 没有标题栏：窗口控制按钮浮动在右上角，按住任意非交互区域都能拖动窗口
 - 没有聊天顶栏：会话内容铺满窗口，输入框悬浮在底部
 - 没有侧边栏；按 Tab 打开全屏对话切换界面，支持键盘选择、删除、新建和打开设置
@@ -14,6 +14,7 @@
 - 聊天内容接近窗口上下边缘时渐进模糊、淡出，不会生硬地被边界切断
 - 每条消息、工具调用和工具返回都是可折叠卡片，用颜色区分
 - 工具调用的 JSON 参数和 JSON 输出用带语法着色、可折叠节点的查看器展示
+- 双击任意对话卡片可以查看该轮实际发给模型的原始请求 body，完整 JSON 树可逐层折叠
 - 所有区域隐藏滚动条，滚轮/触控板仍然可以滚动
 - 会话、设置、API key 落盘；可以删光所有对话，空状态不会自动补一个新对话
 - 全局禁用鼠标框选和右键菜单；只有输入框保留文本选择
@@ -68,6 +69,7 @@ src/styles.css    主题、气泡、浮层、输入区
 - `%APPDATA%\miniharness-electron\chats.json`：所有对话数据
   - `sessions[]`：每个会话的 `id`、`title`、`system`、`msgs[]`
   - `msgs[]`：消息角色、文字、以及工具调用/返回的 `steps`
+  - 每条助手消息的 `requests[]`：该轮 agent loop 实际发给模型的原始请求 body（双击卡片查看）
   - `current` / `seq`：当前选中的会话索引和标题序号
 - `%APPDATA%\miniharness-electron\settings.json`：API key、窗口位置和尺寸
 

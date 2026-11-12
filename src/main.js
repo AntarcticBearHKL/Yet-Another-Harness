@@ -181,7 +181,8 @@ async function runChat(sender, payload) {
       history: payload.history,
       sessionId: payload.chatId,
       signal: controller.signal,
-      onDelta: (delta) => send('chat:delta', { text: delta }),
+      onDelta: (delta, round) => send('chat:delta', { text: delta, round }),
+      onRequest: (body, round) => send('chat:request', { round, body }),
       onToolCall: (call) => send('chat:tool-call', call),
       onToolResult: (result) => send('chat:tool-result', result),
     });
