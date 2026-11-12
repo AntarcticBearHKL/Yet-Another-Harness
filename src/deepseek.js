@@ -6,8 +6,9 @@
 
 const tools = require('./tools');
 
-const ENDPOINT = 'https://api.deepseek.com/chat/completions';
-const MODEL = 'deepseek-chat';
+const ENDPOINT = 'https://opencode.ai/inference/go/openai/v1/chat/completions';
+const MODEL = 'deepseek-v4.1-flash';
+const USER_AGENT = 'miniharness-electron/0.3.0';
 const MAX_HISTORY = 40;
 const MAX_TOOL_ROUNDS = 6;
 
@@ -112,7 +113,7 @@ class ToolCallBuilder {
   }
 }
 
-async function streamChat({ apiKey, body, onDelta, signal }) {
+async function streamChat({ apiKey, body, onDelta, signal, sessionId }) {
   const key = String(apiKey || '').trim();
   if (!key) throw new Error('missing API key');
 
@@ -122,6 +123,8 @@ async function streamChat({ apiKey, body, onDelta, signal }) {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
+      'User-Agent': USER_AGENT,
+      ...(sessionId ? { 'x-opencode-session': String(sessionId) } : {}),
     },
     body: JSON.stringify(body),
     signal: signal || AbortSignal.timeout(300_000),
@@ -193,6 +196,7 @@ async function runAgent({
   onToolCall,
   onToolResult,
   signal,
+  sessionId,
 }) {
   const messages = messagesFromHistory(history, system);
   let finalText = '';
@@ -210,6 +214,7 @@ async function runAgent({
       apiKey,
       body,
       signal,
+      sessionId,
       onDelta: emitDelta,
     });
 

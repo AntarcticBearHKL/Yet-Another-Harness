@@ -3,7 +3,7 @@
 const DEFAULT_SYSTEM_PROMPT =
   'You are miniharness, a terse terminal coding assistant. Answer in plain text.';
 const NO_KEY_HINT =
-  'No DeepSeek API key yet. Open Settings at the bottom of the sidebar and paste your key to start chatting.';
+  'No OpenCode Go API key yet. Open Settings at the bottom of the sidebar and paste your key to start chatting.';
 
 const api = window.miniharness;
 const $ = (id) => document.getElementById(id);
@@ -483,6 +483,7 @@ function newSession() {
   if (state.sessions.length === 0) state.seq = 0;
   state.seq += 1;
   state.sessions.push({
+    id: makeId(),
     title: `Chat ${state.seq}`,
     system: DEFAULT_SYSTEM_PROMPT,
     msgs: [],
@@ -549,6 +550,7 @@ function sendMessage() {
   const history = session.msgs.slice(0, -1); // 不把空的助手占位发出去
   api.sendChat({
     requestId: state.requestId,
+    chatId: session.id,
     apiKey: state.settings.apiKey,
     system: session.system || '',
     history,
@@ -784,7 +786,12 @@ async function boot() {
   } catch (error) {
     console.error('load failed', error);
     state.sessions = [
-      { title: 'Chat 1', system: DEFAULT_SYSTEM_PROMPT, msgs: [] },
+      {
+        id: makeId(),
+        title: 'Chat 1',
+        system: DEFAULT_SYSTEM_PROMPT,
+        msgs: [],
+      },
     ];
     state.current = 0;
     state.seq = 1;

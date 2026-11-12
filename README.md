@@ -3,7 +3,7 @@
 `D:\Dev\Harness\miniharness` 的 Electron 重写版。保留原来的核心体验：
 
 - 无边框、半透明/玻璃质感的桌面窗口，单一暖色浅色主题（奶油底 + 琥珀/陶土强调），没有深浅切换
-- DeepSeek 流式对话
+- DeepSeek V4.1 Flash 流式对话（通过 OpenCode Go 的 OpenAI 兼容端点）
 - tool calling loop（模型 → 工具 → 模型）
 - 免费 `web_search`（DuckDuckGo HTML，不需要 API key）
 - 所有对话卡片同宽，默认占满居中的内容通道
@@ -44,7 +44,7 @@ LIVE_SEARCH=1 npm test   # 额外跑一条真实 DuckDuckGo 搜索
 ```
 src/main.js       BrowserWindow、IPC、窗口控制、chat:send
 src/preload.js    contextBridge 暴露给渲染进程的 API
-src/deepseek.js   DeepSeek SSE + tool_calls 累积 + agent loop
+src/deepseek.js   OpenCode Go SSE + tool_calls 累积 + agent loop
 src/tools.js      免费 web_search（DuckDuckGo HTML）
 src/store.js      chats.json / settings.json 原子写 + 旧版迁移
 src/renderer.js   聊天、会话、设置浮层
@@ -54,6 +54,14 @@ src/styles.css    主题、气泡、浮层、输入区
 
 渲染进程只负责画；网络请求、API key、工具执行都在主进程。`contextIsolation: true`，
 `nodeIntegration: false`，页面 CSP 只允许本地脚本/样式。
+
+## 模型
+
+- 端点：`https://opencode.ai/inference/go/openai/v1/chat/completions`
+- 模型：`deepseek-v4.1-flash`
+- 鉴权：OpenCode Go 的 API key（Bearer）
+- 请求带 `User-Agent: miniharness-electron/0.3.0`，并为每个会话带稳定的
+  `x-opencode-session`，方便网关路由和 prompt cache
 
 ## 数据
 
@@ -65,7 +73,7 @@ src/styles.css    主题、气泡、浮层、输入区
 你原来的 `Chat 3` 会直接出现在新窗口里。
 
 API key 和旧版一样是明文存在 `settings.json` 里；本地应用，没接 Windows Credential
-Manager。
+Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key。
 
 ## 玻璃
 

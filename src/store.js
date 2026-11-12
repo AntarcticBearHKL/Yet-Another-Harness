@@ -6,6 +6,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are miniharness, a terse terminal coding assistant. Answer in plain text.';
@@ -131,6 +132,7 @@ function normalizeChats(raw) {
         : [];
 
       return {
+        id: String(session.id || crypto.randomUUID()),
         title: String(session.title || `Chat ${index + 1}`),
         system: String(session.system ?? DEFAULT_SYSTEM_PROMPT),
         msgs,
