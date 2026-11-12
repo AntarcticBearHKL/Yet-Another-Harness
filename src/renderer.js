@@ -10,11 +10,11 @@ const contextTools = window.MiniharnessContext;
 const $ = (id) => document.getElementById(id);
 
 const dom = {
+  sidebar: $('sidebar'),
+  toggleSidebar: $('toggle-sidebar'),
   messages: $('messages'),
   input: $('input'),
   send: $('send'),
-  chatTitle: $('chat-title'),
-  chatStatus: $('chat-status'),
   openContext: $('open-context'),
   sessionList: $('session-list'),
   settingsOverlay: $('settings-overlay'),
@@ -35,11 +35,12 @@ const state = {
     transparency: 25,
     blur: 100,
     apiKey: '',
+    sidebarCollapsed: false,
   },
+  sidebarCollapsed: false,
   streaming: false,
   requestId: null,
   streamMessage: null,
-  statusText: '',
   pendingDelete: -1,
   deleteTimer: null,
   saveTimer: null,
@@ -80,8 +81,8 @@ function saveChatsSoon() {
 }
 
 function settingsPayload() {
-  const { transparency, apiKey } = state.settings;
-  return { transparency, apiKey };
+  const { transparency, apiKey, sidebarCollapsed } = state.settings;
+  return { transparency, apiKey, sidebarCollapsed };
 }
 
 function saveSettingsNow() {
@@ -110,37 +111,35 @@ function applySettings() {
   if (document.activeElement !== dom.apiKey) {
     dom.apiKey.value = s.apiKey;
   }
+  applySidebar();
 }
 
-function updateHeader() {
+function applySidebar() {
+  state.sidebarCollapsed = state.settings.sidebarCollapsed === true;
+  dom.sidebar.classList.toggle('collapsed', state.sidebarCollapsed);
+  dom.toggleSidebar.setAttribute(
+    'aria-expanded',
+    String(!state.sidebarCollapsed)
+  );
+  dom.toggleSidebar.title = state.sidebarCollapsed
+    ? 'Expand sidebar'
+    : 'Collapse sidebar';
+}
+
+function updateControls() {
   const session = currentSession();
   if (!session) {
-    dom.chatTitle.textContent = 'No chat';
-    dom.chatStatus.textContent = '0 messages';
-    dom.chatStatus.classList.remove('active');
     dom.openContext.disabled = true;
     dom.input.disabled = true;
     dom.input.placeholder = 'Create a chat first';
+    updateSendState();
     return;
   }
 
   dom.input.disabled = false;
   dom.input.placeholder = '';
-  dom.chatTitle.textContent = session.title || 'Chat';
-  const count = session.msgs.length;
-  const text =
-    state.statusText ||
-    (state.streaming
-      ? 'streaming…'
-      : count === 1
-        ? '1 message'
-        : `${count} messages`);
-  dom.chatStatus.textContent = text;
-  dom.chatStatus.classList.toggle(
-    'active',
-    Boolean(state.streaming || state.statusText)
-  );
   dom.openContext.disabled = state.streaming;
+  updateSendState();
 }
 
 function isNearBottom() {
@@ -169,9 +168,23 @@ function renderMessages() {
     const row = el('div', 'msg');
     const bubble = el(
       'div',
-      `bubble ${msg.role === 'Agent' ? 'agent' : 'user'}`,
-      msg.text
+      `bubble ${msg.role === 'Agent' ? 'agent' : 'user'}`
     );
+
+    if (Array.isArray(msg.steps) && msg.steps.length > 0) {
+      const steps = el('div', 'bubble-steps');
+      for (const step of msg.steps) {
+        const line = el('div', 'bubble-step', step.label);
+        if (step.ok === false) line.classList.add('error');
+        steps.append(line);
+      }
+      bubble.append(steps);
+    }
+
+    if (msg.text) {
+      bubble.append(el('div', 'bubble-text', msg.text));
+    }
+
     if (state.streaming && msg === state.streamMessage) {
       bubble.classList.add('streaming');
     }
@@ -240,7 +253,7 @@ function renderSessions() {
 function renderAll() {
   renderSessions();
   renderMessages();
-  updateHeader();
+  updateControls();
 }
 
 function updateSendState() {
@@ -289,8 +302,8 @@ function sendMessage() {
 
   const session = currentSession();
   if (!session) return;
-  session.msgs.push({ role: 'User', text, request: null });
-  const agent = { role: 'Agent', text: '', request: '' };
+  session.msgs.push({ role: 'User', text, request: null, steps: [] });
+  const agent = { role: 'Agent', text: '', request: '', steps: [] };
   session.msgs.push(agent);
 
   state.streamMessage = agent;
@@ -301,9 +314,9 @@ function sendMessage() {
   if (!state.settings.apiKey.trim()) {
     agent.text = NO_KEY_HINT;
     agent.request = null; // 本地提示不算模型历史
+    agent.steps = [{ label: 'local note (no API key)', ok: false }];
     state.streamMessage = null;
     state.streaming = false;
-    state.statusText = '';
     saveChatsSoon();
     renderAll();
     return;
@@ -311,7 +324,6 @@ function sendMessage() {
 
   state.streaming = true;
   state.requestId = makeId();
-  state.statusText = 'thinking…';
   renderAll();
 
   const history = session.msgs.slice(0, -1); // 不把空的助手占位发出去
@@ -325,7 +337,6 @@ function sendMessage() {
 
 function finishStream() {
   state.streaming = false;
-  state.statusText = '';
   state.requestId = null;
   state.streamMessage = null;
   state.forceScroll = true;
@@ -371,7 +382,8 @@ function applyContext() {
     } else if (msg.role === 'Agent') {
       request = ''; // 改过的助手消息仍然算真正的模型历史
     }
-    return { role: msg.role, text: msg.text, request };
+    const steps = prev && prev.role === msg.role ? prev.steps || [] : [];
+    return { role: msg.role, text: msg.text, request, steps };
   });
   session.system = parsed.system ?? session.system;
   state.forceScroll = true;
@@ -399,6 +411,12 @@ function bindEvents() {
     const target = event.target;
     if (target instanceof Element && target.closest('input, textarea')) return;
     event.preventDefault();
+  });
+
+  dom.toggleSidebar.addEventListener('click', () => {
+    state.settings.sidebarCollapsed = !state.settings.sidebarCollapsed;
+    applySidebar();
+    saveSettingsSoon();
   });
 
   $('new-session').addEventListener('click', newSession);
@@ -439,6 +457,7 @@ function bindEvents() {
       transparency: 25,
       blur: 100,
       apiKey: '',
+      sidebarCollapsed: state.settings.sidebarCollapsed === true,
     };
     applySettings();
     saveSettingsSoon();
@@ -462,15 +481,21 @@ function bindEvents() {
   api.onChatDelta(({ requestId, text }) => {
     if (requestId !== state.requestId || !state.streamMessage) return;
     state.streamMessage.text += text;
-    state.statusText = '';
+    state.forceScroll = true;
     renderMessages();
-    updateHeader();
   });
 
-  api.onChatStatus(({ requestId, text }) => {
-    if (requestId !== state.requestId) return;
-    state.statusText = text || '';
-    updateHeader();
+  api.onChatTool(({ requestId, label, ok }) => {
+    if (requestId !== state.requestId || !state.streamMessage) return;
+    if (!Array.isArray(state.streamMessage.steps)) {
+      state.streamMessage.steps = [];
+    }
+    state.streamMessage.steps.push({
+      label: String(label || 'tool'),
+      ok: ok !== false,
+    });
+    state.forceScroll = true;
+    renderMessages();
   });
 
   api.onChatDone(({ requestId, text }) => {

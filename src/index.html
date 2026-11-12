@@ -35,22 +35,48 @@
 
       <div id="shell">
         <aside id="sidebar">
-          <button id="new-session" class="pill primary wide">New chat</button>
+          <div class="sidebar-head">
+            <span class="sidebar-caption">CHATS</span>
+            <button
+              id="toggle-sidebar"
+              class="icon-btn"
+              aria-label="Collapse sidebar"
+              aria-expanded="true"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 6l-6 6 6 6" />
+              </svg>
+            </button>
+          </div>
+
+          <button id="new-session" class="pill primary wide">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            <span class="label">New chat</span>
+          </button>
           <div class="divider"></div>
           <div id="session-list" class="session-list"></div>
           <div class="sidebar-bottom">
             <div class="divider"></div>
-            <button id="open-settings" class="pill wide">Settings</button>
+            <button id="open-context" class="pill wide" disabled>
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 3h7l4 4v14H7z" />
+                <path d="M14 3v5h5" />
+              </svg>
+              <span class="label">Context</span>
+            </button>
+            <button id="open-settings" class="pill wide">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 2v3M12 19v3M4.9 4.9L7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1" />
+              </svg>
+              <span class="label">Settings</span>
+            </button>
           </div>
         </aside>
 
         <main id="main">
-          <header id="chat-header">
-            <h1 id="chat-title">Chat 1</h1>
-            <span id="chat-status" class="muted small"></span>
-            <button id="open-context" class="pill compact">Context</button>
-          </header>
-
           <section id="messages" class="messages" aria-live="polite"></section>
 
           <footer id="composer">

@@ -180,7 +180,7 @@ async function runChat(sender, payload) {
       history: payload.history,
       signal: controller.signal,
       onDelta: (delta) => send('chat:delta', { text: delta }),
-      onStatus: (text) => send('chat:status', { text }),
+      onTool: (step) => send('chat:tool', step),
     });
     send('chat:done', { text });
   } catch (error) {

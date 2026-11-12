@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('miniharness', {
 
   sendChat: (payload) => ipcRenderer.send('chat:send', payload),
   onChatDelta: (callback) => subscribe('chat:delta', callback),
-  onChatStatus: (callback) => subscribe('chat:status', callback),
+  onChatTool: (callback) => subscribe('chat:tool', callback),
   onChatDone: (callback) => subscribe('chat:done', callback),
   onChatError: (callback) => subscribe('chat:error', callback),
 

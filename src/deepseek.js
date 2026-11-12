@@ -183,9 +183,9 @@ async function streamChat({ apiKey, body, onDelta, signal }) {
 
 /**
  * 跑完整的一轮用户请求：模型 → 工具 → 模型，最多 MAX_TOOL_ROUNDS 轮。
- * onDelta 收正文增量，onStatus 收标题栏状态。
+ * onDelta 收正文增量，onTool 收每一轮工具调用的过程行。
  */
-async function runAgent({ apiKey, system, history, onDelta, onStatus, signal }) {
+async function runAgent({ apiKey, system, history, onDelta, onTool, signal }) {
   const messages = messagesFromHistory(history, system);
   let finalText = '';
 
@@ -197,19 +197,12 @@ async function runAgent({ apiKey, system, history, onDelta, onStatus, signal }) 
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     const body = requestBody(messages);
-    let first = true;
 
     const result = await streamChat({
       apiKey,
       body,
       signal,
-      onDelta: (text) => {
-        if (first) {
-          first = false;
-          onStatus?.('');
-        }
-        emitDelta(text);
-      },
+      onDelta: emitDelta,
     });
 
     if (result.toolCalls.length === 0) {
@@ -231,15 +224,17 @@ async function runAgent({ apiKey, system, history, onDelta, onStatus, signal }) 
     }
 
     for (const call of result.toolCalls) {
-      onStatus?.(tools.statusLabel(call.name, call.arguments));
       const output = await tools.execute(call.name, call.arguments);
+      onTool?.({
+        label: tools.statusLabel(call.name, call.arguments),
+        ok: !/^tool error/i.test(output),
+      });
       messages.push({
         role: 'tool',
         tool_call_id: call.id,
         content: output,
       });
     }
-    onStatus?.('thinking…');
 
     if (round + 1 === MAX_TOOL_ROUNDS) {
       throw new Error('tool loop limit reached');

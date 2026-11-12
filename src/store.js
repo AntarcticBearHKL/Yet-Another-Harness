@@ -33,6 +33,7 @@ function defaultSettings() {
     transparency: 25,
     blur: 100,
     apiKey: '',
+    sidebarCollapsed: false,
     window: null,
   };
 }
@@ -72,6 +73,7 @@ function normalizeSettings(raw) {
     transparency: clampNumber(raw.transparency, 0, 100, base.transparency),
     blur: clampNumber(raw.blur, 0, 100, base.blur),
     apiKey: String(raw.apiKey ?? raw.api_key ?? ''),
+    sidebarCollapsed: raw.sidebarCollapsed === true,
     window,
   };
 }
@@ -102,6 +104,16 @@ function normalizeChats(raw) {
                   msg.request === undefined || msg.request === null
                     ? null
                     : String(msg.request),
+                // 工具循环的过程行（只用于展示，不发给模型）
+                steps: Array.isArray(msg.steps)
+                  ? msg.steps
+                      .filter((step) => step && typeof step === 'object')
+                      .map((step) => ({
+                        label: String(step.label ?? ''),
+                        ok: step.ok !== false,
+                      }))
+                      .filter((step) => step.label)
+                  : [],
               };
             })
         : [];

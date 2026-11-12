@@ -150,9 +150,84 @@ button {
   padding: 12px 14px;
   background: var(--panel);
   border-right: 1px solid var(--line);
+  transition: width 160ms ease, flex-basis 160ms ease, padding 160ms ease;
+}
+
+#sidebar.collapsed {
+  width: 56px;
+  flex-basis: 56px;
+  padding: 12px 8px;
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  margin-bottom: 8px;
+}
+
+.sidebar-caption {
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+#sidebar.collapsed .sidebar-caption,
+#sidebar.collapsed .label,
+#sidebar.collapsed .divider,
+#sidebar.collapsed .session-list {
+  display: none;
+}
+
+#sidebar.collapsed .sidebar-head {
+  justify-content: center;
+}
+
+#sidebar.collapsed .pill.wide {
+  width: 40px;
+  padding: 0;
+}
+
+#sidebar.collapsed .pill .icon {
+  margin: 0;
+}
+
+.sidebar-bottom .pill + .pill {
+  margin-top: 6px;
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--dim);
+}
+
+.icon-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.icon-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 160ms ease;
+}
+
+#sidebar.collapsed #toggle-sidebar svg {
+  transform: rotate(180deg);
 }
 
 #main {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -162,6 +237,10 @@ button {
 
 /* ---------------------------------------------------------------- controls */
 .pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   height: 30px;
   padding: 0 12px;
   border: 1px solid var(--line);
@@ -170,6 +249,17 @@ button {
   font-size: 12.5px;
   white-space: nowrap;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.pill .icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .pill:hover {
@@ -304,39 +394,6 @@ button {
 }
 
 /* ---------------------------------------------------------------- chat */
-#chat-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 46px;
-  flex: 0 0 46px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--line);
-}
-
-#chat-title {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-#chat-status {
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--faint);
-}
-
-#chat-status.active {
-  color: var(--accent);
-}
-
 #context-status.error {
   color: #e2564d;
 }
@@ -348,7 +405,7 @@ button {
   align-items: flex-start;
   gap: 10px;
   min-height: 0;
-  padding: 12px 14px;
+  padding: 18px 14px 180px;
   overflow-y: auto;
 }
 
@@ -377,6 +434,39 @@ button {
   background: var(--bubble-user);
 }
 
+.bubble-text {
+  white-space: pre-wrap;
+}
+
+.bubble-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.bubble-steps + .bubble-text {
+  margin-top: 4px;
+}
+
+.bubble-step {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.bubble-step::before {
+  content: "↳ ";
+  color: var(--accent);
+}
+
+.bubble-step.error {
+  color: #b23a2f;
+}
+
 .bubble.streaming::after {
   content: "▍";
   margin-left: 2px;
@@ -398,18 +488,23 @@ button {
 
 /* ---------------------------------------------------------------- composer */
 #composer {
-  flex: 0 0 auto;
-  padding: 12px 14px;
-  background: var(--panel);
-  border-top: 1px solid var(--line);
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  z-index: 5;
+  width: min(760px, calc(100% - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
 .composer-box {
   position: relative;
   height: 77px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 14px;
   background: var(--card);
+  box-shadow: 0 14px 40px rgba(60, 40, 25, 0.18);
+  pointer-events: auto;
 }
 
 .composer-box:focus-within {
