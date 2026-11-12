@@ -40,6 +40,7 @@ const state = {
   renderedOpenKeys: new Set(),
   renderedSessionId: null,
   renderVersion: 0,
+  lastWheelNav: 0,
   spaceHeld: false,
   pointerX: 0,
   pointerY: 0,
@@ -195,6 +196,10 @@ function applyOpenKeys(keys, { instant = false } = {}) {
   }
   for (const card of cards) {
     setCardExpanded(card, set.has(card.dataset.cardKey));
+    card.classList.toggle(
+      'peek-target',
+      state.spaceHeld && card.dataset.cardKey === state.peekKey
+    );
   }
   if (instant) {
     requestAnimationFrame(() => {
@@ -718,6 +723,17 @@ function startSpacePeek(card) {
   state.spaceHeld = true;
   state.peekKey = key;
   state.peekKeys.add(key);
+
+  // 保留鼠标上方已展开的当前条目，避免它折叠后把预览标题顶走
+  const cards = [...dom.messages.querySelectorAll('.message-card')];
+  const targetIndex = cards.findIndex((item) => item.dataset.cardKey === key);
+  const openIndex = cards.findIndex(
+    (item) => item.dataset.cardKey === state.openCardKey
+  );
+  if (targetIndex >= 0 && openIndex >= 0 && openIndex < targetIndex) {
+    state.peekKeys.add(state.openCardKey);
+  }
+
   state.peekPointerX = state.pointerX;
   state.peekPointerY = state.pointerY;
   applyOpenKeys(peekOpenKeys());
@@ -763,6 +779,60 @@ function handlePointerMove(event) {
   state.peekPointerX = state.pointerX;
   state.peekPointerY = state.pointerY;
   applyOpenKeys(peekOpenKeys());
+}
+
+function scrollCardToTop(card, offset = 48) {
+  const container = dom.messages;
+  const containerRect = container.getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  container.scrollTop += cardRect.top - containerRect.top - offset;
+}
+
+function navigateBlock(direction) {
+  const cards = [...dom.messages.querySelectorAll('.message-card')];
+  if (cards.length === 0) return;
+
+  let index = cards.findIndex(
+    (card) => card.dataset.cardKey === state.openCardKey
+  );
+  if (index < 0) {
+    for (const key of state.renderedOpenKeys) {
+      const found = cards.findIndex((card) => card.dataset.cardKey === key);
+      if (found >= 0) {
+        index = found;
+        break;
+      }
+    }
+  }
+  if (index < 0) index = direction > 0 ? -1 : cards.length;
+
+  const nextIndex = Math.max(
+    0,
+    Math.min(cards.length - 1, index + direction)
+  );
+  if (nextIndex === index) return;
+
+  const target = cards[nextIndex];
+  const targetKey = target.dataset.cardKey;
+  state.peekKey = null;
+  state.peekKeys.clear();
+  state.openCardKey = targetKey;
+
+  // 先瞬间折叠当前块，把目标块定位到固定高度，再在下一帧向下展开
+  for (const card of cards) {
+    if (card === target) continue;
+    card.classList.add('no-anim');
+    setCardExpanded(card, false);
+  }
+  setCardExpanded(target, false);
+  void dom.messages.offsetHeight;
+  scrollCardToTop(target);
+
+  requestAnimationFrame(() => {
+    for (const card of cards) card.classList.remove('no-anim');
+    if (state.openCardKey !== targetKey) return;
+    applyOpenKey(targetKey);
+  });
 }
 
 function openSwitcher() {
@@ -1210,6 +1280,26 @@ function bindEvents() {
     endSpacePeek();
     if (state.switcherOpen) closeSwitcher();
   });
+
+  document.addEventListener(
+    'wheel',
+    (event) => {
+      if (!event.ctrlKey) return;
+
+      // Ctrl+wheel 始终拦截，避免在弹窗打开时触发页面缩放
+      event.preventDefault();
+      if (!dom.rawOverlay.classList.contains('hidden')) return;
+      if (!dom.settingsOverlay.classList.contains('hidden')) return;
+      if (state.switcherOpen) return;
+      if (state.spaceHeld || event.deltaY === 0) return;
+
+      const now = Date.now();
+      if (now - state.lastWheelNav < 140) return;
+      state.lastWheelNav = now;
+      navigateBlock(event.deltaY > 0 ? 1 : -1);
+    },
+    { passive: false }
+  );
 
   // 点击遮罩空白处关闭；面板本身阻止冒泡
   dom.settingsOverlay.addEventListener('click', (event) => {
