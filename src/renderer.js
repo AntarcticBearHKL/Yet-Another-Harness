@@ -36,10 +36,10 @@ const state = {
   switcherIndex: 0,
   openCardKey: null,
   peekKey: null,
-  renderedOpenKey: null,
+  peekKeys: new Set(),
+  renderedOpenKeys: new Set(),
   renderedSessionId: null,
   renderVersion: 0,
-  openApplyVersion: 0,
   spaceHeld: false,
   pointerX: 0,
   pointerY: 0,
@@ -172,31 +172,45 @@ function setCardExpanded(card, expanded) {
   if (body) body.inert = !expanded;
 }
 
-function applyOpenKey(key, { instant = false } = {}) {
-  state.openApplyVersion += 1;
+function openKeySet(key) {
+  const set = new Set();
+  if (key) set.add(key);
+  return set;
+}
+
+function sameOpenKeys(a, b) {
+  if (a.size !== b.size) return false;
+  for (const key of a) {
+    if (!b.has(key)) return false;
+  }
+  return true;
+}
+
+function applyOpenKeys(keys, { instant = false } = {}) {
+  const set = keys instanceof Set ? new Set(keys) : openKeySet(keys);
   const cards = [...dom.messages.querySelectorAll('.message-card')];
-  const target = key ? cards.find((card) => card.dataset.cardKey === key) : null;
 
   if (instant) {
     for (const card of cards) card.classList.add('no-anim');
   }
-  for (const card of cards) setCardExpanded(card, card === target);
+  for (const card of cards) {
+    setCardExpanded(card, set.has(card.dataset.cardKey));
+  }
   if (instant) {
     requestAnimationFrame(() => {
       for (const card of cards) card.classList.remove('no-anim');
     });
   }
 
-  state.renderedOpenKey = target ? key : null;
+  state.renderedOpenKeys = set;
 }
 
-function applyOpenKeyPinned(key) {
-  const top = dom.messages.scrollTop;
-  applyOpenKey(key);
-  dom.messages.scrollTop = top;
-  requestAnimationFrame(() => {
-    dom.messages.scrollTop = top;
-  });
+function applyOpenKey(key, opts) {
+  applyOpenKeys(openKeySet(key), opts);
+}
+
+function peekOpenKeys() {
+  return new Set(state.peekKeys);
 }
 
 function makeCard(opts) {
@@ -465,7 +479,7 @@ function renderAgentMessage(msg, msgIndex) {
       key: agentCardKey(msgIndex),
       kind: 'agent',
       title: '对话',
-      meta: '助手',
+      meta: 'response',
       onInspect: () => {
         openRawRequest(requestAt(msg, 0), rawRoundLabel(0));
       },
@@ -491,7 +505,7 @@ function renderAgentMessage(msg, msgIndex) {
           key: stepCardKey(msgIndex, i),
           kind: 'agent',
           title: '对话',
-          meta: '助手',
+          meta: 'response',
           text: step.text,
           streaming: streaming && i === steps.length - 1,
           onInspect: () => inspectStep(msg, step),
@@ -507,9 +521,10 @@ function renderMessages({ animate = true } = {}) {
   const session = currentSession();
   const sessionId = session ? session.id : null;
   const version = ++state.renderVersion;
-  const openVersion = state.openApplyVersion;
   const changed = state.renderedSessionId !== sessionId;
-  const previousKey = changed ? null : state.renderedOpenKey;
+  const previousKeys = changed
+    ? new Set()
+    : new Set(state.renderedOpenKeys);
   const prevTop = dom.messages.scrollTop;
   const stick = !state.peekKey && (state.forceScroll || isNearBottom());
   state.forceScroll = false;
@@ -518,8 +533,9 @@ function renderMessages({ animate = true } = {}) {
   if (!session) {
     state.openCardKey = null;
     state.peekKey = null;
+    state.peekKeys.clear();
     state.spaceHeld = false;
-    state.renderedOpenKey = null;
+    state.renderedOpenKeys = new Set();
     state.renderedSessionId = null;
     dom.messages.append(el('div', 'empty', 'No chats yet. Hold Tab to create one.'));
     return;
@@ -527,8 +543,9 @@ function renderMessages({ animate = true } = {}) {
   if (session.msgs.length === 0) {
     state.openCardKey = null;
     state.peekKey = null;
+    state.peekKeys.clear();
     state.spaceHeld = false;
-    state.renderedOpenKey = null;
+    state.renderedOpenKeys = new Set();
     state.renderedSessionId = sessionId;
     dom.messages.append(el('div', 'empty', 'No messages yet. Type below.'));
     return;
@@ -545,7 +562,7 @@ function renderMessages({ animate = true } = {}) {
         key: messageCardKey(index),
         kind: 'user',
         title: '对话',
-        meta: '你',
+        meta: 'prompt',
         text: msg.text,
         onInspect: () => inspectUserMessage(msg),
       })
@@ -554,30 +571,45 @@ function renderMessages({ animate = true } = {}) {
 
   const autoKey = autoCardKey();
   state.openCardKey = autoKey;
-  let targetKey = state.peekKey || autoKey;
   const cards = [...dom.messages.querySelectorAll('.message-card')];
-  if (targetKey && !cards.some((card) => card.dataset.cardKey === targetKey)) {
-    targetKey = autoKey;
+  const cardKeys = new Set(cards.map((card) => card.dataset.cardKey));
+
+  for (const key of [...state.peekKeys]) {
+    if (!cardKeys.has(key)) state.peekKeys.delete(key);
+  }
+  if (state.peekKey && !cardKeys.has(state.peekKey)) {
     state.peekKey = null;
+  }
+
+  const targetKeys =
+    state.peekKeys.size > 0 ? new Set(state.peekKeys) : openKeySet(autoKey);
+  for (const key of [...targetKeys]) {
+    if (!cardKeys.has(key)) targetKeys.delete(key);
   }
   state.renderedSessionId = sessionId;
 
   if (changed || !animate) {
-    applyOpenKey(targetKey, { instant: true });
+    applyOpenKeys(targetKeys, { instant: true });
   } else {
-    const previous = previousKey
-      ? cards.find((card) => card.dataset.cardKey === previousKey)
-      : null;
-    for (const card of cards) setCardExpanded(card, card === previous);
+    for (const card of cards) {
+      setCardExpanded(card, previousKeys.has(card.dataset.cardKey));
+    }
     void dom.messages.offsetHeight;
-    if (!previous || previousKey !== targetKey) {
+    if (!sameOpenKeys(previousKeys, targetKeys)) {
       requestAnimationFrame(() => {
         if (state.renderVersion !== version) return;
-        if (state.openApplyVersion !== openVersion) return;
-        applyOpenKey(targetKey);
+        const latest =
+          state.peekKeys.size > 0
+            ? peekOpenKeys()
+            : openKeySet(state.openCardKey);
+        const keys = new Set();
+        for (const key of latest) {
+          if (cardKeys.has(key)) keys.add(key);
+        }
+        applyOpenKeys(keys);
       });
     } else {
-      state.renderedOpenKey = targetKey;
+      state.renderedOpenKeys = targetKeys;
     }
   }
 
@@ -685,16 +717,18 @@ function startSpacePeek(card) {
   if (!key) return;
   state.spaceHeld = true;
   state.peekKey = key;
+  state.peekKeys.add(key);
   state.peekPointerX = state.pointerX;
   state.peekPointerY = state.pointerY;
-  applyOpenKeyPinned(key);
+  applyOpenKeys(peekOpenKeys());
 }
 
 function endSpacePeek() {
-  if (!state.spaceHeld) return;
+  if (!state.spaceHeld && state.peekKeys.size === 0) return;
   state.spaceHeld = false;
   state.peekKey = null;
-  applyOpenKeyPinned(state.openCardKey);
+  state.peekKeys.clear();
+  applyOpenKeys(openKeySet(state.openCardKey));
 }
 
 function handlePointerMove(event) {
@@ -714,9 +748,21 @@ function handlePointerMove(event) {
   if (!key || key === state.peekKey) return;
 
   state.peekKey = key;
+  state.peekKeys.add(key);
+
+  const cards = [...dom.messages.querySelectorAll('.message-card')];
+  const newIndex = cards.findIndex((item) => item.dataset.cardKey === key);
+  if (newIndex >= 0) {
+    for (const peeked of [...state.peekKeys]) {
+      if (peeked === key) continue;
+      const index = cards.findIndex((item) => item.dataset.cardKey === peeked);
+      if (index > newIndex) state.peekKeys.delete(peeked);
+    }
+  }
+
   state.peekPointerX = state.pointerX;
   state.peekPointerY = state.pointerY;
-  applyOpenKeyPinned(key);
+  applyOpenKeys(peekOpenKeys());
 }
 
 function openSwitcher() {
@@ -754,6 +800,7 @@ function moveSwitcher(delta) {
 
 function selectSession(index) {
   if (index < 0 || index >= state.sessions.length) return;
+  endSpacePeek();
   state.current = index;
   state.forceScroll = true;
   state.pendingDelete = -1;
@@ -780,6 +827,7 @@ function updateSendState() {
 }
 
 function newSession() {
+  endSpacePeek();
   if (state.sessions.length === 0) state.seq = 0;
   state.seq += 1;
   state.sessions.push({
@@ -797,6 +845,7 @@ function newSession() {
 
 function deleteSession(index) {
   if (index < 0 || index >= state.sessions.length) return;
+  endSpacePeek();
   state.sessions.splice(index, 1);
 
   if (state.sessions.length === 0) {
@@ -818,6 +867,7 @@ function sendMessage() {
   if (state.streaming) return;
   const text = dom.input.value.trim();
   if (!text) return;
+  endSpacePeek();
 
   const session = currentSession();
   if (!session) return;
@@ -870,7 +920,11 @@ function finishStream() {
     .forEach((card) => card.classList.remove('streaming'));
 
   state.openCardKey = autoCardKey();
-  if (!state.peekKey) applyOpenKey(state.openCardKey);
+  if (state.peekKey || state.peekKeys.size > 0) {
+    applyOpenKeys(peekOpenKeys());
+  } else {
+    applyOpenKey(state.openCardKey);
+  }
 
   updateSendState();
   saveChatsSoon();
@@ -1217,7 +1271,12 @@ function bindEvents() {
     const stick = isNearBottom();
     state.forceScroll = false;
     state.openCardKey = key;
-    if (!state.peekKey && state.renderedOpenKey !== key) {
+    if (state.peekKey) {
+      applyOpenKeys(peekOpenKeys());
+    } else if (
+      state.renderedOpenKeys.size !== 1 ||
+      !state.renderedOpenKeys.has(key)
+    ) {
       applyOpenKey(key);
     }
     if (stick && !state.peekKey) {
