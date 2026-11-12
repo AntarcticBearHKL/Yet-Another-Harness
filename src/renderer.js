@@ -192,6 +192,15 @@ function applyOpenKey(key, { instant = false } = {}) {
   state.renderedOpenKey = target ? key : null;
 }
 
+function applyOpenKeyPinned(key) {
+  const top = dom.messages.scrollTop;
+  applyOpenKey(key);
+  dom.messages.scrollTop = top;
+  requestAnimationFrame(() => {
+    dom.messages.scrollTop = top;
+  });
+}
+
 function makeCard(opts) {
   const card = el('div', `message-card ${opts.kind}`);
   card.dataset.cardKey = opts.key;
@@ -686,14 +695,14 @@ function startSpacePeek(card) {
   state.peekKey = key;
   state.peekPointerX = state.pointerX;
   state.peekPointerY = state.pointerY;
-  applyOpenKey(key);
+  applyOpenKeyPinned(key);
 }
 
 function endSpacePeek() {
   if (!state.spaceHeld) return;
   state.spaceHeld = false;
   state.peekKey = null;
-  applyOpenKey(state.openCardKey);
+  applyOpenKeyPinned(state.openCardKey);
 }
 
 function handlePointerMove(event) {
@@ -715,7 +724,7 @@ function handlePointerMove(event) {
   state.peekKey = key;
   state.peekPointerX = state.pointerX;
   state.peekPointerY = state.pointerY;
-  applyOpenKey(key);
+  applyOpenKeyPinned(key);
 }
 
 function openSwitcher() {
@@ -857,7 +866,7 @@ function sendMessage() {
 }
 
 function finishStream() {
-  const stick = state.forceScroll || isNearBottom();
+  const stick = isNearBottom();
   state.streaming = false;
   state.requestId = null;
   state.streamMessage = null;
@@ -919,7 +928,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .overlay';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -937,6 +946,8 @@ function onWindowDragStart(event) {
   const target = event.target;
   if (!(target instanceof Element)) return;
   if (target.closest(DRAG_EXCLUDE)) return;
+  const overlay = target.closest('.overlay');
+  if (overlay && overlay !== dom.switcher) return;
   if (!dom.settingsOverlay.classList.contains('hidden')) return;
   if (target instanceof HTMLElement && hitsScrollbar(target, event)) return;
 
@@ -965,9 +976,20 @@ function onWindowDragEnd() {
 }
 
 function bindEvents() {
-  // 整体禁用鼠标右键菜单与框选；只有输入控件保留文本选择
+  // 整体禁用鼠标右键菜单与框选；有弹窗时右键等于关闭
   document.addEventListener('contextmenu', (event) => {
     event.preventDefault();
+    if (!dom.rawOverlay.classList.contains('hidden')) {
+      closeRawRequest();
+      return;
+    }
+    if (!dom.settingsOverlay.classList.contains('hidden')) {
+      closeSettings();
+      return;
+    }
+    if (state.switcherOpen) {
+      closeSwitcher();
+    }
   });
   document.addEventListener('selectstart', (event) => {
     const target = event.target;
@@ -1184,7 +1206,6 @@ function bindEvents() {
 
     if (newStep) {
       state.openCardKey = key;
-      state.forceScroll = true;
       renderMessages();
       return;
     }
@@ -1192,7 +1213,6 @@ function bindEvents() {
     const card = cardByKey(key);
     if (!card) {
       state.openCardKey = key;
-      state.forceScroll = true;
       renderMessages();
       return;
     }
@@ -1206,7 +1226,7 @@ function bindEvents() {
     textNode.textContent = last.text;
     card.classList.add('streaming');
 
-    const stick = state.forceScroll || isNearBottom();
+    const stick = isNearBottom();
     state.forceScroll = false;
     state.openCardKey = key;
     if (!state.peekKey && state.renderedOpenKey !== key) {
@@ -1246,7 +1266,6 @@ function bindEvents() {
     const session = currentSession();
     if (!session || !session.msgs.includes(state.streamMessage)) return;
     state.openCardKey = autoCardKey();
-    state.forceScroll = true;
     renderMessages();
   });
 
@@ -1268,7 +1287,6 @@ function bindEvents() {
     const session = currentSession();
     if (!session || !session.msgs.includes(state.streamMessage)) return;
     state.openCardKey = autoCardKey();
-    state.forceScroll = true;
     renderMessages();
   });
 
@@ -1298,7 +1316,6 @@ function bindEvents() {
       const session = currentSession();
       if (session && session.msgs.includes(msg)) {
         state.openCardKey = autoCardKey();
-        state.forceScroll = true;
         renderMessages();
       }
     }

@@ -239,32 +239,15 @@ button {
   visibility: hidden;
   pointer-events: none;
   transition:
-    opacity 160ms ease,
-    visibility 0s linear 160ms;
+    opacity 100ms ease,
+    visibility 0s linear 100ms;
 }
 
 #switcher.open {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transition: opacity 160ms ease;
-}
-
-.switcher-head,
-.switcher-list,
-.switcher-foot {
-  opacity: 0;
-  transform: translateY(8px);
-  transition:
-    opacity 180ms ease,
-    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-#switcher.open .switcher-head,
-#switcher.open .switcher-list,
-#switcher.open .switcher-foot {
-  opacity: 1;
-  transform: none;
+  transition: opacity 100ms ease;
 }
 
 .switcher-head {
@@ -444,6 +427,7 @@ button {
   min-height: 0;
   padding: 24px 24px 180px;
   overflow-y: auto;
+  overflow-anchor: none;
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
@@ -1078,9 +1062,6 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   #switcher,
-  .switcher-head,
-  .switcher-list,
-  .switcher-foot,
   .card-body-wrap,
   .card-chevron svg {
     transition: none !important;
