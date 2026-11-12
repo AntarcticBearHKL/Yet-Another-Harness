@@ -73,6 +73,34 @@ function normalizeRole(role) {
   return value === 'agent' || value === 'assistant' ? 'Agent' : 'User';
 }
 
+function normalizeStep(step) {
+  if (!step || typeof step !== 'object') return null;
+  const kind = String(step.kind ?? '');
+  if (kind === 'text') {
+    const text = String(step.text ?? '');
+    return text ? { kind: 'text', text } : null;
+  }
+  if (kind === 'call') {
+    const name = String(step.name ?? '');
+    return name
+      ? { kind: 'call', name, arguments: String(step.arguments ?? '') }
+      : null;
+  }
+  if (kind === 'result') {
+    const name = String(step.name ?? '');
+    return name
+      ? {
+          kind: 'result',
+          name,
+          output: String(step.output ?? ''),
+          ok: step.ok !== false,
+        }
+      : null;
+  }
+  const label = String(step.label ?? '');
+  return label ? { kind: 'status', label, ok: step.ok !== false } : null;
+}
+
 function normalizeChats(raw) {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.sessions)) {
     return defaultChats();
@@ -94,15 +122,9 @@ function normalizeChats(raw) {
                   msg.request === undefined || msg.request === null
                     ? null
                     : String(msg.request),
-                // 工具循环的过程行（只用于展示，不发给模型）
+                // 工具循环的完整过程（调用参数 + 返回内容，只用于展示，不发给模型）
                 steps: Array.isArray(msg.steps)
-                  ? msg.steps
-                      .filter((step) => step && typeof step === 'object')
-                      .map((step) => ({
-                        label: String(step.label ?? ''),
-                        ok: step.ok !== false,
-                      }))
-                      .filter((step) => step.label)
+                  ? msg.steps.map(normalizeStep).filter(Boolean)
                   : [],
               };
             })

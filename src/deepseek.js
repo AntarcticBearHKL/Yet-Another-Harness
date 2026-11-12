@@ -183,9 +183,17 @@ async function streamChat({ apiKey, body, onDelta, signal }) {
 
 /**
  * 跑完整的一轮用户请求：模型 → 工具 → 模型，最多 MAX_TOOL_ROUNDS 轮。
- * onDelta 收正文增量，onTool 收每一轮工具调用的过程行。
+ * onDelta 收正文增量；onToolCall / onToolResult 收每次工具调用的参数和返回内容。
  */
-async function runAgent({ apiKey, system, history, onDelta, onTool, signal }) {
+async function runAgent({
+  apiKey,
+  system,
+  history,
+  onDelta,
+  onToolCall,
+  onToolResult,
+  signal,
+}) {
   const messages = messagesFromHistory(history, system);
   let finalText = '';
 
@@ -219,14 +227,21 @@ async function runAgent({ apiKey, system, history, onDelta, onTool, signal }) {
       })),
     });
 
-    if (result.content && !result.content.endsWith('\n')) {
-      emitDelta('\n\n');
+    // 中间说明和最终答案在历史里用空行隔开；UI 里它们是分开的气泡。
+    if (result.content) {
+      finalText += '\n\n';
     }
 
     for (const call of result.toolCalls) {
+      onToolCall?.({
+        name: call.name,
+        arguments: call.arguments,
+      });
       const output = await tools.execute(call.name, call.arguments);
-      onTool?.({
-        label: tools.statusLabel(call.name, call.arguments),
+      onToolResult?.({
+        name: call.name,
+        arguments: call.arguments,
+        output,
         ok: !/^tool error/i.test(output),
       });
       messages.push({

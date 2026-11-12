@@ -28,7 +28,7 @@ test('normalizing existing chats keeps them', () => {
   assert.equal(chats.seq, 3);
 });
 
-test('tool process steps survive normalization', () => {
+test('tool trace survives normalization', () => {
   const chats = store.normalizeChats({
     sessions: [
       {
@@ -39,7 +39,20 @@ test('tool process steps survive normalization', () => {
             role: 'Agent',
             text: 'answer',
             request: '',
-            steps: [{ label: 'web_search: rust', ok: true }],
+            steps: [
+              { kind: 'text', text: 'let me check' },
+              {
+                kind: 'call',
+                name: 'web_search',
+                arguments: '{"query":"rust"}',
+              },
+              {
+                kind: 'result',
+                name: 'web_search',
+                output: 'Rust 1.90',
+                ok: true,
+              },
+            ],
           },
         ],
       },
@@ -48,7 +61,33 @@ test('tool process steps survive normalization', () => {
     seq: 4,
   });
   assert.deepEqual(chats.sessions[0].msgs[0].steps, [
-    { label: 'web_search: rust', ok: true },
+    { kind: 'text', text: 'let me check' },
+    { kind: 'call', name: 'web_search', arguments: '{"query":"rust"}' },
+    { kind: 'result', name: 'web_search', output: 'Rust 1.90', ok: true },
+  ]);
+});
+
+test('legacy tool status lines become status steps', () => {
+  const chats = store.normalizeChats({
+    sessions: [
+      {
+        title: 'Chat 4',
+        system: 'sys',
+        msgs: [
+          {
+            role: 'Agent',
+            text: 'answer',
+            request: '',
+            steps: [{ label: 'web_search: rust', ok: false }],
+          },
+        ],
+      },
+    ],
+    current: 0,
+    seq: 4,
+  });
+  assert.deepEqual(chats.sessions[0].msgs[0].steps, [
+    { kind: 'status', label: 'web_search: rust', ok: false },
   ]);
 });
 

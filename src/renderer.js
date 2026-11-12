@@ -31,6 +31,7 @@ const state = {
   streaming: false,
   requestId: null,
   streamMessage: null,
+  textOpen: false,
   pendingDelete: -1,
   deleteTimer: null,
   saveTimer: null,
@@ -133,6 +134,92 @@ function isNearBottom() {
   );
 }
 
+function renderAgentMessage(msg) {
+  const steps = Array.isArray(msg.steps) ? msg.steps : [];
+  const rich = steps.some(
+    (step) => step.kind === 'text' || step.kind === 'call' || step.kind === 'result'
+  );
+  const streaming = state.streaming && msg === state.streamMessage;
+
+  if (!rich) {
+    // 旧消息或普通回复：一个气泡，旧的工具过程行显示在文字上方
+    const bubble = el('div', 'bubble agent');
+    const statuses = steps.filter((step) => step.kind === 'status');
+    if (statuses.length > 0) {
+      const wrap = el('div', 'bubble-steps');
+      for (const step of statuses) {
+        const line = el('div', 'bubble-step', step.label);
+        if (step.ok === false) line.classList.add('error');
+        wrap.append(line);
+      }
+      bubble.append(wrap);
+    }
+    if (msg.text) bubble.append(el('div', 'bubble-text', msg.text));
+    if (streaming) bubble.classList.add('streaming');
+    const row = el('div', 'msg');
+    row.append(bubble);
+    dom.messages.append(row);
+    return;
+  }
+
+  for (let i = 0; i < steps.length; i += 1) {
+    const step = steps[i];
+    let bubble = null;
+
+    if (step.kind === 'text') {
+      if (!step.text && !(streaming && i === steps.length - 1)) continue;
+      bubble = el('div', 'bubble agent');
+      if (step.text) bubble.append(el('div', 'bubble-text', step.text));
+    } else if (step.kind === 'call' || step.kind === 'result') {
+      bubble = toolStepBubble(step);
+    } else {
+      continue;
+    }
+
+    if (streaming && i === steps.length - 1 && step.kind === 'text') {
+      bubble.classList.add('streaming');
+    }
+    const row = el('div', 'msg');
+    row.append(bubble);
+    dom.messages.append(row);
+  }
+}
+
+function prettyArguments(raw) {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return String(raw ?? '');
+  }
+}
+
+function toolStepBubble(step) {
+  const call = step.kind === 'call';
+  const bubble = el('div', `bubble tool ${call ? 'tool-call' : 'tool-result'}`);
+  if (!call && step.ok === false) bubble.classList.add('error');
+  const head = el('div', 'tool-head');
+  head.append(el('span', 'tool-kind', call ? 'TOOL CALL' : 'TOOL RESULT'));
+  head.append(el('span', 'tool-name', step.name));
+  if (!call) {
+    head.append(
+      el(
+        'span',
+        `tool-state ${step.ok === false ? 'error' : 'ok'}`,
+        step.ok === false ? 'error' : 'ok'
+      )
+    );
+  }
+  bubble.append(head);
+
+  const body = el(
+    'pre',
+    'tool-body',
+    call ? prettyArguments(step.arguments) : step.output
+  );
+  bubble.append(body);
+  return bubble;
+}
+
 function renderMessages() {
   const session = currentSession();
   const stick = state.forceScroll || isNearBottom();
@@ -149,29 +236,14 @@ function renderMessages() {
   }
 
   for (const msg of session.msgs) {
+    if (msg.role === 'Agent') {
+      renderAgentMessage(msg);
+      continue;
+    }
+
+    const bubble = el('div', 'bubble user');
+    if (msg.text) bubble.append(el('div', 'bubble-text', msg.text));
     const row = el('div', 'msg');
-    const bubble = el(
-      'div',
-      `bubble ${msg.role === 'Agent' ? 'agent' : 'user'}`
-    );
-
-    if (Array.isArray(msg.steps) && msg.steps.length > 0) {
-      const steps = el('div', 'bubble-steps');
-      for (const step of msg.steps) {
-        const line = el('div', 'bubble-step', step.label);
-        if (step.ok === false) line.classList.add('error');
-        steps.append(line);
-      }
-      bubble.append(steps);
-    }
-
-    if (msg.text) {
-      bubble.append(el('div', 'bubble-text', msg.text));
-    }
-
-    if (state.streaming && msg === state.streamMessage) {
-      bubble.classList.add('streaming');
-    }
     row.append(bubble);
     dom.messages.append(row);
   }
@@ -290,6 +362,7 @@ function sendMessage() {
   session.msgs.push(agent);
 
   state.streamMessage = agent;
+  state.textOpen = false;
   state.forceScroll = true;
   dom.input.value = '';
   updateSendState();
@@ -297,8 +370,9 @@ function sendMessage() {
   if (!state.settings.apiKey.trim()) {
     agent.text = NO_KEY_HINT;
     agent.request = null; // 本地提示不算模型历史
-    agent.steps = [{ label: 'local note (no API key)', ok: false }];
+    agent.steps = [{ kind: 'status', label: 'local note (no API key)', ok: false }];
     state.streamMessage = null;
+    state.textOpen = false;
     state.streaming = false;
     saveChatsSoon();
     renderAll();
@@ -322,6 +396,7 @@ function finishStream() {
   state.streaming = false;
   state.requestId = null;
   state.streamMessage = null;
+  state.textOpen = false;
   state.forceScroll = true;
   updateSendState();
   saveChatsSoon();
@@ -448,20 +523,49 @@ function bindEvents() {
 
   api.onChatDelta(({ requestId, text }) => {
     if (requestId !== state.requestId || !state.streamMessage) return;
-    state.streamMessage.text += text;
+    const msg = state.streamMessage;
+    msg.text += text;
+    if (!Array.isArray(msg.steps)) msg.steps = [];
+
+    const last = msg.steps[msg.steps.length - 1];
+    if (state.textOpen && last && last.kind === 'text') {
+      last.text += text;
+    } else {
+      msg.steps.push({ kind: 'text', text });
+      state.textOpen = true;
+    }
+
     state.forceScroll = true;
     renderMessages();
   });
 
-  api.onChatTool(({ requestId, label, ok }) => {
+  api.onChatToolCall(({ requestId, name, arguments: args }) => {
     if (requestId !== state.requestId || !state.streamMessage) return;
     if (!Array.isArray(state.streamMessage.steps)) {
       state.streamMessage.steps = [];
     }
     state.streamMessage.steps.push({
-      label: String(label || 'tool'),
+      kind: 'call',
+      name: String(name || 'tool'),
+      arguments: String(args ?? ''),
+    });
+    state.textOpen = false;
+    state.forceScroll = true;
+    renderMessages();
+  });
+
+  api.onChatToolResult(({ requestId, name, output, ok }) => {
+    if (requestId !== state.requestId || !state.streamMessage) return;
+    if (!Array.isArray(state.streamMessage.steps)) {
+      state.streamMessage.steps = [];
+    }
+    state.streamMessage.steps.push({
+      kind: 'result',
+      name: String(name || 'tool'),
+      output: String(output ?? ''),
       ok: ok !== false,
     });
+    state.textOpen = false;
     state.forceScroll = true;
     renderMessages();
   });
@@ -477,12 +581,17 @@ function bindEvents() {
   api.onChatError(({ requestId, error }) => {
     if (requestId !== state.requestId) return;
     if (state.streamMessage) {
-      if (state.streamMessage.text.trim()) {
-        state.streamMessage.text += `\n\n[request failed] ${error}`;
+      const msg = state.streamMessage;
+      const note = `[request failed] ${error}`;
+      if (msg.text.trim()) {
+        msg.text += `\n\n${note}`;
       } else {
-        state.streamMessage.text = `[request failed] ${error}`;
+        msg.text = note;
       }
-      state.streamMessage.request = null;
+      if (Array.isArray(msg.steps) && msg.steps.length > 0) {
+        msg.steps.push({ kind: 'text', text: note });
+      }
+      msg.request = null;
     }
     finishStream();
   });
