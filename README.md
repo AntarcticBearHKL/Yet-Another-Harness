@@ -7,12 +7,12 @@
 - tool calling loop（模型 → 工具 → 模型）
 - 免费 `web_search`（DuckDuckGo HTML，不需要 API key）
 - 所有气泡靠左
-- 没有标题栏：窗口控制按钮浮动在右上角，顶部只留透明拖拽区
+- 没有标题栏：窗口控制按钮浮动在右上角，按住任意非交互区域都能拖动窗口
 - 没有聊天顶栏：会话内容铺满窗口，输入框悬浮在底部
-- 左侧栏可展开/折叠，折叠状态记在 `settings.json`
+- 左侧栏右键展开/折叠，折叠状态记在 `settings.json`
 - tool loop 的每次工具调用会作为一行过程显示在回复气泡里
 - 会话、设置、API key 落盘；可以删光所有对话，空状态不会自动补一个新对话
-- 全局禁用鼠标框选和右键菜单；只有输入框/上下文编辑框保留文本选择
+- 全局禁用鼠标框选；右键任意位置切换侧边栏；只有输入框保留文本选择
 
 旧的 Rust/Slint 版已经删除；新开发都在这个目录。
 
@@ -70,7 +70,7 @@ Electron 版用 **不透明 acrylic + Windows 11 DWM 原生圆角**：
 - `backgroundMaterial: 'acrylic'` 由系统做亚克力模糊；
 - `roundedCorners: true` 让 DWM 直接裁圆角，页面不再画第二层圆角，也不再用
   `setShape`（那会导致缩放拖影和方角黑边）；
-- 页面只叠一层深色 tint，`Transparency` 控制透明度；
+- 页面只叠一层固定的暖色 tint，没有透明度设置；
 - 系统不支持 acrylic 时回退到深色背景，功能不受影响。
 
 Windows 11 的活动窗口可能有一条 1px 的系统 accent 边框，这是 DWM 画的，不是应用背景。
@@ -81,7 +81,7 @@ Windows 11 的活动窗口可能有一条 1px 的系统 accent 边框，这是 D
 - 流式响应里的 `delta.tool_calls` 按 `index` 把 `function.arguments` 拼起来。
 - 模型要工具时：把 assistant 的 tool_calls 放回 messages，顺序执行工具，追加
   `role: 'tool'` 结果，再请求模型；最多 **6 轮**。
-- 工具执行期间标题栏显示 `web_search: <query>`，正文继续流式输出。
+- 工具执行期间在回复气泡里显示过程行，正文继续流式输出。
 - 工具调用和结果不落盘，只保存最终回复。
 
 `web_search` 抓 `https://html.duckduckgo.com/html/?q=...`，解析 `result__a` /
@@ -92,7 +92,7 @@ Windows 11 的活动窗口可能有一条 1px 的系统 accent 边框，这是 D
 
 - 用 Chromium 渲染，字体/布局与 Slint 版略有差异。
 - 背景是系统亚克力 + DWM 圆角，不再是桌面截图快照；因此没有“快照过期”的问题，
-  模糊强度由系统 acrylic 决定，页面只控制深色 tint 的透明度。
+  模糊强度由系统 acrylic 决定，页面只叠一层固定的暖色 tint。
 - 没有 `jsonview` / 点气泡看 raw request：界面上只显示对话本身。
 - 仍然没有取消在途请求的按钮；一次只允许一个请求。
 

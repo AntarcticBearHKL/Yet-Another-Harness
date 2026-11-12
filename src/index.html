@@ -12,8 +12,6 @@
   </head>
   <body>
     <div id="app">
-      <div id="drag-strip" aria-hidden="true"></div>
-
       <div id="window-controls">
         <button id="win-min" class="win-btn" aria-label="Minimize">
           <svg viewBox="0 0 10 10" aria-hidden="true">
@@ -36,16 +34,6 @@
         <aside id="sidebar">
           <div class="sidebar-head">
             <span class="sidebar-caption">CHATS</span>
-            <button
-              id="toggle-sidebar"
-              class="icon-btn"
-              aria-label="Collapse sidebar"
-              aria-expanded="true"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M15 6l-6 6 6 6" />
-              </svg>
-            </button>
           </div>
 
           <button id="new-session" class="pill primary wide">
@@ -94,12 +82,6 @@
           <button id="close-settings" class="pill compact">Close</button>
         </div>
         <div class="divider"></div>
-
-        <label class="setting-row slider-row">
-          <span>Transparency</span>
-          <span id="transparency-value" class="muted small">25%</span>
-          <input id="transparency" type="range" min="0" max="100" step="1" />
-        </label>
 
         <div class="setting-col">
           <div class="setting-row">

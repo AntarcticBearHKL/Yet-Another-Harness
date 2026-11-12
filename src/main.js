@@ -36,6 +36,7 @@ let mainWindow = null;
 let settings = null;
 let saveBoundsTimer = null;
 const activeChats = new Set();
+let dragState = null;
 
 function clampBounds(bounds) {
   const display = bounds
@@ -221,6 +222,33 @@ if (gotLock) {
       else mainWindow.maximize();
     });
     ipcMain.on('window:close', () => mainWindow?.close());
+    ipcMain.on('window:drag-start', (event, point) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || win.isDestroyed() || win.isMaximized() || win.isFullScreen()) {
+        return;
+      }
+      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+      dragState = {
+        win,
+        cursorX: point.x,
+        cursorY: point.y,
+        bounds: win.getBounds(),
+      };
+    });
+    ipcMain.on('window:drag-move', (event, point) => {
+      if (!dragState || dragState.win.isDestroyed()) return;
+      if (dragState.win !== BrowserWindow.fromWebContents(event.sender)) return;
+      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+      dragState.win.setPosition(
+        Math.round(dragState.bounds.x + point.x - dragState.cursorX),
+        Math.round(dragState.bounds.y + point.y - dragState.cursorY)
+      );
+    });
+    ipcMain.on('window:drag-end', (event) => {
+      if (!dragState) return;
+      if (dragState.win !== BrowserWindow.fromWebContents(event.sender)) return;
+      dragState = null;
+    });
     ipcMain.handle('window:is-maximized', () => mainWindow?.isMaximized() ?? false);
     ipcMain.handle('app:version', () => app.getVersion());
 

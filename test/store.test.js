@@ -54,7 +54,6 @@ test('tool process steps survive normalization', () => {
 
 test('sidebar collapsed is preserved in settings normalization', () => {
   const settings = store.normalizeSettings({
-    transparency: 25,
     apiKey: '',
     sidebarCollapsed: true,
   });

@@ -10,14 +10,11 @@ const $ = (id) => document.getElementById(id);
 
 const dom = {
   sidebar: $('sidebar'),
-  toggleSidebar: $('toggle-sidebar'),
   messages: $('messages'),
   input: $('input'),
   send: $('send'),
   sessionList: $('session-list'),
   settingsOverlay: $('settings-overlay'),
-  transparency: $('transparency'),
-  transparencyValue: $('transparency-value'),
   apiKey: $('api-key'),
   apiKeyState: $('api-key-state'),
 };
@@ -27,8 +24,6 @@ const state = {
   current: 0,
   seq: 1,
   settings: {
-    transparency: 25,
-    blur: 100,
     apiKey: '',
     sidebarCollapsed: false,
   },
@@ -42,6 +37,10 @@ const state = {
   settingsTimer: null,
   forceScroll: true,
 };
+
+let windowDrag = null;
+let dragPoint = null;
+let dragFrame = 0;
 
 function currentSession() {
   return state.sessions[state.current];
@@ -76,8 +75,8 @@ function saveChatsSoon() {
 }
 
 function settingsPayload() {
-  const { transparency, apiKey, sidebarCollapsed } = state.settings;
-  return { transparency, apiKey, sidebarCollapsed };
+  const { apiKey, sidebarCollapsed } = state.settings;
+  return { apiKey, sidebarCollapsed };
 }
 
 function saveSettingsNow() {
@@ -95,13 +94,6 @@ function saveSettingsSoon() {
 
 function applySettings() {
   const s = state.settings;
-  document.documentElement.style.setProperty(
-    '--tint-alpha',
-    String(Math.max(0, Math.min(1, 1 - s.transparency / 100)))
-  );
-  dom.transparency.value = String(s.transparency);
-  dom.transparencyValue.textContent = `${Math.round(s.transparency)}%`;
-
   dom.apiKeyState.textContent = s.apiKey ? 'set' : 'not set';
   if (document.activeElement !== dom.apiKey) {
     dom.apiKey.value = s.apiKey;
@@ -112,13 +104,12 @@ function applySettings() {
 function applySidebar() {
   state.sidebarCollapsed = state.settings.sidebarCollapsed === true;
   dom.sidebar.classList.toggle('collapsed', state.sidebarCollapsed);
-  dom.toggleSidebar.setAttribute(
-    'aria-expanded',
-    String(!state.sidebarCollapsed)
-  );
-  dom.toggleSidebar.title = state.sidebarCollapsed
-    ? 'Expand sidebar'
-    : 'Collapse sidebar';
+}
+
+function toggleSidebar() {
+  state.settings.sidebarCollapsed = !state.sidebarCollapsed;
+  applySidebar();
+  saveSettingsSoon();
 }
 
 function updateControls() {
@@ -200,7 +191,6 @@ function renderSessions() {
     if (index === state.current) row.classList.add('active');
 
     const title = el('span', 'session-title', session.title);
-    const count = el('span', 'session-count', String(session.msgs.length));
     const trash = el('button', 'trash');
     trash.type = 'button';
     trash.title = 'Delete chat';
@@ -238,7 +228,7 @@ function renderSessions() {
       renderSessions();
     });
 
-    row.append(title, count, trash);
+    row.append(title, trash);
     dom.sessionList.append(row);
   });
 }
@@ -348,10 +338,58 @@ function closeSettings() {
   saveSettingsNow();
 }
 
+/* ---------------------------------------------------------------- window drag */
+const DRAG_EXCLUDE =
+  'button, a, input, textarea, select, label, [contenteditable="true"], .session-row, .overlay';
+
+function hitsScrollbar(target, event) {
+  if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
+    return false;
+  }
+  const rect = target.getBoundingClientRect();
+  return (
+    event.clientX >= rect.left + target.clientWidth - 1 ||
+    event.clientY >= rect.top + target.clientHeight - 1
+  );
+}
+
+function onWindowDragStart(event) {
+  if (event.button !== 0) return;
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (target.closest(DRAG_EXCLUDE)) return;
+  if (!dom.settingsOverlay.classList.contains('hidden')) return;
+  if (target instanceof HTMLElement && hitsScrollbar(target, event)) return;
+
+  windowDrag = { x: event.screenX, y: event.screenY };
+  api.dragStart({ x: event.screenX, y: event.screenY });
+}
+
+function onWindowDragMove(event) {
+  if (!windowDrag) return;
+  dragPoint = { x: event.screenX, y: event.screenY };
+  if (dragFrame) return;
+  dragFrame = requestAnimationFrame(() => {
+    dragFrame = 0;
+    if (!windowDrag || !dragPoint) return;
+    api.dragMove(dragPoint);
+  });
+}
+
+function onWindowDragEnd() {
+  if (!windowDrag) return;
+  windowDrag = null;
+  dragPoint = null;
+  cancelAnimationFrame(dragFrame);
+  dragFrame = 0;
+  api.dragEnd();
+}
+
 function bindEvents() {
   // 整体禁用鼠标右键菜单与框选；只有输入控件保留文本选择
   document.addEventListener('contextmenu', (event) => {
     event.preventDefault();
+    if (dom.settingsOverlay.classList.contains('hidden')) toggleSidebar();
   });
   document.addEventListener('selectstart', (event) => {
     const target = event.target;
@@ -359,11 +397,10 @@ function bindEvents() {
     event.preventDefault();
   });
 
-  dom.toggleSidebar.addEventListener('click', () => {
-    state.settings.sidebarCollapsed = !state.settings.sidebarCollapsed;
-    applySidebar();
-    saveSettingsSoon();
-  });
+  document.addEventListener('mousedown', onWindowDragStart);
+  document.addEventListener('mousemove', onWindowDragMove);
+  document.addEventListener('mouseup', onWindowDragEnd);
+  window.addEventListener('blur', onWindowDragEnd);
 
   $('new-session').addEventListener('click', newSession);
   $('open-settings').addEventListener('click', openSettings);
@@ -383,11 +420,6 @@ function bindEvents() {
   $('win-max').addEventListener('click', () => api.maximize());
   $('win-close').addEventListener('click', () => api.close());
 
-  dom.transparency.addEventListener('input', () => {
-    state.settings.transparency = Number(dom.transparency.value);
-    applySettings();
-    saveSettingsSoon();
-  });
   dom.apiKey.addEventListener('input', () => {
     state.settings.apiKey = dom.apiKey.value;
     dom.apiKeyState.textContent = state.settings.apiKey ? 'set' : 'not set';
@@ -396,8 +428,6 @@ function bindEvents() {
 
   $('reset-settings').addEventListener('click', () => {
     state.settings = {
-      transparency: 25,
-      blur: 100,
       apiKey: '',
       sidebarCollapsed: state.settings.sidebarCollapsed === true,
     };

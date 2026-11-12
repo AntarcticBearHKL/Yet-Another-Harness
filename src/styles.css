@@ -85,17 +85,6 @@ button {
 }
 
 /* ---------------------------------------------------------------- window chrome */
-/* 顶部无标题栏：只留一条透明拖拽区 + 右上角浮动窗口按钮 */
-#drag-strip {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 38px;
-  z-index: 10;
-  -webkit-app-region: drag;
-}
-
 #window-controls {
   position: absolute;
   top: 6px;
@@ -155,7 +144,7 @@ button {
   flex-direction: column;
   width: 250px;
   flex: 0 0 250px;
-  padding: 40px 14px 12px;
+  padding: 12px 14px;
   background: var(--panel);
   border-right: 1px solid var(--line);
   transition: width 160ms ease, flex-basis 160ms ease, padding 160ms ease;
@@ -164,14 +153,13 @@ button {
 #sidebar.collapsed {
   width: 56px;
   flex-basis: 56px;
-  padding: 40px 8px 12px;
+  padding: 12px 8px;
 }
 
 .sidebar-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  min-height: 28px;
+  min-height: 18px;
   margin-bottom: 8px;
 }
 
@@ -189,7 +177,7 @@ button {
 }
 
 #sidebar.collapsed .sidebar-head {
-  justify-content: center;
+  display: none;
 }
 
 #sidebar.collapsed .pill.wide {
@@ -203,35 +191,6 @@ button {
 
 .sidebar-bottom .pill + .pill {
   margin-top: 6px;
-}
-
-.icon-btn {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  color: var(--dim);
-}
-
-.icon-btn:hover {
-  background: var(--hover);
-  color: var(--text);
-}
-
-.icon-btn svg {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition: transform 160ms ease;
-}
-
-#sidebar.collapsed #toggle-sidebar svg {
-  transform: rotate(180deg);
 }
 
 #main {
@@ -349,7 +308,6 @@ button {
 .session-row.active {
   background: var(--selected);
   color: var(--text);
-  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .session-title {
@@ -359,12 +317,6 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-}
-
-.session-count {
-  margin-left: 6px;
-  color: var(--faint);
-  font-size: 11px;
 }
 
 .trash {
@@ -409,7 +361,7 @@ button {
   align-items: flex-start;
   gap: 10px;
   min-height: 0;
-  padding: 44px 14px 180px;
+  padding: 24px 14px 180px;
   overflow-y: auto;
 }
 
@@ -622,19 +574,6 @@ button {
   min-height: 30px;
   color: var(--dim);
   font-size: 12.5px;
-}
-
-.slider-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto;
-  row-gap: 6px;
-}
-
-.slider-row input {
-  grid-column: 1 / -1;
-  width: 100%;
-  accent-color: var(--accent);
 }
 
 .setting-col {

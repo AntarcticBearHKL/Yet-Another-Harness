@@ -30,8 +30,6 @@ function legacyFile(name) {
 
 function defaultSettings() {
   return {
-    transparency: 25,
-    blur: 100,
     apiKey: '',
     sidebarCollapsed: false,
     window: null,
@@ -45,12 +43,6 @@ function defaultChats() {
     current: 0,
     seq: 0,
   };
-}
-
-function clampNumber(value, min, max, fallback) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return fallback;
-  return Math.min(max, Math.max(min, number));
 }
 
 function normalizeSettings(raw) {
@@ -70,8 +62,6 @@ function normalizeSettings(raw) {
   }
 
   return {
-    transparency: clampNumber(raw.transparency, 0, 100, base.transparency),
-    blur: clampNumber(raw.blur, 0, 100, base.blur),
     apiKey: String(raw.apiKey ?? raw.api_key ?? ''),
     sidebarCollapsed: raw.sidebarCollapsed === true,
     window,
