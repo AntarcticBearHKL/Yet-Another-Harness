@@ -9,7 +9,6 @@ const api = window.miniharness;
 const $ = (id) => document.getElementById(id);
 
 const dom = {
-  app: $('app'),
   sidebar: $('sidebar'),
   messages: $('messages'),
   input: $('input'),
@@ -106,7 +105,6 @@ function applySettings() {
 function applySidebar() {
   state.sidebarCollapsed = state.settings.sidebarCollapsed === true;
   dom.sidebar.classList.toggle('collapsed', state.sidebarCollapsed);
-  dom.app.classList.toggle('sidebar-open', !state.sidebarCollapsed);
 }
 
 function toggleSidebar() {
