@@ -929,6 +929,7 @@ function bindEvents() {
     if (!Array.isArray(msg.requests)) msg.requests = [];
     const index = Number.isInteger(round) ? round : 0;
     msg.requests[index] = body;
+    saveChatsSoon();
   });
 
   api.onChatToolCall(({ requestId, name, arguments: args, round }) => {
@@ -944,6 +945,7 @@ function bindEvents() {
     });
     state.textOpen = false;
     state.forceScroll = true;
+    saveChatsSoon();
     renderMessages();
   });
 
@@ -961,6 +963,7 @@ function bindEvents() {
     });
     state.textOpen = false;
     state.forceScroll = true;
+    saveChatsSoon();
     renderMessages();
   });
 
@@ -993,11 +996,15 @@ function bindEvents() {
   window.addEventListener('beforeunload', () => {
     clearTimeout(state.saveTimer);
     clearTimeout(state.settingsTimer);
-    api.saveChats({
-      sessions: state.sessions,
-      current: state.current,
-      seq: state.seq,
-    });
+    try {
+      api.saveChatsSync({
+        sessions: state.sessions,
+        current: state.current,
+        seq: state.seq,
+      });
+    } catch (error) {
+      console.error('save chats on close failed', error);
+    }
     api.saveSettings(settingsPayload());
   });
 }

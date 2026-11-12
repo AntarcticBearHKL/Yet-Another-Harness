@@ -217,6 +217,14 @@ if (gotLock) {
 
     ipcMain.handle('chats:load', () => store.loadChats());
     ipcMain.handle('chats:save', (_event, data) => store.saveChats(data));
+    ipcMain.on('chats:save-sync', (event, data) => {
+      try {
+        store.saveChats(data);
+        event.returnValue = true;
+      } catch {
+        event.returnValue = false;
+      }
+    });
 
     ipcMain.on('window:minimize', () => mainWindow?.minimize());
     ipcMain.on('window:maximize', () => {
@@ -261,6 +269,10 @@ if (gotLock) {
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+
+    app.on('will-quit', () => {
+      store.close();
     });
   });
 

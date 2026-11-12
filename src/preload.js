@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('miniharness', {
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   loadChats: () => ipcRenderer.invoke('chats:load'),
   saveChats: (chats) => ipcRenderer.invoke('chats:save', chats),
+  saveChatsSync: (chats) => ipcRenderer.sendSync('chats:save-sync', chats),
 
   sendChat: (payload) => ipcRenderer.send('chat:send', payload),
   onChatDelta: (callback) => subscribe('chat:delta', callback),

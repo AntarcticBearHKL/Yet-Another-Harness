@@ -2,7 +2,25 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const store = require('../src/store');
+
+function withStoreDir(run) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'miniharness-store-'));
+  store.init({
+    getPath(name) {
+      return name === 'userData' ? dir : path.dirname(dir);
+    },
+  });
+  try {
+    run(dir);
+  } finally {
+    store.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 test('default chats can be empty', () => {
   const chats = store.defaultChats();
@@ -134,4 +152,97 @@ test('raw request bodies survive normalization', () => {
 test('legacy api_key is normalized', () => {
   const settings = store.normalizeSettings({ api_key: 'oc_test' });
   assert.equal(settings.apiKey, 'oc_test');
+});
+
+test('sqlite round-trips sessions, steps and raw requests', () => {
+  withStoreDir(() => {
+    store.saveChats({
+      sessions: [
+        {
+          id: 's1',
+          title: 'Chat 1',
+          system: 'sys',
+          msgs: [
+            {
+              role: 'User',
+              text: 'hi',
+              request: null,
+              steps: [],
+              requests: [],
+            },
+            {
+              role: 'Agent',
+              text: 'hello',
+              request: '',
+              steps: [
+                { kind: 'text', text: 'hello', round: 0 },
+                {
+                  kind: 'call',
+                  name: 'web_search',
+                  arguments: '{"query":"hi"}',
+                  round: 0,
+                },
+                {
+                  kind: 'result',
+                  name: 'web_search',
+                  output: 'ok',
+                  ok: true,
+                  round: 0,
+                },
+              ],
+              requests: [
+                { model: 'deepseek-v4.1-flash', messages: [] },
+              ],
+            },
+          ],
+        },
+      ],
+      current: 0,
+      seq: 1,
+    });
+
+    const loaded = store.loadChats();
+    assert.equal(loaded.sessions.length, 1);
+    assert.equal(loaded.sessions[0].msgs.length, 2);
+    assert.deepEqual(loaded.sessions[0].msgs[1].steps[1], {
+      kind: 'call',
+      name: 'web_search',
+      arguments: '{"query":"hi"}',
+      round: 0,
+    });
+    assert.equal(
+      loaded.sessions[0].msgs[1].requests[0].model,
+      'deepseek-v4.1-flash'
+    );
+    assert.equal(loaded.current, 0);
+    assert.equal(loaded.seq, 1);
+  });
+});
+
+test('legacy chats.json migrates into sqlite and is kept as a backup', () => {
+  withStoreDir((dir) => {
+    fs.writeFileSync(
+      path.join(dir, 'chats.json'),
+      JSON.stringify({
+        sessions: [
+          {
+            id: 'old-session',
+            title: 'Old Chat',
+            system: 'sys',
+            msgs: [{ role: 'User', text: 'hello', request: null }],
+          },
+        ],
+        current: 0,
+        seq: 3,
+      }),
+      'utf8'
+    );
+
+    const loaded = store.loadChats();
+    assert.equal(loaded.sessions.length, 1);
+    assert.equal(loaded.sessions[0].title, 'Old Chat');
+    assert.equal(loaded.sessions[0].msgs[0].text, 'hello');
+    assert.ok(fs.existsSync(path.join(dir, 'chats.json.pre-sqlite')));
+    assert.ok(fs.existsSync(path.join(dir, 'chats.db')));
+  });
 });

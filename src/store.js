@@ -7,14 +7,20 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
+const { DatabaseSync } = require('node:sqlite');
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are miniharness, a terse terminal coding assistant. Answer in plain text.';
+const CHATS_DB = 'chats.db';
+const SCHEMA_VERSION = 1;
 
 let dataDir = null;
 let legacyDir = null;
+let db = null;
 
 function init(app) {
+  close();
   dataDir = app.getPath('userData');
   const appData = process.env.APPDATA || app.getPath('appData');
   legacyDir = path.join(appData, 'miniharness');
@@ -134,8 +140,8 @@ function normalizeChats(raw) {
                   : [],
                 // 每一轮实际发给模型的原始请求 body（用于双击查看）
                 requests: Array.isArray(msg.requests)
-                  ? msg.requests.filter(
-                      (body) => body && typeof body === 'object'
+                  ? msg.requests.map((body) =>
+                      body && typeof body === 'object' ? body : null
                     )
                   : [],
               };
@@ -225,44 +231,417 @@ function saveSettings(settings) {
   return normalized;
 }
 
-function loadChats() {
-  const current = file('chats.json');
-  if (fs.existsSync(current)) {
+const SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  system TEXT NOT NULL,
+  sort_order INTEGER NOT NULL,
+  content_hash TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  seq INTEGER NOT NULL,
+  role TEXT NOT NULL,
+  text TEXT NOT NULL,
+  request TEXT,
+  PRIMARY KEY (session_id, seq)
+);
+
+CREATE TABLE IF NOT EXISTS steps (
+  session_id TEXT NOT NULL,
+  message_seq INTEGER NOT NULL,
+  seq INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  round INTEGER NOT NULL DEFAULT 0,
+  text TEXT,
+  name TEXT,
+  arguments TEXT,
+  output TEXT,
+  ok INTEGER NOT NULL DEFAULT 1,
+  label TEXT,
+  PRIMARY KEY (session_id, message_seq, seq),
+  FOREIGN KEY (session_id, message_seq)
+    REFERENCES messages(session_id, seq) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS requests (
+  session_id TEXT NOT NULL,
+  message_seq INTEGER NOT NULL,
+  round INTEGER NOT NULL,
+  body BLOB NOT NULL,
+  PRIMARY KEY (session_id, message_seq, round),
+  FOREIGN KEY (session_id, message_seq)
+    REFERENCES messages(session_id, seq) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS app_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  current_session_id TEXT,
+  title_seq INTEGER NOT NULL DEFAULT 0
+);
+
+INSERT OR IGNORE INTO app_state (id, current_session_id, title_seq)
+VALUES (1, NULL, 0);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_order ON sessions(sort_order);
+CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, seq);
+CREATE INDEX IF NOT EXISTS idx_steps_message ON steps(session_id, message_seq, seq);
+CREATE INDEX IF NOT EXISTS idx_requests_message ON requests(session_id, message_seq, round);
+`;
+
+function close() {
+  if (!db) return;
+  try {
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+  } catch {
+    /* ignore */
+  }
+  try {
+    db.close();
+  } catch {
+    /* ignore */
+  }
+  db = null;
+}
+
+function ensureSchema(database) {
+  const row = database.prepare('PRAGMA user_version').get();
+  const version = Number(row && row.user_version) || 0;
+  if (version > SCHEMA_VERSION) {
+    throw new Error(
+      `chats.db schema version ${version} is newer than supported ${SCHEMA_VERSION}`
+    );
+  }
+  if (version >= SCHEMA_VERSION) return;
+
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    database.exec(SCHEMA_SQL);
+    database.exec('COMMIT');
+  } catch (error) {
     try {
-      return normalizeChats(readJson(current));
+      database.exec('ROLLBACK');
     } catch {
-      try {
-        fs.renameSync(current, `${current}.corrupt`);
-      } catch {
-        /* ignore */
-      }
+      /* ignore */
+    }
+    throw error;
+  }
+  database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
+}
+
+function openDb() {
+  if (db) return db;
+  const database = new DatabaseSync(file(CHATS_DB));
+  try {
+    database.exec('PRAGMA journal_mode = WAL;');
+    database.exec('PRAGMA synchronous = NORMAL;');
+    database.exec('PRAGMA foreign_keys = ON;');
+    database.exec('PRAGMA busy_timeout = 5000;');
+    ensureSchema(database);
+    db = database;
+    return db;
+  } catch (error) {
+    try {
+      database.close();
+    } catch {
+      /* ignore */
+    }
+    throw error;
+  }
+}
+
+function sessionCount() {
+  return Number(openDb().prepare('SELECT COUNT(*) AS n FROM sessions').get().n) || 0;
+}
+
+function hashSession(session) {
+  return crypto
+    .createHash('sha1')
+    .update(
+      JSON.stringify({
+        title: session.title,
+        system: session.system,
+        msgs: session.msgs,
+      })
+    )
+    .digest('hex');
+}
+
+function readChats() {
+  const database = openDb();
+  const sessionRows = database
+    .prepare('SELECT id, title, system FROM sessions ORDER BY sort_order ASC')
+    .all();
+  if (sessionRows.length === 0) return defaultChats();
+
+  const messageRows = database
+    .prepare(
+      'SELECT session_id, seq, role, text, request FROM messages ORDER BY session_id, seq'
+    )
+    .all();
+  const stepRows = database
+    .prepare(
+      `SELECT session_id, message_seq, seq, kind, round, text, name, arguments, output, ok, label
+       FROM steps ORDER BY session_id, message_seq, seq`
+    )
+    .all();
+  const requestRows = database
+    .prepare(
+      `SELECT session_id, message_seq, round, body
+       FROM requests ORDER BY session_id, message_seq, round`
+    )
+    .all();
+
+  const bySession = new Map(
+    sessionRows.map((row) => [
+      row.id,
+      { id: row.id, title: row.title, system: row.system, msgs: [] },
+    ])
+  );
+  const messageByKey = new Map();
+
+  for (const row of messageRows) {
+    const session = bySession.get(row.session_id);
+    if (!session) continue;
+    const msg = {
+      role: normalizeRole(row.role),
+      text: String(row.text ?? ''),
+      request: row.request === null ? null : String(row.request),
+      steps: [],
+      requests: [],
+    };
+    session.msgs.push(msg);
+    messageByKey.set(`${row.session_id}\u0000${row.seq}`, msg);
+  }
+
+  for (const row of stepRows) {
+    const msg = messageByKey.get(
+      `${row.session_id}\u0000${row.message_seq}`
+    );
+    if (!msg) continue;
+    const round = Number(row.round) || 0;
+    if (row.kind === 'text') {
+      msg.steps.push({ kind: 'text', text: String(row.text ?? ''), round });
+    } else if (row.kind === 'call') {
+      msg.steps.push({
+        kind: 'call',
+        name: String(row.name ?? ''),
+        arguments: String(row.arguments ?? ''),
+        round,
+      });
+    } else if (row.kind === 'result') {
+      msg.steps.push({
+        kind: 'result',
+        name: String(row.name ?? ''),
+        output: String(row.output ?? ''),
+        ok: Boolean(row.ok),
+        round,
+      });
+    } else if (row.kind === 'status') {
+      msg.steps.push({
+        kind: 'status',
+        label: String(row.label ?? ''),
+        ok: Boolean(row.ok),
+      });
     }
   }
 
-  if (legacyDir) {
-    const legacy = legacyFile('chats.json');
-    if (fs.existsSync(legacy)) {
-      try {
-        const migrated = normalizeChats(readJson(legacy));
-        atomicWrite(current, migrated);
-        return migrated;
-      } catch {
-        /* ignore */
-      }
+  for (const row of requestRows) {
+    const msg = messageByKey.get(
+      `${row.session_id}\u0000${row.message_seq}`
+    );
+    if (!msg) continue;
+    try {
+      msg.requests[Number(row.round) || 0] = JSON.parse(
+        zlib.gunzipSync(row.body).toString('utf8')
+      );
+    } catch {
+      /* skip unreadable raw request */
     }
   }
-  return defaultChats();
+
+  const state =
+    database
+      .prepare('SELECT current_session_id, title_seq FROM app_state WHERE id = 1')
+      .get() || {};
+
+  let current = 0;
+  if (state.current_session_id) {
+    const index = sessionRows.findIndex(
+      (row) => row.id === state.current_session_id
+    );
+    if (index >= 0) current = index;
+  }
+
+  return {
+    sessions: sessionRows.map((row) => bySession.get(row.id)),
+    current,
+    seq: Math.max(sessionRows.length, Number(state.title_seq) || 0),
+  };
+}
+
+function writeChats(chats) {
+  const normalized = normalizeChats(chats);
+  const database = openDb();
+
+  const existing = new Map(
+    database
+      .prepare('SELECT id, content_hash FROM sessions')
+      .all()
+      .map((row) => [row.id, row.content_hash])
+  );
+
+  const upsertSession = database.prepare(
+    `INSERT INTO sessions (id, title, system, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       title = excluded.title,
+       system = excluded.system,
+       sort_order = excluded.sort_order,
+       content_hash = excluded.content_hash,
+       updated_at = excluded.updated_at`
+  );
+  const deleteMessages = database.prepare(
+    'DELETE FROM messages WHERE session_id = ?'
+  );
+  const insertMessage = database.prepare(
+    'INSERT INTO messages (session_id, seq, role, text, request) VALUES (?, ?, ?, ?, ?)'
+  );
+  const insertStep = database.prepare(
+    `INSERT INTO steps
+       (session_id, message_seq, seq, kind, round, text, name, arguments, output, ok, label)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertRequest = database.prepare(
+    'INSERT INTO requests (session_id, message_seq, round, body) VALUES (?, ?, ?, ?)'
+  );
+  const deleteSession = database.prepare('DELETE FROM sessions WHERE id = ?');
+  const updateState = database.prepare(
+    'UPDATE app_state SET current_session_id = ?, title_seq = ? WHERE id = 1'
+  );
+
+  const incoming = new Set();
+  const now = Date.now();
+
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    normalized.sessions.forEach((session, order) => {
+      incoming.add(session.id);
+      const hash = hashSession(session);
+      upsertSession.run(
+        session.id,
+        session.title,
+        session.system,
+        order,
+        hash,
+        now
+      );
+      if (existing.get(session.id) === hash) return;
+
+      deleteMessages.run(session.id);
+      session.msgs.forEach((msg, messageSeq) => {
+        insertMessage.run(
+          session.id,
+          messageSeq,
+          msg.role,
+          msg.text,
+          msg.request
+        );
+        (msg.steps || []).forEach((step, stepSeq) => {
+          insertStep.run(
+            session.id,
+            messageSeq,
+            stepSeq,
+            step.kind,
+            Number.isInteger(step.round) ? step.round : 0,
+            step.text ?? null,
+            step.name ?? null,
+            step.arguments ?? null,
+            step.output ?? null,
+            step.ok === false ? 0 : 1,
+            step.label ?? null
+          );
+        });
+        (msg.requests || []).forEach((body, round) => {
+          if (!body) return;
+          insertRequest.run(
+            session.id,
+            messageSeq,
+            round,
+            zlib.gzipSync(Buffer.from(JSON.stringify(body), 'utf8'))
+          );
+        });
+      });
+    });
+
+    for (const id of existing.keys()) {
+      if (!incoming.has(id)) deleteSession.run(id);
+    }
+
+    const current = normalized.sessions[normalized.current];
+    updateState.run(current ? current.id : null, normalized.seq);
+    database.exec('COMMIT');
+  } catch (error) {
+    try {
+      database.exec('ROLLBACK');
+    } catch {
+      /* ignore */
+    }
+    throw error;
+  }
+
+  return normalized;
+}
+
+function importLegacyChats() {
+  const candidates = [
+    { path: file('chats.json'), rename: true },
+    { path: legacyFile('chats.json'), rename: false },
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate.path || !fs.existsSync(candidate.path)) continue;
+
+    let data;
+    try {
+      data = normalizeChats(readJson(candidate.path));
+    } catch {
+      if (candidate.rename) {
+        try {
+          fs.renameSync(candidate.path, `${candidate.path}.corrupt`);
+        } catch {
+          /* ignore */
+        }
+      }
+      continue;
+    }
+
+    if (data.sessions.length === 0) continue;
+    writeChats(data);
+    if (candidate.rename) {
+      fs.renameSync(candidate.path, `${candidate.path}.pre-sqlite`);
+    }
+    return;
+  }
+}
+
+function loadChats() {
+  openDb();
+  if (sessionCount() === 0) importLegacyChats();
+  return readChats();
 }
 
 function saveChats(chats) {
-  const normalized = normalizeChats(chats);
-  atomicWrite(file('chats.json'), normalized);
-  return normalized;
+  return writeChats(chats);
 }
 
 module.exports = {
   DEFAULT_SYSTEM_PROMPT,
   init,
+  close,
   defaultSettings,
   defaultChats,
   normalizeSettings,
