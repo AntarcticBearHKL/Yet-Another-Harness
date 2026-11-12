@@ -53,10 +53,12 @@
 
     <div
       id="switcher"
-      class="overlay hidden"
+      class="overlay"
       role="dialog"
       aria-modal="true"
       aria-labelledby="switcher-title"
+      aria-hidden="true"
+      inert
     >
       <div class="switcher-head">
         <div>
@@ -71,7 +73,7 @@
       </div>
       <div id="switcher-list" class="switcher-list"></div>
       <div class="switcher-foot">
-        Tab / Esc 关闭 · ↑↓ 选择 · Enter 切换
+        按住 Tab 显示 · 松开收起 · ↑↓ 选择 · Enter 切换
       </div>
     </div>
 

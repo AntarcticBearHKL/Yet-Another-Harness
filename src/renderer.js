@@ -3,10 +3,11 @@
 const DEFAULT_SYSTEM_PROMPT =
   'You are miniharness, a terse terminal coding assistant. Answer in plain text.';
 const NO_KEY_HINT =
-  'No OpenCode Go API key yet. Press Tab and open Settings to paste your key.';
+  'No OpenCode Go API key yet. Hold Tab and open Settings to paste your key.';
 
 const api = window.miniharness;
 const $ = (id) => document.getElementById(id);
+const TAB_HOLD_MS = 280;
 
 const dom = {
   messages: $('messages'),
@@ -34,6 +35,19 @@ const state = {
   },
   switcherOpen: false,
   switcherIndex: 0,
+  openCardKey: null,
+  peekKey: null,
+  renderedOpenKey: null,
+  renderedSessionId: null,
+  renderVersion: 0,
+  openApplyVersion: 0,
+  spaceHeld: false,
+  pointerX: 0,
+  pointerY: 0,
+  peekPointerX: 0,
+  peekPointerY: 0,
+  tabHeld: false,
+  tabTimer: null,
   streaming: false,
   requestId: null,
   streamMessage: null,
@@ -111,7 +125,7 @@ function updateControls() {
   const session = currentSession();
   if (!session) {
     dom.input.disabled = true;
-    dom.input.placeholder = 'Press Tab to create a chat';
+    dom.input.placeholder = 'Hold Tab to create a chat';
     updateSendState();
     return;
   }
@@ -134,14 +148,56 @@ function appendRow(card) {
   dom.messages.append(row);
 }
 
+function messageCardKey(index) {
+  return `m:${index}`;
+}
+
+function agentCardKey(index) {
+  return `a:${index}`;
+}
+
+function stepCardKey(messageIndex, stepIndex) {
+  return `s:${messageIndex}:${stepIndex}`;
+}
+
+function cardByKey(key) {
+  if (!key) return null;
+  for (const card of dom.messages.querySelectorAll('.message-card')) {
+    if (card.dataset.cardKey === key) return card;
+  }
+  return null;
+}
+
+function setCardExpanded(card, expanded) {
+  card.classList.toggle('collapsed', !expanded);
+  const body = card.querySelector('.card-body-wrap');
+  if (body) body.inert = !expanded;
+}
+
+function applyOpenKey(key, { instant = false } = {}) {
+  state.openApplyVersion += 1;
+  const cards = [...dom.messages.querySelectorAll('.message-card')];
+  const target = key ? cards.find((card) => card.dataset.cardKey === key) : null;
+
+  if (instant) {
+    for (const card of cards) card.classList.add('no-anim');
+  }
+  for (const card of cards) setCardExpanded(card, card === target);
+  if (instant) {
+    requestAnimationFrame(() => {
+      for (const card of cards) card.classList.remove('no-anim');
+    });
+  }
+
+  state.renderedOpenKey = target ? key : null;
+}
+
 function makeCard(opts) {
   const card = el('div', `message-card ${opts.kind}`);
-  if (opts.collapsed) card.classList.add('collapsed');
+  card.dataset.cardKey = opts.key;
+  card.classList.add('collapsed');
 
   const head = el('div', 'card-head');
-  head.setAttribute('role', 'button');
-  head.tabIndex = 0;
-  head.setAttribute('aria-expanded', String(!opts.collapsed));
   head.append(el('span', 'card-dot'));
   head.append(el('span', 'card-title', opts.title));
   head.append(el('span', 'card-meta', opts.meta || ''));
@@ -155,23 +211,11 @@ function makeCard(opts) {
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
   head.append(chevron);
 
-  const toggle = () => {
-    opts.onToggle();
-    const collapsed = card.classList.toggle('collapsed');
-    head.setAttribute('aria-expanded', String(!collapsed));
-  };
-  head.addEventListener('click', (event) => {
-    event.stopPropagation();
-    toggle();
-  });
-  head.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    toggle();
-  });
+  card.title = opts.onInspect
+    ? 'Hold Space to peek · double-click to view raw request body'
+    : 'Hold Space to peek';
 
   if (typeof opts.onInspect === 'function') {
-    card.title = 'Double-click to view raw request body';
     card.addEventListener('dblclick', (event) => {
       if (event.target instanceof Element && event.target.closest('button')) {
         return;
@@ -182,24 +226,20 @@ function makeCard(opts) {
     });
   }
 
-  card.append(head);
-  return card;
+  const bodyWrap = el('div', 'card-body-wrap');
+  bodyWrap.inert = true;
+  const body = el('div', 'card-body');
+  const inner = el('div', 'card-body-inner');
+  body.append(inner);
+  bodyWrap.append(body);
+  card.append(head, bodyWrap);
+
+  return { card, head, body: inner, bodyWrap };
 }
 
-function textCard({
-  kind,
-  title,
-  meta,
-  text,
-  collapsed,
-  onToggle,
-  streaming,
-  onInspect,
-}) {
-  const card = makeCard({ kind, title, meta, collapsed, onToggle, onInspect });
-  const body = el('div', 'card-body');
+function textCard({ key, kind, title, meta, text, streaming, onInspect }) {
+  const { card, body } = makeCard({ key, kind, title, meta, onInspect });
   if (text) body.append(el('div', 'card-text', text));
-  card.append(body);
   if (streaming) card.classList.add('streaming');
   return card;
 }
@@ -342,24 +382,20 @@ function inspectUserMessage(msg) {
   );
 }
 
-function renderToolCard(step, msg) {
+function renderToolCard(step, msg, key) {
   const call = step.kind === 'call';
-  const card = makeCard({
+  const { card, body } = makeCard({
+    key,
     kind: call ? 'tool-call' : 'tool-result',
     title: call ? '工具调用' : '工具返回',
     meta: step.name || 'tool',
     badge: call
       ? null
       : { text: step.ok === false ? 'error' : 'ok', error: step.ok === false },
-    collapsed: step.collapsed === true,
-    onToggle: () => {
-      step.collapsed = step.collapsed !== true;
-    },
     onInspect: () => inspectStep(msg, step),
   });
   if (!call && step.ok === false) card.classList.add('error');
 
-  const body = el('div', 'card-body');
   const raw = call ? step.arguments : step.output;
   const structured = parseStructured(raw);
   if (structured) {
@@ -367,33 +403,70 @@ function renderToolCard(step, msg) {
   } else {
     body.append(el('pre', 'tool-text', String(raw ?? '')));
   }
-  card.append(body);
   return card;
 }
 
-function renderAgentMessage(msg) {
-  const steps = Array.isArray(msg.steps) ? msg.steps : [];
-  const rich = steps.some(
+function isRichTrace(steps) {
+  return steps.some(
     (step) =>
       step.kind === 'text' || step.kind === 'call' || step.kind === 'result'
   );
+}
+
+function lastCardKey(session) {
+  if (!session || session.msgs.length === 0) return null;
+  const index = session.msgs.length - 1;
+  const msg = session.msgs[index];
+  if (msg.role !== 'Agent') return messageCardKey(index);
+
+  const steps = Array.isArray(msg.steps) ? msg.steps : [];
+  if (isRichTrace(steps) && steps.length > 0) {
+    return stepCardKey(index, steps.length - 1);
+  }
+  return agentCardKey(index);
+}
+
+function streamingAutoKey() {
+  const session = currentSession();
+  if (!session || !state.streaming || !state.streamMessage) return null;
+
+  const index = session.msgs.indexOf(state.streamMessage);
+  if (index < 0) return null;
+
+  const steps = Array.isArray(state.streamMessage.steps)
+    ? state.streamMessage.steps
+    : [];
+  if (steps.length > 0) return stepCardKey(index, steps.length - 1);
+
+  // 还没有第一个 token：先展开用户刚发的那条消息
+  if (!state.streamMessage.text) {
+    for (let i = index - 1; i >= 0; i -= 1) {
+      if (session.msgs[i].role === 'User') return messageCardKey(i);
+    }
+  }
+  return agentCardKey(index);
+}
+
+function autoCardKey() {
+  return streamingAutoKey() || lastCardKey(currentSession());
+}
+
+function renderAgentMessage(msg, msgIndex) {
+  const steps = Array.isArray(msg.steps) ? msg.steps : [];
+  const rich = isRichTrace(steps);
   const streaming = state.streaming && msg === state.streamMessage;
 
   if (!rich) {
     // 旧消息或普通回复：一个卡片，旧的工具过程行显示在文字上方
-    const card = makeCard({
+    const { card, body } = makeCard({
+      key: agentCardKey(msgIndex),
       kind: 'agent',
       title: '对话',
       meta: '助手',
-      collapsed: msg.collapsed === true,
-      onToggle: () => {
-        msg.collapsed = msg.collapsed !== true;
-      },
       onInspect: () => {
         openRawRequest(requestAt(msg, 0), rawRoundLabel(0));
       },
     });
-    const body = el('div', 'card-body');
     for (const step of steps) {
       if (step.kind !== 'status') continue;
       const line = el('div', 'card-status-line', step.label);
@@ -401,7 +474,6 @@ function renderAgentMessage(msg) {
       body.append(line);
     }
     if (msg.text) body.append(el('div', 'card-text', msg.text));
-    card.append(body);
     if (streaming) card.classList.add('streaming');
     appendRow(card);
     return;
@@ -413,62 +485,102 @@ function renderAgentMessage(msg) {
       if (!step.text && !(streaming && i === steps.length - 1)) continue;
       appendRow(
         textCard({
+          key: stepCardKey(msgIndex, i),
           kind: 'agent',
           title: '对话',
           meta: '助手',
           text: step.text,
-          collapsed: step.collapsed === true,
-          onToggle: () => {
-            step.collapsed = step.collapsed !== true;
-          },
           streaming: streaming && i === steps.length - 1,
           onInspect: () => inspectStep(msg, step),
         })
       );
     } else if (step.kind === 'call' || step.kind === 'result') {
-      appendRow(renderToolCard(step, msg));
+      appendRow(renderToolCard(step, msg, stepCardKey(msgIndex, i)));
     }
   }
 }
 
-function renderMessages() {
+function renderMessages({ animate = true } = {}) {
   const session = currentSession();
-  const stick = state.forceScroll || isNearBottom();
+  const sessionId = session ? session.id : null;
+  const version = ++state.renderVersion;
+  const openVersion = state.openApplyVersion;
+  const changed = state.renderedSessionId !== sessionId;
+  const previousKey = changed ? null : state.renderedOpenKey;
   const prevTop = dom.messages.scrollTop;
+  const stick = !state.peekKey && (state.forceScroll || isNearBottom());
   state.forceScroll = false;
 
   dom.messages.replaceChildren();
   if (!session) {
-    dom.messages.append(el('div', 'empty', 'No chats yet. Press Tab to create one.'));
+    state.openCardKey = null;
+    state.peekKey = null;
+    state.spaceHeld = false;
+    state.renderedOpenKey = null;
+    state.renderedSessionId = null;
+    dom.messages.append(el('div', 'empty', 'No chats yet. Hold Tab to create one.'));
     return;
   }
   if (session.msgs.length === 0) {
+    state.openCardKey = null;
+    state.peekKey = null;
+    state.spaceHeld = false;
+    state.renderedOpenKey = null;
+    state.renderedSessionId = sessionId;
     dom.messages.append(el('div', 'empty', 'No messages yet. Type below.'));
     return;
   }
 
-  for (const msg of session.msgs) {
+  session.msgs.forEach((msg, index) => {
     if (msg.role === 'Agent') {
-      renderAgentMessage(msg);
-      continue;
+      renderAgentMessage(msg, index);
+      return;
     }
 
     appendRow(
       textCard({
+        key: messageCardKey(index),
         kind: 'user',
         title: '对话',
         meta: '你',
         text: msg.text,
-        collapsed: msg.collapsed === true,
-        onToggle: () => {
-          msg.collapsed = msg.collapsed !== true;
-        },
         onInspect: () => inspectUserMessage(msg),
       })
     );
+  });
+
+  const autoKey = autoCardKey();
+  state.openCardKey = autoKey;
+  let targetKey = state.peekKey || autoKey;
+  const cards = [...dom.messages.querySelectorAll('.message-card')];
+  if (targetKey && !cards.some((card) => card.dataset.cardKey === targetKey)) {
+    targetKey = autoKey;
+    state.peekKey = null;
+  }
+  state.renderedSessionId = sessionId;
+
+  if (changed || !animate) {
+    applyOpenKey(targetKey, { instant: true });
+  } else {
+    const previous = previousKey
+      ? cards.find((card) => card.dataset.cardKey === previousKey)
+      : null;
+    for (const card of cards) setCardExpanded(card, card === previous);
+    void dom.messages.offsetHeight;
+    if (!previous || previousKey !== targetKey) {
+      requestAnimationFrame(() => {
+        if (state.renderVersion !== version) return;
+        if (state.openApplyVersion !== openVersion) return;
+        applyOpenKey(targetKey);
+      });
+    } else {
+      state.renderedOpenKey = targetKey;
+    }
   }
 
   requestAnimationFrame(() => {
+    if (state.renderVersion !== version) return;
+    if (state.peekKey) return;
     if (stick) dom.messages.scrollTop = dom.messages.scrollHeight;
     else dom.messages.scrollTop = prevTop;
   });
@@ -555,14 +667,68 @@ function renderSwitcher() {
   }
 }
 
+function cancelTabHold() {
+  state.tabHeld = false;
+  clearTimeout(state.tabTimer);
+  state.tabTimer = null;
+}
+
+function cardAtPointer() {
+  const element = document.elementFromPoint(state.pointerX, state.pointerY);
+  if (!(element instanceof Element)) return null;
+  return element.closest('.message-card');
+}
+
+function startSpacePeek(card) {
+  const key = card && card.dataset.cardKey;
+  if (!key) return;
+  state.spaceHeld = true;
+  state.peekKey = key;
+  state.peekPointerX = state.pointerX;
+  state.peekPointerY = state.pointerY;
+  applyOpenKey(key);
+}
+
+function endSpacePeek() {
+  if (!state.spaceHeld) return;
+  state.spaceHeld = false;
+  state.peekKey = null;
+  applyOpenKey(state.openCardKey);
+}
+
+function handlePointerMove(event) {
+  state.pointerX = event.clientX;
+  state.pointerY = event.clientY;
+  if (!state.spaceHeld) return;
+
+  if (
+    Math.abs(state.pointerX - state.peekPointerX) < 6 &&
+    Math.abs(state.pointerY - state.peekPointerY) < 6
+  ) {
+    return;
+  }
+
+  const card = cardAtPointer();
+  const key = card && card.dataset.cardKey;
+  if (!key || key === state.peekKey) return;
+
+  state.peekKey = key;
+  state.peekPointerX = state.pointerX;
+  state.peekPointerY = state.pointerY;
+  applyOpenKey(key);
+}
+
 function openSwitcher() {
   if (!dom.settingsOverlay.classList.contains('hidden')) return;
+  endSpacePeek();
   state.switcherOpen = true;
   state.switcherIndex = state.current;
   state.pendingDelete = -1;
-  dom.switcher.classList.remove('hidden');
   dom.input.blur();
   renderSwitcher();
+  dom.switcher.inert = false;
+  dom.switcher.setAttribute('aria-hidden', 'false');
+  dom.switcher.classList.add('open');
 }
 
 function closeSwitcher() {
@@ -570,13 +736,11 @@ function closeSwitcher() {
   state.switcherOpen = false;
   state.pendingDelete = -1;
   clearTimeout(state.deleteTimer);
-  dom.switcher.classList.add('hidden');
+  cancelTabHold();
+  dom.switcher.classList.remove('open');
+  dom.switcher.inert = true;
+  dom.switcher.setAttribute('aria-hidden', 'true');
   dom.input.focus();
-}
-
-function toggleSwitcher() {
-  if (state.switcherOpen) closeSwitcher();
-  else openSwitcher();
 }
 
 function moveSwitcher(delta) {
@@ -693,17 +857,33 @@ function sendMessage() {
 }
 
 function finishStream() {
+  const stick = state.forceScroll || isNearBottom();
   state.streaming = false;
   state.requestId = null;
   state.streamMessage = null;
   state.textOpen = false;
-  state.forceScroll = true;
+  state.forceScroll = false;
+
+  dom.messages
+    .querySelectorAll('.message-card.streaming')
+    .forEach((card) => card.classList.remove('streaming'));
+
+  state.openCardKey = autoCardKey();
+  if (!state.peekKey) applyOpenKey(state.openCardKey);
+
   updateSendState();
   saveChatsSoon();
-  renderAll();
+  if (state.switcherOpen) renderSwitcher();
+
+  if (!state.peekKey && stick) {
+    requestAnimationFrame(() => {
+      dom.messages.scrollTop = dom.messages.scrollHeight;
+    });
+  }
 }
 
 function openRawRequest(body, label) {
+  endSpacePeek();
   dom.rawMeta.textContent = label || '';
   dom.rawBody.replaceChildren();
   if (body && typeof body === 'object') {
@@ -727,6 +907,7 @@ function closeRawRequest() {
 }
 
 function openSettings() {
+  endSpacePeek();
   applySettings();
   dom.settingsOverlay.classList.remove('hidden');
 }
@@ -738,7 +919,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .card-head, .overlay';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .overlay';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -850,46 +1031,120 @@ function bindEvents() {
     if (event.key === 'Tab') {
       if (!dom.settingsOverlay.classList.contains('hidden')) return;
       event.preventDefault();
-      toggleSwitcher();
+      if (state.switcherOpen) return;
+      if (event.repeat || state.tabHeld) return;
+
+      endSpacePeek();
+      state.tabHeld = true;
+      clearTimeout(state.tabTimer);
+      state.tabTimer = setTimeout(() => {
+        state.tabTimer = null;
+        if (state.tabHeld) openSwitcher();
+      }, TAB_HOLD_MS);
       return;
     }
 
-    if (!state.switcherOpen) {
-      if (
-        event.key === 'Escape' &&
-        !dom.settingsOverlay.classList.contains('hidden')
-      ) {
-        closeSettings();
-      }
+    if (!dom.settingsOverlay.classList.contains('hidden')) {
+      if (event.key === 'Escape') closeSettings();
       return;
     }
 
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeSwitcher();
-      return;
-    }
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      moveSwitcher(1);
-      return;
-    }
-
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      moveSwitcher(-1);
-      return;
-    }
-
-    if (event.key === 'Enter') {
-      const target = event.target;
-      if (target instanceof Element && target.closest('button, input, textarea')) {
+    if (state.switcherOpen) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeSwitcher();
         return;
       }
-      event.preventDefault();
-      selectSession(state.switcherIndex);
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        moveSwitcher(1);
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        moveSwitcher(-1);
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        const target = event.target;
+        if (
+          target instanceof Element &&
+          target.closest('button, input, textarea')
+        ) {
+          return;
+        }
+        event.preventDefault();
+        selectSession(state.switcherIndex);
+      }
+      return;
     }
+
+    if (event.code === 'Space' || event.key === ' ') {
+      if (event.repeat || state.spaceHeld) return;
+      const active = document.activeElement;
+      const target = event.target;
+      const inEditable =
+        (target instanceof Element &&
+          target.closest(
+            'input, textarea, [contenteditable="true"]'
+          )) ||
+        (active instanceof Element &&
+          active.closest(
+            'input, textarea, [contenteditable="true"]'
+          ));
+      if (inEditable) {
+        const emptyComposer = active === dom.input && dom.input.value === '';
+        if (!emptyComposer) return;
+      }
+      if (
+        target instanceof Element &&
+        target.closest('button, a, select')
+      ) {
+        return;
+      }
+      if (
+        active instanceof Element &&
+        active.closest('button, a, select')
+      ) {
+        return;
+      }
+      const card = cardAtPointer();
+      if (!card) return;
+      event.preventDefault();
+      startSpacePeek(card);
+    }
+  });
+
+  document.addEventListener('keyup', (event) => {
+    if (event.key === 'Tab') {
+      if (!state.tabHeld) return;
+      cancelTabHold();
+      if (!dom.settingsOverlay.classList.contains('hidden')) return;
+      event.preventDefault();
+      if (state.switcherOpen) closeSwitcher();
+      return;
+    }
+
+    if (event.code === 'Space' || event.key === ' ') {
+      if (!state.spaceHeld) return;
+      event.preventDefault();
+      endSpacePeek();
+    }
+  });
+
+  document.addEventListener('mousemove', handlePointerMove);
+  document.addEventListener('mousedown', (event) => {
+    state.pointerX = event.clientX;
+    state.pointerY = event.clientY;
+  });
+
+  window.addEventListener('blur', () => {
+    cancelTabHold();
+    endSpacePeek();
+    if (state.switcherOpen) closeSwitcher();
   });
 
   // 点击遮罩空白处关闭；面板本身阻止冒泡
@@ -906,6 +1161,7 @@ function bindEvents() {
 
     const stepRound = Number.isInteger(round) ? round : 0;
     const last = msg.steps[msg.steps.length - 1];
+    let newStep = false;
     if (
       state.textOpen &&
       last &&
@@ -916,10 +1172,51 @@ function bindEvents() {
     } else {
       msg.steps.push({ kind: 'text', text, round: stepRound });
       state.textOpen = true;
+      newStep = true;
     }
 
-    state.forceScroll = true;
-    renderMessages();
+    const session = currentSession();
+    const messageIndex = session ? session.msgs.indexOf(msg) : -1;
+    if (messageIndex < 0) return;
+
+    const stepIndex = msg.steps.length - 1;
+    const key = stepCardKey(messageIndex, stepIndex);
+
+    if (newStep) {
+      state.openCardKey = key;
+      state.forceScroll = true;
+      renderMessages();
+      return;
+    }
+
+    const card = cardByKey(key);
+    if (!card) {
+      state.openCardKey = key;
+      state.forceScroll = true;
+      renderMessages();
+      return;
+    }
+
+    let textNode = card.querySelector('.card-text');
+    if (!textNode) {
+      textNode = el('div', 'card-text');
+      const body = card.querySelector('.card-body-inner');
+      if (body) body.append(textNode);
+    }
+    textNode.textContent = last.text;
+    card.classList.add('streaming');
+
+    const stick = state.forceScroll || isNearBottom();
+    state.forceScroll = false;
+    state.openCardKey = key;
+    if (!state.peekKey && state.renderedOpenKey !== key) {
+      applyOpenKey(key);
+    }
+    if (stick && !state.peekKey) {
+      requestAnimationFrame(() => {
+        dom.messages.scrollTop = dom.messages.scrollHeight;
+      });
+    }
   });
 
   api.onChatRequest(({ requestId, round, body }) => {
@@ -944,8 +1241,12 @@ function bindEvents() {
       round: Number.isInteger(round) ? round : 0,
     });
     state.textOpen = false;
-    state.forceScroll = true;
     saveChatsSoon();
+
+    const session = currentSession();
+    if (!session || !session.msgs.includes(state.streamMessage)) return;
+    state.openCardKey = autoCardKey();
+    state.forceScroll = true;
     renderMessages();
   });
 
@@ -962,8 +1263,12 @@ function bindEvents() {
       round: Number.isInteger(round) ? round : 0,
     });
     state.textOpen = false;
-    state.forceScroll = true;
     saveChatsSoon();
+
+    const session = currentSession();
+    if (!session || !session.msgs.includes(state.streamMessage)) return;
+    state.openCardKey = autoCardKey();
+    state.forceScroll = true;
     renderMessages();
   });
 
@@ -986,9 +1291,16 @@ function bindEvents() {
         msg.text = note;
       }
       if (Array.isArray(msg.steps) && msg.steps.length > 0) {
-        msg.steps.push({ kind: 'text', text: note });
+        msg.steps.push({ kind: 'text', text: note, round: 0 });
       }
       msg.request = null;
+
+      const session = currentSession();
+      if (session && session.msgs.includes(msg)) {
+        state.openCardKey = autoCardKey();
+        state.forceScroll = true;
+        renderMessages();
+      }
     }
     finishStream();
   });

@@ -235,10 +235,36 @@ button {
   -webkit-backdrop-filter: blur(34px) saturate(1.35);
   backdrop-filter: blur(34px) saturate(1.35);
   z-index: 30;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    visibility 0s linear 160ms;
 }
 
-#switcher.hidden {
-  display: none;
+#switcher.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 160ms ease;
+}
+
+.switcher-head,
+.switcher-list,
+.switcher-foot {
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#switcher.open .switcher-head,
+#switcher.open .switcher-list,
+#switcher.open .switcher-foot {
+  opacity: 1;
+  transform: none;
 }
 
 .switcher-head {
@@ -532,13 +558,8 @@ button {
   align-items: center;
   gap: 8px;
   padding: 9px 13px 8px;
-  cursor: pointer;
+  cursor: default;
   user-select: none;
-}
-
-.card-head:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
 }
 
 .card-dot {
@@ -641,14 +662,34 @@ button {
   transform: rotate(-90deg);
 }
 
+.card-body-wrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  opacity: 1;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease;
+}
+
 .card-body {
-  padding: 0 13px 12px;
+  min-height: 0;
+  overflow: hidden;
   font-size: 13.5px;
   line-height: 1.6;
 }
 
-.message-card.collapsed .card-body {
-  display: none;
+.card-body-inner {
+  padding: 0 13px 12px;
+}
+
+.message-card.collapsed .card-body-wrap {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.message-card.no-anim .card-body-wrap {
+  transition: none;
 }
 
 .card-text {
@@ -1033,4 +1074,19 @@ button {
   width: 0;
   height: 0;
   display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #switcher,
+  .switcher-head,
+  .switcher-list,
+  .switcher-foot,
+  .card-body-wrap,
+  .card-chevron svg {
+    transition: none !important;
+  }
+
+  .message-card.streaming .card-text::after {
+    animation: none;
+  }
 }
