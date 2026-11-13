@@ -27,6 +27,9 @@ const dom = {
   rawMeta: $('raw-meta'),
   apiKey: $('api-key'),
   apiKeyState: $('api-key-state'),
+  ringMenu: $('ring-menu'),
+  ringSvg: $('ring-svg'),
+  ringCenter: $('ring-center'),
 };
 
 const state = {
@@ -55,6 +58,9 @@ const state = {
   saveTimer: null,
   settingsTimer: null,
   forceScroll: true,
+  ringOpen: false,
+  ringIndex: -1,
+  ringSuppress: false,
 };
 
 let windowDrag = null;
@@ -1251,10 +1257,207 @@ function onWindowDragEnd() {
   }
 }
 
+const RING_MID = 150;
+const RING_SIZE = 300;
+const RING_OUTER = 118;
+const RING_INNER = 64;
+const RING_LABEL_RADIUS = 91;
+const RING_DEAD_ZONE = 34;
+const RING_GAP = 3;
+
+const RING_ITEMS = [
+  {
+    label: '新对话',
+    icon: '<path d="M4 5h16v11H9l-4 4V5Z"/><path d="M12 8v5M9.5 10.5h5"/>',
+    action: () => newSession(),
+  },
+  {
+    label: '工作区',
+    icon: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
+    action: () => openSwitcher(),
+  },
+  {
+    label: '设置',
+    icon: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+    action: () => openSettings(),
+  },
+  {
+    label: '关闭',
+    icon: '<path d="M6 6l12 12M18 6L6 18"/>',
+    action: () => api.close(),
+  },
+];
+
+let ringCenterPoint = { x: 0, y: 0 };
+let ringSegments = [];
+let ringLabels = [];
+
+function ringPolar(radius, angleDeg) {
+  const rad = (angleDeg * Math.PI) / 180;
+  return {
+    x: RING_MID + radius * Math.cos(rad),
+    y: RING_MID + radius * Math.sin(rad),
+  };
+}
+
+function ringSectorPath(inner, outer, startAngle, endAngle) {
+  const a = ringPolar(outer, startAngle);
+  const b = ringPolar(outer, endAngle);
+  const c = ringPolar(inner, endAngle);
+  const d = ringPolar(inner, startAngle);
+  const large = endAngle - startAngle > 180 ? 1 : 0;
+  return [
+    `M ${a.x} ${a.y}`,
+    `A ${outer} ${outer} 0 ${large} 1 ${b.x} ${b.y}`,
+    `L ${c.x} ${c.y}`,
+    `A ${inner} ${inner} 0 ${large} 0 ${d.x} ${d.y}`,
+    'Z',
+  ].join(' ');
+}
+
+function buildRingMenu() {
+  const svgNS = 'http://www.w3.org/2000/svg';
+  dom.ringSvg.replaceChildren();
+  for (const label of ringLabels) label.remove();
+  ringSegments = [];
+  ringLabels = [];
+
+  const step = 360 / RING_ITEMS.length;
+  RING_ITEMS.forEach((item, index) => {
+    const midAngle = -90 + index * step;
+    const start = midAngle - step / 2 + RING_GAP / 2;
+    const end = midAngle + step / 2 - RING_GAP / 2;
+
+    const path = document.createElementNS(svgNS, 'path');
+    path.setAttribute('class', 'ring-seg');
+    path.setAttribute('d', ringSectorPath(RING_INNER, RING_OUTER, start, end));
+    dom.ringSvg.append(path);
+    ringSegments.push(path);
+
+    const label = el('div', 'ring-label');
+    label.innerHTML = `<svg class="ring-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span>${item.label}</span>`;
+    const point = ringPolar(RING_LABEL_RADIUS, midAngle);
+    label.style.left = `${point.x}px`;
+    label.style.top = `${point.y}px`;
+    dom.ringMenu.append(label);
+    ringLabels.push(label);
+  });
+}
+
+function updateRingSelection(index) {
+  state.ringIndex = index;
+  ringSegments.forEach((segment, i) =>
+    segment.classList.toggle('selected', i === index)
+  );
+  ringLabels.forEach((label, i) =>
+    label.classList.toggle('selected', i === index)
+  );
+}
+
+function ringIndexForPoint(x, y) {
+  const dx = x - ringCenterPoint.x;
+  const dy = y - ringCenterPoint.y;
+  if (Math.hypot(dx, dy) < RING_DEAD_ZONE) return -1;
+
+  const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const step = 360 / RING_ITEMS.length;
+  let best = -1;
+  let bestDiff = Infinity;
+  for (let i = 0; i < RING_ITEMS.length; i += 1) {
+    const midAngle = -90 + i * step;
+    const diff = Math.abs((((angle - midAngle) % 360) + 540) % 360 - 180);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = i;
+    }
+  }
+  return best;
+}
+
+function openRingMenu(x, y) {
+  if (state.ringOpen) closeRingMenu();
+
+  const half = RING_SIZE / 2;
+  const margin = 6;
+  const cx = Math.min(
+    window.innerWidth - half - margin,
+    Math.max(half + margin, x)
+  );
+  const cy = Math.min(
+    window.innerHeight - half - margin,
+    Math.max(half + margin, y)
+  );
+
+  ringCenterPoint = { x: cx, y: cy };
+  dom.ringMenu.style.left = `${cx}px`;
+  dom.ringMenu.style.top = `${cy}px`;
+  state.ringOpen = true;
+  state.ringSuppress = true;
+  updateRingSelection(-1);
+  dom.ringMenu.setAttribute('aria-hidden', 'false');
+  dom.ringMenu.classList.add('open');
+}
+
+function closeRingMenu() {
+  if (!state.ringOpen) return;
+  state.ringOpen = false;
+  updateRingSelection(-1);
+  dom.ringMenu.classList.remove('open');
+  dom.ringMenu.setAttribute('aria-hidden', 'true');
+}
+
+function updateRingFromPointer(event) {
+  if (!state.ringOpen) return;
+  updateRingSelection(ringIndexForPoint(event.clientX, event.clientY));
+}
+
+function onRightMouseDown(event) {
+  if (event.button !== 2) return;
+
+  if (!dom.rawOverlay.classList.contains('hidden')) {
+    closeRawRequest();
+    state.ringSuppress = true;
+    return;
+  }
+  if (!dom.settingsOverlay.classList.contains('hidden')) {
+    closeSettings();
+    state.ringSuppress = true;
+    return;
+  }
+  if (state.switcherOpen) {
+    closeSwitcher();
+    state.ringSuppress = true;
+    return;
+  }
+  if (state.composerOpen) {
+    closeComposer();
+    state.ringSuppress = true;
+    return;
+  }
+
+  openRingMenu(event.clientX, event.clientY);
+}
+
+function onRightMouseUp(event) {
+  if (event.button !== 2 || !state.ringOpen) return;
+  const index = ringIndexForPoint(event.clientX, event.clientY);
+  closeRingMenu();
+  if (index < 0) return;
+  const action = RING_ITEMS[index].action;
+  requestAnimationFrame(() => action());
+}
+
 function bindEvents() {
+  buildRingMenu();
+
   // 整体禁用鼠标右键菜单与框选；有弹窗时右键等于关闭
   document.addEventListener('contextmenu', (event) => {
     event.preventDefault();
+    if (state.ringSuppress) {
+      state.ringSuppress = false;
+      return;
+    }
+    if (state.ringOpen) return;
     if (!dom.rawOverlay.classList.contains('hidden')) {
       closeRawRequest();
       return;
@@ -1265,7 +1468,9 @@ function bindEvents() {
     }
     if (state.switcherOpen) {
       closeSwitcher();
+      return;
     }
+    if (state.composerOpen) closeComposer();
   });
   document.addEventListener('selectstart', (event) => {
     const target = event.target;
@@ -1277,6 +1482,11 @@ function bindEvents() {
   document.addEventListener('mousemove', onWindowDragMove);
   document.addEventListener('mouseup', onWindowDragEnd);
   window.addEventListener('blur', onWindowDragEnd);
+
+  document.addEventListener('mousedown', onRightMouseDown);
+  document.addEventListener('mousemove', updateRingFromPointer);
+  document.addEventListener('mouseup', onRightMouseUp);
+  window.addEventListener('blur', closeRingMenu);
 
   dom.switcherNew.addEventListener('click', createChatFromSwitcher);
   dom.projectNew.addEventListener('click', newProject);
@@ -1319,6 +1529,14 @@ function bindEvents() {
   });
 
   document.addEventListener('keydown', (event) => {
+    if (state.ringOpen) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeRingMenu();
+      }
+      return;
+    }
+
     if (!dom.rawOverlay.classList.contains('hidden')) {
       if (event.key === 'Escape') {
         event.preventDefault();
