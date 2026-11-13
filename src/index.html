@@ -37,16 +37,17 @@
           <div class="edge-blur edge-blur-top" aria-hidden="true"></div>
           <div class="edge-blur edge-blur-bottom" aria-hidden="true"></div>
 
-          <footer id="composer">
+          <div id="composer" class="composer-overlay" role="dialog" aria-modal="true" aria-label="New message" aria-hidden="true" inert>
             <div class="composer-box">
-              <textarea id="input" rows="3" spellcheck="false"></textarea>
+              <textarea id="input" rows="4" spellcheck="false" placeholder="输入新对话…" aria-label="New message"></textarea>
+              <div class="composer-hint">Enter 发送 · Shift+Enter 换行 · Esc 关闭</div>
               <button id="send" class="send-btn" aria-label="Send">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M2 21L23 12L2 3L2 10L17 12L2 14Z" />
                 </svg>
               </button>
             </div>
-          </footer>
+          </div>
         </main>
       </div>
     </div>

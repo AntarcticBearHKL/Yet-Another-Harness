@@ -10,6 +10,7 @@ const $ = (id) => document.getElementById(id);
 
 const dom = {
   messages: $('messages'),
+  composer: $('composer'),
   input: $('input'),
   send: $('send'),
   switcher: $('switcher'),
@@ -33,6 +34,7 @@ const state = {
   },
   switcherOpen: false,
   switcherIndex: 0,
+  composerOpen: false,
   openCardKey: null,
   peekKey: null,
   peekKeys: new Set(),
@@ -128,7 +130,7 @@ function updateControls() {
   }
 
   dom.input.disabled = false;
-  dom.input.placeholder = '';
+  dom.input.placeholder = '输入新对话…';
   updateSendState();
 }
 
@@ -554,7 +556,7 @@ function renderMessages({ animate = true } = {}) {
     state.spaceHeld = false;
     state.renderedOpenKeys = new Set();
     state.renderedSessionId = sessionId;
-    dom.messages.append(el('div', 'empty', 'No messages yet. Type below.'));
+    dom.messages.append(el('div', 'empty', 'No messages yet. Press Alt to type.'));
     return;
   }
 
@@ -719,10 +721,38 @@ function cardAtPointer() {
   return element.closest('.message-card');
 }
 
-function applyPeekKeysKeepingScroll() {
-  const top = dom.messages.scrollTop;
-  applyOpenKeys(peekOpenKeys());
-  if (dom.messages.scrollTop !== top) dom.messages.scrollTop = top;
+function applyPeekPinned(key) {
+  const target = cardByKey(key);
+  if (!target) return;
+
+  const anchorTop = target.getBoundingClientRect().top;
+  const container = dom.messages;
+
+  // 只展开当前 hover 的条目，其他条目全部折叠；用 instant 避免
+  // 折叠动画把目标标题带着移动。
+  applyOpenKey(key, { instant: true });
+
+  const pin = () => {
+    const drift = target.getBoundingClientRect().top - anchorTop;
+    if (Math.abs(drift) <= 0.5) return;
+
+    const desired = container.scrollTop + drift;
+    if (desired >= 0) {
+      container.scrollTop = desired;
+    } else {
+      // 目标靠近顶部、上方内容折叠后需要负的 scrollTop；
+      // 用临时顶部留白补足，保证标题的屏幕位置不变。
+      container.scrollTop = 0;
+      const currentPad = parseFloat(getComputedStyle(container).paddingTop) || 0;
+      container.style.paddingTop = `${currentPad - desired}px`;
+    }
+  };
+
+  pin();
+  requestAnimationFrame(() => {
+    if (!state.spaceHeld || state.peekKey !== key) return;
+    pin();
+  });
 }
 
 function startSpacePeek(card) {
@@ -730,15 +760,13 @@ function startSpacePeek(card) {
   if (!key) return;
   state.spaceHeld = true;
   state.peekKey = key;
+  state.peekKeys.clear();
   state.peekKeys.add(key);
-
-  // 保留当前展开的条目，预览期间只增加内容高度，不折叠已有内容，
-  // 这样滚动条不会因为 maxScroll 变小而被浏览器夹回去。
-  if (state.openCardKey) state.peekKeys.add(state.openCardKey);
+  dom.messages.style.removeProperty('padding-top');
 
   state.peekPointerX = state.pointerX;
   state.peekPointerY = state.pointerY;
-  applyPeekKeysKeepingScroll();
+  applyPeekPinned(key);
 }
 
 function endSpacePeek() {
@@ -746,9 +774,8 @@ function endSpacePeek() {
   state.spaceHeld = false;
   state.peekKey = null;
   state.peekKeys.clear();
-  const top = dom.messages.scrollTop;
+  dom.messages.style.removeProperty('padding-top');
   applyOpenKeys(openKeySet(state.openCardKey));
-  if (dom.messages.scrollTop !== top) dom.messages.scrollTop = top;
 }
 
 function handlePointerMove(event) {
@@ -768,11 +795,12 @@ function handlePointerMove(event) {
   if (!key || key === state.peekKey) return;
 
   state.peekKey = key;
+  state.peekKeys.clear();
   state.peekKeys.add(key);
 
   state.peekPointerX = state.pointerX;
   state.peekPointerY = state.pointerY;
-  applyPeekKeysKeepingScroll();
+  applyPeekPinned(key);
 }
 
 function scrollCardToTop(card, offset = 48) {
@@ -844,13 +872,46 @@ function navigateBlock(direction, { selector = null } = {}) {
   applyOpenKey(targetKey, { instant: true });
 }
 
+function openComposer() {
+  if (state.composerOpen || !currentSession()) return;
+  if (!dom.settingsOverlay.classList.contains('hidden')) return;
+  if (!dom.rawOverlay.classList.contains('hidden')) return;
+  if (state.switcherOpen) return;
+
+  endSpacePeek();
+  state.composerOpen = true;
+  dom.composer.inert = false;
+  dom.composer.setAttribute('aria-hidden', 'false');
+  dom.composer.classList.add('open');
+  requestAnimationFrame(() => {
+    if (!state.composerOpen) return;
+    dom.input.focus();
+    const end = dom.input.value.length;
+    dom.input.setSelectionRange(end, end);
+  });
+}
+
+function closeComposer() {
+  if (!state.composerOpen) return;
+  state.composerOpen = false;
+  dom.composer.classList.remove('open');
+  dom.composer.inert = true;
+  dom.composer.setAttribute('aria-hidden', 'true');
+  dom.input.blur();
+}
+
+function toggleComposer() {
+  if (state.composerOpen) closeComposer();
+  else openComposer();
+}
+
 function openSwitcher() {
   if (!dom.settingsOverlay.classList.contains('hidden')) return;
   endSpacePeek();
+  closeComposer();
   state.switcherOpen = true;
   state.switcherIndex = state.current;
   state.pendingDelete = -1;
-  dom.input.blur();
   renderSwitcher();
   dom.switcher.inert = false;
   dom.switcher.setAttribute('aria-hidden', 'false');
@@ -866,7 +927,6 @@ function closeSwitcher() {
   dom.switcher.classList.remove('open');
   dom.switcher.inert = true;
   dom.switcher.setAttribute('aria-hidden', 'true');
-  dom.input.focus();
 }
 
 function moveSwitcher(delta) {
@@ -917,9 +977,11 @@ function newSession() {
   });
   state.current = state.sessions.length - 1;
   state.forceScroll = true;
+  dom.input.value = '';
+  updateSendState();
   saveChatsSoon();
   renderAll();
-  dom.input.focus();
+  openComposer();
 }
 
 function deleteSession(index) {
@@ -947,6 +1009,7 @@ function sendMessage() {
   const text = dom.input.value.trim();
   if (!text) return;
   endSpacePeek();
+  closeComposer();
 
   const session = currentSession();
   if (!session) return;
@@ -996,8 +1059,8 @@ function finishStream() {
     .forEach((card) => card.classList.remove('streaming'));
 
   state.openCardKey = autoCardKey();
-  if (state.peekKey || state.peekKeys.size > 0) {
-    applyPeekKeysKeepingScroll();
+  if (state.peekKey) {
+    applyPeekPinned(state.peekKey);
   } else {
     applyOpenKey(state.openCardKey);
   }
@@ -1028,17 +1091,17 @@ function openRawRequest(body, label) {
       )
     );
   }
-  dom.input.blur();
+  closeComposer();
   dom.rawOverlay.classList.remove('hidden');
 }
 
 function closeRawRequest() {
   dom.rawOverlay.classList.add('hidden');
-  dom.input.focus();
 }
 
 function openSettings() {
   endSpacePeek();
+  closeComposer();
   applySettings();
   dom.settingsOverlay.classList.remove('hidden');
 }
@@ -1050,7 +1113,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-overlay';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -1140,10 +1203,14 @@ function bindEvents() {
   dom.send.addEventListener('click', sendMessage);
   dom.input.addEventListener('input', updateSendState);
   dom.input.addEventListener('keydown', (event) => {
+    if (event.isComposing || event.keyCode === 229) return;
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       sendMessage();
     }
+  });
+  dom.composer.addEventListener('click', (event) => {
+    if (event.target === dom.composer) closeComposer();
   });
 
   $('win-min').addEventListener('click', () => api.minimize());
@@ -1167,6 +1234,22 @@ function bindEvents() {
       if (event.key === 'Escape') {
         event.preventDefault();
         closeRawRequest();
+      }
+      return;
+    }
+
+    if (event.key === 'Alt' && !event.getModifierState?.('AltGraph')) {
+      if (!dom.settingsOverlay.classList.contains('hidden')) return;
+      if (state.switcherOpen) return;
+      event.preventDefault();
+      if (!event.repeat) toggleComposer();
+      return;
+    }
+
+    if (state.composerOpen) {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        closeComposer();
       }
       return;
     }
@@ -1296,6 +1379,7 @@ function bindEvents() {
       if (!dom.rawOverlay.classList.contains('hidden')) return;
       if (!dom.settingsOverlay.classList.contains('hidden')) return;
       if (state.switcherOpen) return;
+      if (state.composerOpen) return;
       if (state.spaceHeld) return;
 
       const delta = event.deltaY || event.deltaX;
@@ -1373,7 +1457,7 @@ function bindEvents() {
     state.forceScroll = false;
     state.openCardKey = key;
     if (state.peekKey) {
-      applyPeekKeysKeepingScroll();
+      applyPeekPinned(state.peekKey);
     } else if (
       state.renderedOpenKeys.size !== 1 ||
       !state.renderedOpenKeys.has(key)
@@ -1519,7 +1603,6 @@ async function boot() {
   applySettings();
   renderAll();
   updateSendState();
-  dom.input.focus();
 }
 
 boot();
