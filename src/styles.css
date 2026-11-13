@@ -148,6 +148,16 @@ body.maximized .web-content {
   opacity: 1;
 }
 
+body:has(#switcher.open) #window-controls,
+body:has(#catalog:not(.hidden)) #window-controls,
+body:has(#settings-overlay:not(.hidden)) #window-controls,
+body:has(#raw-overlay:not(.hidden)) #window-controls,
+body:has(#web-content:not(.hidden)) #window-controls,
+body:has(#composer.open) #window-controls,
+body.ring-open #window-controls {
+  display: none;
+}
+
 .win-btn {
   display: grid;
   place-items: center;
