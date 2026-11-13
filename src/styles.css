@@ -555,61 +555,6 @@ body.ring-open #window-controls {
   text-align: center;
 }
 
-.trash {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--faint);
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, opacity 120ms ease;
-}
-
-.trash svg {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.trash:hover {
-  background: var(--hover);
-  color: #b23a2f;
-}
-
-.trash.armed {
-  background: #d9433a;
-  color: #fff;
-}
-
-.switch-card .switch-trash {
-  position: static;
-  flex: none;
-  margin: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.switch-card:hover .switch-trash {
-  opacity: 0.6;
-  pointer-events: auto;
-}
-
-.switch-card .switch-trash:hover {
-  opacity: 1;
-}
-
-.switch-card .switch-trash.armed {
-  opacity: 1;
-}
-
 /* ---------------------------------------------------------------- chat */
 .messages {
   display: flex;
@@ -2372,6 +2317,34 @@ body.ring-open #window-controls {
   color: #b05445;
 }
 
+.queue-action.armed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: auto;
+  padding: 0 8px;
+  background: #d9433a;
+  color: #fff;
+}
+
+.queue-action.armed:hover {
+  background: #c53a32;
+  color: #fff;
+}
+
+.queue-action-label {
+  display: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.queue-action.armed .queue-action-label {
+  display: inline;
+}
+
 .queue-action svg {
   width: 14px;
   height: 14px;
@@ -2701,6 +2674,11 @@ body.ring-open #messages {
   stroke: rgba(185, 111, 61, 0.58);
 }
 
+.ring-seg.danger {
+  fill: rgba(178, 58, 47, 0.12);
+  stroke: rgba(178, 58, 47, 0.55);
+}
+
 .ring-label {
   position: absolute;
   display: flex;
@@ -2718,6 +2696,10 @@ body.ring-open #messages {
 .ring-label.selected {
   color: var(--accent-deep);
   transform: translate(-50%, -50%) scale(1.06);
+}
+
+.ring-label.danger {
+  color: #b23a2f;
 }
 
 .ring-icon {

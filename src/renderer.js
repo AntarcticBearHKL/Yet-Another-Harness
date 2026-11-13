@@ -94,6 +94,8 @@ const state = {
   streamMessage: null,
   pendingDelete: -1,
   deleteTimer: null,
+  pendingQueueDelete: null,
+  queueDeleteTimer: null,
   saveTimer: null,
   settingsTimer: null,
   forceScroll: true,
@@ -102,6 +104,7 @@ const state = {
   ringSuppress: false,
   ringPersistent: false,
   ringMoved: false,
+  ringConfirmIndex: -1,
   catalogOpen: false,
   catalogKind: null,
   catalogData: null,
@@ -1951,36 +1954,12 @@ function renderSwitcher() {
     const top = el('div', 'switch-top');
     top.append(el('span', 'switch-title', session.title || `Chat ${localIndex + 1}`));
 
-    const trash = el('button', 'trash switch-trash');
-    trash.type = 'button';
-    trash.setAttribute('aria-label', 'Delete chat');
-    if (state.pendingDelete === localIndex) trash.classList.add('armed');
-    trash.innerHTML =
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6H20M9 6V4H15V6M6 6L7 20H17L18 6M10 10V17M14 10V17"/></svg>';
-
     card.dataset.index = String(localIndex);
     card.dataset.sessionId = session.id;
     card.addEventListener('click', () => selectSession(globalIndex));
     card.addEventListener('mouseenter', () => highlightSwitcher(localIndex));
 
-    trash.addEventListener('click', (event) => {
-      event.stopPropagation();
-      if (state.pendingDelete === localIndex) {
-        state.pendingDelete = -1;
-        clearTimeout(state.deleteTimer);
-        deleteSession(globalIndex);
-        return;
-      }
-      state.pendingDelete = localIndex;
-      clearTimeout(state.deleteTimer);
-      state.deleteTimer = setTimeout(() => {
-        state.pendingDelete = -1;
-        renderSwitcher();
-      }, 3000);
-      renderSwitcher();
-    });
-
-    card.append(top, trash);
+    card.append(top);
     dom.switcherList.append(card);
   });
 
@@ -2191,6 +2170,8 @@ function confirmDeleteProject(projectId) {
 function deleteProject(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
+  state.pendingDelete = -1;
+  clearTimeout(state.deleteTimer);
   const removedSessions = state.sessions.filter(
     (session) => session.projectId === projectId
   );
@@ -2214,7 +2195,7 @@ function deleteProject(projectId) {
   state.pendingDelete = -1;
   applyFoldState(currentSession());
   resetComposerSkills();
-  saveChatsSoon();
+  saveChatsNow();
   renderAll();
 }
 
@@ -2363,6 +2344,12 @@ function newSession(projectId) {
   openComposer();
 }
 
+function deleteSessionById(sessionId) {
+  const index = state.sessions.findIndex((session) => session.id === sessionId);
+  if (index < 0) return;
+  deleteSession(index);
+}
+
 function deleteSession(index) {
   if (index < 0 || index >= state.sessions.length) return;
   const removed = state.sessions[index];
@@ -2395,7 +2382,7 @@ function deleteSession(index) {
   state.forceScroll = true;
   applyFoldState(currentSession());
   resetComposerSkills();
-  saveChatsSoon();
+  saveChatsNow();
   renderAll();
 }
 
@@ -2557,14 +2544,18 @@ function renderQueueRow(session, item, index) {
       '发送排队消息',
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3L10 14"/><path d="M21 3l-7 18-4-7-7-4 18-7z"/></svg>',
       () => sendQueuedPrompt(session, index)
-    ),
-    queueActionButton(
-      'remove',
-      '删除排队消息',
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
-      () => removeQueuedPrompt(session, index)
     )
   );
+  const armed = state.pendingQueueDelete === item;
+  const remove = queueActionButton(
+    'remove',
+    armed ? '确认删除排队消息' : '删除排队消息',
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    () => armQueuedPromptDelete(session, item)
+  );
+  remove.classList.toggle('armed', armed);
+  remove.append(el('span', 'queue-action-label', '确认删除'));
+  actions.append(remove);
   row.append(actions);
 
   row.addEventListener('dragstart', (event) => {
@@ -2869,6 +2860,8 @@ function resetComposerSkills() {
   state.slashIndex = 0;
   state.slashSkills = [];
   state.slashDismissed = false;
+  state.pendingQueueDelete = null;
+  clearTimeout(state.queueDeleteTimer);
   renderComposerSkills();
   updateSendState();
 }
@@ -2933,9 +2926,34 @@ function attachSkillArgs() {
   closeSkillArgs();
 }
 
+function clearPendingQueueDelete(item) {
+  if (state.pendingQueueDelete !== item) return;
+  state.pendingQueueDelete = null;
+  clearTimeout(state.queueDeleteTimer);
+}
+
+function armQueuedPromptDelete(session, item) {
+  if (!Array.isArray(session.pendingQueue)) return;
+  const index = session.pendingQueue.indexOf(item);
+  if (index < 0) return;
+  if (state.pendingQueueDelete === item) {
+    clearPendingQueueDelete(item);
+    removeQueuedPrompt(session, index);
+    return;
+  }
+  state.pendingQueueDelete = item;
+  clearTimeout(state.queueDeleteTimer);
+  state.queueDeleteTimer = setTimeout(() => {
+    state.pendingQueueDelete = null;
+    if (state.composerOpen) renderComposerContext();
+  }, 3200);
+  if (state.composerOpen) renderComposerContext();
+}
+
 function removeQueuedPrompt(session, index) {
   if (!Array.isArray(session.pendingQueue)) return;
-  session.pendingQueue.splice(index, 1);
+  const [removed] = session.pendingQueue.splice(index, 1);
+  clearPendingQueueDelete(removed);
   saveChatsSoon();
   if (state.composerOpen) renderComposerContext();
 }
@@ -2944,6 +2962,7 @@ function editQueuedPrompt(session, index) {
   if (!Array.isArray(session.pendingQueue)) return;
   const [item] = session.pendingQueue.splice(index, 1);
   if (!item) return;
+  clearPendingQueueDelete(item);
   const text = typeof item === 'string' ? item : item.text || '';
   const skills =
     item && typeof item === 'object' && Array.isArray(item.skills)
@@ -2978,6 +2997,7 @@ function sendQueuedPrompt(session, index) {
   if (!Array.isArray(session.pendingQueue)) return;
   const [item] = session.pendingQueue.splice(index, 1);
   if (!item) return;
+  clearPendingQueueDelete(item);
   if (state.streaming) {
     session.pendingQueue.unshift(item);
     saveChatsSoon();
@@ -3016,6 +3036,7 @@ function processNextQueuedPrompt(session) {
   if (session !== currentSession()) return;
   const item = session.pendingQueue.shift();
   if (!item) return;
+  clearPendingQueueDelete(item);
   const text = typeof item === 'string' ? item : item.text || '';
   const skills =
     item && typeof item === 'object' && Array.isArray(item.skills)
@@ -3502,6 +3523,38 @@ function updateRingSelection(index) {
   );
 }
 
+function setRingItemLabel(index, text, danger) {
+  const label = ringLabels[index];
+  const segment = ringSegments[index];
+  if (!label) return;
+  const textNode = label.querySelector('span');
+  if (textNode) textNode.textContent = text;
+  label.classList.toggle('danger', Boolean(danger));
+  if (segment) segment.classList.toggle('danger', Boolean(danger));
+}
+
+function activateRingItem(index) {
+  const item = index >= 0 ? ringItems[index] : null;
+  if (!item) {
+    closeRingMenu();
+    return;
+  }
+  if (state.ringConfirmIndex >= 0 && state.ringConfirmIndex !== index) {
+    const previous = ringItems[state.ringConfirmIndex];
+    if (previous) {
+      setRingItemLabel(state.ringConfirmIndex, previous.label, false);
+    }
+    state.ringConfirmIndex = -1;
+  }
+  if (item.confirm && state.ringConfirmIndex !== index) {
+    state.ringConfirmIndex = index;
+    setRingItemLabel(index, '确认删除', true);
+    return;
+  }
+  closeRingMenu();
+  if (typeof item.action === 'function') item.action();
+}
+
 function ringIndexForPoint(x, y) {
   const dx = x - ringCenterPoint.x;
   const dy = y - ringCenterPoint.y;
@@ -3548,6 +3601,7 @@ function openRingMenu(x, y, items = RING_ITEMS, options = {}) {
   state.ringOpen = true;
   state.ringPersistent = options.persistent === true;
   state.ringMoved = false;
+  state.ringConfirmIndex = -1;
   state.ringSuppress = true;
   updateRingSelection(-1);
   ensureRingCatcher();
@@ -3577,9 +3631,7 @@ function ensureRingCatcher() {
       closeRingMenu();
       return;
     }
-    const item = ringItems[index];
-    closeRingMenu();
-    if (item && typeof item.action === 'function') item.action();
+    activateRingItem(index);
   });
   document.body.append(ringCatcher);
 }
@@ -3594,6 +3646,7 @@ function closeRingMenu() {
   if (!state.ringOpen) return;
   state.ringOpen = false;
   state.ringPersistent = false;
+  state.ringConfirmIndex = -1;
   ringItems = RING_ITEMS;
   updateRingSelection(-1);
   removeRingCatcher();
@@ -3618,7 +3671,7 @@ function updateRingFromPointer(event) {
 
 function openSwitcherRingMenu(event) {
   const target = event.target instanceof Element ? event.target : null;
-  const projectRow = target?.closest('.project-row');
+  const projectRow = target?.closest('.project-row, .project-row-wrap');
   if (projectRow?.dataset.projectId) {
     const projectId = projectRow.dataset.projectId;
     if (!state.projects.some((project) => project.id === projectId)) return;
@@ -3634,7 +3687,8 @@ function openSwitcherRingMenu(event) {
         {
           label: '删除',
           icon: RING_ICONS.trash,
-          action: () => confirmDeleteProject(projectId),
+          action: () => deleteProject(projectId),
+          confirm: true,
         },
       ],
       { usage: false, persistent: true }
@@ -3659,6 +3713,12 @@ function openSwitcherRingMenu(event) {
           label: '配置 MCP',
           icon: RING_ICONS.mcp,
           action: () => openMcpConfigForSession(sessionId),
+        },
+        {
+          label: '删除',
+          icon: RING_ICONS.trash,
+          action: () => deleteSessionById(sessionId),
+          confirm: true,
         },
       ],
       { usage: false, persistent: true }
@@ -3772,10 +3832,11 @@ function onRightMouseUp(event) {
     return;
   }
   const index = ringIndexForPoint(event.clientX, event.clientY);
-  const item = index >= 0 ? ringItems[index] : null;
-  closeRingMenu();
-  if (!item || typeof item.action !== 'function') return;
-  requestAnimationFrame(() => item.action());
+  if (index < 0) {
+    closeRingMenu();
+    return;
+  }
+  activateRingItem(index);
 }
 
 const CATALOG_EMPTY = {
@@ -4651,7 +4712,10 @@ function bindEvents() {
       cancelTabHold();
       if (!dom.settingsOverlay.classList.contains('hidden')) return;
       event.preventDefault();
-      if (state.ringOpen && state.ringPersistent) return;
+      if (state.ringOpen) {
+        closeSwitcher();
+        return;
+      }
       if (state.switcherOpen) commitSwitcherSelection();
     }
   });
