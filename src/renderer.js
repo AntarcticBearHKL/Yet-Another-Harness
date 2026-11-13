@@ -28,7 +28,10 @@ const dom = {
   apiKeyState: $('api-key-state'),
   ringMenu: $('ring-menu'),
   ringSvg: $('ring-svg'),
-  ringCenter: $('ring-center'),
+  catalog: $('catalog'),
+  catalogTitle: $('catalog-title'),
+  catalogList: $('catalog-list'),
+  catalogClose: $('catalog-close'),
 };
 
 const state = {
@@ -60,6 +63,8 @@ const state = {
   ringOpen: false,
   ringIndex: -1,
   ringSuppress: false,
+  catalogOpen: false,
+  catalogKind: null,
 };
 
 let windowDrag = null;
@@ -1240,24 +1245,19 @@ const RING_GAP = 3;
 
 const RING_ITEMS = [
   {
-    label: '新对话',
-    icon: '<path d="M4 5h16v11H9l-4 4V5Z"/><path d="M12 8v5M9.5 10.5h5"/>',
-    action: () => newSession(),
+    label: '工具',
+    icon: '<path d="M14.5 6.5a3.5 3.5 0 0 0-4.9 4.9L4 17v3h3l5.6-5.6a3.5 3.5 0 0 0 4.9-4.9l-2.1 2.1-2.1-2.1 2.1-2.1Z"/>',
+    action: () => openCatalog('tools'),
   },
   {
-    label: '工作区',
-    icon: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
-    action: () => openSwitcher(),
+    label: 'Skill',
+    icon: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z"/>',
+    action: () => openCatalog('skills'),
   },
   {
-    label: '设置',
-    icon: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
-    action: () => openSettings(),
-  },
-  {
-    label: '关闭',
-    icon: '<path d="M6 6l12 12M18 6L6 18"/>',
-    action: () => api.close(),
+    label: 'MCP',
+    icon: '<path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0V8ZM12 16v5"/>',
+    action: () => openCatalog('mcp'),
   },
 ];
 
@@ -1367,6 +1367,7 @@ function openRingMenu(x, y) {
   state.ringOpen = true;
   state.ringSuppress = true;
   updateRingSelection(-1);
+  document.body.classList.add('ring-open');
   dom.ringMenu.setAttribute('aria-hidden', 'false');
   dom.ringMenu.classList.add('open');
 }
@@ -1375,6 +1376,7 @@ function closeRingMenu() {
   if (!state.ringOpen) return;
   state.ringOpen = false;
   updateRingSelection(-1);
+  document.body.classList.remove('ring-open');
   dom.ringMenu.classList.remove('open');
   dom.ringMenu.setAttribute('aria-hidden', 'true');
 }
@@ -1387,6 +1389,11 @@ function updateRingFromPointer(event) {
 function onRightMouseDown(event) {
   if (event.button !== 2) return;
 
+  if (state.catalogOpen) {
+    closeCatalog();
+    state.ringSuppress = true;
+    return;
+  }
   if (!dom.rawOverlay.classList.contains('hidden')) {
     closeRawRequest();
     state.ringSuppress = true;
@@ -1420,6 +1427,113 @@ function onRightMouseUp(event) {
   requestAnimationFrame(() => action());
 }
 
+const CATALOG_TITLES = { tools: '工具', skills: 'Skill', mcp: 'MCP' };
+const CATALOG_EMPTY = {
+  skills: '还没有安装 Skill。',
+  mcp: '还没有连接 MCP。',
+};
+
+function closeCatalog() {
+  if (!state.catalogOpen) return;
+  state.catalogOpen = false;
+  state.catalogKind = null;
+  dom.catalog.classList.add('hidden');
+  dom.catalog.setAttribute('aria-hidden', 'true');
+}
+
+function renderCatalogTools(tools) {
+  if (!Array.isArray(tools) || tools.length === 0) {
+    dom.catalogList.append(el('div', 'catalog-empty', '还没有可用工具。'));
+    return;
+  }
+
+  for (const entry of tools) {
+    const fn = entry.function || entry;
+    const item = el('div', 'catalog-item');
+    item.append(el('div', 'catalog-name', fn.name || 'tool'));
+    if (fn.description) {
+      item.append(el('div', 'catalog-desc', fn.description));
+    }
+
+    const properties = fn.parameters?.properties || {};
+    const required = new Set(fn.parameters?.required || []);
+    const names = Object.keys(properties);
+    if (names.length > 0) {
+      const params = el('div', 'catalog-params');
+      for (const paramName of names) {
+        const schema = properties[paramName] || {};
+        const row = el('div', 'catalog-param');
+        const head = el('div', 'catalog-param-head');
+        head.append(el('span', 'catalog-param-name', paramName));
+        if (schema.type) {
+          head.append(el('span', 'catalog-param-type', schema.type));
+        }
+        if (required.has(paramName)) {
+          head.append(el('span', 'catalog-param-required', 'required'));
+        }
+        row.append(head);
+        if (schema.description) {
+          row.append(el('div', 'catalog-param-desc', schema.description));
+        }
+        params.append(row);
+      }
+      item.append(params);
+    }
+    dom.catalogList.append(item);
+  }
+}
+
+function renderCatalogList(kind, entries) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    dom.catalogList.append(
+      el('div', 'catalog-empty', CATALOG_EMPTY[kind] || 'Nothing here yet.')
+    );
+    return;
+  }
+
+  for (const entry of entries) {
+    const item = el('div', 'catalog-item');
+    item.append(el('div', 'catalog-name', entry.name || kind));
+    if (entry.description) {
+      item.append(el('div', 'catalog-desc', entry.description));
+    }
+    const meta = [entry.source, entry.transport, entry.status]
+      .filter(Boolean)
+      .join(' · ');
+    if (meta) item.append(el('div', 'catalog-meta', meta));
+    dom.catalogList.append(item);
+  }
+}
+
+async function openCatalog(kind) {
+  closeRingMenu();
+  state.catalogOpen = true;
+  state.catalogKind = kind;
+  dom.catalogTitle.textContent = CATALOG_TITLES[kind] || kind;
+  dom.catalogList.replaceChildren(
+    el('div', 'catalog-empty', 'Loading…')
+  );
+  dom.catalog.classList.remove('hidden');
+  dom.catalog.setAttribute('aria-hidden', 'false');
+
+  try {
+    const data = await api.loadCatalog();
+    if (!state.catalogOpen || state.catalogKind !== kind) return;
+    dom.catalogList.replaceChildren();
+    if (kind === 'tools') {
+      renderCatalogTools(data?.tools);
+    } else {
+      renderCatalogList(kind, kind === 'skills' ? data?.skills : data?.mcp);
+    }
+  } catch (error) {
+    console.error('load catalog failed', error);
+    if (!state.catalogOpen || state.catalogKind !== kind) return;
+    dom.catalogList.replaceChildren(
+      el('div', 'catalog-empty', 'Failed to load.')
+    );
+  }
+}
+
 function bindEvents() {
   buildRingMenu();
 
@@ -1431,6 +1545,10 @@ function bindEvents() {
       return;
     }
     if (state.ringOpen) return;
+    if (state.catalogOpen) {
+      closeCatalog();
+      return;
+    }
     if (!dom.rawOverlay.classList.contains('hidden')) {
       closeRawRequest();
       return;
@@ -1471,6 +1589,7 @@ function bindEvents() {
   $('close-settings').addEventListener('click', closeSettings);
   $('done-settings').addEventListener('click', closeSettings);
   $('close-raw').addEventListener('click', closeRawRequest);
+  dom.catalogClose.addEventListener('click', closeCatalog);
   dom.rawOverlay.addEventListener('click', (event) => {
     if (event.target === dom.rawOverlay) closeRawRequest();
   });
@@ -1506,6 +1625,14 @@ function bindEvents() {
       if (event.key === 'Escape') {
         event.preventDefault();
         closeRingMenu();
+      }
+      return;
+    }
+
+    if (state.catalogOpen) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeCatalog();
       }
       return;
     }

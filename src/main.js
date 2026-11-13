@@ -14,6 +14,7 @@ const {
 
 const store = require('./store');
 const deepseek = require('./deepseek');
+const tools = require('./tools');
 
 app.setName('YAH - Yet Another Harness');
 
@@ -352,6 +353,11 @@ if (gotLock) {
     });
     ipcMain.handle('window:is-maximized', () => mainWindow?.isMaximized() ?? false);
     ipcMain.handle('app:version', () => app.getVersion());
+    ipcMain.handle('catalog:load', () => ({
+      tools: tools.definitions(),
+      skills: [],
+      mcp: [],
+    }));
 
     ipcMain.on('chat:send', (event, payload) => {
       runChat(event.sender, payload);

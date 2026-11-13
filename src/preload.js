@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('yah', {
   onChatDone: (callback) => subscribe('chat:done', callback),
   onChatError: (callback) => subscribe('chat:error', callback),
 
+  loadCatalog: () => ipcRenderer.invoke('catalog:load'),
+
   openContent: (payload) => ipcRenderer.invoke('content:open', payload),
   updateContent: (payload) => ipcRenderer.send('content:update', payload),
   onContentInit: (callback) => subscribe('content:init', callback),

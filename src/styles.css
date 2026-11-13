@@ -1244,6 +1244,10 @@ button {
     transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+body.ring-open #messages {
+  pointer-events: none;
+}
+
 .ring-svg {
   position: absolute;
   inset: 0;
@@ -1293,27 +1297,133 @@ button {
   stroke-linejoin: round;
 }
 
-.ring-center {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  display: grid;
-  place-items: center;
-  width: 104px;
-  height: 104px;
-  border: 1px solid var(--line);
-  border-radius: 50%;
+/* ---------------------------------------------------------------- catalog */
+.catalog {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
   background: var(--solid);
-  transform: translate(-50%, -50%);
 }
 
-.ring-center::after {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  opacity: 0.7;
+.catalog.hidden {
+  display: none;
+}
+
+.catalog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: none;
+  height: 64px;
+  padding: 0 24px;
+}
+
+.catalog-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.catalog-list {
+  flex: 1;
+  width: 100%;
+  max-width: 920px;
+  min-height: 0;
+  margin: 0 auto;
+  padding: 8px 24px 40px;
+  overflow-y: auto;
+}
+
+.catalog-item {
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+
+.catalog-item:first-child {
+  border-top: 0;
+}
+
+.catalog-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.catalog-desc {
+  margin-top: 6px;
+  color: var(--dim);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.catalog-meta {
+  margin-top: 8px;
+  color: var(--faint);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+
+.catalog-params {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.catalog-param {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--dim);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.catalog-param-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.catalog-param-name {
+  flex: none;
+  color: var(--accent-deep);
+  font-weight: 600;
+}
+
+.catalog-param-type {
+  flex: none;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.catalog-param-required {
+  flex: none;
+  color: var(--accent);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.catalog-param-desc {
+  min-width: 0;
+  color: var(--dim);
+}
+
+.catalog-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 260px;
+  color: var(--faint);
+  font-size: 13px;
 }
 
 /* ---------------------------------------------------------------- scrollbars */
