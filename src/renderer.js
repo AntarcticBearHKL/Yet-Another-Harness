@@ -500,6 +500,38 @@ function toggleCard(key) {
   applyOpenKey(key);
 }
 
+function previewLine(text) {
+  const lines = String(text ?? '')
+    .replace(/\r\n/g, '\n')
+    .split('\n');
+  for (const raw of lines) {
+    let line = raw.trim();
+    if (!line) continue;
+    if (/^```/.test(line)) continue;
+    line = line
+      .replace(/^#{1,6}\s+/, '')
+      .replace(/^[-*+]\s+/, '')
+      .replace(/^\d+[.)]\s+/, '')
+      .replace(/^>\s*/, '')
+      .replace(/[*_`]/g, '')
+      .trim();
+    if (line) return line;
+  }
+  return '';
+}
+
+function previewFromRaw(raw, structured) {
+  if (structured) {
+    try {
+      const compact = JSON.stringify(structured);
+      return compact.length > 200 ? `${compact.slice(0, 199)}…` : compact;
+    } catch {
+      /* fall through */
+    }
+  }
+  return previewLine(raw);
+}
+
 function makeCard(opts) {
   const card = el('div', `message-card ${opts.kind}`);
   card.dataset.cardKey = opts.key;
@@ -543,14 +575,42 @@ function makeCard(opts) {
     });
   }
 
+  let previewWrap = null;
+  if (opts.preview && !opts.alwaysOpen && !opts.headless) {
+    previewWrap = el('div', 'card-preview-wrap');
+    const preview = el('div', 'card-preview');
+    const previewText = el('span', 'card-preview-text', opts.preview);
+    previewText.title = opts.preview;
+    preview.append(previewText);
+    previewWrap.append(preview);
+    previewWrap.addEventListener('click', (event) => {
+      if (suppressNextCardClick) {
+        suppressNextCardClick = false;
+        return;
+      }
+      if (event.detail > 1) return;
+      toggleCard(opts.key);
+    });
+    previewWrap.addEventListener('dblclick', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.ctrlKey && typeof opts.onInspect === 'function') {
+        opts.onInspect();
+        return;
+      }
+      opts.onFullContent?.();
+    });
+  }
+
   const bodyWrap = el('div', 'card-body-wrap');
   bodyWrap.inert = !opts.alwaysOpen;
   const body = el('div', 'card-body');
   const inner = el('div', 'card-body-inner');
   body.append(inner);
   bodyWrap.append(body);
-  if (head) card.append(head, bodyWrap);
-  else card.append(bodyWrap);
+  if (head) card.append(head);
+  if (previewWrap) card.append(previewWrap);
+  card.append(bodyWrap);
 
   bodyWrap.addEventListener('dblclick', (event) => {
     if (
@@ -630,6 +690,7 @@ function textCard({
     kind,
     title,
     meta,
+    preview: previewLine(text),
     onInspect,
     primary,
     minimalHead,
@@ -822,6 +883,7 @@ function renderToolCard(step, msg, key) {
     kind: call ? 'tool-call' : 'tool-result',
     title: call ? '工具调用' : '工具返回',
     meta: step.name || 'tool',
+    preview: previewFromRaw(raw, structured),
     badge: call
       ? null
       : { text: step.ok === false ? 'error' : 'ok', error: step.ok === false },
@@ -913,6 +975,7 @@ function renderAgentMessage(msg, msgIndex, container) {
       kind: 'agent',
       title: '回答',
       meta: 'response',
+      preview: previewLine(msg.text),
       primary: true,
       minimalHead: true,
       onInspect: () => {
@@ -1563,7 +1626,9 @@ function onWindowDragStart(event) {
   if (!dom.settingsOverlay.classList.contains('hidden')) return;
   if (target instanceof HTMLElement && hitsScrollbar(target, event)) return;
 
-  const isCardHead = Boolean(target.closest('.card-head'));
+  const isCardHead = Boolean(
+    target.closest('.card-head, .card-preview-wrap')
+  );
   suppressNextCardClick = false;
   windowDrag = {
     x: event.screenX,

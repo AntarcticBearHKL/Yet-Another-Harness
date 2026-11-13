@@ -862,6 +862,55 @@ body.maximized #app {
   font-weight: 500;
 }
 
+.card-preview-wrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  opacity: 1;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease;
+}
+
+.card-preview {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.card-preview-text {
+  display: block;
+  padding: 0 14px 9px;
+  color: var(--faint);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.message-card.collapsed:hover .card-preview-text {
+  color: var(--dim);
+}
+
+.message-card:not(.collapsed) .card-preview-wrap {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.message-card.no-anim .card-preview-wrap {
+  transition: none;
+}
+
+.message-card.answer-card .card-preview-text {
+  padding: 0 16px 10px;
+  font-size: 13px;
+}
+
+.message-card.process-card .card-preview-text {
+  padding: 0 14px 8px;
+  font-size: 12px;
+}
+
 .card-body-wrap {
   display: grid;
   grid-template-rows: 1fr;
