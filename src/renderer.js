@@ -719,6 +719,12 @@ function cardAtPointer() {
   return element.closest('.message-card');
 }
 
+function applyPeekKeysKeepingScroll() {
+  const top = dom.messages.scrollTop;
+  applyOpenKeys(peekOpenKeys());
+  if (dom.messages.scrollTop !== top) dom.messages.scrollTop = top;
+}
+
 function startSpacePeek(card) {
   const key = card && card.dataset.cardKey;
   if (!key) return;
@@ -726,19 +732,13 @@ function startSpacePeek(card) {
   state.peekKey = key;
   state.peekKeys.add(key);
 
-  // 保留鼠标上方已展开的当前条目，避免它折叠后把预览标题顶走
-  const cards = [...dom.messages.querySelectorAll('.message-card')];
-  const targetIndex = cards.findIndex((item) => item.dataset.cardKey === key);
-  const openIndex = cards.findIndex(
-    (item) => item.dataset.cardKey === state.openCardKey
-  );
-  if (targetIndex >= 0 && openIndex >= 0 && openIndex < targetIndex) {
-    state.peekKeys.add(state.openCardKey);
-  }
+  // 保留当前展开的条目，预览期间只增加内容高度，不折叠已有内容，
+  // 这样滚动条不会因为 maxScroll 变小而被浏览器夹回去。
+  if (state.openCardKey) state.peekKeys.add(state.openCardKey);
 
   state.peekPointerX = state.pointerX;
   state.peekPointerY = state.pointerY;
-  applyOpenKeys(peekOpenKeys());
+  applyPeekKeysKeepingScroll();
 }
 
 function endSpacePeek() {
@@ -746,7 +746,9 @@ function endSpacePeek() {
   state.spaceHeld = false;
   state.peekKey = null;
   state.peekKeys.clear();
+  const top = dom.messages.scrollTop;
   applyOpenKeys(openKeySet(state.openCardKey));
+  if (dom.messages.scrollTop !== top) dom.messages.scrollTop = top;
 }
 
 function handlePointerMove(event) {
@@ -768,19 +770,9 @@ function handlePointerMove(event) {
   state.peekKey = key;
   state.peekKeys.add(key);
 
-  const cards = [...dom.messages.querySelectorAll('.message-card')];
-  const newIndex = cards.findIndex((item) => item.dataset.cardKey === key);
-  if (newIndex >= 0) {
-    for (const peeked of [...state.peekKeys]) {
-      if (peeked === key) continue;
-      const index = cards.findIndex((item) => item.dataset.cardKey === peeked);
-      if (index > newIndex) state.peekKeys.delete(peeked);
-    }
-  }
-
   state.peekPointerX = state.pointerX;
   state.peekPointerY = state.pointerY;
-  applyOpenKeys(peekOpenKeys());
+  applyPeekKeysKeepingScroll();
 }
 
 function scrollCardToTop(card, offset = 48) {
@@ -820,21 +812,14 @@ function navigateBlock(direction) {
   state.peekKeys.clear();
   state.openCardKey = targetKey;
 
-  // 先瞬间折叠当前块，把目标块定位到固定高度，再在下一帧向下展开
+  // 先瞬间折叠所有块，把目标块定位到固定高度后立刻展开
   for (const card of cards) {
-    if (card === target) continue;
     card.classList.add('no-anim');
     setCardExpanded(card, false);
   }
-  setCardExpanded(target, false);
   void dom.messages.offsetHeight;
   scrollCardToTop(target);
-
-  requestAnimationFrame(() => {
-    for (const card of cards) card.classList.remove('no-anim');
-    if (state.openCardKey !== targetKey) return;
-    applyOpenKey(targetKey);
-  });
+  applyOpenKey(targetKey, { instant: true });
 }
 
 function openSwitcher() {
@@ -990,7 +975,7 @@ function finishStream() {
 
   state.openCardKey = autoCardKey();
   if (state.peekKey || state.peekKeys.size > 0) {
-    applyOpenKeys(peekOpenKeys());
+    applyPeekKeysKeepingScroll();
   } else {
     applyOpenKey(state.openCardKey);
   }
@@ -1292,7 +1277,7 @@ function bindEvents() {
       if (state.spaceHeld || event.deltaY === 0) return;
 
       const now = Date.now();
-      if (now - state.lastWheelNav < 140) return;
+      if (now - state.lastWheelNav < 25) return;
       state.lastWheelNav = now;
       navigateBlock(event.deltaY > 0 ? 1 : -1);
     },
@@ -1356,7 +1341,7 @@ function bindEvents() {
     state.forceScroll = false;
     state.openCardKey = key;
     if (state.peekKey) {
-      applyOpenKeys(peekOpenKeys());
+      applyPeekKeysKeepingScroll();
     } else if (
       state.renderedOpenKeys.size !== 1 ||
       !state.renderedOpenKeys.has(key)
