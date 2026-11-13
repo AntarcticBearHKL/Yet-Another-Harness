@@ -68,6 +68,8 @@ const state = {
   renderedSessionId: null,
   collapsedProcessKeys: new Set(),
   viewMode: null,
+  foldRestored: false,
+  foldSessionId: null,
   renderVersion: 0,
   lastWheelNav: 0,
   tabHeld: false,
@@ -371,6 +373,7 @@ function structurePayload() {
       mcpDisabled: Array.isArray(session.mcpDisabled)
         ? session.mcpDisabled
         : [],
+      foldState: session.foldState || null,
       msgs: [],
     })),
     current: state.current,
@@ -546,7 +549,35 @@ function setViewMode(mode) {
   // 再按一次同一个快捷键回到普通模式
   state.viewMode = state.viewMode === mode ? null : mode;
   state.openCardKey = null;
+  state.foldRestored = true;
+  state.foldSessionId = currentSession()?.id || state.foldSessionId;
   renderAll();
+  persistFoldState();
+}
+
+function applyFoldState(session) {
+  const fold = session?.foldState || null;
+  state.foldSessionId = session?.id || null;
+  state.viewMode = fold?.viewMode || null;
+  state.collapsedProcessKeys = new Set(fold?.collapsedProcessKeys || []);
+  state.openCardKey = fold?.openKey || null;
+  state.foldRestored = Boolean(fold);
+}
+
+function captureFoldState() {
+  return {
+    openKey: state.viewMode ? null : state.openCardKey || null,
+    collapsedProcessKeys: [...state.collapsedProcessKeys],
+    viewMode: state.viewMode || null,
+  };
+}
+
+function persistFoldState() {
+  const session = currentSession();
+  if (!session) return;
+  if (state.foldSessionId && state.foldSessionId !== session.id) return;
+  session.foldState = captureFoldState();
+  saveChatsSoon();
 }
 
 function anchorCardTitle(element, targetTop, duration = 360) {
@@ -577,10 +608,13 @@ function toggleCard(key) {
   if (!card) return;
   if (card.classList.contains('always-open')) return;
   state.viewMode = null;
+  state.foldRestored = true;
+  state.foldSessionId = currentSession()?.id || state.foldSessionId;
 
   if (!card.classList.contains('collapsed')) {
     state.openCardKey = null;
     applyOpenKey(null);
+    persistFoldState();
     return;
   }
 
@@ -589,6 +623,7 @@ function toggleCard(key) {
   state.openCardKey = key;
   applyOpenKey(key);
   anchorCardTitle(head, anchorTop);
+  persistFoldState();
 }
 
 function previewLine(text) {
@@ -1370,11 +1405,21 @@ function renderAgentMessage(msg, msgIndex, container) {
     head.append(el('span', 'process-group-label', '过程'));
     head.append(el('span', 'process-group-count', String(processCount)));
     head.addEventListener('click', () => {
+      if (state.viewMode) {
+        state.collapsedProcessKeys = new Set(
+          [...dom.messages.querySelectorAll('.process-group.collapsed')]
+            .map((item) => item.dataset.processKey)
+            .filter(Boolean)
+        );
+      }
       state.viewMode = null;
+      state.foldRestored = true;
+      state.foldSessionId = currentSession()?.id || state.foldSessionId;
       const nextCollapsed = group.classList.toggle('collapsed');
       head.setAttribute('aria-expanded', nextCollapsed ? 'false' : 'true');
       if (nextCollapsed) state.collapsedProcessKeys.add(processKey);
       else state.collapsedProcessKeys.delete(processKey);
+      persistFoldState();
     });
     processBody = el('div', 'process-group-body');
     group.append(head, processBody);
@@ -1612,7 +1657,6 @@ function renderMessages({ animate = true } = {}) {
   const sessionId = session ? session.id : null;
   const version = ++state.renderVersion;
   const changed = state.renderedSessionId !== sessionId;
-  if (changed) state.collapsedProcessKeys = new Set();
   const previousKeys = changed
     ? new Set()
     : new Set(state.renderedOpenKeys);
@@ -1661,10 +1705,22 @@ function renderMessages({ animate = true } = {}) {
     renderAgentMessage(msg, index, currentTurn);
   });
 
-  const autoKey = state.viewMode ? null : autoCardKey();
-  state.openCardKey = autoKey;
+  let autoKey = null;
+  if (state.viewMode) {
+    autoKey = null;
+  } else if (state.foldRestored) {
+    autoKey = state.openCardKey;
+  } else {
+    autoKey = autoCardKey();
+    state.openCardKey = autoKey;
+  }
   const cards = [...dom.messages.querySelectorAll('.message-card')];
   const cardKeys = new Set(cards.map((card) => card.dataset.cardKey));
+  if (state.foldRestored && autoKey && !cardKeys.has(autoKey)) {
+    autoKey = autoCardKey();
+    state.openCardKey = autoKey;
+  }
+  state.openCardKey = autoKey;
 
   const targetKeys = state.viewMode
     ? viewModeOpenKeys(cards)
@@ -2022,6 +2078,7 @@ function deleteProject(projectId) {
   state.switcherProjectId = state.projects[0]?.id || null;
   state.switcherIndex = 0;
   state.pendingDelete = -1;
+  applyFoldState(currentSession());
   saveChatsSoon();
   renderAll();
 }
@@ -2082,7 +2139,7 @@ function commitSwitcherSelection() {
 function selectSession(index) {
   if (index < 0 || index >= state.sessions.length) return;
   state.current = index;
-  state.viewMode = null;
+  applyFoldState(state.sessions[index]);
   state.switcherProjectId = state.sessions[index].projectId;
   state.forceScroll = true;
   state.pendingDelete = -1;
@@ -2090,6 +2147,7 @@ function selectSession(index) {
   saveChatsSoon();
   closeSwitcher();
   renderAll();
+  persistFoldState();
 }
 
 function createChatFromSwitcher() {
@@ -2143,22 +2201,25 @@ function newSession(projectId) {
     state.projects.find((project) => project.id === projectId)?.id ||
     currentSession()?.projectId ||
     state.projects[0].id;
-  state.sessions.push({
+  const session = {
     id: makeId(),
     title: `Chat ${state.seq}`,
     system: DEFAULT_SYSTEM_PROMPT,
     projectId: targetProjectId,
     mcpDisabled: [],
+    foldState: null,
     msgs: [],
-  });
+  };
+  state.sessions.push(session);
   state.current = state.sessions.length - 1;
-  state.viewMode = null;
+  applyFoldState(session);
   state.forceScroll = true;
   state.switcherProjectId = targetProjectId;
   dom.input.value = '';
   updateSendState();
   saveChatsSoon();
   renderAll();
+  persistFoldState();
   openComposer();
 }
 
@@ -2192,6 +2253,7 @@ function deleteSession(index) {
 
   state.pendingDelete = -1;
   state.forceScroll = true;
+  applyFoldState(currentSession());
   saveChatsSoon();
   renderAll();
 }
@@ -2220,6 +2282,8 @@ async function sendMessage() {
   const session = currentSession();
   if (!session) return;
   state.viewMode = null;
+  state.foldRestored = false;
+  state.foldSessionId = session.id;
   const firstMessage = session.msgs.length === 0;
   session.msgs.push({ role: 'User', text, request: null, steps: [] });
   const agent = { role: 'Agent', text: '', request: '', steps: [], requests: [] };
@@ -2281,6 +2345,7 @@ async function refreshChats() {
       : -1;
     state.current = index >= 0 ? index : chats.current;
     ensureProjects();
+    applyFoldState(currentSession());
     renderAll();
   } catch (error) {
     console.error('refresh chats failed', error);
@@ -2301,12 +2366,15 @@ function finishStream() {
     text.scrollTop = 0;
   });
 
+  state.foldRestored = true;
+  state.foldSessionId = currentSession()?.id || state.foldSessionId;
   if (state.viewMode) {
     renderMessages();
   } else {
     state.openCardKey = autoCardKey();
     applyOpenKey(state.openCardKey);
   }
+  persistFoldState();
 
   updateSendState();
   saveChatsSoon();
@@ -3895,10 +3963,12 @@ async function boot() {
     }
   });
   ensureProjects();
+  applyFoldState(currentSession());
 
   bindEvents();
   applySettings();
   renderAll();
+  persistFoldState();
   updateSendState();
   void loadUsage();
   void loadMcpServers();

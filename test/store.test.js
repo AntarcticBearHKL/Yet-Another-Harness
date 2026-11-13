@@ -318,6 +318,11 @@ test('session MCP switches and step metrics round-trip', () => {
           system: 'sys',
           projectId: 'p1',
           mcpDisabled: ['m1', 'm2'],
+          foldState: {
+            openKey: 'a:1',
+            collapsedProcessKeys: ['p:0'],
+            viewMode: null,
+          },
           msgs: [
             { role: 'User', text: 'hi', request: null, steps: [], requests: [] },
             {
@@ -352,6 +357,11 @@ test('session MCP switches and step metrics round-trip', () => {
 
     let loaded = store.loadChats();
     assert.deepEqual(loaded.sessions[0].mcpDisabled, ['m1', 'm2']);
+    assert.deepEqual(loaded.sessions[0].foldState, {
+      openKey: 'a:1',
+      collapsedProcessKeys: ['p:0'],
+      viewMode: null,
+    });
     assert.deepEqual(loaded.sessions[0].msgs[1].steps[0].metrics, {
       startedAt: 100,
     });
@@ -369,6 +379,11 @@ test('session MCP switches and step metrics round-trip', () => {
           system: 'sys',
           projectId: 'p1',
           mcpDisabled: ['m2'],
+          foldState: {
+            openKey: null,
+            collapsedProcessKeys: ['p:0', 'p:1'],
+            viewMode: 'replies',
+          },
           msgs: [],
         },
       ],
@@ -378,6 +393,11 @@ test('session MCP switches and step metrics round-trip', () => {
 
     loaded = store.loadChats();
     assert.deepEqual(loaded.sessions[0].mcpDisabled, ['m2']);
+    assert.deepEqual(loaded.sessions[0].foldState, {
+      openKey: null,
+      collapsedProcessKeys: ['p:0', 'p:1'],
+      viewMode: 'replies',
+    });
     assert.equal(loaded.sessions[0].msgs.length, 2);
   });
 });

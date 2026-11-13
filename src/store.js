@@ -13,7 +13,7 @@ const { DatabaseSync } = require('node:sqlite');
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
 
 let dataDir = null;
@@ -127,6 +127,24 @@ function normalizeStep(step) {
   return label ? { kind: 'status', label, ok: step.ok !== false } : null;
 }
 
+function normalizeFoldState(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const viewMode =
+    raw.viewMode === 'questions' ||
+    raw.viewMode === 'replies' ||
+    raw.viewMode === 'processes'
+      ? raw.viewMode
+      : null;
+  const openKey =
+    typeof raw.openKey === 'string' && raw.openKey.trim()
+      ? raw.openKey.trim()
+      : null;
+  const collapsedProcessKeys = Array.isArray(raw.collapsedProcessKeys)
+    ? [...new Set(raw.collapsedProcessKeys.map(String).filter(Boolean))]
+    : [];
+  return { openKey, collapsedProcessKeys, viewMode };
+}
+
 function normalizeProjects(raw) {
   const projects = [];
   const seen = new Set();
@@ -197,6 +215,7 @@ function normalizeChats(raw) {
         mcpDisabled: Array.isArray(session.mcpDisabled)
           ? session.mcpDisabled.map(String).filter(Boolean)
           : [],
+        foldState: normalizeFoldState(session.foldState),
         msgs,
       };
     });
@@ -295,6 +314,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   system TEXT NOT NULL,
   project_id TEXT,
   mcp_disabled TEXT,
+  fold_state TEXT,
   sort_order INTEGER NOT NULL,
   content_hash TEXT NOT NULL,
   updated_at INTEGER NOT NULL
@@ -421,6 +441,12 @@ function ensureSchema(database) {
       database.exec('ALTER TABLE steps ADD COLUMN metrics TEXT');
     }
 
+    // v6 -> v7: per-session fold state (open card, collapsed process groups, view mode).
+    const sessionColumns = database.prepare('PRAGMA table_info(sessions)').all();
+    if (!sessionColumns.some((column) => column.name === 'fold_state')) {
+      database.exec('ALTER TABLE sessions ADD COLUMN fold_state TEXT');
+    }
+
     // v3 -> v4: token usage attached to agent messages.
     const messageColumns = database.prepare('PRAGMA table_info(messages)').all();
     if (!messageColumns.some((column) => column.name === 'usage')) {
@@ -507,7 +533,7 @@ function readChats() {
 
   const sessionRows = database
     .prepare(
-      'SELECT id, title, system, project_id, mcp_disabled FROM sessions ORDER BY sort_order ASC'
+      'SELECT id, title, system, project_id, mcp_disabled, fold_state FROM sessions ORDER BY sort_order ASC'
     )
     .all();
   if (sessionRows.length === 0) {
@@ -550,6 +576,14 @@ function readChats() {
           /* ignore malformed mcp_disabled */
         }
       }
+      let foldState = null;
+      if (row.fold_state) {
+        try {
+          foldState = normalizeFoldState(JSON.parse(row.fold_state));
+        } catch {
+          /* ignore malformed fold_state */
+        }
+      }
       return [
         row.id,
         {
@@ -560,6 +594,7 @@ function readChats() {
             ? row.project_id
             : projects[0].id,
           mcpDisabled,
+          foldState,
           msgs: [],
         },
       ];
@@ -691,13 +726,14 @@ function writeChats(chats) {
   );
 
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, project_id, mcp_disabled, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, project_id, mcp_disabled, fold_state, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
        project_id = excluded.project_id,
        mcp_disabled = excluded.mcp_disabled,
+       fold_state = excluded.fold_state,
        sort_order = excluded.sort_order,
        content_hash = excluded.content_hash,
        updated_at = excluded.updated_at`
@@ -755,6 +791,7 @@ function writeChats(chats) {
         session.system,
         session.projectId,
         JSON.stringify(session.mcpDisabled || []),
+        session.foldState ? JSON.stringify(session.foldState) : null,
         order,
         hash,
         now
@@ -895,13 +932,14 @@ function saveStructure(chats) {
        sort_order = excluded.sort_order`
   );
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, project_id, mcp_disabled, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, project_id, mcp_disabled, fold_state, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
        project_id = excluded.project_id,
        mcp_disabled = excluded.mcp_disabled,
+       fold_state = excluded.fold_state,
        sort_order = excluded.sort_order,
        content_hash = excluded.content_hash,
        updated_at = excluded.updated_at`
@@ -943,6 +981,7 @@ function saveStructure(chats) {
         session.system,
         session.projectId,
         JSON.stringify(session.mcpDisabled || []),
+        session.foldState ? JSON.stringify(session.foldState) : null,
         order,
         metadataHash(session),
         now
