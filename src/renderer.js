@@ -56,6 +56,7 @@ const state = {
   openCardKey: null,
   renderedOpenKeys: new Set(),
   renderedSessionId: null,
+  collapsedProcessKeys: new Set(),
   renderVersion: 0,
   lastWheelNav: 0,
   tabHeld: false,
@@ -1171,43 +1172,116 @@ function renderAgentMessage(msg, msgIndex, container) {
   );
   const { resultForCall, pairedResults } = pairToolSteps(steps);
 
-  for (let i = 0; i < steps.length; i += 1) {
-    const step = steps[i];
+  const isVisibleProcessStep = (step, index) => {
+    if (step.kind === 'status') return false;
+    if (index === lastTextIndex) return false;
     if (step.kind === 'text' || step.kind === 'thinking') {
-      if (!step.text && !(streaming && i === steps.length - 1)) continue;
+      return Boolean(step.text) || (streaming && index === steps.length - 1);
+    }
+    if (step.kind === 'call') return true;
+    if (step.kind === 'result') return !pairedResults.has(index);
+    return false;
+  };
+
+  const processCount = steps.reduce(
+    (count, step, index) =>
+      count + (isVisibleProcessStep(step, index) ? 1 : 0),
+    0
+  );
+
+  let processBody = null;
+  if (processCount > 0) {
+    const processKey = `p:${msgIndex}`;
+    const group = el('div', 'process-group');
+    if (state.collapsedProcessKeys.has(processKey)) {
+      group.classList.add('collapsed');
+    }
+    const head = el('button', 'process-group-head');
+    head.type = 'button';
+    head.setAttribute(
+      'aria-expanded',
+      group.classList.contains('collapsed') ? 'false' : 'true'
+    );
+    head.append(el('span', 'process-group-chevron', '›'));
+    head.append(el('span', 'process-group-label', '过程'));
+    head.append(el('span', 'process-group-count', String(processCount)));
+    head.addEventListener('click', () => {
+      const collapsed = group.classList.toggle('collapsed');
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      if (collapsed) state.collapsedProcessKeys.add(processKey);
+      else state.collapsedProcessKeys.delete(processKey);
+    });
+    processBody = el('div', 'process-group-body');
+    group.append(head, processBody);
+    container.append(group);
+  }
+
+  const appendProcessStep = (step, index, target) => {
+    if (step.kind === 'text' || step.kind === 'thinking') {
       const thinking = step.kind === 'thinking';
-      const primary = !thinking && i === lastTextIndex;
       appendRow(
         textCard({
-          key: stepCardKey(msgIndex, i),
+          key: stepCardKey(msgIndex, index),
           kind: thinking ? 'thinking' : 'agent',
-          title: thinking ? '思考' : primary ? '回答' : '过程',
-          meta: thinking ? '' : primary ? '回复' : '',
+          title: thinking ? '思考' : '过程',
+          meta: '',
           text: step.text,
-          usage: primary ? msg.usage : null,
-          streaming: streaming && i === steps.length - 1,
+          usage: null,
+          streaming: streaming && index === steps.length - 1,
           onInspect: () => inspectStep(msg, step),
-          primary,
-          minimalHead: primary,
-          process: !primary,
+          primary: false,
+          minimalHead: false,
+          process: true,
         }),
-        { process: !primary },
-        container
+        { process: true },
+        target
       );
-    } else if (step.kind === 'call') {
-      const resultIndex = resultForCall.get(i);
+      return;
+    }
+    if (step.kind === 'call') {
+      const resultIndex = resultForCall.get(index);
       const resultStep =
         resultIndex === undefined ? null : steps[resultIndex];
       appendRow(
-        renderToolCard(step, resultStep, msg, stepCardKey(msgIndex, i)),
+        renderToolCard(step, resultStep, msg, stepCardKey(msgIndex, index)),
         { process: true },
-        container
+        target
       );
-    } else if (step.kind === 'result') {
-      if (pairedResults.has(i)) continue;
+      return;
+    }
+    if (step.kind === 'result') {
+      if (pairedResults.has(index)) return;
       appendRow(
-        renderToolCard(null, step, msg, stepCardKey(msgIndex, i)),
+        renderToolCard(null, step, msg, stepCardKey(msgIndex, index)),
         { process: true },
+        target
+      );
+    }
+  };
+
+  for (let i = 0; i < steps.length; i += 1) {
+    if (!isVisibleProcessStep(steps[i], i)) continue;
+    appendProcessStep(steps[i], i, processBody || container);
+  }
+
+  if (lastTextIndex >= 0) {
+    const step = steps[lastTextIndex];
+    if (step.text || (streaming && lastTextIndex === steps.length - 1)) {
+      appendRow(
+        textCard({
+          key: stepCardKey(msgIndex, lastTextIndex),
+          kind: 'agent',
+          title: '回答',
+          meta: '回复',
+          text: step.text,
+          usage: msg.usage,
+          streaming: streaming && lastTextIndex === steps.length - 1,
+          onInspect: () => inspectStep(msg, step),
+          primary: true,
+          minimalHead: true,
+          process: false,
+        }),
+        {},
         container
       );
     }
@@ -1219,6 +1293,7 @@ function renderMessages({ animate = true } = {}) {
   const sessionId = session ? session.id : null;
   const version = ++state.renderVersion;
   const changed = state.renderedSessionId !== sessionId;
+  if (changed) state.collapsedProcessKeys = new Set();
   const previousKeys = changed
     ? new Set()
     : new Set(state.renderedOpenKeys);
