@@ -1011,13 +1011,27 @@ function renderToolCard(callStep, resultStep, msg, key) {
     resultStep && resultStep.kind === 'result' ? resultStep : null;
   const stepForInspect = call || result;
   const name = call?.name || result?.name || 'tool';
+  const isMcp = String(name).startsWith('mcp__');
+  const displayName = isMcp
+    ? String(name)
+        .slice(5)
+        .split('__')
+        .filter(Boolean)
+        .join(' · ') || name
+    : name;
   const argsRaw = call?.arguments ?? '';
   const resultRaw = result?.output ?? '';
   const argsStructured = parseStructured(argsRaw);
   const resultStructured = parseStructured(resultRaw);
   const running = Boolean(call && !result);
   const ok = result ? result.ok !== false : true;
-  const title = call ? '工具调用' : '工具返回';
+  const title = isMcp
+    ? call
+      ? 'MCP 调用'
+      : 'MCP 返回'
+    : call
+      ? '工具调用'
+      : '工具返回';
   const previewRaw = result ? resultRaw : argsRaw;
   const previewStructured = result ? resultStructured : argsStructured;
   const preview = running
@@ -1027,7 +1041,7 @@ function renderToolCard(callStep, resultStep, msg, key) {
     key,
     kind: call ? 'tool-call' : 'tool-result',
     title,
-    meta: name,
+    meta: displayName,
     preview,
     badge: result
       ? { text: ok ? 'ok' : 'error', error: !ok }
@@ -1037,10 +1051,10 @@ function renderToolCard(callStep, resultStep, msg, key) {
     onFullContent: () =>
       openFullContent({
         key,
-        title: `${title} · ${name}`,
+        title: `${title} · ${displayName}`,
         kind: 'tool',
-        text: combinedToolText(name, call, result),
-        json: combinedToolJson(name, call, result),
+        text: combinedToolText(displayName, call, result),
+        json: combinedToolJson(displayName, call, result),
       }),
   });
   if (result && result.ok === false) card.classList.add('error');
@@ -2368,11 +2382,6 @@ const CATALOG_EMPTY = {
   mcp: '还没有连接 MCP。',
 };
 const TOOL_GROUPS = [
-  {
-    id: 'mcp',
-    label: 'MCP',
-    pattern: /^mcp__/i,
-  },
   {
     id: 'search',
     label: '搜索',

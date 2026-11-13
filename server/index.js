@@ -401,8 +401,14 @@ function handleApi(req, res, url) {
 
   if (req.method === 'GET' && pathname === '/api/catalog') {
     void mcpManager.ensureConnections();
+    const catalogTools = tools
+      .definitions()
+      .filter(
+        (definition) =>
+          !String(definition.function?.name || '').startsWith('mcp__')
+      );
     sendJson(res, 200, {
-      tools: tools.definitions(),
+      tools: catalogTools,
       skills: [],
       mcp: mcpManager.catalogEntries(),
     });

@@ -12,13 +12,15 @@
     <link rel="stylesheet" href="resize.css" />
   </head>
   <body>
-    <header class="titlebar">
-      <span id="content-title" class="title">CONTENT</span>
-      <button id="content-close" class="close" aria-label="Close">×</button>
-    </header>
-    <main id="content" class="content"></main>
-    <div class="edge-blur edge-blur-short edge-blur-top" aria-hidden="true"></div>
-    <div class="edge-blur edge-blur-short edge-blur-bottom" aria-hidden="true"></div>
+    <div id="content-app">
+      <header class="titlebar">
+        <span id="content-title" class="title">CONTENT</span>
+        <button id="content-close" class="close" aria-label="Close">×</button>
+      </header>
+      <main id="content" class="content"></main>
+      <div class="edge-blur edge-blur-short edge-blur-top" aria-hidden="true"></div>
+      <div class="edge-blur edge-blur-short edge-blur-bottom" aria-hidden="true"></div>
+    </div>
     <script src="resize.js"></script>
     <script src="content.js"></script>
   </body>
