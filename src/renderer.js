@@ -444,12 +444,20 @@ function setCardExpanded(card, expanded) {
   requestAnimationFrame(() => updateCardClip(card));
 }
 
+function stickStreamingText(card) {
+  if (!card || !card.classList.contains('streaming')) return;
+  const text = card.querySelector('.card-text');
+  if (!text) return;
+  text.scrollTop = text.scrollHeight;
+}
+
 function updateCardClip(card) {
   if (!card) return;
   const scroller = card.querySelector('.card-text, .json-view, .tool-text');
   if (!scroller) return;
   const clipped = scroller.scrollHeight > scroller.clientHeight + 1;
   scroller.classList.toggle('is-clipped', clipped);
+  if (card.classList.contains('streaming')) stickStreamingText(card);
 }
 
 function openKeySet(key) {
@@ -1160,6 +1168,9 @@ function renderMessages({ animate = true } = {}) {
 
   requestAnimationFrame(() => {
     if (state.renderVersion !== version) return;
+    stickStreamingText(
+      dom.messages.querySelector('.message-card.streaming')
+    );
     if (stick) dom.messages.scrollTop = dom.messages.scrollHeight;
     else dom.messages.scrollTop = prevTop;
   });
@@ -1613,6 +1624,9 @@ function finishStream() {
   dom.messages
     .querySelectorAll('.message-card.streaming')
     .forEach((card) => card.classList.remove('streaming'));
+  dom.messages.querySelectorAll('.card-text').forEach((text) => {
+    text.scrollTop = 0;
+  });
 
   state.openCardKey = autoCardKey();
   applyOpenKey(state.openCardKey);
@@ -2598,8 +2612,9 @@ function bindEvents() {
     }
     renderTextContent(textNode, last.text);
     api.updateContent({ key, text: last.text });
-    updateCardClip(card);
     card.classList.add('streaming');
+    updateCardClip(card);
+    stickStreamingText(card);
 
     const stick = isNearBottom();
     state.forceScroll = false;

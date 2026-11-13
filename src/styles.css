@@ -1110,6 +1110,19 @@ body.ring-open #window-controls {
   );
 }
 
+.message-card.streaming .card-text.is-clipped {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 26px
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 26px
+  );
+}
+
 .text-block {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
