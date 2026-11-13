@@ -1,8 +1,8 @@
 {
-  "name": "miniharness-electron",
-  "productName": "miniharness",
+  "name": "yah",
+  "productName": "YAH - Yet Another Harness",
   "version": "0.3.0",
-  "description": "miniharness rewritten in Electron",
+  "description": "YAH - Yet Another Harness, an Electron chat harness",
   "main": "src/main.js",
   "private": true,
   "license": "MIT",

@@ -8,7 +8,7 @@ function subscribe(channel, callback) {
   return () => ipcRenderer.removeListener(channel, listener);
 }
 
-contextBridge.exposeInMainWorld('miniharness', {
+contextBridge.exposeInMainWorld('yah', {
   loadSettings: () => ipcRenderer.invoke('settings:load'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   loadChats: () => ipcRenderer.invoke('chats:load'),

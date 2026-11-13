@@ -1,7 +1,7 @@
 'use strict';
 
 // 会话 / 设置的落盘。数据目录由 main.js 通过 init() 指定，默认
-// %APPDATA%\miniharness-electron；第一次启动会尝试从旧的 Rust 版
+// %APPDATA%\yah；第一次启动会尝试从旧的 Rust 版
 // %APPDATA%\miniharness 迁移 chats.json / settings.json。
 
 const fs = require('node:fs');
@@ -11,7 +11,7 @@ const zlib = require('node:zlib');
 const { DatabaseSync } = require('node:sqlite');
 
 const DEFAULT_SYSTEM_PROMPT =
-  'You are miniharness, a terse terminal coding assistant. Answer in plain text.';
+  'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
 const SCHEMA_VERSION = 1;
 

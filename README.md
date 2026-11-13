@@ -1,6 +1,6 @@
-# miniharness-electron
+# YAH - Yet Another Harness
 
-`D:\Dev\Harness\miniharness` 的 Electron 重写版。保留原来的核心体验：
+YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 miniharness 的核心体验：
 
 - 无边框、扁平暖色桌面窗口，单一浅色主题（奶油底 + 琥珀/陶土强调），没有深浅切换
 - DeepSeek V4.1 Flash 流式对话（通过 OpenCode Go 的 OpenAI 兼容端点）
@@ -29,7 +29,7 @@
 - 会话用 SQLite（`node:sqlite`，WAL）管理；设置和 API key 仍存 `settings.json`
 - 全局禁用鼠标框选和右键菜单；只有输入框保留文本选择
 
-旧的 Rust/Slint 版已经删除；新开发都在这个目录。
+旧的 Rust/Slint 版已经删除；新开发都在 `D:\Dev\Harness\yah`。
 
 ## 运行
 
@@ -38,8 +38,8 @@ npm install
 npm start
 ```
 
-桌面上有 `miniharness.lnk`，直接双击启动（指向 `node_modules\electron\dist\electron.exe`，
-工作目录是本项目，图标是 `assets\miniharness.ico`）。移动项目目录后需要重新创建快捷方式。
+桌面上有 `YAH - Yet Another Harness.lnk`，直接双击启动（指向 `node_modules\electron\dist\electron.exe`，
+工作目录是本项目，图标是 `assets\yah.ico`）。移动项目目录后需要重新创建快捷方式。
 
 测试：
 
@@ -71,21 +71,22 @@ src/styles.css    主题、气泡、浮层、输入区
 - 端点：`https://opencode.ai/inference/go/openai/v1/chat/completions`
 - 模型：`deepseek-v4.1-flash`
 - 鉴权：OpenCode Go 的 API key（Bearer）
-- 请求带 `User-Agent: miniharness-electron/0.3.0`，并为每个会话带稳定的
+- 请求带 `User-Agent: yah/0.3.0`，并为每个会话带稳定的
   `x-opencode-session`，方便网关路由和 prompt cache
 
 ## 数据
 
-- `%APPDATA%\miniharness-electron\chats.db`：所有对话数据（SQLite，WAL）
+- `%APPDATA%\yah\chats.db`：所有对话数据（SQLite，WAL）
   - `sessions`：会话 id、标题、system、排序
   - `messages`：每个会话的消息角色和文字
   - `steps`：工具调用/返回、文本片段、轮次
   - `requests`：每条助手消息每轮的原始请求 body（gzip 压缩的 JSON BLOB）
   - `app_state`：当前会话 id 和标题序号
   - 运行时还会出现 `chats.db-wal` / `chats.db-shm`；备份时不要只复制 `chats.db`
-- `%APPDATA%\miniharness-electron\settings.json`：API key、窗口位置和尺寸
+- `%APPDATA%\yah\settings.json`：API key、窗口位置和尺寸
 
-第一次启动时，如果数据库还没有会话，会尝试导入旧的 `chats.json`，成功后把原文件
+第一次启动时，如果新的 `yah` 数据目录不存在，会从旧的 Electron 目录
+`%APPDATA%\miniharness-electron` 复制数据库和设置；如果数据库还没有会话，会尝试导入旧的 `chats.json`，成功后把原文件
 重命名为 `chats.json.pre-sqlite` 作为备份；也会尝试从旧版 `%APPDATA%\miniharness`
 迁移 `chats.json` 和 `settings.json`（`api_key` → `apiKey`，`window.w/h` → `width/height`）。
 

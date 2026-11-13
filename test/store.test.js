@@ -8,7 +8,7 @@ const path = require('node:path');
 const store = require('../src/store');
 
 function withStoreDir(run) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'miniharness-store-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-store-'));
   store.init({
     getPath(name) {
       return name === 'userData' ? dir : path.dirname(dir);

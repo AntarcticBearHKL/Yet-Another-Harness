@@ -11,7 +11,7 @@ const MODEL = 'deepseek-v4.1-flash';
 const PROVIDER = 'opencode-go';
 const API = 'openai-chat-completions';
 const REASONING_FIELD = 'reasoning_content';
-const USER_AGENT = 'miniharness-electron/0.3.0';
+const USER_AGENT = 'yah/0.3.0';
 const MAX_HISTORY = 40;
 const MAX_TOOL_ROUNDS = 6;
 

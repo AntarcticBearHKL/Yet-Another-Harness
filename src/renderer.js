@@ -1,11 +1,11 @@
 'use strict';
 
 const DEFAULT_SYSTEM_PROMPT =
-  'You are miniharness, a terse terminal coding assistant. Answer in plain text.';
+  'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const NO_KEY_HINT =
   'No OpenCode Go API key yet. Hold Tab and open Settings to paste your key.';
 
-const api = window.miniharness;
+const api = window.yah;
 const $ = (id) => document.getElementById(id);
 
 const dom = {

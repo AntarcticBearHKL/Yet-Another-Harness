@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('node:fs');
 const path = require('node:path');
 const {
   app,
@@ -14,10 +15,18 @@ const {
 const store = require('./store');
 const deepseek = require('./deepseek');
 
-// 独立的数据目录，避免和旧的 Rust 版 %APPDATA%\miniharness 互相覆盖；
-// 第一次启动由 store 从旧目录迁移 chats.json / settings.json。
-app.setPath('userData', path.join(app.getPath('appData'), 'miniharness-electron'));
-app.setAppUserModelId('com.miniharness.electron');
+app.setName('YAH - Yet Another Harness');
+
+// 独立的数据目录 %APPDATA%\yah；首次升级时从旧的 Electron 目录
+// %APPDATA%\miniharness-electron 复制 chats.db / settings.json。
+const appData = app.getPath('appData');
+const userData = path.join(appData, 'yah');
+const previousUserData = path.join(appData, 'miniharness-electron');
+if (!fs.existsSync(userData) && fs.existsSync(previousUserData)) {
+  fs.cpSync(previousUserData, userData, { recursive: true });
+}
+app.setPath('userData', userData);
+app.setAppUserModelId('com.yah.harness');
 // 系统 acrylic/边框也跟随浅色，避免深色材质透出来
 nativeTheme.themeSource = 'light';
 
@@ -107,8 +116,8 @@ function createWindow() {
     ...bounds,
     minWidth: 900,
     minHeight: 520,
-    title: 'MINIHARNESS',
-    icon: path.join(__dirname, '..', 'assets', 'miniharness.ico'),
+    title: 'YAH - Yet Another Harness',
+    icon: path.join(__dirname, '..', 'assets', 'yah.ico'),
     frame: false,
     // 扁平纯色页面 + Windows 11 原生圆角；不使用 acrylic 或 setShape。
     transparent: false,
