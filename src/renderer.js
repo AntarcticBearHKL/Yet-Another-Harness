@@ -782,38 +782,60 @@ function scrollCardToTop(card, offset = 48) {
   container.scrollTop += cardRect.top - containerRect.top - offset;
 }
 
-function navigateBlock(direction) {
-  const cards = [...dom.messages.querySelectorAll('.message-card')];
+function navigateBlock(direction, { selector = null } = {}) {
+  const allCards = [...dom.messages.querySelectorAll('.message-card')];
+  if (allCards.length === 0) return;
+
+  const cards = selector
+    ? allCards.filter((card) => card.matches(selector))
+    : allCards;
   if (cards.length === 0) return;
 
-  let index = cards.findIndex(
-    (card) => card.dataset.cardKey === state.openCardKey
-  );
-  if (index < 0) {
+  let currentKey = state.openCardKey;
+  if (!currentKey) {
     for (const key of state.renderedOpenKeys) {
-      const found = cards.findIndex((card) => card.dataset.cardKey === key);
-      if (found >= 0) {
-        index = found;
-        break;
-      }
+      currentKey = key;
+      break;
     }
   }
-  if (index < 0) index = direction > 0 ? -1 : cards.length;
 
-  const nextIndex = Math.max(
-    0,
-    Math.min(cards.length - 1, index + direction)
+  const allIndex = allCards.findIndex(
+    (card) => card.dataset.cardKey === currentKey
   );
-  if (nextIndex === index) return;
+  const filteredIndex = cards.findIndex(
+    (card) => card.dataset.cardKey === currentKey
+  );
 
-  const target = cards[nextIndex];
+  let targetIndex;
+  if (filteredIndex >= 0) {
+    targetIndex = filteredIndex + direction;
+  } else if (allIndex >= 0) {
+    if (direction > 0) {
+      // 当前展开的不是目标类型：取它后面的第一个
+      targetIndex = cards.findIndex(
+        (card) => allCards.indexOf(card) > allIndex
+      );
+    } else {
+      // 当前展开的不是目标类型：取它前面的最后一个
+      targetIndex = -1;
+      for (let i = 0; i < cards.length; i += 1) {
+        if (allCards.indexOf(cards[i]) < allIndex) targetIndex = i;
+      }
+    }
+  } else {
+    targetIndex = direction > 0 ? 0 : cards.length - 1;
+  }
+
+  if (targetIndex < 0 || targetIndex >= cards.length) return;
+
+  const target = cards[targetIndex];
   const targetKey = target.dataset.cardKey;
   state.peekKey = null;
   state.peekKeys.clear();
   state.openCardKey = targetKey;
 
   // 先瞬间折叠所有块，把目标块定位到固定高度后立刻展开
-  for (const card of cards) {
+  for (const card of allCards) {
     card.classList.add('no-anim');
     setCardExpanded(card, false);
   }
@@ -1267,19 +1289,29 @@ function bindEvents() {
   document.addEventListener(
     'wheel',
     (event) => {
-      if (!event.ctrlKey) return;
+      if (!event.ctrlKey && !event.shiftKey) return;
 
-      // Ctrl+wheel 始终拦截，避免在弹窗打开时触发页面缩放
+      // Ctrl+wheel / Shift+wheel 始终拦截，避免页面缩放或横向滚动
       event.preventDefault();
       if (!dom.rawOverlay.classList.contains('hidden')) return;
       if (!dom.settingsOverlay.classList.contains('hidden')) return;
       if (state.switcherOpen) return;
-      if (state.spaceHeld || event.deltaY === 0) return;
+      if (state.spaceHeld) return;
+
+      const delta = event.deltaY || event.deltaX;
+      if (delta === 0) return;
 
       const now = Date.now();
       if (now - state.lastWheelNav < 25) return;
       state.lastWheelNav = now;
-      navigateBlock(event.deltaY > 0 ? 1 : -1);
+
+      const direction = delta > 0 ? 1 : -1;
+      if (event.ctrlKey) {
+        navigateBlock(direction);
+      } else {
+        // Shift+wheel：只在用户 prompt 条目之间切换
+        navigateBlock(direction, { selector: '.message-card.user' });
+      }
     },
     { passive: false }
   );
