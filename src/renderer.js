@@ -713,9 +713,12 @@ function compactTokens(value) {
 
 function usageText(usage) {
   if (!usage) return '';
-  return `${compactTokens(usage.hit)} / ${compactTokens(
-    usage.miss
-  )} / ${compactTokens(usage.output)}`;
+  const hit = Math.max(0, Number(usage.hit) || 0);
+  const miss = Math.max(0, Number(usage.miss) || 0);
+  const output = Math.max(0, Number(usage.output) || 0);
+  const input = hit + miss;
+  const hitPercent = input > 0 ? Math.round((hit / input) * 100) : 0;
+  return `${compactTokens(input)} / ${hitPercent}% / ${compactTokens(output)}`;
 }
 
 function contextTokensForMessage(msg) {
@@ -858,11 +861,15 @@ function makeCard(opts) {
     }
     if (opts.usage) {
       const usage = el('span', 'card-usage', usageText(opts.usage));
+      const hit = Math.max(0, Number(opts.usage.hit) || 0);
+      const miss = Math.max(0, Number(opts.usage.miss) || 0);
+      const input = hit + miss;
+      const hitPercent = input > 0 ? Math.round((hit / input) * 100) : 0;
       usage.setAttribute(
         'aria-label',
-        `输入命中 ${Number(opts.usage.hit) || 0} · 输入未命中 ${
-          Number(opts.usage.miss) || 0
-        } · 输出 ${Number(opts.usage.output) || 0}`
+        `输入总共 ${input} · 缓存命中 ${hit} (${hitPercent}%) · 输出 ${
+          Number(opts.usage.output) || 0
+        }`
       );
       tail.append(usage);
     }
