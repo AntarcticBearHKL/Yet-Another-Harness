@@ -67,22 +67,9 @@
       class="catalog hidden"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="catalog-title"
+      aria-label="工具"
       aria-hidden="true"
     >
-      <header class="catalog-head">
-        <h2 id="catalog-title">工具</h2>
-        <button
-          id="catalog-close"
-          class="icon-btn"
-          type="button"
-          aria-label="Close"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        </button>
-      </header>
       <div class="catalog-body">
         <aside class="catalog-side">
           <div id="catalog-categories" class="catalog-categories"></div>
@@ -91,8 +78,18 @@
           <div id="catalog-list" class="catalog-list"></div>
         </section>
       </div>
-      <div class="edge-blur edge-blur-top" aria-hidden="true"></div>
-      <div class="edge-blur edge-blur-bottom" aria-hidden="true"></div>
+      <div class="edge-blur edge-blur-short edge-blur-top" aria-hidden="true"></div>
+      <div class="edge-blur edge-blur-short edge-blur-bottom" aria-hidden="true"></div>
+      <button
+        id="catalog-close"
+        class="icon-btn catalog-close"
+        type="button"
+        aria-label="Close"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </button>
     </div>
 
     <div id="web-content" class="web-content hidden" aria-hidden="true">

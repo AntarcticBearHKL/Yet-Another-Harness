@@ -27,7 +27,6 @@ const dom = {
   ringMenu: $('ring-menu'),
   ringSvg: $('ring-svg'),
   catalog: $('catalog'),
-  catalogTitle: $('catalog-title'),
   catalogCategories: $('catalog-categories'),
   catalogList: $('catalog-list'),
   catalogClose: $('catalog-close'),
@@ -1995,12 +1994,6 @@ const TOOL_GROUPS = [
   },
 ];
 
-function catalogTitleFor(kind) {
-  if (kind === 'skills') return 'Skill';
-  if (kind === 'mcp') return 'MCP';
-  return '工具';
-}
-
 function toolGroupFor(fn) {
   const name = String(fn?.name || '');
   const description = String(fn?.description || '');
@@ -2043,25 +2036,35 @@ function closeCatalog() {
   dom.catalog.setAttribute('aria-hidden', 'true');
 }
 
-function renderCatalogCategories(data, selectedKind) {
-  const toolCounts = toolCountsByGroup(data?.tools);
-  const toolItems = TOOL_GROUPS.map((group) => ({
-    id: `tool:${group.id}`,
-    label: group.label,
-    count: toolCounts.get(group.id) || 0,
-  })).filter((item) => item.count > 0);
-  const otherCount = toolCounts.get('other') || 0;
-  if (otherCount > 0) {
-    toolItems.push({ id: 'tool:other', label: '其他', count: otherCount });
-  }
-  if (toolItems.length === 0) {
-    toolItems.push({ id: 'tool:other', label: '其他', count: 0 });
+function renderCatalogCategories(data, selectedKind, page) {
+  let items;
+  if (page === 'tools') {
+    const toolCounts = toolCountsByGroup(data?.tools);
+    items = TOOL_GROUPS.map((group) => ({
+      id: `tool:${group.id}`,
+      label: group.label,
+      count: toolCounts.get(group.id) || 0,
+    })).filter((item) => item.count > 0);
+    const otherCount = toolCounts.get('other') || 0;
+    if (otherCount > 0) {
+      items.push({ id: 'tool:other', label: '其他', count: otherCount });
+    }
+    if (items.length === 0) {
+      items.push({ id: 'tool:other', label: '其他', count: 0 });
+    }
+  } else {
+    items = [
+      {
+        id: page,
+        label: page === 'skills' ? 'Skill' : 'MCP',
+        count: Array.isArray(data?.[page]) ? data[page].length : 0,
+      },
+    ];
   }
 
   dom.catalogCategories.replaceChildren();
   const wrapper = el('div', 'catalog-section');
-  wrapper.append(el('div', 'catalog-section-label', '分类'));
-  for (const item of toolItems) {
+  for (const item of items) {
     const button = el('button', 'catalog-category');
     button.type = 'button';
     button.dataset.kind = item.id;
@@ -2077,7 +2080,6 @@ function renderCatalogCategories(data, selectedKind) {
 function selectCatalogKind(kind) {
   if (!state.catalogOpen || state.catalogKind === kind) return;
   state.catalogKind = kind;
-  dom.catalogTitle.textContent = catalogTitleFor(kind);
   for (const button of dom.catalogCategories.querySelectorAll(
     '.catalog-category'
   )) {
@@ -2205,12 +2207,15 @@ function renderCatalogContent(kind) {
 async function openCatalog(kind) {
   closeRingMenu();
   const page = kind === 'skills' || kind === 'mcp' ? kind : 'tools';
+  dom.catalog.setAttribute(
+    'aria-label',
+    page === 'skills' ? 'Skill' : page === 'mcp' ? 'MCP' : '工具'
+  );
   state.catalogOpen = true;
   state.catalogKind = page === 'tools' ? 'tool:search' : page;
   state.catalogData = null;
   const request = ++state.catalogRequest;
-  dom.catalog.classList.toggle('single', page !== 'tools');
-  dom.catalogTitle.textContent = catalogTitleFor(state.catalogKind);
+  dom.catalog.classList.remove('single');
   dom.catalogCategories.replaceChildren();
   dom.catalogList.replaceChildren(
     el('div', 'catalog-empty', '加载中…')
@@ -2222,18 +2227,9 @@ async function openCatalog(kind) {
     const data = await api.loadCatalog();
     if (!state.catalogOpen || request !== state.catalogRequest) return;
     state.catalogData = data;
-    if (page === 'tools') {
-      ensureCatalogSelection(data);
-      dom.catalogTitle.textContent = catalogTitleFor(state.catalogKind);
-      renderCatalogCategories(data, state.catalogKind);
-      renderCatalogContent(state.catalogKind);
-    } else {
-      dom.catalogList.replaceChildren();
-      renderCatalogList(
-        page,
-        page === 'skills' ? data?.skills : data?.mcp
-      );
-    }
+    if (page === 'tools') ensureCatalogSelection(data);
+    renderCatalogCategories(data, state.catalogKind, page);
+    renderCatalogContent(state.catalogKind);
   } catch (error) {
     console.error('load catalog failed', error);
     if (!state.catalogOpen || request !== state.catalogRequest) return;
