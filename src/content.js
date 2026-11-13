@@ -149,3 +149,9 @@ document.addEventListener('mousedown', onWindowDragStart);
 document.addEventListener('mousemove', onWindowDragMove);
 document.addEventListener('mouseup', onWindowDragEnd);
 window.addEventListener('blur', onWindowDragEnd);
+
+// 右键直接关闭全文窗口
+window.addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+  api.close();
+});
