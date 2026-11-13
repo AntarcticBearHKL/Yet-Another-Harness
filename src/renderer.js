@@ -556,8 +556,8 @@ function makeCard(opts) {
     }
 
     card.title = opts.onFullContent
-      ? 'Click header to expand/collapse · double-click content for full view · Ctrl+double-click for raw request'
-      : 'Click header to expand/collapse';
+      ? 'Click header or preview to expand/collapse · double-click content for full view · Ctrl+double-click for raw request'
+      : 'Click header or preview to expand/collapse';
 
     head.addEventListener('click', (event) => {
       if (suppressNextCardClick) {
