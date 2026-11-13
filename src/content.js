@@ -144,9 +144,13 @@ api.onContentUpdate((payload) => {
   updateText(payload.text);
 });
 
-closeButton.addEventListener('click', () => api.close());
+closeButton?.addEventListener('click', () => api.close());
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') api.close();
+});
+document.addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+  api.close();
 });
 
 // 禁止原生 hover tooltip

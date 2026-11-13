@@ -20,6 +20,16 @@ const dom = {
   projectList: $('project-list'),
   settingsOverlay: $('settings-overlay'),
   rawOverlay: $('raw-overlay'),
+  renameOverlay: $('rename-overlay'),
+  renameTitle: $('rename-title'),
+  renameInput: $('rename-input'),
+  renameCancel: $('rename-cancel'),
+  renameSave: $('rename-save'),
+  confirmOverlay: $('confirm-overlay'),
+  confirmTitle: $('confirm-title'),
+  confirmText: $('confirm-text'),
+  confirmCancel: $('confirm-cancel'),
+  confirmOk: $('confirm-ok'),
   rawBody: $('raw-body'),
   rawMeta: $('raw-meta'),
   apiKey: $('api-key'),
@@ -81,6 +91,10 @@ const state = {
     error: '',
     fetchedAt: 0,
   },
+  mcpServers: [],
+  mcpServersLoading: false,
+  mcpServersFetchedAt: 0,
+  mcpBlockExpanded: new Set(),
 };
 
 async function requestJson(path, options = {}) {
@@ -273,12 +287,8 @@ const api = {
     requestJson('/api/title', { method: 'POST', body: payload }),
   loadCatalog: () => requestJson('/api/catalog'),
 
-  openContent: (payload) =>
-    shell ? shell.openContent(payload) : openWebContent(payload),
-  updateContent: (payload) => {
-    if (shell) shell.updateContent(payload);
-    else updateWebContent(payload);
-  },
+  openContent: (payload) => openWebContent(payload),
+  updateContent: (payload) => updateWebContent(payload),
   onContentInit: (callback) => shell?.onContentInit?.(callback) ?? (() => {}),
   onContentUpdate: (callback) =>
     shell?.onContentUpdate?.(callback) ?? (() => {}),
@@ -286,6 +296,7 @@ const api = {
   onChatDelta: (callback) => subscribeEvent('assistant.delta', callback),
   onChatRequest: (callback) => subscribeEvent('request.body', callback),
   onChatUsage: (callback) => subscribeEvent('usage', callback),
+  onChatTiming: (callback) => subscribeEvent('assistant.timing', callback),
   onChatToolCall: (callback) => subscribeEvent('tool.call', callback),
   onChatToolResult: (callback) => subscribeEvent('tool.result', callback),
   onChatDone: (callback) => subscribeEvent('run.done', callback),
@@ -304,6 +315,9 @@ let dragFromComposer = false;
 let suppressNextCardClick = false;
 let turnFlashTimer = 0;
 let cardAnchorFrame = 0;
+let toolTimer = 0;
+let renameTarget = null;
+let confirmAction = null;
 
 function currentSession() {
   return state.sessions[state.current];
@@ -349,6 +363,9 @@ function structurePayload() {
       title: session.title,
       system: session.system,
       projectId: session.projectId,
+      mcpDisabled: Array.isArray(session.mcpDisabled)
+        ? session.mcpDisabled
+        : [],
       msgs: [],
     })),
     current: state.current,
@@ -600,6 +617,67 @@ function usageText(usage) {
   )}/${compactTokens(usage.output)}`;
 }
 
+function formatDuration(ms) {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value < 0) return '';
+  if (value < 1000) return `${Math.round(value)}ms`;
+  if (value < 60_000) return `${(value / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(value / 60_000);
+  const seconds = Math.round((value % 60_000) / 1000);
+  return `${minutes}m${String(seconds).padStart(2, '0')}s`;
+}
+
+function formatLatency(ms) {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value < 0) return '';
+  if (value < 1000) return `${Math.round(value)}ms`;
+  return `${(value / 1000).toFixed(1)}s`;
+}
+
+function formatTps(tps) {
+  const value = Number(tps);
+  if (!Number.isFinite(value) || value < 0) return '';
+  return `${value >= 100 ? Math.round(value) : value.toFixed(1)} tok/s`;
+}
+
+function formatLlmTiming(metrics, thinking) {
+  if (!metrics) return '';
+  const first = thinking
+    ? metrics.firstThinkingMs
+    : metrics.firstContentMs;
+  const tps = thinking ? metrics.thinkingTps : metrics.outputTps;
+  const parts = [];
+  if (Number.isFinite(Number(first))) {
+    parts.push(`首 token ${formatLatency(first)}`);
+  }
+  if (Number.isFinite(Number(tps))) {
+    parts.push(formatTps(tps));
+  }
+  return parts.join(' · ');
+}
+
+function updateToolTimers() {
+  const nodes = [
+    ...document.querySelectorAll('.card-timing[data-started-at]'),
+  ];
+  if (nodes.length === 0) {
+    clearInterval(toolTimer);
+    toolTimer = 0;
+    return;
+  }
+  const now = Date.now();
+  for (const node of nodes) {
+    const started = Number(node.dataset.startedAt) || 0;
+    if (!started) continue;
+    node.textContent = `运行中 ${formatDuration(now - started)}`;
+  }
+}
+
+function startToolTimer() {
+  if (toolTimer) return;
+  toolTimer = setInterval(updateToolTimers, 100);
+}
+
 function makeCard(opts) {
   const card = el('div', `message-card ${opts.kind}`);
   card.dataset.cardKey = opts.key;
@@ -617,6 +695,22 @@ function makeCard(opts) {
       head.append(el('span', 'card-title', opts.title || ''));
     }
     head.append(el('span', 'card-meta', opts.meta || ''));
+    if (opts.timing) {
+      const timingText =
+        typeof opts.timing === 'string'
+          ? opts.timing
+          : opts.timing.text || '';
+      const startedAt =
+        typeof opts.timing === 'object' ? opts.timing.startedAt : null;
+      if (timingText || startedAt) {
+        const timing = el('span', 'card-timing', timingText);
+        if (startedAt) {
+          timing.dataset.startedAt = String(startedAt);
+          startToolTimer();
+        }
+        head.append(timing);
+      }
+    }
     if (opts.usage) {
       const usage = el('span', 'card-usage', usageText(opts.usage));
       usage.setAttribute(
@@ -758,6 +852,7 @@ function textCard({
   minimalHead,
   process,
   usage,
+  timing,
 }) {
   const { card, body } = makeCard({
     key,
@@ -766,6 +861,7 @@ function textCard({
     meta,
     preview: previewLine(text),
     usage,
+    timing,
     onInspect,
     primary,
     minimalHead,
@@ -1005,10 +1101,11 @@ function combinedToolText(name, callStep, resultStep) {
   return parts.join('\n\n');
 }
 
-function renderToolCard(callStep, resultStep, msg, key) {
+function renderToolCard(callStep, resultStep, msg, key, options = {}) {
   const call = callStep && callStep.kind === 'call' ? callStep : null;
   const result =
     resultStep && resultStep.kind === 'result' ? resultStep : null;
+  const live = options.live === true;
   const stepForInspect = call || result;
   const name = call?.name || result?.name || 'tool';
   const isMcp = String(name).startsWith('mcp__');
@@ -1019,6 +1116,23 @@ function renderToolCard(callStep, resultStep, msg, key) {
         .filter(Boolean)
         .join(' · ') || name
     : name;
+  const callMetrics = call?.metrics || null;
+  const resultMetrics = result?.metrics || null;
+  const startedAt = Number.isFinite(Number(callMetrics?.startedAt))
+    ? Number(callMetrics.startedAt)
+    : null;
+  const durationMs = Number.isFinite(Number(resultMetrics?.durationMs))
+    ? Number(resultMetrics.durationMs)
+    : null;
+  const timing =
+    durationMs !== null
+      ? `耗时 ${formatDuration(durationMs)}`
+      : live && startedAt
+        ? {
+            text: `运行中 ${formatDuration(Date.now() - startedAt)}`,
+            startedAt,
+          }
+        : '';
   const argsRaw = call?.arguments ?? '';
   const resultRaw = result?.output ?? '';
   const argsStructured = parseStructured(argsRaw);
@@ -1043,6 +1157,7 @@ function renderToolCard(callStep, resultStep, msg, key) {
     title,
     meta: displayName,
     preview,
+    timing,
     badge: result
       ? { text: ok ? 'ok' : 'error', error: !ok }
       : null,
@@ -1239,6 +1354,7 @@ function renderAgentMessage(msg, msgIndex, container) {
   const appendProcessStep = (step, index, target) => {
     if (step.kind === 'text' || step.kind === 'thinking') {
       const thinking = step.kind === 'thinking';
+      const metrics = msg.usage?.rounds?.[step.round] || null;
       appendRow(
         textCard({
           key: stepCardKey(msgIndex, index),
@@ -1247,6 +1363,7 @@ function renderAgentMessage(msg, msgIndex, container) {
           meta: '',
           text: step.text,
           usage: null,
+          timing: formatLlmTiming(metrics, thinking),
           streaming: streaming && index === steps.length - 1,
           onInspect: () => inspectStep(msg, step),
           primary: false,
@@ -1263,7 +1380,13 @@ function renderAgentMessage(msg, msgIndex, container) {
       const resultStep =
         resultIndex === undefined ? null : steps[resultIndex];
       appendRow(
-        renderToolCard(step, resultStep, msg, stepCardKey(msgIndex, index)),
+        renderToolCard(
+          step,
+          resultStep,
+          msg,
+          stepCardKey(msgIndex, index),
+          { live: streaming && msg === state.streamMessage }
+        ),
         { process: true },
         target
       );
@@ -1287,6 +1410,7 @@ function renderAgentMessage(msg, msgIndex, container) {
   if (lastTextIndex >= 0) {
     const step = steps[lastTextIndex];
     if (step.text || (streaming && lastTextIndex === steps.length - 1)) {
+      const metrics = msg.usage?.rounds?.[step.round] || null;
       appendRow(
         textCard({
           key: stepCardKey(msgIndex, lastTextIndex),
@@ -1295,6 +1419,7 @@ function renderAgentMessage(msg, msgIndex, container) {
           meta: '回复',
           text: step.text,
           usage: msg.usage,
+          timing: formatLlmTiming(metrics, false),
           streaming: streaming && lastTextIndex === steps.length - 1,
           onInspect: () => inspectStep(msg, step),
           primary: true,
@@ -1306,6 +1431,150 @@ function renderAgentMessage(msg, msgIndex, container) {
       );
     }
   }
+}
+
+function mcpBlockServerEnabled(session, server) {
+  if (server.enabled === false) return false;
+  return !(Array.isArray(session.mcpDisabled)
+    ? session.mcpDisabled
+    : []
+  ).includes(server.id);
+}
+
+async function loadMcpServers(force = false) {
+  if (state.mcpServersLoading) return;
+  if (
+    !force &&
+    state.mcpServers.length &&
+    Date.now() - state.mcpServersFetchedAt < 30_000
+  ) {
+    return;
+  }
+  state.mcpServersLoading = true;
+  try {
+    const data = await requestJson('/api/mcp/state');
+    state.mcpServers = Array.isArray(data?.servers) ? data.servers : [];
+    state.mcpServersFetchedAt = Date.now();
+  } catch (error) {
+    console.error('load MCP servers failed', error);
+  } finally {
+    state.mcpServersLoading = false;
+    const session = currentSession();
+    if (session) renderMcpBlock(session);
+  }
+}
+
+function renderMcpBlock(session, container = dom.messages) {
+  if (!session || !container) return;
+  const existing = container.querySelector('.mcp-context');
+  const expanded = state.mcpBlockExpanded.has(session.id);
+  const block = el('section', 'mcp-context');
+  block.classList.toggle('expanded', expanded);
+
+  const head = el('button', 'mcp-context-head');
+  head.type = 'button';
+  head.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  head.append(el('span', 'mcp-context-dot'));
+  head.append(el('span', 'mcp-context-label', 'MCP'));
+  const total = state.mcpServers.length;
+  const enabledCount = state.mcpServers.filter((server) =>
+    mcpBlockServerEnabled(session, server)
+  ).length;
+  head.append(
+    el(
+      'span',
+      'mcp-context-summary',
+      total
+        ? `${enabledCount}/${total} 开启`
+        : state.mcpServersLoading
+          ? '加载中…'
+          : '未配置'
+    )
+  );
+  head.append(
+    el('span', 'mcp-context-chevron', expanded ? '⌄' : '›')
+  );
+  head.addEventListener('click', () => {
+    if (expanded) state.mcpBlockExpanded.delete(session.id);
+    else {
+      state.mcpBlockExpanded.add(session.id);
+      void loadMcpServers(true);
+    }
+    renderMcpBlock(session, container);
+  });
+  block.append(head);
+
+  if (expanded) {
+    const body = el('div', 'mcp-context-body');
+    if (state.mcpServers.length === 0) {
+      body.append(
+        el(
+          'div',
+          'mcp-context-empty',
+          state.mcpServersLoading ? '加载中…' : '还没有 MCP 服务器'
+        )
+      );
+    } else {
+      for (const server of state.mcpServers) {
+        const row = el('div', 'mcp-context-row');
+        row.append(
+          el(
+            'span',
+            `mcp-context-status ${server.status || 'idle'}`
+          )
+        );
+        const info = el('div', 'mcp-context-info');
+        info.append(el('span', 'mcp-context-name', server.name));
+        const meta = [
+          String(server.transport || '').toUpperCase(),
+          server.source === 'opencode' ? 'OpenCode' : '本机',
+          server.enabled === false
+            ? '已禁用'
+            : `${server.toolCount || 0} 工具`,
+        ]
+          .filter(Boolean)
+          .join(' · ');
+        info.append(el('span', 'mcp-context-meta', meta));
+        row.append(info);
+
+        const toggle = el('button', 'mcp-context-toggle');
+        toggle.type = 'button';
+        const enabled = mcpBlockServerEnabled(session, server);
+        toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+        toggle.classList.toggle('on', enabled);
+        toggle.disabled = server.enabled === false;
+        const track = el('span', 'mcp-context-toggle-track');
+        track.append(el('span', 'mcp-context-toggle-knob'));
+        toggle.append(track);
+        if (server.enabled !== false) {
+          toggle.addEventListener('click', () => {
+            const disabled = new Set(
+              Array.isArray(session.mcpDisabled)
+                ? session.mcpDisabled
+                : []
+            );
+            if (disabled.has(server.id)) disabled.delete(server.id);
+            else disabled.add(server.id);
+            session.mcpDisabled = [...disabled];
+            saveChatsSoon();
+            renderMcpBlock(session, container);
+          });
+        }
+        row.append(toggle);
+        body.append(row);
+      }
+    }
+    const foot = el('div', 'mcp-context-foot');
+    const manage = el('button', 'mcp-context-manage', '管理服务器');
+    manage.type = 'button';
+    manage.addEventListener('click', () => openMcp());
+    foot.append(manage);
+    body.append(foot);
+    block.append(body);
+  }
+
+  if (existing) existing.replaceWith(block);
+  else container.prepend(block);
 }
 
 function renderMessages({ animate = true } = {}) {
@@ -1322,6 +1591,7 @@ function renderMessages({ animate = true } = {}) {
   state.forceScroll = false;
 
   dom.messages.replaceChildren();
+  if (session) renderMcpBlock(session, dom.messages);
   if (!session) {
     state.openCardKey = null;
     state.renderedOpenKeys = new Set();
@@ -1427,6 +1697,7 @@ function renderSwitcher() {
   state.projects.forEach((item) => {
     const row = el('button', 'project-row');
     row.type = 'button';
+    row.dataset.projectId = item.id;
     if (item.id === project.id) row.classList.add('selected');
     row.append(el('span', 'project-name', item.name));
     row.addEventListener('click', () => selectProject(item.id));
@@ -1471,6 +1742,7 @@ function renderSwitcher() {
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6H20M9 6V4H15V6M6 6L7 20H17L18 6M10 10V17M14 10V17"/></svg>';
 
     card.dataset.index = String(localIndex);
+    card.dataset.sessionId = session.id;
     card.addEventListener('click', () => selectSession(globalIndex));
     card.addEventListener('mouseenter', () => highlightSwitcher(localIndex));
 
@@ -1603,6 +1875,139 @@ function closeSwitcher() {
   dom.switcher.setAttribute('aria-hidden', 'true');
 }
 
+function openRename(kind, id) {
+  let current = '';
+  if (kind === 'project') {
+    const project = state.projects.find((item) => item.id === id);
+    if (!project) return;
+    current = project.name;
+    dom.renameTitle.textContent = 'RENAME PROJECT';
+  } else {
+    const session = state.sessions.find((item) => item.id === id);
+    if (!session) return;
+    current = session.title;
+    dom.renameTitle.textContent = 'RENAME CHAT';
+  }
+  renameTarget = { kind, id };
+  dom.renameInput.value = current;
+  dom.renameOverlay.classList.remove('hidden');
+  dom.renameOverlay.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => {
+    dom.renameInput.focus();
+    dom.renameInput.select();
+  });
+}
+
+function closeRename() {
+  renameTarget = null;
+  dom.renameOverlay.classList.add('hidden');
+  dom.renameOverlay.setAttribute('aria-hidden', 'true');
+}
+
+function saveRename() {
+  if (!renameTarget) {
+    closeRename();
+    return;
+  }
+  const value = dom.renameInput.value.trim();
+  if (!value) {
+    dom.renameInput.focus();
+    return;
+  }
+  const { kind, id } = renameTarget;
+  if (kind === 'project') {
+    const project = state.projects.find((item) => item.id === id);
+    if (project) project.name = value;
+  } else {
+    const session = state.sessions.find((item) => item.id === id);
+    if (session) session.title = value;
+  }
+  saveChatsSoon();
+  closeRename();
+  if (state.switcherOpen) renderSwitcher();
+}
+
+function openConfirm({ title, text, action }) {
+  dom.confirmTitle.textContent = title;
+  dom.confirmText.textContent = text;
+  confirmAction = action;
+  dom.confirmOverlay.classList.remove('hidden');
+  dom.confirmOverlay.setAttribute('aria-hidden', 'false');
+}
+
+function closeConfirm() {
+  confirmAction = null;
+  dom.confirmOverlay.classList.add('hidden');
+  dom.confirmOverlay.setAttribute('aria-hidden', 'true');
+}
+
+function runConfirm() {
+  const action = confirmAction;
+  closeConfirm();
+  if (typeof action === 'function') action();
+}
+
+function confirmDeleteProject(projectId) {
+  const project = state.projects.find((item) => item.id === projectId);
+  if (!project) return;
+  const count = state.sessions.filter(
+    (session) => session.projectId === projectId
+  ).length;
+  openConfirm({
+    title: 'DELETE PROJECT',
+    text: `删除「${project.name}」${
+      count ? `及其中 ${count} 个对话` : ''
+    }？删除后不可恢复。`,
+    action: () => deleteProject(projectId),
+  });
+}
+
+function deleteProject(projectId) {
+  const project = state.projects.find((item) => item.id === projectId);
+  if (!project) return;
+  const removedSessions = state.sessions.filter(
+    (session) => session.projectId === projectId
+  );
+  const currentId = currentSession()?.id;
+  state.projects = state.projects.filter((item) => item.id !== projectId);
+  state.sessions = state.sessions.filter(
+    (session) => session.projectId !== projectId
+  );
+  for (const session of removedSessions) {
+    api
+      .deleteSession(session.id)
+      .catch((error) => console.error('delete session failed', error));
+  }
+  ensureProjects();
+  const remaining = state.sessions.findIndex(
+    (session) => session.id === currentId
+  );
+  state.current = remaining >= 0 ? remaining : 0;
+  state.switcherProjectId = state.projects[0]?.id || null;
+  state.switcherIndex = 0;
+  state.pendingDelete = -1;
+  saveChatsSoon();
+  renderAll();
+}
+
+function openMcpConfigForSession(sessionId) {
+  const index = state.sessions.findIndex(
+    (session) => session.id === sessionId
+  );
+  if (index < 0) return;
+  state.mcpBlockExpanded.add(sessionId);
+  selectSession(index);
+  requestAnimationFrame(() => {
+    dom.messages.scrollTop = 0;
+    const block = dom.messages.querySelector('.mcp-context');
+    if (!block) return;
+    block.classList.remove('flash');
+    void block.offsetWidth;
+    block.classList.add('flash');
+    setTimeout(() => block.classList.remove('flash'), 950);
+  });
+}
+
 function highlightSwitcher(index) {
   if (!state.switcherOpen) return;
   const sessions = sessionsInProject(state.switcherProjectId);
@@ -1706,6 +2111,7 @@ function newSession(projectId) {
     title: `Chat ${state.seq}`,
     system: DEFAULT_SYSTEM_PROMPT,
     projectId: targetProjectId,
+    mcpDisabled: [],
     msgs: [],
   });
   state.current = state.sessions.length - 1;
@@ -2074,11 +2480,23 @@ const RING_ITEMS = [
   },
 ];
 
+const RING_ICONS = {
+  rename:
+    '<path d="M4 20h4L19 9l-4-4L4 16v4ZM14 6l4 4"/>',
+  trash:
+    '<path d="M4 6h16M9 6V4h6v2M6 6l1 14h10l1-14M10 10v7M14 10v7"/>',
+  mcp: '<path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0V8ZM12 16v5"/>',
+  minimize: '<path d="M4 12h16"/>',
+  maximize: '<path d="M5 5h14v14H5z"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+};
+
 let ringCenterPoint = { x: 0, y: 0 };
 let ringSegments = [];
 let ringLabels = [];
 let ringUsagePanel = null;
 let ringUsageRows = [];
+let ringItems = RING_ITEMS;
 
 function ringPolar(radius, angleDeg) {
   const rad = (angleDeg * Math.PI) / 180;
@@ -2191,7 +2609,7 @@ async function loadUsage(force = false) {
   }
 }
 
-function buildRingMenu() {
+function buildRingMenu(items = RING_ITEMS, options = {}) {
   const svgNS = 'http://www.w3.org/2000/svg';
   dom.ringSvg.replaceChildren();
   for (const label of ringLabels) label.remove();
@@ -2201,8 +2619,8 @@ function buildRingMenu() {
   ringUsagePanel = null;
   ringUsageRows = [];
 
-  const step = 360 / RING_ITEMS.length;
-  RING_ITEMS.forEach((item, index) => {
+  const step = 360 / items.length;
+  items.forEach((item, index) => {
     const midAngle = -90 + index * step;
     const start = midAngle - step / 2 + RING_GAP / 2;
     const end = midAngle + step / 2 - RING_GAP / 2;
@@ -2221,6 +2639,8 @@ function buildRingMenu() {
     dom.ringMenu.append(label);
     ringLabels.push(label);
   });
+
+  if (options.usage === false) return;
 
   const usageLayer = el('div', 'ring-usage-layer');
   const panel = el('div', 'ring-usage-panel');
@@ -2277,10 +2697,10 @@ function ringIndexForPoint(x, y) {
   if (distance < RING_DEAD_ZONE || distance > RING_SELECT_RADIUS) return -1;
 
   const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-  const step = 360 / RING_ITEMS.length;
+  const step = 360 / ringItems.length;
   let best = -1;
   let bestDiff = Infinity;
-  for (let i = 0; i < RING_ITEMS.length; i += 1) {
+  for (let i = 0; i < ringItems.length; i += 1) {
     const midAngle = -90 + i * step;
     const diff = Math.abs((((angle - midAngle) % 360) + 540) % 360 - 180);
     if (diff < bestDiff) {
@@ -2291,17 +2711,22 @@ function ringIndexForPoint(x, y) {
   return best;
 }
 
-function openRingMenu(x, y) {
+function openRingMenu(x, y, items = RING_ITEMS, options = {}) {
   if (state.ringOpen) closeRingMenu();
 
+  ringItems = items;
+  buildRingMenu(items, options);
+
+  const halfW = options.usage === false ? 170 : RING_VISUAL_HALF_W;
+  const halfH = options.usage === false ? 170 : RING_VISUAL_HALF_H;
   const margin = 6;
   const cx = Math.min(
-    window.innerWidth - RING_VISUAL_HALF_W - margin,
-    Math.max(RING_VISUAL_HALF_W + margin, x)
+    window.innerWidth - halfW - margin,
+    Math.max(halfW + margin, x)
   );
   const cy = Math.min(
-    window.innerHeight - RING_VISUAL_HALF_H - margin,
-    Math.max(RING_VISUAL_HALF_H + margin, y)
+    window.innerHeight - halfH - margin,
+    Math.max(halfH + margin, y)
   );
 
   ringCenterPoint = { x: cx, y: cy };
@@ -2313,12 +2738,13 @@ function openRingMenu(x, y) {
   document.body.classList.add('ring-open');
   dom.ringMenu.setAttribute('aria-hidden', 'false');
   dom.ringMenu.classList.add('open');
-  void loadUsage();
+  if (options.usage !== false) void loadUsage();
 }
 
 function closeRingMenu() {
   if (!state.ringOpen) return;
   state.ringOpen = false;
+  ringItems = RING_ITEMS;
   updateRingSelection(-1);
   document.body.classList.remove('ring-open');
   dom.ringMenu.classList.remove('open');
@@ -2330,9 +2756,94 @@ function updateRingFromPointer(event) {
   updateRingSelection(ringIndexForPoint(event.clientX, event.clientY));
 }
 
+function openSwitcherRingMenu(event) {
+  const target = event.target instanceof Element ? event.target : null;
+  const projectRow = target?.closest('.project-row');
+  if (projectRow?.dataset.projectId) {
+    const projectId = projectRow.dataset.projectId;
+    if (!state.projects.some((project) => project.id === projectId)) return;
+    openRingMenu(
+      event.clientX,
+      event.clientY,
+      [
+        {
+          label: '改名',
+          icon: RING_ICONS.rename,
+          action: () => openRename('project', projectId),
+        },
+        {
+          label: '删除',
+          icon: RING_ICONS.trash,
+          action: () => confirmDeleteProject(projectId),
+        },
+      ],
+      { usage: false }
+    );
+    return;
+  }
+
+  const card = target?.closest('.switch-card');
+  if (card?.dataset.sessionId) {
+    const sessionId = card.dataset.sessionId;
+    if (!state.sessions.some((session) => session.id === sessionId)) return;
+    openRingMenu(
+      event.clientX,
+      event.clientY,
+      [
+        {
+          label: '改名',
+          icon: RING_ICONS.rename,
+          action: () => openRename('session', sessionId),
+        },
+        {
+          label: '配置 MCP',
+          icon: RING_ICONS.mcp,
+          action: () => openMcpConfigForSession(sessionId),
+        },
+      ],
+      { usage: false }
+    );
+    return;
+  }
+
+  if (!api.isElectron) return;
+  openRingMenu(
+    event.clientX,
+    event.clientY,
+    [
+      {
+        label: '最小化',
+        icon: RING_ICONS.minimize,
+        action: () => api.minimize(),
+      },
+      {
+        label: '最大化',
+        icon: RING_ICONS.maximize,
+        action: () => api.maximize(),
+      },
+      {
+        label: '关闭',
+        icon: RING_ICONS.close,
+        action: () => api.close(),
+      },
+    ],
+    { usage: false }
+  );
+}
+
 function onRightMouseDown(event) {
   if (event.button !== 2) return;
 
+  if (!dom.renameOverlay.classList.contains('hidden')) {
+    closeRename();
+    state.ringSuppress = true;
+    return;
+  }
+  if (!dom.confirmOverlay.classList.contains('hidden')) {
+    closeConfirm();
+    state.ringSuppress = true;
+    return;
+  }
   if (window.mcpOverlayOpen?.()) {
     window.closeMcp?.();
     state.ringSuppress = true;
@@ -2354,7 +2865,7 @@ function onRightMouseDown(event) {
     return;
   }
   if (state.switcherOpen) {
-    closeSwitcher();
+    openSwitcherRingMenu(event);
     state.ringSuppress = true;
     return;
   }
@@ -2370,10 +2881,10 @@ function onRightMouseDown(event) {
 function onRightMouseUp(event) {
   if (event.button !== 2 || !state.ringOpen) return;
   const index = ringIndexForPoint(event.clientX, event.clientY);
+  const item = index >= 0 ? ringItems[index] : null;
   closeRingMenu();
-  if (index < 0) return;
-  const action = RING_ITEMS[index].action;
-  requestAnimationFrame(() => action());
+  if (!item || typeof item.action !== 'function') return;
+  requestAnimationFrame(() => item.action());
 }
 
 const CATALOG_EMPTY = {
@@ -2682,6 +3193,14 @@ function bindEvents() {
       return;
     }
     if (state.ringOpen) return;
+    if (!dom.renameOverlay.classList.contains('hidden')) {
+      closeRename();
+      return;
+    }
+    if (!dom.confirmOverlay.classList.contains('hidden')) {
+      closeConfirm();
+      return;
+    }
     if (window.mcpOverlayOpen?.()) {
       window.closeMcp?.();
       return;
@@ -2731,11 +3250,33 @@ function bindEvents() {
     openSettings();
   });
 
-  $('close-settings').addEventListener('click', closeSettings);
+  $('close-settings')?.addEventListener('click', closeSettings);
   $('done-settings').addEventListener('click', closeSettings);
-  $('close-raw').addEventListener('click', closeRawRequest);
-  dom.catalogClose.addEventListener('click', closeCatalog);
+  $('close-raw')?.addEventListener('click', closeRawRequest);
+  dom.catalogClose?.addEventListener('click', closeCatalog);
   dom.webContentClose?.addEventListener('click', closeWebContent);
+
+  dom.renameCancel.addEventListener('click', closeRename);
+  dom.renameSave.addEventListener('click', saveRename);
+  dom.renameInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.stopPropagation();
+      saveRename();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeRename();
+    }
+  });
+  dom.renameOverlay.addEventListener('click', (event) => {
+    if (event.target === dom.renameOverlay) closeRename();
+  });
+  dom.confirmCancel.addEventListener('click', closeConfirm);
+  dom.confirmOk.addEventListener('click', runConfirm);
+  dom.confirmOverlay.addEventListener('click', (event) => {
+    if (event.target === dom.confirmOverlay) closeConfirm();
+  });
   dom.rawOverlay.addEventListener('click', (event) => {
     if (event.target === dom.rawOverlay) closeRawRequest();
   });
@@ -2754,9 +3295,9 @@ function bindEvents() {
     }
   });
 
-  $('win-min').addEventListener('click', () => api.minimize());
-  $('win-max').addEventListener('click', () => api.maximize());
-  $('win-close').addEventListener('click', () => api.close());
+  $('win-min')?.addEventListener('click', () => api.minimize());
+  $('win-max')?.addEventListener('click', () => api.maximize());
+  $('win-close')?.addEventListener('click', () => api.close());
 
   dom.apiKey.addEventListener('input', () => {
     state.settings.apiKey = dom.apiKey.value;
@@ -2774,6 +3315,20 @@ function bindEvents() {
   });
 
   document.addEventListener('keydown', (event) => {
+    if (!dom.renameOverlay.classList.contains('hidden')) {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        closeRename();
+      }
+      return;
+    }
+    if (!dom.confirmOverlay.classList.contains('hidden')) {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        closeConfirm();
+      }
+      return;
+    }
     if (window.mcpOverlayOpen?.()) {
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
@@ -3060,7 +3615,40 @@ function bindEvents() {
     renderMessages();
   });
 
-  api.onChatToolCall(({ requestId, name, arguments: args, round }) => {
+  api.onChatTiming(({ requestId, round, channel, firstTokenMs }) => {
+    if (requestId !== state.requestId || !state.streamMessage) return;
+    const msg = state.streamMessage;
+    if (!msg.usage || typeof msg.usage !== 'object') {
+      msg.usage = { hit: 0, miss: 0, output: 0, rounds: {} };
+    }
+    if (!msg.usage.rounds || typeof msg.usage.rounds !== 'object') {
+      msg.usage.rounds = {};
+    }
+    const metrics = { ...(msg.usage.rounds[round] || {}) };
+    if (channel === 'thinking') metrics.firstThinkingMs = firstTokenMs;
+    else metrics.firstContentMs = firstTokenMs;
+    msg.usage.rounds[round] = metrics;
+
+    const session = currentSession();
+    if (!session || !session.msgs.includes(msg)) return;
+    const stepKind = channel === 'thinking' ? 'thinking' : 'text';
+    const stepIndex = (msg.steps || []).findIndex(
+      (step) => step.kind === stepKind && step.round === round
+    );
+    if (stepIndex < 0) return;
+    const card = cardByKey(
+      stepCardKey(session.msgs.indexOf(msg), stepIndex)
+    );
+    const timingNode = card?.querySelector('.card-timing');
+    if (timingNode) {
+      timingNode.textContent = formatLlmTiming(
+        metrics,
+        channel === 'thinking'
+      );
+    }
+  });
+
+  api.onChatToolCall(({ requestId, name, arguments: args, round, startedAt }) => {
     if (requestId !== state.requestId || !state.streamMessage) return;
     if (!Array.isArray(state.streamMessage.steps)) {
       state.streamMessage.steps = [];
@@ -3070,6 +3658,9 @@ function bindEvents() {
       name: String(name || 'tool'),
       arguments: String(args ?? ''),
       round: Number.isInteger(round) ? round : 0,
+      metrics: Number.isFinite(Number(startedAt))
+        ? { startedAt: Number(startedAt) }
+        : null,
     });
     saveChatsSoon();
 
@@ -3079,7 +3670,7 @@ function bindEvents() {
     renderMessages();
   });
 
-  api.onChatToolResult(({ requestId, name, output, ok, round }) => {
+  api.onChatToolResult(({ requestId, name, output, ok, round, startedAt, durationMs }) => {
     if (requestId !== state.requestId || !state.streamMessage) return;
     if (!Array.isArray(state.streamMessage.steps)) {
       state.streamMessage.steps = [];
@@ -3090,6 +3681,14 @@ function bindEvents() {
       output: String(output ?? ''),
       ok: ok !== false,
       round: Number.isInteger(round) ? round : 0,
+      metrics: {
+        startedAt: Number.isFinite(Number(startedAt))
+          ? Number(startedAt)
+          : undefined,
+        durationMs: Number.isFinite(Number(durationMs))
+          ? Number(durationMs)
+          : undefined,
+      },
     });
     saveChatsSoon();
 
@@ -3178,6 +3777,7 @@ async function boot() {
         title: 'Chat 1',
         system: DEFAULT_SYSTEM_PROMPT,
         projectId: DEFAULT_PROJECT.id,
+        mcpDisabled: [],
         msgs: [],
       },
     ];
@@ -3198,6 +3798,7 @@ async function boot() {
   renderAll();
   updateSendState();
   void loadUsage();
+  void loadMcpServers();
 }
 
 boot();

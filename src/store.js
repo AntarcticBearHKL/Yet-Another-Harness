@@ -13,7 +13,7 @@ const { DatabaseSync } = require('node:sqlite');
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 6;
 const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
 
 let dataDir = null;
@@ -84,13 +84,19 @@ function normalizeStep(step) {
   if (!step || typeof step !== 'object') return null;
   const kind = String(step.kind ?? '');
   const round = Number.isInteger(step.round) ? step.round : 0;
+  const metrics =
+    step.metrics && typeof step.metrics === 'object' ? step.metrics : null;
   if (kind === 'text') {
     const text = String(step.text ?? '');
-    return text ? { kind: 'text', text, round } : null;
+    return text
+      ? { kind: 'text', text, round, ...(metrics ? { metrics } : {}) }
+      : null;
   }
   if (kind === 'thinking') {
     const text = String(step.text ?? '');
-    return text ? { kind: 'thinking', text, round } : null;
+    return text
+      ? { kind: 'thinking', text, round, ...(metrics ? { metrics } : {}) }
+      : null;
   }
   if (kind === 'call') {
     const name = String(step.name ?? '');
@@ -100,6 +106,7 @@ function normalizeStep(step) {
           name,
           arguments: String(step.arguments ?? ''),
           round,
+          ...(metrics ? { metrics } : {}),
         }
       : null;
   }
@@ -112,6 +119,7 @@ function normalizeStep(step) {
           output: String(step.output ?? ''),
           ok: step.ok !== false,
           round,
+          ...(metrics ? { metrics } : {}),
         }
       : null;
   }
@@ -186,6 +194,9 @@ function normalizeChats(raw) {
         title: String(session.title || `Chat ${index + 1}`),
         system: String(session.system ?? DEFAULT_SYSTEM_PROMPT),
         projectId,
+        mcpDisabled: Array.isArray(session.mcpDisabled)
+          ? session.mcpDisabled.map(String).filter(Boolean)
+          : [],
         msgs,
       };
     });
@@ -283,6 +294,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   title TEXT NOT NULL,
   system TEXT NOT NULL,
   project_id TEXT,
+  mcp_disabled TEXT,
   sort_order INTEGER NOT NULL,
   content_hash TEXT NOT NULL,
   updated_at INTEGER NOT NULL
@@ -310,6 +322,7 @@ CREATE TABLE IF NOT EXISTS steps (
   output TEXT,
   ok INTEGER NOT NULL DEFAULT 1,
   label TEXT,
+  metrics TEXT,
   PRIMARY KEY (session_id, message_seq, seq),
   FOREIGN KEY (session_id, message_seq)
     REFERENCES messages(session_id, seq) ON DELETE CASCADE
@@ -397,6 +410,17 @@ function ensureSchema(database) {
       database.exec('ALTER TABLE sessions ADD COLUMN project_id TEXT');
     }
 
+    // v4 -> v5: per-session disabled MCP server ids.
+    if (!columns.some((column) => column.name === 'mcp_disabled')) {
+      database.exec('ALTER TABLE sessions ADD COLUMN mcp_disabled TEXT');
+    }
+
+    // v5 -> v6: per-step timing metrics.
+    const stepColumns = database.prepare('PRAGMA table_info(steps)').all();
+    if (!stepColumns.some((column) => column.name === 'metrics')) {
+      database.exec('ALTER TABLE steps ADD COLUMN metrics TEXT');
+    }
+
     // v3 -> v4: token usage attached to agent messages.
     const messageColumns = database.prepare('PRAGMA table_info(messages)').all();
     if (!messageColumns.some((column) => column.name === 'usage')) {
@@ -464,6 +488,7 @@ function hashSession(session) {
         title: session.title,
         system: session.system,
         projectId: session.projectId,
+        mcpDisabled: session.mcpDisabled || [],
         msgs: session.msgs,
       })
     )
@@ -482,7 +507,7 @@ function readChats() {
 
   const sessionRows = database
     .prepare(
-      'SELECT id, title, system, project_id FROM sessions ORDER BY sort_order ASC'
+      'SELECT id, title, system, project_id, mcp_disabled FROM sessions ORDER BY sort_order ASC'
     )
     .all();
   if (sessionRows.length === 0) {
@@ -501,7 +526,7 @@ function readChats() {
     .all();
   const stepRows = database
     .prepare(
-      `SELECT session_id, message_seq, seq, kind, round, text, name, arguments, output, ok, label
+      `SELECT session_id, message_seq, seq, kind, round, text, name, arguments, output, ok, label, metrics
        FROM steps ORDER BY session_id, message_seq, seq`
     )
     .all();
@@ -513,18 +538,32 @@ function readChats() {
     .all();
 
   const bySession = new Map(
-    sessionRows.map((row) => [
-      row.id,
-      {
-        id: row.id,
-        title: row.title,
-        system: row.system,
-        projectId: projectIds.has(row.project_id)
-          ? row.project_id
-          : projects[0].id,
-        msgs: [],
-      },
-    ])
+    sessionRows.map((row) => {
+      let mcpDisabled = [];
+      if (row.mcp_disabled) {
+        try {
+          const parsed = JSON.parse(row.mcp_disabled);
+          if (Array.isArray(parsed)) {
+            mcpDisabled = parsed.map(String).filter(Boolean);
+          }
+        } catch {
+          /* ignore malformed mcp_disabled */
+        }
+      }
+      return [
+        row.id,
+        {
+          id: row.id,
+          title: row.title,
+          system: row.system,
+          projectId: projectIds.has(row.project_id)
+            ? row.project_id
+            : projects[0].id,
+          mcpDisabled,
+          msgs: [],
+        },
+      ];
+    })
   );
   const messageByKey = new Map();
 
@@ -556,16 +595,36 @@ function readChats() {
     );
     if (!msg) continue;
     const round = Number(row.round) || 0;
+    let metrics = null;
+    if (row.metrics) {
+      try {
+        const parsed = JSON.parse(row.metrics);
+        if (parsed && typeof parsed === 'object') metrics = parsed;
+      } catch {
+        /* ignore malformed step metrics */
+      }
+    }
     if (row.kind === 'text') {
-      msg.steps.push({ kind: 'text', text: String(row.text ?? ''), round });
+      msg.steps.push({
+        kind: 'text',
+        text: String(row.text ?? ''),
+        round,
+        ...(metrics ? { metrics } : {}),
+      });
     } else if (row.kind === 'thinking') {
-      msg.steps.push({ kind: 'thinking', text: String(row.text ?? ''), round });
+      msg.steps.push({
+        kind: 'thinking',
+        text: String(row.text ?? ''),
+        round,
+        ...(metrics ? { metrics } : {}),
+      });
     } else if (row.kind === 'call') {
       msg.steps.push({
         kind: 'call',
         name: String(row.name ?? ''),
         arguments: String(row.arguments ?? ''),
         round,
+        ...(metrics ? { metrics } : {}),
       });
     } else if (row.kind === 'result') {
       msg.steps.push({
@@ -574,6 +633,7 @@ function readChats() {
         output: String(row.output ?? ''),
         ok: Boolean(row.ok),
         round,
+        ...(metrics ? { metrics } : {}),
       });
     } else if (row.kind === 'status') {
       msg.steps.push({
@@ -631,12 +691,13 @@ function writeChats(chats) {
   );
 
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, project_id, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, project_id, mcp_disabled, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
        project_id = excluded.project_id,
+       mcp_disabled = excluded.mcp_disabled,
        sort_order = excluded.sort_order,
        content_hash = excluded.content_hash,
        updated_at = excluded.updated_at`
@@ -663,8 +724,8 @@ function writeChats(chats) {
   );
   const insertStep = database.prepare(
     `INSERT INTO steps
-       (session_id, message_seq, seq, kind, round, text, name, arguments, output, ok, label)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (session_id, message_seq, seq, kind, round, text, name, arguments, output, ok, label, metrics)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertRequest = database.prepare(
     'INSERT INTO requests (session_id, message_seq, round, body) VALUES (?, ?, ?, ?)'
@@ -693,6 +754,7 @@ function writeChats(chats) {
         session.title,
         session.system,
         session.projectId,
+        JSON.stringify(session.mcpDisabled || []),
         order,
         hash,
         now
@@ -723,7 +785,8 @@ function writeChats(chats) {
             step.arguments ?? null,
             step.output ?? null,
             step.ok === false ? 0 : 1,
-            step.label ?? null
+            step.label ?? null,
+            step.metrics ? JSON.stringify(step.metrics) : null
           );
         });
         (msg.requests || []).forEach((body, round) => {
@@ -810,6 +873,7 @@ function metadataHash(session) {
         title: session.title,
         system: session.system,
         projectId: session.projectId,
+        mcpDisabled: session.mcpDisabled || [],
       })
     )
     .digest('hex');
@@ -831,12 +895,13 @@ function saveStructure(chats) {
        sort_order = excluded.sort_order`
   );
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, project_id, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, project_id, mcp_disabled, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
        project_id = excluded.project_id,
+       mcp_disabled = excluded.mcp_disabled,
        sort_order = excluded.sort_order,
        content_hash = excluded.content_hash,
        updated_at = excluded.updated_at`
@@ -844,26 +909,52 @@ function saveStructure(chats) {
   const updateState = database.prepare(
     'UPDATE app_state SET current_session_id = ?, title_seq = ? WHERE id = 1'
   );
+  const deleteSession = database.prepare('DELETE FROM sessions WHERE id = ?');
+  const deleteProject = database.prepare('DELETE FROM projects WHERE id = ?');
+  const existingSessions = new Set(
+    database
+      .prepare('SELECT id FROM sessions')
+      .all()
+      .map((row) => row.id)
+  );
+  const existingProjects = new Set(
+    database
+      .prepare('SELECT id FROM projects')
+      .all()
+      .map((row) => row.id)
+  );
 
   const now = Date.now();
+  const incomingSessions = new Set();
+  const incomingProjects = new Set();
 
   database.exec('BEGIN IMMEDIATE');
   try {
     normalized.projects.forEach((project, order) => {
+      incomingProjects.add(project.id);
       upsertProject.run(project.id, project.name, order);
     });
 
     normalized.sessions.forEach((session, order) => {
+      incomingSessions.add(session.id);
       upsertSession.run(
         session.id,
         session.title,
         session.system,
         session.projectId,
+        JSON.stringify(session.mcpDisabled || []),
         order,
         metadataHash(session),
         now
       );
     });
+
+    for (const id of existingSessions) {
+      if (!incomingSessions.has(id)) deleteSession.run(id);
+    }
+    for (const id of existingProjects) {
+      if (!incomingProjects.has(id)) deleteProject.run(id);
+    }
 
     const current = normalized.sessions[normalized.current];
     updateState.run(current ? current.id : null, normalized.seq);
@@ -929,8 +1020,8 @@ function updateMessage(sessionId, seq, msg) {
   );
   const insertStep = database.prepare(
     `INSERT INTO steps
-       (session_id, message_seq, seq, kind, round, text, name, arguments, output, ok, label)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (session_id, message_seq, seq, kind, round, text, name, arguments, output, ok, label, metrics)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const deleteRequests = database.prepare(
     'DELETE FROM requests WHERE session_id = ? AND message_seq = ?'
@@ -965,7 +1056,8 @@ function updateMessage(sessionId, seq, msg) {
         step.arguments ?? null,
         step.output ?? null,
         step.ok === false ? 0 : 1,
-        step.label ?? null
+        step.label ?? null,
+        step.metrics ? JSON.stringify(step.metrics) : null
       );
     });
 

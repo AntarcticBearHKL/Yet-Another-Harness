@@ -237,6 +237,7 @@ function closeMcp() {
   mcpDisconnectEvents();
   mcpDom.overlay.classList.add('hidden');
   mcpDom.overlay.setAttribute('aria-hidden', 'true');
+  window.loadMcpServers?.(true);
 }
 
 /* ------------------------------------------------------------------- events */
@@ -2429,7 +2430,7 @@ async function mcpRemoveServer() {
 /* ------------------------------------------------------------------ wiring */
 
 function mcpBindEvents() {
-  mcpDom.close.addEventListener('click', closeMcp);
+  mcpDom.close?.addEventListener('click', closeMcp);
   mcpDom.add.addEventListener('click', () => mcpOpenForm(null));
   mcpDom.refresh.addEventListener('click', () => void mcpRefreshCapabilities());
   mcpDom.reconnect.addEventListener('click', () => void mcpReconnect());
@@ -2448,7 +2449,7 @@ function mcpBindEvents() {
     mcpRenderDetail();
   });
 
-  mcpDom.formClose.addEventListener('click', mcpCloseForm);
+  mcpDom.formClose?.addEventListener('click', mcpCloseForm);
   mcpDom.formCancel.addEventListener('click', mcpCloseForm);
   mcpDom.formSave.addEventListener('click', () => void mcpSaveForm());
   mcpDom.formModeForm.addEventListener('click', () => mcpSetFormMode('form'));

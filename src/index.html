@@ -13,24 +13,6 @@
   </head>
   <body>
     <div id="app">
-      <div id="window-controls">
-        <button id="win-min" class="win-btn" aria-label="Minimize">
-          <svg viewBox="0 0 10 10" aria-hidden="true">
-            <path d="M1 5h8" />
-          </svg>
-        </button>
-        <button id="win-max" class="win-btn" aria-label="Maximize">
-          <svg viewBox="0 0 10 10" aria-hidden="true">
-            <rect x="1" y="1" width="8" height="8" />
-          </svg>
-        </button>
-        <button id="win-close" class="win-btn close" aria-label="Close">
-          <svg viewBox="0 0 10 10" aria-hidden="true">
-            <path d="M1 1l8 8M9 1L1 9" />
-          </svg>
-        </button>
-      </div>
-
       <div id="shell">
         <main id="main">
           <section id="messages" class="messages" aria-live="polite"></section>
@@ -79,16 +61,6 @@
       </div>
       <div class="edge-blur edge-blur-short edge-blur-top" aria-hidden="true"></div>
       <div class="edge-blur edge-blur-short edge-blur-bottom" aria-hidden="true"></div>
-      <button
-        id="catalog-close"
-        class="icon-btn catalog-close"
-        type="button"
-        aria-label="Close"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M6 6l12 12M18 6L6 18" />
-        </svg>
-      </button>
     </div>
 
     <div
@@ -170,16 +142,6 @@
         class="edge-blur edge-blur-short edge-blur-bottom"
         aria-hidden="true"
       ></div>
-      <button
-        id="mcp-close"
-        class="icon-btn mcp-close"
-        type="button"
-        aria-label="Close"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M6 6l12 12M18 6L6 18" />
-        </svg>
-      </button>
       <div id="mcp-toast" class="mcp-toast hidden" aria-live="polite"></div>
     </div>
 
@@ -188,9 +150,6 @@
         <div class="overlay-head">
           <h2 id="mcp-form-title">ADD MCP SERVER</h2>
           <span id="mcp-form-subtitle" class="muted small"></span>
-          <button id="mcp-form-close" class="pill compact" type="button">
-            Close
-          </button>
         </div>
         <div class="divider"></div>
         <div class="mcp-form-scroll">
@@ -356,16 +315,6 @@
     <div id="web-content" class="web-content hidden" aria-hidden="true">
       <div class="web-content-head">
         <span id="web-content-title">CONTENT</span>
-        <button
-          id="web-content-close"
-          class="icon-btn"
-          type="button"
-          aria-label="Close"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        </button>
       </div>
       <div id="web-content-body" class="web-content-body"></div>
       <div class="edge-blur edge-blur-top" aria-hidden="true"></div>
@@ -418,11 +367,66 @@
       <div class="edge-blur edge-blur-short edge-blur-bottom" aria-hidden="true"></div>
     </div>
 
+    <div id="rename-overlay" class="overlay hidden" aria-hidden="true">
+      <div class="overlay-panel rename-panel">
+        <div class="overlay-head">
+          <h2 id="rename-title">RENAME</h2>
+        </div>
+        <div class="divider"></div>
+        <input
+          id="rename-input"
+          class="text-input"
+          type="text"
+          spellcheck="false"
+          autocomplete="off"
+        />
+        <div class="overlay-actions">
+          <button id="rename-cancel" class="pill" type="button">Cancel</button>
+          <button id="rename-save" class="pill primary" type="button">
+            Save
+          </button>
+        </div>
+        <div
+          class="edge-blur edge-blur-short edge-blur-top"
+          aria-hidden="true"
+        ></div>
+        <div
+          class="edge-blur edge-blur-short edge-blur-bottom"
+          aria-hidden="true"
+        ></div>
+      </div>
+    </div>
+
+    <div id="confirm-overlay" class="overlay hidden" aria-hidden="true">
+      <div class="overlay-panel confirm-panel">
+        <div class="overlay-head">
+          <h2 id="confirm-title">DELETE</h2>
+        </div>
+        <div class="divider"></div>
+        <p id="confirm-text" class="confirm-text"></p>
+        <div class="overlay-actions">
+          <button id="confirm-cancel" class="pill" type="button">
+            Cancel
+          </button>
+          <button id="confirm-ok" class="pill danger-solid" type="button">
+            Delete
+          </button>
+        </div>
+        <div
+          class="edge-blur edge-blur-short edge-blur-top"
+          aria-hidden="true"
+        ></div>
+        <div
+          class="edge-blur edge-blur-short edge-blur-bottom"
+          aria-hidden="true"
+        ></div>
+      </div>
+    </div>
+
     <div id="settings-overlay" class="overlay hidden">
       <div class="overlay-panel settings-panel">
         <div class="overlay-head">
           <h2>SETTINGS</h2>
-          <button id="close-settings" class="pill compact">Close</button>
         </div>
         <div class="divider"></div>
 
@@ -472,7 +476,6 @@
         <div class="overlay-head">
           <h2>RAW REQUEST BODY</h2>
           <span id="raw-meta" class="muted small"></span>
-          <button id="close-raw" class="pill compact">Close</button>
         </div>
         <div class="divider"></div>
         <div id="raw-body" class="raw-body"></div>

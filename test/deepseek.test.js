@@ -205,6 +205,32 @@ test('token usage normalizes cache hit and miss', () => {
   );
 });
 
+test('timing metrics split reasoning and content', () => {
+  const metrics = deepseek.timingMetrics({
+    usage: {
+      completion_tokens: 100,
+      completion_tokens_details: { reasoning_tokens: 40 },
+    },
+    timing: {
+      startedAt: 1000,
+      finishedAt: 11000,
+      firstReasoningAt: 1500,
+      lastReasoningAt: 3500,
+      firstContentAt: 4000,
+      lastContentAt: 9000,
+      contentChars: 300,
+      reasoningChars: 120,
+    },
+  });
+  assert.equal(metrics.firstThinkingMs, 500);
+  assert.equal(metrics.firstContentMs, 3000);
+  assert.equal(metrics.thinkingTokens, 40);
+  assert.equal(metrics.outputTokens, 60);
+  assert.equal(metrics.thinkingTps, 20);
+  assert.equal(metrics.outputTps, 12);
+  assert.equal(metrics.durationMs, 10000);
+});
+
 test('SSE done and comments are skipped', () => {
   assert.deepEqual(deepseek.parseSseLine('data: [DONE]'), [{ type: 'done' }]);
   assert.deepEqual(deepseek.parseSseLine(': keep-alive'), []);

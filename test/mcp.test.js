@@ -205,6 +205,12 @@ test('registry exposes MCP tools and routes calls', async () => {
     assert.match(mcpDef.function.description, /Demo Server/);
     assert.equal(mcpDef.function.parameters.required[0], 'path');
 
+    const filtered = tools.definitions({ mcpDisabled: ['s1'] });
+    assert.equal(
+      filtered.some((def) => def.function.name.startsWith('mcp__')),
+      false
+    );
+
     const output = await tools.execute(
       mcpDef.function.name,
       JSON.stringify({ path: 'a.txt' })

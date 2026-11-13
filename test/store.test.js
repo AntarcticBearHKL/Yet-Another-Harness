@@ -307,6 +307,136 @@ test('structure saves keep messages and run events', () => {
   });
 });
 
+test('session MCP switches and step metrics round-trip', () => {
+  withStoreDir(() => {
+    store.saveChats({
+      projects: [{ id: 'p1', name: 'Project 1' }],
+      sessions: [
+        {
+          id: 's1',
+          title: 'Chat 1',
+          system: 'sys',
+          projectId: 'p1',
+          mcpDisabled: ['m1', 'm2'],
+          msgs: [
+            { role: 'User', text: 'hi', request: null, steps: [], requests: [] },
+            {
+              role: 'Agent',
+              text: 'done',
+              request: '',
+              steps: [
+                {
+                  kind: 'call',
+                  name: 'read_file',
+                  arguments: '{}',
+                  round: 0,
+                  metrics: { startedAt: 100 },
+                },
+                {
+                  kind: 'result',
+                  name: 'read_file',
+                  output: 'ok',
+                  ok: true,
+                  round: 0,
+                  metrics: { startedAt: 100, durationMs: 250 },
+                },
+              ],
+              requests: [],
+            },
+          ],
+        },
+      ],
+      current: 0,
+      seq: 1,
+    });
+
+    let loaded = store.loadChats();
+    assert.deepEqual(loaded.sessions[0].mcpDisabled, ['m1', 'm2']);
+    assert.deepEqual(loaded.sessions[0].msgs[1].steps[0].metrics, {
+      startedAt: 100,
+    });
+    assert.deepEqual(loaded.sessions[0].msgs[1].steps[1].metrics, {
+      startedAt: 100,
+      durationMs: 250,
+    });
+
+    store.saveStructure({
+      projects: [{ id: 'p1', name: 'Project 1' }],
+      sessions: [
+        {
+          id: 's1',
+          title: 'Chat 1',
+          system: 'sys',
+          projectId: 'p1',
+          mcpDisabled: ['m2'],
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 1,
+    });
+
+    loaded = store.loadChats();
+    assert.deepEqual(loaded.sessions[0].mcpDisabled, ['m2']);
+    assert.equal(loaded.sessions[0].msgs.length, 2);
+  });
+});
+
+test('structure saves drop removed projects and their sessions', () => {
+  withStoreDir(() => {
+    store.saveChats({
+      projects: [
+        { id: 'p1', name: 'Keep' },
+        { id: 'p2', name: 'Drop' },
+      ],
+      sessions: [
+        {
+          id: 's1',
+          title: 'Keep Chat',
+          system: 'sys',
+          projectId: 'p1',
+          msgs: [{ role: 'User', text: 'hi', request: null, steps: [], requests: [] }],
+        },
+        {
+          id: 's2',
+          title: 'Drop Chat',
+          system: 'sys',
+          projectId: 'p2',
+          msgs: [{ role: 'User', text: 'bye', request: null, steps: [], requests: [] }],
+        },
+      ],
+      current: 0,
+      seq: 2,
+    });
+
+    store.saveStructure({
+      projects: [{ id: 'p1', name: 'Keep' }],
+      sessions: [
+        {
+          id: 's1',
+          title: 'Keep Chat',
+          system: 'sys',
+          projectId: 'p1',
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 2,
+    });
+
+    const loaded = store.loadChats();
+    assert.deepEqual(
+      loaded.projects.map((project) => project.id),
+      ['p1']
+    );
+    assert.deepEqual(
+      loaded.sessions.map((session) => session.id),
+      ['s1']
+    );
+    assert.equal(loaded.sessions[0].msgs.length, 1);
+  });
+});
+
 test('legacy chats.json migrates into sqlite and is kept as a backup', () => {
   withStoreDir((dir) => {
     fs.writeFileSync(

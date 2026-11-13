@@ -93,22 +93,31 @@ function buildEntries() {
   return entries;
 }
 
-function definitions() {
-  return buildEntries().map((entry) => {
-    const label = entry.title ? `${entry.title} (${entry.toolName})` : entry.toolName;
-    const prefix = `MCP server "${entry.serverName}" · tool "${label}".`;
-    const description = entry.description
-      ? `${prefix} ${entry.description}`
-      : prefix;
-    return {
-      type: 'function',
-      function: {
-        name: entry.name,
-        description: description.slice(0, 1024),
-        parameters: entry.schema,
-      },
-    };
-  });
+function definitions(options = {}) {
+  const disabled = new Set(
+    Array.isArray(options.disabledServerIds)
+      ? options.disabledServerIds.map(String)
+      : []
+  );
+  return buildEntries()
+    .filter((entry) => !disabled.has(String(entry.serverId)))
+    .map((entry) => {
+      const label = entry.title
+        ? `${entry.title} (${entry.toolName})`
+        : entry.toolName;
+      const prefix = `MCP server "${entry.serverName}" · tool "${label}".`;
+      const description = entry.description
+        ? `${prefix} ${entry.description}`
+        : prefix;
+      return {
+        type: 'function',
+        function: {
+          name: entry.name,
+          description: description.slice(0, 1024),
+          parameters: entry.schema,
+        },
+      };
+    });
 }
 
 function findEntry(name) {

@@ -100,13 +100,13 @@ function messagesFromHistory(
   return messages;
 }
 
-function requestBody(messages) {
+function requestBody(messages, options = {}) {
   return {
     model: MODEL,
     messages,
     stream: true,
     stream_options: { include_usage: true },
-    tools: tools.definitions(),
+    tools: tools.definitions({ mcpDisabled: options.mcpDisabled }),
     tool_choice: 'auto',
   };
 }
@@ -128,6 +128,58 @@ function tokenUsage(usage) {
     ? missValue
     : Math.max(0, prompt - hit);
   return { hit, miss, output };
+}
+
+function timingMetrics(result) {
+  const timing = result?.timing;
+  if (!timing) return null;
+  const total = tokenUsage(result.usage);
+  const reasoningTokens =
+    Number(
+      result.usage?.completion_tokens_details?.reasoning_tokens ??
+        result.usage?.output_tokens_details?.reasoning_tokens
+    ) || 0;
+  const contentChars = Number(timing.contentChars) || 0;
+  const reasoningChars = Number(timing.reasoningChars) || 0;
+  const totalChars = contentChars + reasoningChars;
+  let totalTokens = total.output;
+  if (!totalTokens && totalChars) {
+    totalTokens = totalChars / 4;
+  }
+  let thinkingTokens = Math.min(totalTokens, reasoningTokens);
+  let outputTokens = Math.max(0, totalTokens - thinkingTokens);
+  if (!reasoningTokens && totalChars > 0 && totalTokens > 0) {
+    const ratio = reasoningChars / totalChars;
+    thinkingTokens = totalTokens * ratio;
+    outputTokens = totalTokens - thinkingTokens;
+  }
+  const thinkingDuration =
+    timing.firstReasoningAt && timing.lastReasoningAt
+      ? timing.lastReasoningAt - timing.firstReasoningAt
+      : 0;
+  const contentDuration =
+    timing.firstContentAt && timing.lastContentAt
+      ? timing.lastContentAt - timing.firstContentAt
+      : 0;
+  return {
+    firstThinkingMs: timing.firstReasoningAt
+      ? timing.firstReasoningAt - timing.startedAt
+      : null,
+    firstContentMs: timing.firstContentAt
+      ? timing.firstContentAt - timing.startedAt
+      : null,
+    thinkingTokens: Math.round(thinkingTokens * 10) / 10,
+    outputTokens: Math.round(outputTokens * 10) / 10,
+    thinkingTps:
+      thinkingDuration > 0
+        ? thinkingTokens / (thinkingDuration / 1000)
+        : null,
+    outputTps:
+      contentDuration > 0
+        ? outputTokens / (contentDuration / 1000)
+        : null,
+    durationMs: timing.finishedAt - timing.startedAt,
+  };
 }
 
 /** 解析一行 SSE，返回 0..N 个事件（一行里可能同时有 content 和 tool_calls）。 */
@@ -207,10 +259,18 @@ class ToolCallBuilder {
   }
 }
 
-async function streamChat({ apiKey, body, onDelta, signal, sessionId }) {
+async function streamChat({
+  apiKey,
+  body,
+  onDelta,
+  onFirstToken,
+  signal,
+  sessionId,
+}) {
   const key = String(apiKey || '').trim();
   if (!key) throw new Error('missing API key');
 
+  const startedAt = Date.now();
   const response = await fetch(ENDPOINT, {
     method: 'POST',
     headers: {
@@ -238,13 +298,33 @@ async function streamChat({ apiKey, body, onDelta, signal, sessionId }) {
   let reasoning = '';
   let usage = null;
   let done = false;
+  let firstContentAt = 0;
+  let firstReasoningAt = 0;
+  let lastContentAt = 0;
+  let lastReasoningAt = 0;
+  let contentChars = 0;
+  let reasoningChars = 0;
 
   const handleLine = (line) => {
     for (const event of parseSseLine(line)) {
       if (event.type === 'content') {
+        const now = Date.now();
+        if (!firstContentAt) {
+          firstContentAt = now;
+          onFirstToken?.('content', now - startedAt);
+        }
+        lastContentAt = now;
+        contentChars += event.text.length;
         content += event.text;
         onDelta?.(event.text, false);
       } else if (event.type === 'reasoning') {
+        const now = Date.now();
+        if (!firstReasoningAt) {
+          firstReasoningAt = now;
+          onFirstToken?.('thinking', now - startedAt);
+        }
+        lastReasoningAt = now;
+        reasoningChars += event.text.length;
         reasoning += event.text;
         onDelta?.(event.text, true);
       } else if (event.type === 'tool') {
@@ -282,7 +362,22 @@ async function streamChat({ apiKey, body, onDelta, signal, sessionId }) {
   if (!content && !reasoning && toolCalls.length === 0) {
     throw new Error('model returned an empty reply');
   }
-  return { content, reasoning, toolCalls, usage };
+  return {
+    content,
+    reasoning,
+    toolCalls,
+    usage,
+    timing: {
+      startedAt,
+      finishedAt: Date.now(),
+      firstContentAt,
+      firstReasoningAt,
+      lastContentAt,
+      lastReasoningAt,
+      contentChars,
+      reasoningChars,
+    },
+  };
 }
 
 /**
@@ -311,9 +406,11 @@ async function runAgent({
   apiKey,
   system,
   history,
+  mcpDisabled,
   onDelta,
   onRequest,
   onUsage,
+  onTiming,
   onToolCall,
   onToolResult,
   signal,
@@ -335,7 +432,7 @@ async function runAgent({
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     activeRound = round;
-    const body = requestBody(messages);
+    const body = requestBody(messages, { mcpDisabled });
     onRequest?.(structuredClone(body), round);
 
     const result = await streamChat({
@@ -344,9 +441,11 @@ async function runAgent({
       signal,
       sessionId,
       onDelta: emitDelta,
+      onFirstToken: (channel, firstTokenMs) =>
+        onTiming?.({ round, channel, firstTokenMs }),
     });
 
-    if (result.usage) onUsage?.(tokenUsage(result.usage), round);
+    onUsage?.(tokenUsage(result.usage), round, timingMetrics(result));
 
     if (result.toolCalls.length === 0) {
       return finalText;
@@ -362,10 +461,12 @@ async function runAgent({
     }
 
     for (const call of result.toolCalls) {
+      const startedAt = Date.now();
       onToolCall?.({
         name: call.name,
         arguments: call.arguments,
         round,
+        startedAt,
       });
       const output = await tools.execute(call.name, call.arguments);
       onToolResult?.({
@@ -374,6 +475,8 @@ async function runAgent({
         output,
         ok: !/^tool error/i.test(output),
         round,
+        startedAt,
+        durationMs: Date.now() - startedAt,
       });
       messages.push({
         role: 'tool',
@@ -405,6 +508,7 @@ module.exports = {
   messagesFromHistory,
   requestBody,
   tokenUsage,
+  timingMetrics,
   parseSseLine,
   ToolCallBuilder,
   streamChat,

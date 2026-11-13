@@ -145,6 +145,9 @@ function startRun({ sessionId, text, runId }) {
       apiKey,
       system: session.system || '',
       history,
+      mcpDisabled: Array.isArray(session.mcpDisabled)
+        ? session.mcpDisabled
+        : [],
       sessionId,
       signal: state.controller.signal,
       onDelta: (delta, round, reasoning) => {
@@ -167,15 +170,30 @@ function startRun({ sessionId, text, runId }) {
         emit(sessionId, id, 'request.body', { round, body });
         schedulePersist(state);
       },
-      onUsage: (usage, round) => {
-        const previous = agent.usage || { hit: 0, miss: 0, output: 0 };
+      onUsage: (usage, round, timing) => {
+        const previous = agent.usage || {
+          hit: 0,
+          miss: 0,
+          output: 0,
+          rounds: {},
+        };
+        const rounds = { ...(previous.rounds || {}) };
+        if (timing) rounds[round] = { ...timing, ...usage };
         agent.usage = {
           hit: (previous.hit || 0) + (usage.hit || 0),
           miss: (previous.miss || 0) + (usage.miss || 0),
           output: (previous.output || 0) + (usage.output || 0),
+          rounds,
         };
-        emit(sessionId, id, 'usage', { usage: agent.usage, round });
+        emit(sessionId, id, 'usage', {
+          usage: agent.usage,
+          round,
+          timing,
+        });
         schedulePersist(state);
+      },
+      onTiming: (timing) => {
+        emit(sessionId, id, 'assistant.timing', timing);
       },
       onToolCall: (call) => {
         agent.steps.push({
@@ -183,6 +201,7 @@ function startRun({ sessionId, text, runId }) {
           name: call.name,
           arguments: call.arguments,
           round: call.round,
+          metrics: { startedAt: call.startedAt },
         });
         emit(sessionId, id, 'tool.call', call);
         schedulePersist(state);
@@ -194,6 +213,10 @@ function startRun({ sessionId, text, runId }) {
           output: result.output,
           ok: result.ok,
           round: result.round,
+          metrics: {
+            startedAt: result.startedAt,
+            durationMs: result.durationMs,
+          },
         });
         emit(sessionId, id, 'tool.result', result);
         schedulePersist(state);
