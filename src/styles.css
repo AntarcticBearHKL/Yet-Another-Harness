@@ -432,6 +432,29 @@ body.maximized .web-content {
   font-weight: 600;
 }
 
+.project-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 38px;
+  margin-top: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--faint);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.project-add:hover {
+  background: var(--hover);
+  color: var(--accent);
+}
+
 .switch-card {
   position: relative;
   display: flex;

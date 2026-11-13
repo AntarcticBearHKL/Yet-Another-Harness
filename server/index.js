@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 
 const store = require('../src/store');
 const tools = require('../src/tools');
+const deepseek = require('../src/deepseek');
 const runner = require('./runner');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -122,6 +123,53 @@ function settingsView() {
   return { hasApiKey, apiKey: '' };
 }
 
+function titleFallback(text) {
+  const line = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!line) return 'New chat';
+  return line.length > 28 ? `${line.slice(0, 27)}…` : line;
+}
+
+function cleanTitle(raw, text) {
+  const cleaned = String(raw || '')
+    .replace(/\r?\n/g, ' ')
+    .replace(/^title\s*[:：]\s*/i, '')
+    .replace(/^["'“”‘’#*\s]+|["'“”‘’#*\s]+$/g, '')
+    .replace(/[。.!?！？；;：:]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return titleFallback(text);
+  return cleaned.length > 40 ? `${cleaned.slice(0, 39)}…` : cleaned;
+}
+
+async function generateChatTitle(text, sessionId) {
+  const apiKey = String(
+    process.env.OPENCODE_API_KEY || store.loadSettings().apiKey || ''
+  ).trim();
+  if (!apiKey) return titleFallback(text);
+
+  const messages = [
+    {
+      role: 'system',
+      content:
+        'You name chat conversations. Reply with only a short title, no quotes, no markdown, no trailing punctuation. Use the same language as the user. Keep it under 24 Chinese characters or 8 English words.',
+    },
+    { role: 'user', content: `First user message:\n${text}` },
+  ];
+
+  try {
+    const result = await deepseek.streamChat({
+      apiKey,
+      sessionId,
+      signal: AbortSignal.timeout(20_000),
+      body: { model: deepseek.MODEL, messages, stream: true },
+    });
+    return cleanTitle(result.content, text);
+  } catch (error) {
+    console.error('generate title failed', error);
+    return titleFallback(text);
+  }
+}
+
 function handleApi(req, res, url) {
   const { pathname } = url;
 
@@ -202,6 +250,26 @@ function handleApi(req, res, url) {
               : 400;
         sendJson(res, status, { error: error.message, code: error.code });
       });
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/title') {
+    readJson(req)
+      .then(async (body) => {
+        const text = String(body?.text || '').trim();
+        if (!text) {
+          sendJson(res, 400, { error: 'text is required' });
+          return;
+        }
+        const title = await generateChatTitle(
+          text,
+          String(body?.chatId || '')
+        );
+        sendJson(res, 200, { title });
+      })
+      .catch((error) =>
+        sendJson(res, error.status || 400, { error: error.message })
+      );
     return true;
   }
 

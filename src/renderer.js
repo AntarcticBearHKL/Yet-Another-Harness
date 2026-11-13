@@ -16,10 +16,8 @@ const dom = {
   send: $('send'),
   switcher: $('switcher'),
   switcherList: $('switcher-list'),
-  switcherNew: $('switcher-new'),
   switcherSettings: $('switcher-settings'),
   projectList: $('project-list'),
-  projectNew: $('project-new'),
   settingsOverlay: $('settings-overlay'),
   rawOverlay: $('raw-overlay'),
   rawBody: $('raw-body'),
@@ -261,6 +259,8 @@ const api = {
   },
   sendChat: (payload) =>
     requestJson('/api/send', { method: 'POST', body: payload }),
+  generateTitle: (payload) =>
+    requestJson('/api/title', { method: 'POST', body: payload }),
   loadCatalog: () => requestJson('/api/catalog'),
 
   openContent: (payload) =>
@@ -1167,10 +1167,19 @@ function renderSwitcher() {
     dom.projectList.append(row);
   });
 
+  const addProject = el('button', 'project-add', '+');
+  addProject.type = 'button';
+  addProject.title = 'New project';
+  addProject.setAttribute('aria-label', 'New project');
+  addProject.addEventListener('click', newProject);
+  dom.projectList.append(addProject);
+
   dom.switcherList.replaceChildren();
   if (sessions.length === 0) {
     state.switcherIndex = 0;
-    dom.switcherList.append(el('div', 'switcher-empty', '还没有对话'));
+    dom.switcherList.append(
+      el('div', 'switcher-empty', '还没有对话，按空格新建')
+    );
     return;
   }
 
@@ -1435,6 +1444,18 @@ function updateSendState() {
     !currentSession() || state.streaming || dom.input.value.trim() === '';
 }
 
+function syncDraftTitle() {
+  if (!state.composerOpen) return;
+  const session = currentSession();
+  if (!session || session.msgs.length > 0) return;
+  const draft = dom.input.value.replace(/\s+/g, ' ').trim();
+  const title = draft ? draft.slice(0, 60) : '';
+  if (session.title === title) return;
+  session.title = title;
+  saveChatsSoon();
+  if (state.switcherOpen) renderSwitcher();
+}
+
 function newSession(projectId) {
   ensureProjects();
   if (state.sessions.length === 0) state.seq = 0;
@@ -1494,6 +1515,21 @@ function deleteSession(index) {
   renderAll();
 }
 
+async function requestSessionTitle(session, text) {
+  try {
+    const result = await api.generateTitle({ chatId: session.id, text });
+    const title = String(result?.title || '').trim();
+    if (!title) return;
+    const current = state.sessions.find((item) => item.id === session.id);
+    if (!current) return;
+    current.title = title;
+    saveChatsSoon();
+    if (state.switcherOpen) renderSwitcher();
+  } catch (error) {
+    console.error('generate chat title failed', error);
+  }
+}
+
 async function sendMessage() {
   if (state.streaming) return;
   const text = dom.input.value.trim();
@@ -1502,6 +1538,7 @@ async function sendMessage() {
 
   const session = currentSession();
   if (!session) return;
+  const firstMessage = session.msgs.length === 0;
   session.msgs.push({ role: 'User', text, request: null, steps: [] });
   const agent = { role: 'Agent', text: '', request: '', steps: [], requests: [] };
   session.msgs.push(agent);
@@ -1510,6 +1547,7 @@ async function sendMessage() {
   state.forceScroll = true;
   dom.input.value = '';
   updateSendState();
+  if (firstMessage) requestSessionTitle(session, text);
 
   if (!state.settings.hasApiKey) {
     agent.text = NO_KEY_HINT;
@@ -2246,8 +2284,6 @@ function bindEvents() {
   document.addEventListener('mouseup', onRightMouseUp);
   window.addEventListener('blur', closeRingMenu);
 
-  dom.switcherNew.addEventListener('click', createChatFromSwitcher);
-  dom.projectNew.addEventListener('click', newProject);
   dom.switcherSettings.addEventListener('click', () => {
     closeSwitcher();
     openSettings();
@@ -2264,7 +2300,10 @@ function bindEvents() {
 
   $('mobile-compose')?.addEventListener('click', openComposer);
   dom.send.addEventListener('click', sendMessage);
-  dom.input.addEventListener('input', updateSendState);
+  dom.input.addEventListener('input', () => {
+    updateSendState();
+    syncDraftTitle();
+  });
   dom.input.addEventListener('keydown', (event) => {
     if (event.isComposing || event.keyCode === 229) return;
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -2365,6 +2404,19 @@ function bindEvents() {
       if (event.key === 'ArrowUp') {
         event.preventDefault();
         moveSwitcher(-1);
+        return;
+      }
+
+      if (event.code === 'Space' || event.key === ' ') {
+        const target = event.target;
+        if (
+          target instanceof Element &&
+          target.closest('button, input, textarea')
+        ) {
+          return;
+        }
+        event.preventDefault();
+        if (!event.repeat) createChatFromSwitcher();
         return;
       }
 
