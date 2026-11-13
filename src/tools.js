@@ -160,6 +160,66 @@ function statusLabel(name, args) {
     return value.description ? `${name}: ${value.description}` : name;
   }
   if (name === 'patch') return 'patch';
+  if (name === 'skill_mcp') {
+    const parts = [value.server, value.tool].filter(Boolean);
+    return parts.length ? `skill_mcp: ${parts.join('/')}` : 'skill_mcp';
+  }
+  if (name === 'look_at') {
+    const filePath = String(value.path ?? '');
+    return filePath ? `look_at: ${path.basename(filePath)}` : 'look_at';
+  }
+  if (name === 'session_list') return 'session_list';
+  if (name === 'session_read' || name === 'session_info' || name === 'session_rename') {
+    return value.sessionID ? `${name}: ${value.sessionID}` : name;
+  }
+  if (name === 'session_search') {
+    const query = String(value.query ?? '').slice(0, 40);
+    return query ? `session_search: ${query}` : 'session_search';
+  }
+  if (name === 'task_create' || name === 'task_get' || name === 'task_update') {
+    const label = value.subject || value.id;
+    return label ? `${name}: ${label}` : name;
+  }
+  if (name === 'task_list') return value.status ? `task_list: ${value.status}` : 'task_list';
+  if (name === 'create_goal') {
+    const objective = String(value.objective ?? '').slice(0, 48);
+    return objective ? `create_goal: ${objective}` : 'create_goal';
+  }
+  if (name === 'update_goal' || name === 'get_goal') {
+    return value.id ? `${name}: ${value.id}` : name;
+  }
+  if (name === 'team_create' || name === 'team_delete' || name === 'team_status') {
+    return value.name ? `${name}: ${value.name}` : name;
+  }
+  if (name.startsWith('team_')) {
+    const team = value.team || value.name;
+    return team ? `${name}: ${team}` : name;
+  }
+  if (name.startsWith('background_') || name.startsWith('monitor_')) {
+    const label = value.id || value.command;
+    return label ? `${name}: ${String(label).slice(0, 40)}` : name;
+  }
+  if (name === 'question') {
+    const first = Array.isArray(value.questions) ? value.questions[0] : null;
+    const text = String(first?.question || first || '').slice(0, 48);
+    return text ? `question: ${text}` : 'question';
+  }
+  if (name === 'models') {
+    return value.query ? `models: ${value.query}` : 'models';
+  }
+  if (name === 'worktree_create') {
+    return value.name ? `worktree_create: ${value.name}` : 'worktree_create';
+  }
+  if (name === 'worktree_remove') {
+    const dir = String(value.directory ?? '');
+    return dir ? `worktree_remove: ${path.basename(dir)}` : 'worktree_remove';
+  }
+  if (name === 'worktree_list') return 'worktree_list';
+  if (name === 'list_mcp_resources') return 'list_mcp_resources';
+  if (name === 'read_mcp_resource') {
+    const parts = [value.server, value.uri].filter(Boolean);
+    return parts.length ? `read_mcp_resource: ${parts.join(' ')}` : 'read_mcp_resource';
+  }
   if (mcp.isMcpTool(name)) {
     return mcp.statusLabel(name, args);
   }

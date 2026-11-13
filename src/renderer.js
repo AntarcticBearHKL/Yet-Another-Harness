@@ -3646,23 +3646,79 @@ const TOOL_GROUPS = [
   {
     id: 'file',
     label: '文件',
-    pattern: /file|read|write|edit|list|glob|grep|directory|path/i,
+    pattern: /file|read|write|edit|list|glob|grep|directory|path|patch/i,
   },
   {
     id: 'system',
     label: '系统',
-    pattern: /shell|exec|command|process|terminal|system/i,
+    pattern: /shell|exec|command|process|terminal|system|bash|background|monitor/i,
   },
   {
     id: 'agent',
     label: '代理',
-    pattern: /agent|task|subagent|skill|mcp/i,
+    pattern: /agent|task|subagent|skill|mcp|team|goal|question|model|worktree|look_at/i,
+  },
+  {
+    id: 'session',
+    label: '会话',
+    pattern: /session/i,
   },
 ];
+
+const TOOL_GROUP_BY_NAME = new Map([
+  ['read', 'file'],
+  ['read_file', 'file'],
+  ['write', 'file'],
+  ['edit', 'file'],
+  ['hashline_edit', 'file'],
+  ['glob', 'file'],
+  ['grep', 'file'],
+  ['patch', 'file'],
+  ['websearch', 'search'],
+  ['web_search', 'search'],
+  ['webfetch', 'search'],
+  ['shell', 'system'],
+  ['interactive_bash', 'system'],
+  ['background_output', 'system'],
+  ['background_cancel', 'system'],
+  ['monitor_start', 'system'],
+  ['monitor_stop', 'system'],
+  ['monitor_list', 'system'],
+  ['monitor_output', 'system'],
+  ['skill', 'agent'],
+  ['skill_mcp', 'agent'],
+  ['task', 'agent'],
+  ['subagent', 'agent'],
+  ['call_omo_agent', 'agent'],
+  ['delegate_task', 'agent'],
+  ['task_create', 'agent'],
+  ['task_get', 'agent'],
+  ['task_list', 'agent'],
+  ['task_update', 'agent'],
+  ['team_list', 'agent'],
+  ['team_task_list', 'agent'],
+  ['look_at', 'agent'],
+  ['question', 'agent'],
+  ['models', 'agent'],
+  ['worktree_list', 'agent'],
+  ['worktree_create', 'agent'],
+  ['worktree_remove', 'agent'],
+  ['list_mcp_resources', 'agent'],
+  ['read_mcp_resource', 'agent'],
+  ['session_list', 'session'],
+  ['session_read', 'session'],
+  ['session_search', 'session'],
+  ['session_info', 'session'],
+  ['session_rename', 'session'],
+]);
 
 function toolGroupFor(fn) {
   const name = String(fn?.name || '');
   const description = String(fn?.description || '');
+  const explicit = TOOL_GROUP_BY_NAME.get(name);
+  if (explicit) {
+    return TOOL_GROUPS.find((group) => group.id === explicit);
+  }
   return (
     TOOL_GROUPS.find((group) => group.pattern.test(name)) ||
     TOOL_GROUPS.find((group) => group.pattern.test(description)) || {
