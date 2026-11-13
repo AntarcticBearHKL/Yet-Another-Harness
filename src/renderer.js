@@ -1245,12 +1245,7 @@ function streamingAutoKey() {
     return stepCardKey(index, lastStep >= 0 ? lastStep : steps.length - 1);
   }
 
-  // 还没有第一个 token：先展开用户刚发的那条消息
-  if (!state.streamMessage.text) {
-    for (let i = index - 1; i >= 0; i -= 1) {
-      if (session.msgs[i].role === 'User') return messageCardKey(i);
-    }
-  }
+  // 还没有第一个 token：展开空的回复卡片，显示等待光标
   return agentCardKey(index);
 }
 
@@ -1290,6 +1285,10 @@ function renderAgentMessage(msg, msgIndex, container) {
       const line = el('div', 'card-status-line', step.label);
       if (step.ok === false) line.classList.add('error');
       body.append(line);
+    }
+    if (streaming && !msg.text) {
+      // 已发送但还没有第一个 token：展开回复卡片并显示闪烁光标
+      body.append(el('div', 'card-text card-waiting'));
     }
     if (msg.text) {
       const textNode = el('div', 'card-text');

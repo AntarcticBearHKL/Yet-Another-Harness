@@ -1492,6 +1492,12 @@ body.ring-open #window-controls {
   animation: blink 1s step-end infinite;
 }
 
+.message-card.streaming .card-waiting::after {
+  content: "▍";
+  color: var(--accent);
+  animation: blink 1s step-end infinite;
+}
+
 @keyframes blink {
   50% {
     opacity: 0;
@@ -2646,6 +2652,10 @@ body.web .mobile-compose {
   }
 
   .message-card.streaming .text-block:last-child::after {
+    animation: none;
+  }
+
+  .message-card.streaming .card-waiting::after {
     animation: none;
   }
 }
