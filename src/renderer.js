@@ -209,6 +209,8 @@ function renderWebContent(payload) {
 
 function openWebContent(payload) {
   if (!dom.webContent) return Promise.resolve();
+  closeRingMenu();
+  state.ringSuppress = false;
   webContentKey = payload?.key || null;
   webContentKind = payload?.kind || 'text';
   dom.webContentTitle.textContent = payload?.title || 'CONTENT';
@@ -239,6 +241,8 @@ function updateWebContent(payload) {
 
 function closeWebContent() {
   if (!dom.webContent) return;
+  closeRingMenu();
+  state.ringSuppress = false;
   webContentKey = null;
   dom.webContent.classList.add('hidden');
   dom.webContent.setAttribute('aria-hidden', 'true');
@@ -1876,6 +1880,8 @@ function closeComposer() {
 function openSwitcher() {
   if (!dom.settingsOverlay.classList.contains('hidden')) return;
   closeComposer();
+  closeRingMenu();
+  state.ringSuppress = false;
   ensureProjects();
   const session = currentSession();
   state.switcherOpen = true;
@@ -2871,6 +2877,22 @@ function openSwitcherRingMenu(event) {
 function onRightMouseDown(event) {
   if (event.button !== 2) return;
 
+  const switcherOpen =
+    state.switcherOpen || dom.switcher.classList.contains('open');
+
+  if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
+    closeRingMenu();
+    closeWebContent();
+    state.ringSuppress = true;
+    return;
+  }
+  if (state.ringOpen) {
+    closeRingMenu();
+    if (!switcherOpen) {
+      state.ringSuppress = true;
+      return;
+    }
+  }
   if (!dom.renameOverlay.classList.contains('hidden')) {
     closeRename();
     state.ringSuppress = true;
@@ -2901,7 +2923,7 @@ function onRightMouseDown(event) {
     state.ringSuppress = true;
     return;
   }
-  if (state.switcherOpen) {
+  if (switcherOpen) {
     openSwitcherRingMenu(event);
     state.ringSuppress = true;
     return;
@@ -3229,6 +3251,11 @@ function bindEvents() {
       state.ringSuppress = false;
       return;
     }
+    if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
+      closeRingMenu();
+      closeWebContent();
+      return;
+    }
     if (state.ringOpen) return;
     if (!dom.renameOverlay.classList.contains('hidden')) {
       closeRename();
@@ -3258,12 +3285,11 @@ function bindEvents() {
       closeSettings();
       return;
     }
-    if (state.switcherOpen) {
-      closeSwitcher();
+    if (state.switcherOpen || dom.switcher.classList.contains('open')) {
       return;
     }
     if (state.composerOpen) closeComposer();
-  });
+  }, true);
   document.addEventListener('selectstart', (event) => {
     const target = event.target;
     if (target instanceof Element && target.closest('input, textarea')) return;
@@ -3277,9 +3303,9 @@ function bindEvents() {
   window.addEventListener('resize', syncMaximized);
   syncMaximized();
 
-  document.addEventListener('mousedown', onRightMouseDown);
+  document.addEventListener('mousedown', onRightMouseDown, true);
   document.addEventListener('mousemove', updateRingFromPointer);
-  document.addEventListener('mouseup', onRightMouseUp);
+  document.addEventListener('mouseup', onRightMouseUp, true);
   window.addEventListener('blur', closeRingMenu);
 
   dom.switcherSettings.addEventListener('click', () => {
@@ -3378,8 +3404,10 @@ function bindEvents() {
       if (event.key === 'Escape') {
         event.preventDefault();
         closeRingMenu();
+        return;
       }
-      return;
+      if (event.key !== 'Tab') return;
+      closeRingMenu();
     }
 
     if (state.catalogOpen) {
