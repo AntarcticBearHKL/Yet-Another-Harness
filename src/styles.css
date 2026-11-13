@@ -1440,14 +1440,14 @@ body.ring-open #messages {
 }
 
 .ring-seg {
-  fill: rgba(251, 246, 239, 0.97);
+  fill: #fbf6ef;
   stroke: rgba(74, 54, 40, 0.16);
   stroke-width: 1;
   transition: fill 100ms ease, stroke 100ms ease;
 }
 
 .ring-seg.selected {
-  fill: rgba(185, 111, 61, 0.16);
+  fill: #eedbcb;
   stroke: rgba(185, 111, 61, 0.58);
 }
 
