@@ -296,11 +296,22 @@ body.maximized .web-content {
 }
 
 .project-pane {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
   padding: 14px 12px 14px 14px;
-  border-right: 1px solid var(--line);
+}
+
+.project-pane::after {
+  content: "";
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  right: 0;
+  width: 1px;
+  background: var(--line);
+  pointer-events: none;
 }
 
 .conversation-pane {
