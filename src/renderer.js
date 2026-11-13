@@ -3445,6 +3445,15 @@ function bindEvents() {
       .catch((error) => console.error('clear api key failed', error));
   });
 
+  // 全局屏蔽原生 Tab 焦点切换；Tab 只用于 YAH 自己的工作区
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.key === 'Tab') event.preventDefault();
+    },
+    true
+  );
+
   document.addEventListener('keydown', (event) => {
     if (!dom.renameOverlay.classList.contains('hidden')) {
       if (event.key === 'Escape' && !event.isComposing) {
@@ -3524,6 +3533,9 @@ function bindEvents() {
     if (event.key === 'Tab') {
       if (!dom.settingsOverlay.classList.contains('hidden')) return;
       event.preventDefault();
+      if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
       if (state.switcherOpen) return;
       if (event.repeat || state.tabHeld) return;
 

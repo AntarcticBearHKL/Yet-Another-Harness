@@ -146,6 +146,7 @@ api.onContentUpdate((payload) => {
 
 closeButton?.addEventListener('click', () => api.close());
 window.addEventListener('keydown', (event) => {
+  if (event.key === 'Tab') event.preventDefault();
   if (event.key === 'Escape') api.close();
 });
 document.addEventListener('contextmenu', (event) => {
