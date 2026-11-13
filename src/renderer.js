@@ -5,6 +5,8 @@ const DEFAULT_SYSTEM_PROMPT =
 const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
 const NO_KEY_HINT =
   'No OpenCode Go API key yet. Hold Tab and open Settings to paste your key.';
+// DeepSeek V4.1 Flash (OpenCode Go) context window.
+const CONTEXT_WINDOW_TOKENS = 1_000_000;
 
 const shell = window.yah || null;
 const $ = (id) => document.getElementById(id);
@@ -683,6 +685,49 @@ function usageText(usage) {
   return `${compactTokens(usage.hit)}/${compactTokens(
     usage.miss
   )}/${compactTokens(usage.output)}`;
+}
+
+function contextTokensForMessage(msg) {
+  const usage = msg?.usage;
+  if (!usage || typeof usage !== 'object') return 0;
+  const rounds = usage.rounds;
+  if (rounds && typeof rounds === 'object') {
+    const roundKeys = Object.keys(rounds)
+      .map((key) => Number(key))
+      .filter((key) => Number.isInteger(key))
+      .sort((a, b) => a - b);
+    for (let i = roundKeys.length - 1; i >= 0; i -= 1) {
+      const round = rounds[roundKeys[i]] || {};
+      const prompt = Number(round.hit || 0) + Number(round.miss || 0);
+      const output = Number(round.output || 0);
+      if (prompt + output > 0) return prompt + output;
+    }
+  }
+  const total =
+    Number(usage.hit || 0) +
+    Number(usage.miss || 0) +
+    Number(usage.output || 0);
+  return total > 0 ? total : 0;
+}
+
+function contextBadge(msg) {
+  const tokens = contextTokensForMessage(msg);
+  if (!tokens) return null;
+  const percent = Math.min(100, (tokens / CONTEXT_WINDOW_TOKENS) * 100);
+  const text =
+    percent > 0 && percent < 0.1
+      ? '<0.1%'
+      : percent < 10
+        ? `${percent.toFixed(1)}%`
+        : `${Math.round(percent)}%`;
+  const label = el('span', 'turn-context', text);
+  label.setAttribute(
+    'aria-label',
+    `上下文 ${compactTokens(tokens)} / ${compactTokens(
+      CONTEXT_WINDOW_TOKENS
+    )} · ${text}`
+  );
+  return label;
 }
 
 function formatDuration(ms) {
@@ -1731,6 +1776,12 @@ function renderMessages({ animate = true } = {}) {
       dom.messages.append(currentTurn);
     }
     renderAgentMessage(msg, index, currentTurn);
+    const badge = contextBadge(msg);
+    if (badge) {
+      currentTurn.querySelector('.turn-context')?.remove();
+      currentTurn.classList.add('has-context');
+      currentTurn.append(badge);
+    }
   });
 
   let autoKey = null;

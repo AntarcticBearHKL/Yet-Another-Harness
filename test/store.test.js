@@ -348,6 +348,14 @@ test('session MCP switches and step metrics round-trip', () => {
                 },
               ],
               requests: [],
+              usage: {
+                hit: 10,
+                miss: 20,
+                output: 5,
+                rounds: {
+                  0: { hit: 10, miss: 20, output: 5 },
+                },
+              },
             },
           ],
         },
@@ -367,6 +375,14 @@ test('session MCP switches and step metrics round-trip', () => {
       'next question',
       'another',
     ]);
+    assert.deepEqual(loaded.sessions[0].msgs[1].usage, {
+      hit: 10,
+      miss: 20,
+      output: 5,
+      rounds: {
+        0: { hit: 10, miss: 20, output: 5 },
+      },
+    });
     assert.deepEqual(loaded.sessions[0].msgs[1].steps[0].metrics, {
       startedAt: 100,
     });

@@ -1080,6 +1080,33 @@ body.ring-open #window-controls {
   pointer-events: none;
 }
 
+.turn.has-context::before {
+  bottom: -16px;
+}
+
+.turn-context {
+  position: absolute;
+  left: 0;
+  bottom: -22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 12px;
+  color: var(--faint);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.turn-context::before {
+  content: "";
+  width: 7px;
+  height: 1px;
+  background: rgba(185, 111, 61, 0.4);
+}
+
 .msg {
   display: block;
   width: 100%;

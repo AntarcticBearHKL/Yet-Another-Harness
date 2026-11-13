@@ -207,6 +207,11 @@ function normalizeChats(raw) {
                       body && typeof body === 'object' ? body : null
                     )
                   : [],
+                // token 用量和每轮性能指标
+                usage:
+                  msg.usage && typeof msg.usage === 'object'
+                    ? msg.usage
+                    : null,
               };
             })
         : [];
