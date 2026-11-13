@@ -12,6 +12,8 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - Alt 输入框：透明毛玻璃高斯模糊遮罩；输入框外的区域按住左键仍可拖动窗口；Enter 发送，Shift+Enter 换行，Esc 或再次按 Alt 关闭；关闭时保留草稿，新对话会清空
 - 没有侧边栏；按住 Tab 立即打开全屏对话切换界面，松开收起，支持键盘选择和删除
 - 扁平化界面：没有卡片底色、阴影、圆角卡片和模糊面板，用分隔线、文字颜色和当前条目的暖色底高亮区分；唯一例外是 Alt 输入框的透明毛玻璃遮罩
+- 全局使用 Resource Han Rounded CN（资源圆体，SIL OFL）：界面、对话正文、工具/JSON 查看器统一圆体
+- 对话正文重新排版：14.5px 字号、1.8 行高、28px 外边距、14px 内边距、统一段落间距；`一、二、三、` 这类章节标题自动加粗并着色
 - 聊天内容接近窗口上下边缘时渐进淡出，不会生硬地被边界切断
 - 每条消息、工具调用和工具返回都是可折叠条目，用圆点和标题颜色区分；用户/助手标签显示为 `prompt` / `response`
 - 思考过程单独显示为 `thinking` 条目，和最终 `response` 分开；回传按 pi 风格处理：同一 provider/api/model 时作为 assistant 消息的 `reasoning_content` 回传，不拼进 `content`，换模型时丢弃
@@ -96,7 +98,7 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 
 ## 外观
 
-页面是扁平化暖色主题：
+页面是扁平化暖色主题，使用 `assets\fonts` 里的 Resource Han Rounded CN 圆体（Regular / Bold，SIL OFL，许可证见 `assets\fonts\OFL-ResourceHanRounded.txt`）：
 
 - 整个窗口使用纯色奶油底，没有卡片底色、圆角卡片、阴影或 backdrop blur（Alt 输入框的透明毛玻璃遮罩除外）；
 - 对话条目用细分隔线和文字/圆点颜色区分；

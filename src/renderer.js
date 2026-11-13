@@ -260,9 +260,41 @@ function makeCard(opts) {
   return { card, head, body: inner, bodyWrap };
 }
 
+function isTextHeading(block) {
+  const line = block.split('\n', 1)[0].trim();
+  return (
+    /^[一二三四五六七八九十百千零〇]+、/.test(line) ||
+    /^（[一二三四五六七八九十百千零〇]+）/.test(line)
+  );
+}
+
+function renderTextContent(container, text) {
+  const normalized = String(text ?? '').replace(/\r\n/g, '\n').trim();
+  const blocks = normalized ? normalized.split(/\n{2,}/) : [];
+  container.replaceChildren();
+  for (const raw of blocks) {
+    const block = raw.trim();
+    if (!block) continue;
+    const [firstLine, ...rest] = block.split('\n');
+    if (isTextHeading(block)) {
+      container.append(
+        el('div', 'text-block text-heading', firstLine.trim())
+      );
+      const remainder = rest.join('\n').trim();
+      if (remainder) container.append(el('div', 'text-block', remainder));
+    } else {
+      container.append(el('div', 'text-block', block));
+    }
+  }
+}
+
 function textCard({ key, kind, title, meta, text, streaming, onInspect }) {
   const { card, body } = makeCard({ key, kind, title, meta, onInspect });
-  if (text) body.append(el('div', 'card-text', text));
+  if (text) {
+    const textNode = el('div', 'card-text');
+    renderTextContent(textNode, text);
+    body.append(textNode);
+  }
   if (streaming) card.classList.add('streaming');
   return card;
 }
@@ -499,7 +531,11 @@ function renderAgentMessage(msg, msgIndex) {
       if (step.ok === false) line.classList.add('error');
       body.append(line);
     }
-    if (msg.text) body.append(el('div', 'card-text', msg.text));
+    if (msg.text) {
+      const textNode = el('div', 'card-text');
+      renderTextContent(textNode, msg.text);
+      body.append(textNode);
+    }
     if (streaming) card.classList.add('streaming');
     appendRow(card);
     return;
@@ -1461,7 +1497,7 @@ function bindEvents() {
       const body = card.querySelector('.card-body-inner');
       if (body) body.append(textNode);
     }
-    textNode.textContent = last.text;
+    renderTextContent(textNode, last.text);
     card.classList.add('streaming');
 
     const stick = isNearBottom();
