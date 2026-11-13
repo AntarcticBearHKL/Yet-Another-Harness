@@ -14,6 +14,7 @@ const runner = require('./runner');
 const usage = require('./usage');
 const { McpManager } = require('./mcp/manager');
 const { createSkillService } = require('./skills');
+const { loadAgents, saveAgents, getAgent } = require('./agents');
 
 const ROOT = path.resolve(__dirname, '..');
 const APP_DATA =
@@ -23,6 +24,7 @@ const DATA_DIR = path.resolve(
 );
 const STATIC_DIR = path.resolve(process.env.YAH_STATIC_DIR || path.join(ROOT, 'src'));
 const ASSETS_DIR = path.join(ROOT, 'assets');
+const AGENTS_FILE = path.join(DATA_DIR, 'agents.json');
 const HOST = '127.0.0.1';
 const LOCAL_PORT = Number(process.env.YAH_LOCAL_PORT) || 3789;
 const REMOTE_PORT = Number(process.env.YAH_REMOTE_PORT) || 3790;
@@ -396,11 +398,13 @@ function handleApi(req, res, url) {
           body?.skills,
           sessionMcpDisabled(sessionId)
         );
+        const agent = getAgent(AGENTS_FILE, body?.agentId);
         const result = runner.startRun({
           sessionId,
           text: String(body?.text || ''),
           runId: String(body?.requestId || ''),
           skillsText: resolved.text,
+          agentConfig: agent,
         });
         sendJson(res, 200, result);
       })
@@ -453,16 +457,36 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && pathname === '/api/agents') {
+    sendJson(res, 200, { agents: loadAgents(AGENTS_FILE) });
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/agents') {
+    readJson(req)
+      .then((body) => {
+        const agents = saveAgents(AGENTS_FILE, body?.agents);
+        sendJson(res, 200, { ok: true, agents });
+      })
+      .catch((error) =>
+        sendJson(res, error.status || 400, { error: error.message })
+      );
+    return true;
+  }
+
   if (req.method === 'GET' && pathname === '/api/catalog') {
     void mcpManager.ensureConnections();
-    const catalogTools = tools
-      .definitions()
-      .filter(
-        (definition) =>
-          !String(definition.function?.name || '').startsWith('mcp__')
-      );
+    const allTools = tools.definitions();
+    const catalogTools = allTools.filter(
+      (definition) =>
+        !String(definition.function?.name || '').startsWith('mcp__')
+    );
     sendJson(res, 200, {
       tools: catalogTools,
+      agentTools: allTools.map((definition) => ({
+        name: definition.function?.name || '',
+        description: definition.function?.description || '',
+      })),
       skills: skillService.list({}),
       mcp: mcpManager.catalogEntries(),
     });

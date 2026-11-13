@@ -316,6 +316,7 @@ test('session MCP switches and step metrics round-trip', () => {
           id: 's1',
           title: 'Chat 1',
           system: 'sys',
+          agentId: 'agent-test',
           projectId: 'p1',
           mcpDisabled: ['m1', 'm2'],
           foldState: {
@@ -327,6 +328,7 @@ test('session MCP switches and step metrics round-trip', () => {
             'next question',
             {
               text: 'another',
+              agentId: 'agent-test',
               skills: [
                 {
                   id: 'builtin:test-skill',
@@ -384,7 +386,7 @@ test('session MCP switches and step metrics round-trip', () => {
       viewMode: null,
     });
     assert.deepEqual(loaded.sessions[0].pendingQueue, [
-      { text: 'next question', skills: [] },
+      { text: 'next question', skills: [], agentId: '' },
       {
         text: 'another',
         skills: [
@@ -394,8 +396,10 @@ test('session MCP switches and step metrics round-trip', () => {
             arguments: { topic: 'skills' },
           },
         ],
+        agentId: 'agent-test',
       },
     ]);
+    assert.equal(loaded.sessions[0].agentId, 'agent-test');
     assert.deepEqual(loaded.sessions[0].msgs[1].usage, {
       hit: 10,
       miss: 20,
@@ -452,6 +456,7 @@ test('session MCP switches and step metrics round-trip', () => {
       {
         text: 'edited question',
         skills: [{ id: 'user:mine', name: 'My Skill', arguments: {} }],
+        agentId: '',
       },
     ]);
     assert.equal(loaded.sessions[0].msgs.length, 2);

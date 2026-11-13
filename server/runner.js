@@ -81,7 +81,7 @@ function flushPersist(state) {
   persist(state);
 }
 
-function startRun({ sessionId, text, runId, skillsText = '' }) {
+function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null }) {
   const id = String(runId || '').trim();
   const prompt = String(text || '').trim();
   if (!id) throw Object.assign(new Error('runId is required'), { code: 'bad_request' });
@@ -140,8 +140,13 @@ function startRun({ sessionId, text, runId, skillsText = '' }) {
     { role: 'User', text: prompt, request: null, steps: [], requests: [] },
   ];
   const skillBlock = String(skillsText || '').trim();
+  const agentPrompt = String(agentConfig?.prompt || '').trim();
+  const agentBlock = agentPrompt
+    ? `# Agent Context${agentConfig?.name ? ` · ${agentConfig.name}` : ''}\n${agentPrompt}`
+    : '';
   const system = [
     session.system || '',
+    agentBlock,
     skillBlock ? `# Active Skills\n${skillBlock}` : '',
   ]
     .filter(Boolean)
@@ -155,6 +160,7 @@ function startRun({ sessionId, text, runId, skillsText = '' }) {
       mcpDisabled: Array.isArray(session.mcpDisabled)
         ? session.mcpDisabled
         : [],
+      allowedTools: Array.isArray(agentConfig?.tools) ? agentConfig.tools : null,
       sessionId,
       signal: state.controller.signal,
       onDelta: (delta, round, reasoning) => {

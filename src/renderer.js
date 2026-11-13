@@ -16,6 +16,7 @@ const dom = {
   composer: $('composer'),
   input: $('input'),
   send: $('send'),
+  agentSelect: $('agent-select'),
   composerContext: $('composer-context'),
   composerBox: $('composer-box'),
   composerTokens: $('composer-tokens'),
@@ -123,6 +124,12 @@ const state = {
   skillsLoading: false,
   skillsSessionId: null,
   skillsFetchedAt: 0,
+  agents: [],
+  agentsLoading: false,
+  agentsFetchedAt: 0,
+  agentSaveTimer: null,
+  agentDeleteArmed: null,
+  agentDeleteTimer: null,
   attachedSkills: [],
   skillArgsTarget: null,
   slashOpen: false,
@@ -299,6 +306,9 @@ const api = {
   loadChats: () => requestJson('/api/chats'),
   saveChats: (chats) =>
     requestJson('/api/chats', { method: 'POST', body: chats }),
+  loadAgents: () => requestJson('/api/agents'),
+  saveAgents: (agents) =>
+    requestJson('/api/agents', { method: 'POST', body: { agents } }),
   deleteSession: (id) =>
     requestJson(`/api/sessions/${encodeURIComponent(id)}`, {
       method: 'DELETE',
@@ -406,6 +416,7 @@ function structurePayload() {
       id: session.id,
       title: session.title,
       system: session.system,
+      agentId: session.agentId || '',
       projectId: session.projectId,
       mcpDisabled: Array.isArray(session.mcpDisabled)
         ? session.mcpDisabled
@@ -2036,6 +2047,7 @@ function openComposer() {
   renderComposerContext();
   renderComposerSkills();
   void loadSkills(true);
+  void loadAgents(true);
   requestAnimationFrame(() => {
     if (!state.composerOpen) return;
     dom.input.focus();
@@ -2329,6 +2341,7 @@ function newSession(projectId) {
     id: makeId(),
     title: `Chat ${state.seq}`,
     system: DEFAULT_SYSTEM_PROMPT,
+    agentId: previous?.agentId || '',
     projectId: targetProjectId,
     mcpDisabled: Array.isArray(previous?.mcpDisabled)
       ? [...previous.mcpDisabled]
@@ -2411,7 +2424,7 @@ async function requestSessionTitle(session, text) {
 async function startPrompt(
   session,
   text,
-  { clearInput = false, skills = [] } = {}
+  { clearInput = false, skills = [], agentId = '' } = {}
 ) {
   if (!session || !text) return;
   state.viewMode = null;
@@ -2455,6 +2468,7 @@ async function startPrompt(
       chatId: session.id,
       text,
       skills,
+      agentId: agentId || session.agentId || '',
     });
   } catch (error) {
     if (state.requestId !== requestId) return;
@@ -2479,13 +2493,14 @@ async function sendMessage() {
   const text =
     inputText || (skills.length ? `/${skills[0].name}` : '');
   if (!text) return;
+  const agentId = session.agentId || '';
 
   if (
     state.streaming ||
     (Array.isArray(session.pendingQueue) && session.pendingQueue.length > 0)
   ) {
     if (!Array.isArray(session.pendingQueue)) session.pendingQueue = [];
-    session.pendingQueue.push({ text, skills });
+    session.pendingQueue.push({ text, skills, agentId });
     dom.input.value = '';
     state.slashDismissed = false;
     clearAttachedSkills();
@@ -2499,7 +2514,7 @@ async function sendMessage() {
   closeComposer();
   state.slashDismissed = false;
   clearAttachedSkills();
-  await startPrompt(session, text, { clearInput: true, skills });
+  await startPrompt(session, text, { clearInput: true, skills, agentId });
 }
 
 function queueActionButton(kind, label, svg, onClick) {
@@ -2619,6 +2634,7 @@ function renderComposerQueue(session) {
 
 function renderComposerContext() {
   if (!dom.composerContext) return;
+  renderAgentPicker();
   const session = currentSession();
   if (!session) {
     dom.composerContext.replaceChildren();
@@ -2631,6 +2647,57 @@ function renderComposerContext() {
     return;
   }
   dom.composerContext.replaceChildren(renderComposerQueue(session));
+}
+
+function renderAgentPicker() {
+  const select = dom.agentSelect;
+  if (!select) return;
+  const session = currentSession();
+  const current = String(session?.agentId || '');
+  select.replaceChildren();
+  const none = document.createElement('option');
+  none.value = '';
+  none.textContent = '默认';
+  select.append(none);
+  for (const agent of state.agents) {
+    const option = document.createElement('option');
+    option.value = agent.id;
+    option.textContent = agent.name;
+    select.append(option);
+  }
+  if (current && state.agents.some((agent) => agent.id === current)) {
+    select.value = current;
+  } else {
+    select.value = '';
+    if (session && current) {
+      session.agentId = '';
+      saveChatsSoon();
+    }
+  }
+  select.disabled = !session;
+}
+
+async function loadAgents(force = false) {
+  if (state.agentsLoading) return;
+  if (
+    !force &&
+    state.agentsFetchedAt &&
+    Date.now() - state.agentsFetchedAt < 15_000
+  ) {
+    renderAgentPicker();
+    return;
+  }
+  state.agentsLoading = true;
+  try {
+    const data = await api.loadAgents();
+    state.agents = Array.isArray(data?.agents) ? data.agents : [];
+    state.agentsFetchedAt = Date.now();
+  } catch (error) {
+    console.error('load agents failed', error);
+  } finally {
+    state.agentsLoading = false;
+    renderAgentPicker();
+  }
 }
 
 function skillCategory(skill) {
@@ -3044,6 +3111,7 @@ function editQueuedPrompt(session, index) {
     item && typeof item === 'object' && Array.isArray(item.skills)
       ? item.skills
       : [];
+  session.agentId = item && typeof item === 'object' ? item.agentId || '' : '';
   saveChatsSoon();
   if (!state.composerOpen) openComposer();
   state.attachedSkills = skills.map((skill) => {
@@ -3060,6 +3128,7 @@ function editQueuedPrompt(session, index) {
   });
   dom.input.value = text;
   updateSendState();
+  renderAgentPicker();
   if (state.composerOpen) renderComposerContext();
   renderComposerSkills();
   requestAnimationFrame(() => {
@@ -3087,7 +3156,10 @@ function sendQueuedPrompt(session, index) {
       : [];
   saveChatsSoon();
   if (state.composerOpen) renderComposerContext();
-  void startPrompt(session, text, { skills });
+  void startPrompt(session, text, {
+    skills,
+    agentId: item.agentId || session.agentId || '',
+  });
 }
 
 function moveQueuedPrompt(session, from, to) {
@@ -3120,7 +3192,10 @@ function processNextQueuedPrompt(session) {
       : [];
   saveChatsSoon();
   if (state.composerOpen) renderComposerContext();
-  void startPrompt(session, text, { skills });
+  void startPrompt(session, text, {
+    skills,
+    agentId: item.agentId || session.agentId || '',
+  });
 }
 
 async function refreshChats() {
@@ -3379,6 +3454,11 @@ const RING_ITEMS = [
     label: 'Skill',
     icon: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z"/>',
     action: () => openCatalog('skills'),
+  },
+  {
+    label: 'Agent',
+    icon: '<path d="M12 3a3 3 0 0 1 3 3v1h1a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3h1V6a3 3 0 0 1 3-3Z"/><path d="M9 12h.01M15 12h.01M9 16h6"/>',
+    action: () => openCatalog('agents'),
   },
   {
     label: 'MCP',
@@ -4054,6 +4134,17 @@ function skillCatalogGroups(data) {
 }
 
 function ensureCatalogSelection(data, page) {
+  if (page === 'agents') {
+    const exists = state.agents.some(
+      (agent) => `agent:${agent.id}` === state.catalogKind
+    );
+    if (!exists) {
+      state.catalogKind = state.agents[0]
+        ? `agent:${state.agents[0].id}`
+        : 'agent:none';
+    }
+    return;
+  }
   if (page === 'skills') {
     const { locals, servers } = skillCatalogGroups(data);
     const all = [...locals, ...servers];
@@ -4086,7 +4177,9 @@ function catalogCategoryButton(item, selectedKind) {
   button.dataset.kind = item.id;
   if (item.id === selectedKind) button.classList.add('selected');
   button.append(el('span', 'catalog-category-name', item.label));
-  button.append(el('span', 'catalog-category-count', String(item.count)));
+  if (item.count !== null && item.count !== undefined) {
+    button.append(el('span', 'catalog-category-count', String(item.count)));
+  }
   button.addEventListener('click', () => selectCatalogKind(item.id));
   return button;
 }
@@ -4119,6 +4212,26 @@ function renderCatalogCategories(data, selectedKind, page) {
       }
       dom.catalogCategories.append(serverSection);
     }
+    return;
+  }
+
+  if (page === 'agents') {
+    const section = el('div', 'catalog-section');
+    section.append(el('div', 'catalog-section-label', 'Agent'));
+    for (const agent of state.agents) {
+      section.append(
+        catalogCategoryButton(
+          { id: `agent:${agent.id}`, label: agent.name, count: null },
+          selectedKind
+        )
+      );
+    }
+    const add = el('button', 'catalog-category catalog-add');
+    add.type = 'button';
+    add.append(el('span', 'catalog-category-name', '+ 新建 Agent'));
+    add.addEventListener('click', createAgent);
+    section.append(add);
+    dom.catalogCategories.append(section);
     return;
   }
 
@@ -4309,22 +4422,277 @@ function renderCatalogContent(kind) {
     renderCatalogList('skills', entries);
     return;
   }
+  if (kind?.startsWith('agent:')) {
+    renderAgentEditor(kind.slice('agent:'.length));
+    return;
+  }
   renderCatalogList(
     kind,
     kind === 'skills' ? state.catalogData?.skills : state.catalogData?.mcp
   );
 }
 
+function saveAgentsSoon() {
+  clearTimeout(state.agentSaveTimer);
+  state.agentSaveTimer = setTimeout(() => void saveAgentsNow(), 350);
+}
+
+async function saveAgentsNow() {
+  clearTimeout(state.agentSaveTimer);
+  state.agentSaveTimer = null;
+  const payload = state.agents.map((agent) => ({
+    id: agent.id,
+    name: agent.name,
+    prompt: agent.prompt,
+    tools: Array.isArray(agent.tools) ? agent.tools : null,
+  }));
+  try {
+    const data = await api.saveAgents(payload);
+    if (!Array.isArray(data?.agents)) {
+      console.error('save agents failed: invalid response');
+    }
+    state.agentsFetchedAt = Date.now();
+    renderAgentPicker();
+    if (state.catalogOpen && state.catalogKind?.startsWith('agent:')) {
+      renderCatalogCategories(state.catalogData, state.catalogKind, 'agents');
+    }
+  } catch (error) {
+    console.error('save agents failed', error);
+  }
+}
+
+function createAgent() {
+  const agent = {
+    id: makeId(),
+    name: `Agent ${state.agents.length + 1}`,
+    prompt: '',
+    tools: null,
+  };
+  state.agents.push(agent);
+  state.catalogKind = `agent:${agent.id}`;
+  saveAgentsSoon();
+  renderCatalogCategories(state.catalogData, state.catalogKind, 'agents');
+  renderCatalogContent(state.catalogKind);
+}
+
+function deleteAgent(agentId) {
+  const index = state.agents.findIndex((agent) => agent.id === agentId);
+  if (index < 0) return;
+  state.agents.splice(index, 1);
+  state.agentDeleteArmed = null;
+  clearTimeout(state.agentDeleteTimer);
+  let changed = false;
+  for (const session of state.sessions) {
+    if (session.agentId === agentId) {
+      session.agentId = '';
+      changed = true;
+    }
+  }
+  if (changed) saveChatsSoon();
+  saveAgentsSoon();
+  state.catalogKind = state.agents[0]
+    ? `agent:${state.agents[0].id}`
+    : 'agent:none';
+  renderAgentPicker();
+  renderCatalogCategories(state.catalogData, state.catalogKind, 'agents');
+  renderCatalogContent(state.catalogKind);
+}
+
+function renderAgentEditor(agentId) {
+  dom.catalogList.replaceChildren();
+  const agent = state.agents.find((item) => item.id === agentId);
+  if (!agent) {
+    dom.catalogList.append(
+      el(
+        'div',
+        'catalog-empty',
+        '还没有 Agent。点击左侧「+ 新建 Agent」开始。'
+      )
+    );
+    return;
+  }
+  const allTools = Array.isArray(state.catalogData?.agentTools)
+    ? state.catalogData.agentTools
+    : [];
+  const selected = new Set(
+    Array.isArray(agent.tools) ? agent.tools : allTools.map((tool) => tool.name)
+  );
+  const editor = el('div', 'agent-editor');
+  const head = el('div', 'agent-editor-head');
+  const name = el('input', 'agent-name-input');
+  name.type = 'text';
+  name.value = agent.name;
+  name.placeholder = 'Agent 名称';
+  name.addEventListener('input', () => {
+    agent.name = name.value.slice(0, 80);
+    saveAgentsSoon();
+  });
+  head.append(name);
+
+  const del = el('button', 'pill agent-delete');
+  del.type = 'button';
+  const armed = state.agentDeleteArmed === agent.id;
+  del.textContent = armed ? '确认删除' : '删除';
+  if (armed) del.classList.add('danger-solid');
+  del.addEventListener('click', () => {
+    if (state.agentDeleteArmed === agent.id) {
+      deleteAgent(agent.id);
+      return;
+    }
+    state.agentDeleteArmed = agent.id;
+    clearTimeout(state.agentDeleteTimer);
+    state.agentDeleteTimer = setTimeout(() => {
+      state.agentDeleteArmed = null;
+      if (state.catalogOpen && state.catalogKind === `agent:${agent.id}`) {
+        renderAgentEditor(agent.id);
+      }
+    }, 3200);
+    renderAgentEditor(agent.id);
+  });
+  head.append(del);
+  editor.append(head);
+
+  const promptField = el('div', 'agent-field');
+  promptField.append(el('div', 'agent-field-label', '提示词'));
+  const prompt = el('textarea', 'agent-prompt');
+  prompt.rows = 8;
+  prompt.placeholder =
+    '这段提示词会作为 Agent Context 插入到所有对话的上下文之前。';
+  prompt.value = agent.prompt || '';
+  prompt.addEventListener('input', () => {
+    agent.prompt = prompt.value;
+    saveAgentsSoon();
+  });
+  promptField.append(prompt);
+  promptField.append(
+    el(
+      'div',
+      'agent-field-hint',
+      '发送时会以 # Agent Context 的形式放在 system prompt 中。'
+    )
+  );
+  editor.append(promptField);
+
+  const toolsField = el('div', 'agent-field');
+  toolsField.append(el('div', 'agent-field-label', '工具权限'));
+  const toolsHead = el('div', 'agent-tools-head');
+  const allLabel = el('label', 'agent-toggle');
+  const allCheckbox = document.createElement('input');
+  allCheckbox.type = 'checkbox';
+  allCheckbox.checked = agent.tools === null;
+  allLabel.append(allCheckbox);
+  allLabel.append(el('span', 'agent-toggle-label', '允许所有工具'));
+  toolsHead.append(allLabel);
+  const count = el('span', 'agent-tools-count', '');
+  toolsHead.append(count);
+  toolsField.append(toolsHead);
+
+  const search = el('input', 'agent-tools-search');
+  search.type = 'search';
+  search.placeholder = '搜索工具…';
+  toolsField.append(search);
+
+  const list = el('div', 'agent-tools');
+  const updateCount = () => {
+    const total = allTools.length;
+    const active = agent.tools === null ? total : selected.size;
+    count.textContent = `${active} / ${total}`;
+  };
+  const setEnabled = (enabled) => {
+    list.classList.toggle('disabled', !enabled);
+    for (const input of list.querySelectorAll('input')) {
+      input.disabled = !enabled;
+    }
+  };
+  for (const tool of allTools) {
+    const row = el('label', 'agent-tool-row');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = agent.tools === null || selected.has(tool.name);
+    checkbox.disabled = agent.tools === null;
+    checkbox.addEventListener('change', () => {
+      if (agent.tools === null) return;
+      if (checkbox.checked) selected.add(tool.name);
+      else selected.delete(tool.name);
+      agent.tools = [...selected];
+      updateCount();
+      saveAgentsSoon();
+    });
+    const body = el('span', 'agent-tool-body');
+    body.append(el('span', 'agent-tool-name', tool.name));
+    if (tool.description) {
+      body.append(el('span', 'agent-tool-desc', tool.description));
+    }
+    row.append(checkbox, body);
+    row.dataset.search =
+      `${tool.name} ${tool.description || ''}`.toLowerCase();
+    list.append(row);
+  }
+  allCheckbox.addEventListener('change', () => {
+    if (allCheckbox.checked) {
+      agent.tools = null;
+      for (const input of list.querySelectorAll('input')) {
+        input.checked = true;
+      }
+    } else {
+      agent.tools = allTools.map((tool) => tool.name);
+      selected.clear();
+      for (const toolName of agent.tools) selected.add(toolName);
+      for (const input of list.querySelectorAll('input')) {
+        input.checked = true;
+      }
+    }
+    setEnabled(agent.tools !== null);
+    updateCount();
+    saveAgentsSoon();
+  });
+  search.addEventListener('input', () => {
+    const query = search.value.trim().toLowerCase();
+    for (const row of list.querySelectorAll('.agent-tool-row')) {
+      row.classList.toggle(
+        'hidden',
+        Boolean(query) && !row.dataset.search.includes(query)
+      );
+    }
+  });
+  toolsField.append(list);
+  toolsField.append(
+    el(
+      'div',
+      'agent-field-hint',
+      '不勾选任何工具时，Agent 将无法调用工具。'
+    )
+  );
+  editor.append(toolsField);
+  editor.append(el('div', 'agent-editor-status', '修改会自动保存'));
+  dom.catalogList.append(editor);
+  updateCount();
+  setEnabled(agent.tools !== null);
+}
+
 async function openCatalog(kind) {
   closeRingMenu();
-  const page = kind === 'skills' || kind === 'mcp' ? kind : 'tools';
+  const page =
+    kind === 'skills' || kind === 'mcp' || kind === 'agents' ? kind : 'tools';
   dom.catalog.setAttribute(
     'aria-label',
-    page === 'skills' ? 'Skill' : page === 'mcp' ? 'MCP' : '工具'
+    page === 'skills'
+      ? 'Skill'
+      : page === 'mcp'
+        ? 'MCP'
+        : page === 'agents'
+          ? 'Agent'
+          : '工具'
   );
   state.catalogOpen = true;
   state.catalogKind =
-    page === 'tools' ? 'tool:search' : page === 'skills' ? 'local:内置' : 'mcp';
+    page === 'tools'
+      ? 'tool:search'
+      : page === 'skills'
+        ? 'local:内置'
+        : page === 'agents'
+          ? 'agent:none'
+          : 'mcp';
   state.catalogData = null;
   const request = ++state.catalogRequest;
   dom.catalog.classList.remove('single');
@@ -4339,6 +4707,13 @@ async function openCatalog(kind) {
     const data = await api.loadCatalog();
     if (!state.catalogOpen || request !== state.catalogRequest) return;
     state.catalogData = data;
+    if (page === 'agents') {
+      const agentData = await api.loadAgents();
+      if (!state.catalogOpen || request !== state.catalogRequest) return;
+      state.agents = Array.isArray(agentData?.agents) ? agentData.agents : [];
+      state.agentsFetchedAt = Date.now();
+      renderAgentPicker();
+    }
     ensureCatalogSelection(data, page);
     renderCatalogCategories(data, state.catalogKind, page);
     renderCatalogContent(state.catalogKind);
@@ -4552,6 +4927,13 @@ function bindEvents() {
   dom.input.addEventListener('select', repositionSlashPopup);
   dom.input.addEventListener('scroll', repositionSlashPopup);
   window.addEventListener('resize', repositionSlashPopup);
+
+  dom.agentSelect?.addEventListener('change', () => {
+    const session = currentSession();
+    if (!session) return;
+    session.agentId = dom.agentSelect.value || '';
+    saveChatsSoon();
+  });
 
   $('win-min')?.addEventListener('click', () => api.minimize());
   $('win-max')?.addEventListener('click', () => api.maximize());
@@ -5105,6 +5487,7 @@ async function boot() {
         id: makeId(),
         title: 'Chat 1',
         system: DEFAULT_SYSTEM_PROMPT,
+        agentId: '',
         projectId: DEFAULT_PROJECT.id,
         mcpDisabled: [],
         foldState: null,
@@ -5132,6 +5515,7 @@ async function boot() {
   updateSendState();
   void loadUsage();
   void loadMcpServers();
+  void loadAgents();
 }
 
 boot();

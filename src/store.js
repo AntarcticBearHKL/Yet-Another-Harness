@@ -13,7 +13,7 @@ const { DatabaseSync } = require('node:sqlite');
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
 
 let dataDir = null;
@@ -167,7 +167,7 @@ function normalizePendingQueue(raw) {
   for (const item of raw) {
     if (typeof item === 'string') {
       const text = item.trim();
-      if (text) out.push({ text, skills: [] });
+      if (text) out.push({ text, skills: [], agentId: '' });
       continue;
     }
     if (!item || typeof item !== 'object') continue;
@@ -176,7 +176,11 @@ function normalizePendingQueue(raw) {
     const skills = Array.isArray(item.skills)
       ? item.skills.map(normalizeQueueSkill).filter(Boolean).slice(0, 5)
       : [];
-    out.push({ text, skills });
+    out.push({
+      text,
+      skills,
+      agentId: String(item.agentId || '').trim(),
+    });
   }
   return out.slice(0, 100);
 }
@@ -252,6 +256,7 @@ function normalizeChats(raw) {
         id: String(session.id || crypto.randomUUID()),
         title: String(session.title || `Chat ${index + 1}`),
         system: String(session.system ?? DEFAULT_SYSTEM_PROMPT),
+        agentId: String(session.agentId || ''),
         projectId,
         mcpDisabled: Array.isArray(session.mcpDisabled)
           ? session.mcpDisabled.map(String).filter(Boolean)
@@ -354,6 +359,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   system TEXT NOT NULL,
+  agent_id TEXT,
   project_id TEXT,
   mcp_disabled TEXT,
   fold_state TEXT,
@@ -495,6 +501,11 @@ function ensureSchema(database) {
       database.exec('ALTER TABLE sessions ADD COLUMN pending_queue TEXT');
     }
 
+    // v8 -> v9: per-session selected agent.
+    if (!sessionColumns.some((column) => column.name === 'agent_id')) {
+      database.exec('ALTER TABLE sessions ADD COLUMN agent_id TEXT');
+    }
+
     // v3 -> v4: token usage attached to agent messages.
     const messageColumns = database.prepare('PRAGMA table_info(messages)').all();
     if (!messageColumns.some((column) => column.name === 'usage')) {
@@ -561,6 +572,7 @@ function hashSession(session) {
       JSON.stringify({
         title: session.title,
         system: session.system,
+        agentId: session.agentId || '',
         projectId: session.projectId,
         mcpDisabled: session.mcpDisabled || [],
         msgs: session.msgs,
@@ -581,7 +593,7 @@ function readChats() {
 
   const sessionRows = database
     .prepare(
-      'SELECT id, title, system, project_id, mcp_disabled, fold_state, pending_queue FROM sessions ORDER BY sort_order ASC'
+      'SELECT id, title, system, agent_id, project_id, mcp_disabled, fold_state, pending_queue FROM sessions ORDER BY sort_order ASC'
     )
     .all();
   if (sessionRows.length === 0) {
@@ -646,6 +658,7 @@ function readChats() {
           id: row.id,
           title: row.title,
           system: row.system,
+          agentId: row.agent_id || '',
           projectId: projectIds.has(row.project_id)
             ? row.project_id
             : projects[0].id,
@@ -783,11 +796,12 @@ function writeChats(chats) {
   );
 
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, project_id, mcp_disabled, fold_state, pending_queue, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, agent_id, project_id, mcp_disabled, fold_state, pending_queue, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
+       agent_id = excluded.agent_id,
        project_id = excluded.project_id,
        mcp_disabled = excluded.mcp_disabled,
        fold_state = excluded.fold_state,
@@ -847,6 +861,7 @@ function writeChats(chats) {
         session.id,
         session.title,
         session.system,
+        session.agentId || '',
         session.projectId,
         JSON.stringify(session.mcpDisabled || []),
         session.foldState ? JSON.stringify(session.foldState) : null,
@@ -968,6 +983,7 @@ function metadataHash(session) {
       JSON.stringify({
         title: session.title,
         system: session.system,
+        agentId: session.agentId || '',
         projectId: session.projectId,
         mcpDisabled: session.mcpDisabled || [],
       })
@@ -991,11 +1007,12 @@ function saveStructure(chats) {
        sort_order = excluded.sort_order`
   );
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, project_id, mcp_disabled, fold_state, pending_queue, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, agent_id, project_id, mcp_disabled, fold_state, pending_queue, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
+       agent_id = excluded.agent_id,
        project_id = excluded.project_id,
        mcp_disabled = excluded.mcp_disabled,
        fold_state = excluded.fold_state,
@@ -1039,6 +1056,7 @@ function saveStructure(chats) {
         session.id,
         session.title,
         session.system,
+        session.agentId || '',
         session.projectId,
         JSON.stringify(session.mcpDisabled || []),
         session.foldState ? JSON.stringify(session.foldState) : null,

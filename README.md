@@ -60,6 +60,9 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 在输入框开头输入 `/` 会在光标位置弹出搜索式 Skill 联想：按名称、描述、关键词匹配当前对话可用的 Skill，上下键移动、回车或点击选择；选中后输入框本身不变色，只在输入框上方显示一个带颜色的 `/ Skill` 标记，按 Backspace 或点 × 整体删除；带参数的 MCP Skill 会先弹出参数表单
 - 附加的 Skill 在发送时解析并注入该次请求的 system prompt（`# Active Skills`），不会写进用户输入；排队消息会一起保存自己的 Skill
 - 已连接且当前对话启用的 MCP 服务器会把 prompts 暴露为临时 Skill；切换 MCP 开关后列表实时更新
+- Agent 面板从右键环形菜单的 Agent 扇区打开，左右分栏：左侧列出 Agent 和「+ 新建 Agent」，右侧配置名称、提示词和工具权限；Agent 配置保存在 `%APPDATA%\yah\agents.json`
+- Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；工具权限可以限制 Agent 只能调用勾选的工具，不勾选则不能调用工具
+- 输入框底部有 Agent 选择器，按对话保存选择；新对话继承同项目上一个对话的 Agent；排队消息会保存自己的 Agent
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
 - 工具和 Skill 面板是无标题的左右分栏：工具页左侧按分类列出内置工具（搜索 / 文件 / 系统 / 代理等），右侧显示名称、说明、参数；Skill 页左侧先列本地 Skill 分类（内置 / 系统 / 绘画等，由 frontmatter `category` 决定），再按 MCP 服务器名分组列出该服务器导入的 Skill；MCP 工具只出现在独立的 MCP 工作区，不混进工具目录；MCP 工作区左侧服务器、右侧工具 / 资源 / 提示词 / 日志 / 概览；没有内容时显示空状态
 - 聊天里的 MCP 工具调用显示为「MCP 调用」，不会和内置工具的「工具调用」混在一起；调用参数和返回结果仍然合并在同一个卡片里；工具返回后右侧显示 `ok` / `error` 圆角标签，错误卡片带红色侧边和浅红背景，过程组标题会汇总错误数量
@@ -118,6 +121,7 @@ server/index.js    本地后端：HTTP API、SSE、静态页面、远程 Basic A
 server/usage.js    OpenCode Go 额度查询（/api/usage，60 秒缓存）
 server/runner.js   agent 主循环、工具执行、消息/事件持久化
 server/skills.js   Skill 发现（skills/ + %APPDATA%\yah\skills）与 MCP prompts 转 Skill
+server/agents.js   Agent 配置（%APPDATA%\yah\agents.json）：提示词与工具权限
 skills/            内置 Skill Markdown（含 test-skill.md）
 server/mcp/config.js   MCP 自定义配置存储、JSON 配置解析
 server/mcp/opencode.js OpenCode 配置发现与 MCP 服务器继承

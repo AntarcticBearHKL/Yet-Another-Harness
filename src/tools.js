@@ -24,10 +24,13 @@ const UA =
   '(KHTML, like Gecko) Chrome/131.0 Safari/537.36';
 
 function definitions(options = {}) {
-  return [
+  const all = [
     ...mergedDefinitions(),
     ...mcp.definitions({ disabledServerIds: options.mcpDisabled }),
   ];
+  if (!Array.isArray(options.allowedTools)) return all;
+  const allowed = new Set(options.allowedTools.map(String));
+  return all.filter((definition) => allowed.has(definition.function?.name));
 }
 
 async function execute(name, args) {

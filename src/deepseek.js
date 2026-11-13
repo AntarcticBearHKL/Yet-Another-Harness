@@ -108,8 +108,14 @@ function requestBody(messages, options = {}) {
     stream_options: { include_usage: true },
   };
   if (options.tools !== false) {
-    body.tools = tools.definitions({ mcpDisabled: options.mcpDisabled });
-    body.tool_choice = options.toolChoice || 'auto';
+    const definitions = tools.definitions({
+      mcpDisabled: options.mcpDisabled,
+      allowedTools: options.allowedTools,
+    });
+    if (definitions.length > 0) {
+      body.tools = definitions;
+      body.tool_choice = options.toolChoice || 'auto';
+    }
   }
   return body;
 }
@@ -416,6 +422,7 @@ async function runAgent({
   system,
   history,
   mcpDisabled,
+  allowedTools,
   onDelta,
   onRequest,
   onUsage,
@@ -441,7 +448,11 @@ async function runAgent({
 
   const send = async (round, requestMessages, options = {}) => {
     activeRound = round;
-    const body = requestBody(requestMessages, { mcpDisabled, ...options });
+    const body = requestBody(requestMessages, {
+      mcpDisabled,
+      allowedTools,
+      ...options,
+    });
     onRequest?.(structuredClone(body), round);
     const result = await streamChat({
       apiKey,
