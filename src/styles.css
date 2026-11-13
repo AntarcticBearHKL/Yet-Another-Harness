@@ -544,10 +544,10 @@ body.maximized #app {
   align-items: stretch;
   gap: 0;
   width: 100%;
-  max-width: 880px;
+  max-width: 1200px;
   min-height: 0;
   margin: 0 auto;
-  padding: 64px 28px 88px;
+  padding: 64px 32px 88px;
   overflow-y: auto;
   overflow-anchor: none;
   -webkit-mask-image: linear-gradient(
