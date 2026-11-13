@@ -1923,10 +1923,6 @@ const CATALOG_EMPTY = {
   skills: '还没有安装 Skill。',
   mcp: '还没有连接 MCP。',
 };
-const EXTENSION_KINDS = [
-  { id: 'skills', label: 'Skill' },
-  { id: 'mcp', label: 'MCP' },
-];
 const TOOL_GROUPS = [
   {
     id: 'search',
@@ -1951,8 +1947,9 @@ const TOOL_GROUPS = [
 ];
 
 function catalogTitleFor(kind) {
-  if (kind?.startsWith('tool:')) return '工具';
-  return EXTENSION_KINDS.find((item) => item.id === kind)?.label || '工具';
+  if (kind === 'skills') return 'Skill';
+  if (kind === 'mcp') return 'MCP';
+  return '工具';
 }
 
 function toolGroupFor(fn) {
@@ -2012,35 +2009,20 @@ function renderCatalogCategories(data, selectedKind) {
     toolItems.push({ id: 'tool:other', label: '其他', count: 0 });
   }
 
-  const sections = [
-    { label: '工具', items: toolItems },
-    {
-      label: '扩展',
-      items: EXTENSION_KINDS.map((kind) => ({
-        id: kind.id,
-        label: kind.label,
-        count: Array.isArray(data?.[kind.id]) ? data[kind.id].length : 0,
-      })),
-    },
-  ];
-
   dom.catalogCategories.replaceChildren();
-  for (const section of sections) {
-    if (section.items.length === 0) continue;
-    const wrapper = el('div', 'catalog-section');
-    wrapper.append(el('div', 'catalog-section-label', section.label));
-    for (const item of section.items) {
-      const button = el('button', 'catalog-category');
-      button.type = 'button';
-      button.dataset.kind = item.id;
-      if (item.id === selectedKind) button.classList.add('selected');
-      button.append(el('span', 'catalog-category-name', item.label));
-      button.append(el('span', 'catalog-category-count', String(item.count)));
-      button.addEventListener('click', () => selectCatalogKind(item.id));
-      wrapper.append(button);
-    }
-    dom.catalogCategories.append(wrapper);
+  const wrapper = el('div', 'catalog-section');
+  wrapper.append(el('div', 'catalog-section-label', '分类'));
+  for (const item of toolItems) {
+    const button = el('button', 'catalog-category');
+    button.type = 'button';
+    button.dataset.kind = item.id;
+    if (item.id === selectedKind) button.classList.add('selected');
+    button.append(el('span', 'catalog-category-name', item.label));
+    button.append(el('span', 'catalog-category-count', String(item.count)));
+    button.addEventListener('click', () => selectCatalogKind(item.id));
+    wrapper.append(button);
   }
+  dom.catalogCategories.append(wrapper);
 }
 
 function selectCatalogKind(kind) {
@@ -2173,13 +2155,13 @@ function renderCatalogContent(kind) {
 
 async function openCatalog(kind) {
   closeRingMenu();
-  const initialKind =
-    kind === 'skills' || kind === 'mcp' ? kind : 'tool:search';
+  const page = kind === 'skills' || kind === 'mcp' ? kind : 'tools';
   state.catalogOpen = true;
-  state.catalogKind = initialKind;
+  state.catalogKind = page === 'tools' ? 'tool:search' : page;
   state.catalogData = null;
   const request = ++state.catalogRequest;
-  dom.catalogTitle.textContent = catalogTitleFor(initialKind);
+  dom.catalog.classList.toggle('single', page !== 'tools');
+  dom.catalogTitle.textContent = catalogTitleFor(state.catalogKind);
   dom.catalogCategories.replaceChildren();
   dom.catalogList.replaceChildren(
     el('div', 'catalog-empty', '加载中…')
@@ -2191,10 +2173,18 @@ async function openCatalog(kind) {
     const data = await api.loadCatalog();
     if (!state.catalogOpen || request !== state.catalogRequest) return;
     state.catalogData = data;
-    ensureCatalogSelection(data);
-    dom.catalogTitle.textContent = catalogTitleFor(state.catalogKind);
-    renderCatalogCategories(data, state.catalogKind);
-    renderCatalogContent(state.catalogKind);
+    if (page === 'tools') {
+      ensureCatalogSelection(data);
+      dom.catalogTitle.textContent = catalogTitleFor(state.catalogKind);
+      renderCatalogCategories(data, state.catalogKind);
+      renderCatalogContent(state.catalogKind);
+    } else {
+      dom.catalogList.replaceChildren();
+      renderCatalogList(
+        page,
+        page === 'skills' ? data?.skills : data?.mcp
+      );
+    }
   } catch (error) {
     console.error('load catalog failed', error);
     if (!state.catalogOpen || request !== state.catalogRequest) return;

@@ -1520,6 +1520,14 @@ body.ring-open #messages {
   min-height: 0;
 }
 
+.catalog.single .catalog-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.catalog.single .catalog-side {
+  display: none;
+}
+
 .catalog-side {
   display: flex;
   flex-direction: column;
@@ -1878,6 +1886,10 @@ body.web .mobile-compose {
   .catalog-body {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .catalog.single .catalog-body {
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .catalog-side {
