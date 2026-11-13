@@ -47,6 +47,27 @@ test('request body includes tools and streaming', () => {
   assert.equal(body.tools[0].function.name, 'web_search');
 });
 
+test('request body can omit tools for the final summary', () => {
+  const body = deepseek.requestBody(
+    [{ role: 'user', content: 'hi' }],
+    { tools: false }
+  );
+  assert.equal(body.stream, true);
+  assert.equal(body.tools, undefined);
+  assert.equal(body.tool_choice, undefined);
+});
+
+test('tool results summary keeps the latest results', () => {
+  const text = deepseek.toolResultsSummary([
+    { role: 'tool', content: 'first line\nrest' },
+    { role: 'user', content: 'ignore me' },
+    { role: 'tool', content: 'second result' },
+  ]);
+  assert.match(text, /first line/);
+  assert.match(text, /second result/);
+  assert.doesNotMatch(text, /ignore me/);
+});
+
 test('messages from history keep thinking separate for the same route', () => {
   const messages = deepseek.messagesFromHistory(
     [

@@ -101,14 +101,17 @@ function messagesFromHistory(
 }
 
 function requestBody(messages, options = {}) {
-  return {
+  const body = {
     model: MODEL,
     messages,
     stream: true,
     stream_options: { include_usage: true },
-    tools: tools.definitions({ mcpDisabled: options.mcpDisabled }),
-    tool_choice: 'auto',
   };
+  if (options.tools !== false) {
+    body.tools = tools.definitions({ mcpDisabled: options.mcpDisabled });
+    body.tool_choice = options.toolChoice || 'auto';
+  }
+  return body;
 }
 
 function tokenUsage(usage) {
@@ -397,8 +400,14 @@ function toolAssistantMessage(result) {
   };
 }
 
+const TOOL_LIMIT_INSTRUCTION =
+  '（系统提示）工具调用轮次已用完，不要再调用任何工具。' +
+  '请直接基于上面已经获得的工具结果和对话信息，用当前掌握的信息给出完整、可用的最终回复。' +
+  '如果任务还没全部完成，说明已经完成了什么、还差什么。';
+
 /**
  * 跑完整的一轮用户请求：模型 → 工具 → 模型，最多 MAX_TOOL_ROUNDS 轮。
+ * 到达轮次上限后不再报错，而是追加一条总结指令，用当前已有的信息直接给出最终回复。
  * onRequest 收每一轮实际发出去的请求 body；onDelta 收正文增量；
  * onToolCall / onToolResult 收每次工具调用的参数和返回内容。
  */
@@ -430,11 +439,10 @@ async function runAgent({
     onDelta?.(text, activeRound, Boolean(reasoning));
   };
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+  const send = async (round, requestMessages, options = {}) => {
     activeRound = round;
-    const body = requestBody(messages, { mcpDisabled });
+    const body = requestBody(requestMessages, { mcpDisabled, ...options });
     onRequest?.(structuredClone(body), round);
-
     const result = await streamChat({
       apiKey,
       body,
@@ -444,8 +452,12 @@ async function runAgent({
       onFirstToken: (channel, firstTokenMs) =>
         onTiming?.({ round, channel, firstTokenMs }),
     });
-
     onUsage?.(tokenUsage(result.usage), round, timingMetrics(result));
+    return result;
+  };
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+    const result = await send(round, messages);
 
     if (result.toolCalls.length === 0) {
       return finalText;
@@ -486,11 +498,38 @@ async function runAgent({
     }
 
     if (round + 1 === MAX_TOOL_ROUNDS) {
-      throw new Error('tool loop limit reached');
+      // 轮次用完：不带工具再请求一次，让模型基于现有信息直接总结。
+      try {
+        await send(
+          round + 1,
+          [...messages, { role: 'user', content: TOOL_LIMIT_INSTRUCTION }],
+          { tools: false }
+        );
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        if (!finalText.trim()) {
+          finalText = toolResultsSummary(messages);
+        }
+      }
+      return finalText;
     }
   }
 
   return finalText;
+}
+
+function toolResultsSummary(messages) {
+  const results = messages.filter(
+    (message) => message.role === 'tool' && message.content
+  );
+  if (results.length === 0) {
+    return '工具调用轮次已用完，没有拿到可总结的结果。';
+  }
+  const lines = results.slice(-6).map((message) => {
+    const firstLine = String(message.content).split(/\r?\n/)[0] || '';
+    return `- ${firstLine.slice(0, 160)}`;
+  });
+  return `工具调用轮次已用完，基于已获得的结果：\n${lines.join('\n')}`;
 }
 
 async function runSubagent({ apiKey, system, prompt, signal }) {
@@ -567,6 +606,8 @@ module.exports = {
   ToolCallBuilder,
   streamChat,
   toolAssistantMessage,
+  toolResultsSummary,
+  TOOL_LIMIT_INSTRUCTION,
   runAgent,
   runSubagent,
   runVisionSubagent,

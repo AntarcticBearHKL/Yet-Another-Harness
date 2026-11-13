@@ -210,7 +210,8 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 - 每次请求带 `tools: [...OpenCode + OMO 合并工具, ...MCP tools]` 和 `tool_choice: 'auto'`。
 - 流式响应里的 `delta.tool_calls` 按 `index` 把 `function.arguments` 拼起来。
 - 模型要工具时：把 assistant 的 tool_calls 放回 messages，顺序执行工具，追加
-  `role: 'tool'` 结果，再请求模型；最多 **6 轮**。
+  `role: 'tool'` 结果，再请求模型；最多 **6 轮**。第 6 轮工具执行完后不再报错，
+  而是追加一条总结指令、不带工具再请求一次，让模型用当前已有信息直接给出最终回复。
 - 工具执行期间，调用参数和返回结果合并到同一个「工具调用」卡片里：展开后先显示「调用参数」，再显示「返回结果」；返回前显示「等待工具返回…」，不会拆成两个气泡。正文继续流式输出。
 - 工具调用和结果作为步骤持久化；每次模型请求的原始 body 也存 SQLite，可在卡片上双击查看。
 
