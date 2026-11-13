@@ -125,7 +125,8 @@ server/mcp/format.js   MCP 结果转纯文本
 src/main.js        Electron 壳：窗口、拖动/缩放、全文窗口、拉起/连接后端
 src/preload.js     只暴露窗口拖动/缩放和全文窗口能力
 src/deepseek.js    OpenCode Go SSE + tool_calls 累积 + agent loop（后端）
-src/tools.js       免费 web_search、read_file 和 MCP 工具路由（后端）
+src/tools.js       工具注册表：OpenCode + OMO 合并、MCP 路由、兼容别名
+src/tools/         hashline、文件/搜索、shell/后台、会话/任务/目标、子模型、web 工具模块
 src/mcp-registry.js MCP 工具到 OpenAI function 的映射（后端）
 src/store.js       chats.db（SQLite/WAL）+ settings.json 原子写 + 旧版迁移
 src/renderer.js    网页客户端：聊天、项目工作区、设置、环形菜单、HTTP/SSE
@@ -193,22 +194,33 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 - 透明无边框窗口没有系统缩放边框，边缘 5px 的手柄负责缩放，光标会在边缘变成对应方向的缩放箭头；
 - 系统不支持透明窗口时只影响圆角，不影响布局和功能。
 
+## 工具集（OpenCode + OMO）
+
+YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（OMO）的工具；同名工具按 OMO 优先覆盖 OpenCode。
+
+- OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`list_mcp_resources`、`read_mcp_resource`、`session_rename`、`models`、`worktree_*`
+- OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）、`skill`
+- OMO 常驻 / 条件工具：`session_list/read/search/info`、`task_create/get/list/update`、`background_output/cancel`、`monitor_start/stop/list/output`、`interactive_bash`、`task/subagent/call_omo_agent/delegate_task`、`create_goal/update_goal/get_goal`、`skill_mcp`、`look_at`、`team_*`
+- 兼容别名：`read_file`、`web_search`、`hashline_edit`
+- `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
+- OMO 的 `team_*`、`background_*`、`monitor_*` 在 YAH 里是本地记录 / 进程管理版本；`task`/`subagent` 是单次子模型调用；`interactive_bash` 在 Windows 上退化为普通 shell
+
 ## Tool calling
 
-- 每次请求带 `tools: [web_search, read_file, ...MCP tools]` 和 `tool_choice: 'auto'`。
+- 每次请求带 `tools: [...OpenCode + OMO 合并工具, ...MCP tools]` 和 `tool_choice: 'auto'`。
 - 流式响应里的 `delta.tool_calls` 按 `index` 把 `function.arguments` 拼起来。
 - 模型要工具时：把 assistant 的 tool_calls 放回 messages，顺序执行工具，追加
   `role: 'tool'` 结果，再请求模型；最多 **6 轮**。
 - 工具执行期间，调用参数和返回结果合并到同一个「工具调用」卡片里：展开后先显示「调用参数」，再显示「返回结果」；返回前显示「等待工具返回…」，不会拆成两个气泡。正文继续流式输出。
 - 工具调用和结果作为步骤持久化；每次模型请求的原始 body 也存 SQLite，可在卡片上双击查看。
 
-`web_search` 抓 `https://html.duckduckgo.com/html/?q=...`，解析 `result__a` /
+`web_search` / `websearch` 抓 `https://html.duckduckgo.com/html/?q=...`，解析 `result__a` /
 `result__snippet`，把 `uddg=` 重定向解成真实 URL，去标签、解 HTML 实体。免费、无 key，
 但 DuckDuckGo 可能限流/弹 CAPTCHA；这时返回 `tool error`，模型可以换个说法再搜。
 
-`read_file` 读取本地 UTF-8 文本文件，返回带行号的内容；支持 `offset` / `limit` 分页
-（默认 200 行，最多 2000 行 / 100k 字符），自动拒绝目录和二进制文件。相对路径按后端
-进程工作目录解析，跨项目读取建议用绝对路径。
+`read` / `read_file` 读取本地 UTF-8 文本文件，返回带 `LINE#ID` 的内容；支持 `offset` / `limit` 分页
+（默认 2000 行），自动拒绝目录和二进制文件。相对路径按后端进程工作目录解析，跨项目读取建议用绝对路径。
+`write` 写文件并自动创建父目录；`edit` 支持 LINE#ID 锚点和 `oldString`/`newString` 两种模式。
 
 ## MCP
 

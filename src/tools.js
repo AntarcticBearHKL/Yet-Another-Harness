@@ -4,6 +4,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline');
 const mcp = require('./mcp-registry');
+const { mergedDefinitions } = require('./tools/definitions');
+const files = require('./tools/files');
+const processTools = require('./tools/process');
+const stateTools = require('./tools/state');
+const agentTools = require('./tools/agent');
+const webTools = require('./tools/web');
+
+function configure(next = {}) {
+  agentTools.configure(next);
+}
 
 // 免费 web_search：DuckDuckGo 公开 HTML 端点，不需要 API key。
 // 解析 result__a / result__snippet，把 uddg= 重定向解成真实 URL。
@@ -15,62 +25,7 @@ const UA =
 
 function definitions(options = {}) {
   return [
-    {
-      type: 'function',
-      function: {
-        name: 'web_search',
-        description:
-          'Search the public web with DuckDuckGo. Use this for current events, facts you are unsure about, ' +
-          'or anything beyond your training data. Returns titles, URLs and short snippets. Free, no API key.',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: {
-              type: 'string',
-              description: "Search query, in the user's language if appropriate.",
-            },
-            max_results: {
-              type: 'integer',
-              description: 'How many results to return (1-8).',
-              minimum: 1,
-              maximum: 8,
-            },
-          },
-          required: ['query'],
-        },
-      },
-    },
-    {
-      type: 'function',
-      function: {
-        name: 'read_file',
-        description:
-          'Read a UTF-8 text file from the local filesystem. Returns numbered lines. ' +
-          'Use offset and limit to page through large files.',
-        parameters: {
-          type: 'object',
-          properties: {
-            path: {
-              type: 'string',
-              description:
-                'Absolute path, or a path relative to the harness working directory.',
-            },
-            offset: {
-              type: 'integer',
-              description: '1-based line number to start from.',
-              minimum: 1,
-            },
-            limit: {
-              type: 'integer',
-              description: 'Maximum number of lines to return (1-2000).',
-              minimum: 1,
-              maximum: 2000,
-            },
-          },
-          required: ['path'],
-        },
-      },
-    },
+    ...mergedDefinitions(),
     ...mcp.definitions({ disabledServerIds: options.mcpDisabled }),
   ];
 }
@@ -84,32 +39,83 @@ async function execute(name, args) {
   }
   if (!value || typeof value !== 'object') value = {};
 
-  if (name === 'web_search') {
-    const query = String(value.query ?? '').trim();
-    if (!query) {
-      return 'tool error: web_search requires a non-empty "query"';
-    }
-    const max = Math.max(1, Math.min(8, Number(value.max_results) || 5));
-    try {
+  try {
+    if (name === 'web_search' || name === 'websearch') {
+      const query = String(value.query ?? '').trim();
+      if (!query) {
+        return `tool error: ${name} requires a non-empty "query"`;
+      }
+      const max = Math.max(1, Math.min(8, Number(value.max_results) || 5));
       return await webSearch(query, max);
-    } catch (error) {
-      return `tool error: ${error.message}`;
     }
-  }
 
-  if (name === 'read_file') {
-    try {
+    if (name === 'read_file') {
       return await readFileTool(value);
-    } catch (error) {
-      return `tool error: ${error.message}`;
     }
-  }
 
-  if (mcp.isMcpTool(name)) {
-    return mcp.execute(name, args);
+    const handlers = {
+      read: files.readTool,
+      write: files.writeTool,
+      edit: files.editTool,
+      hashline_edit: files.editTool,
+      glob: files.globTool,
+      grep: files.grepTool,
+      patch: files.patchTool,
+      shell: processTools.shellTool,
+      interactive_bash: processTools.shellTool,
+      webfetch: webTools.webfetchTool,
+      skill: agentTools.skillTool,
+      skill_mcp: agentTools.skillMcpTool,
+      session_list: stateTools.sessionList,
+      session_read: stateTools.sessionRead,
+      session_search: stateTools.sessionSearch,
+      session_info: stateTools.sessionInfo,
+      session_rename: agentTools.sessionRename,
+      task_create: stateTools.taskCreate,
+      task_get: stateTools.taskGet,
+      task_list: stateTools.taskList,
+      task_update: stateTools.taskUpdate,
+      create_goal: stateTools.createGoal,
+      update_goal: stateTools.updateGoal,
+      get_goal: stateTools.getGoal,
+      background_output: processTools.backgroundOutput,
+      background_cancel: processTools.backgroundCancel,
+      monitor_start: processTools.monitorStart,
+      monitor_stop: processTools.monitorStop,
+      monitor_list: processTools.monitorList,
+      monitor_output: processTools.monitorOutput,
+      task: agentTools.subagentTool,
+      subagent: agentTools.subagentTool,
+      call_omo_agent: agentTools.subagentTool,
+      delegate_task: agentTools.subagentTool,
+      look_at: agentTools.lookAtTool,
+      question: agentTools.questionTool,
+      models: agentTools.modelsTool,
+      worktree_list: agentTools.worktreeList,
+      worktree_create: agentTools.worktreeCreate,
+      worktree_remove: agentTools.worktreeRemove,
+      list_mcp_resources: agentTools.listMcpResources,
+      read_mcp_resource: agentTools.readMcpResource,
+      team_create: stateTools.teamCreate,
+      team_delete: stateTools.teamDelete,
+      team_list: stateTools.teamList,
+      team_status: stateTools.teamStatus,
+      team_send_message: stateTools.teamSendMessage,
+      team_task_create: stateTools.teamTaskCreate,
+      team_task_list: stateTools.teamTaskList,
+      team_task_update: stateTools.teamTaskUpdate,
+      team_task_get: stateTools.teamTaskGet,
+      team_shutdown_request: stateTools.teamShutdownRequest,
+      team_approve_shutdown: stateTools.teamApproveShutdown,
+      team_reject_shutdown: stateTools.teamRejectShutdown,
+    };
+    const handler = handlers[name];
+    if (handler) return await handler(value);
+    if (mcp.isMcpTool(name)) return mcp.execute(name, args);
+    return `tool error: unknown tool "${name}"`;
+  } catch (error) {
+    return `tool error: ${error.message}`;
   }
-
-  return `tool error: unknown tool "${name}"`;
 }
 
 function statusLabel(name, args) {
@@ -119,15 +125,41 @@ function statusLabel(name, args) {
   } catch {
     /* ignore */
   }
-  if (name === 'web_search') {
+  if (name === 'web_search' || name === 'websearch') {
     const query = Array.from(String(value.query ?? '')).slice(0, 48).join('');
-    return query ? `web_search: ${query}` : 'web_search';
+    return `${name}: ${query}`;
   }
-  if (name === 'read_file') {
+  if (name === 'read' || name === 'read_file' || name === 'write') {
     const filePath = String(value.path ?? '');
     const base = filePath ? path.basename(filePath) : '';
-    return base ? `read_file: ${base}` : 'read_file';
+    return base ? `${name}: ${base}` : name;
   }
+  if (name === 'edit' || name === 'hashline_edit') {
+    const filePath = String(value.filePath || value.path || '');
+    return filePath ? `edit: ${path.basename(filePath)}` : 'edit';
+  }
+  if (name === 'glob' || name === 'grep') {
+    const pattern = String(value.pattern ?? '');
+    return pattern ? `${name}: ${pattern}` : name;
+  }
+  if (name === 'shell' || name === 'interactive_bash') {
+    const command = String(value.command ?? '').replace(/\s+/g, ' ').slice(0, 60);
+    return command ? `${name}: ${command}` : name;
+  }
+  if (name === 'webfetch') {
+    try {
+      return `webfetch: ${new URL(String(value.url ?? '')).host}`;
+    } catch {
+      return 'webfetch';
+    }
+  }
+  if (name === 'skill') {
+    return value.name ? `skill: ${value.name}` : 'skill';
+  }
+  if (name === 'task' || name === 'subagent' || name === 'call_omo_agent' || name === 'delegate_task') {
+    return value.description ? `${name}: ${value.description}` : name;
+  }
+  if (name === 'patch') return 'patch';
   if (mcp.isMcpTool(name)) {
     return mcp.statusLabel(name, args);
   }
@@ -363,6 +395,7 @@ function truncate(text, max) {
 
 module.exports = {
   SEARCH_URL,
+  configure,
   definitions,
   execute,
   statusLabel,

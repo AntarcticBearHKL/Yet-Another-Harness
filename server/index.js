@@ -44,6 +44,7 @@ const skillService = createSkillService({
   dataDir: DATA_DIR,
   mcpManager,
 });
+tools.configure({ skillService, mcpManager });
 
 let pidWritten = false;
 

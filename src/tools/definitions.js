@@ -1,0 +1,551 @@
+'use strict';
+
+// Merged tool catalog: OpenCode built-ins + oh-my-opencode (OMO) tools.
+// For overlapping names OMO wins (glob, grep, edit, skill), per OMO's registry.
+
+function fn(name, description, properties = {}, required = []) {
+  return {
+    type: 'function',
+    function: {
+      name,
+      description,
+      parameters: {
+        type: 'object',
+        properties,
+        ...(required.length ? { required } : {}),
+      },
+    },
+  };
+}
+
+const str = (description) => ({ type: 'string', description });
+const num = (description) => ({ type: 'number', description });
+const bool = (description) => ({ type: 'boolean', description });
+const obj = (description) => ({ type: 'object', description });
+const arr = (description, items) => ({
+  type: 'array',
+  description,
+  ...(items ? { items } : {}),
+});
+
+const READ = fn(
+  'read',
+  'Read a text file or directory. Text lines are prefixed with LINE#ID|content for hashline edits. Use offset and limit for large files.',
+  {
+    path: str('File or directory to read'),
+    offset: num('1-based line or directory entry to start from'),
+    limit: num('Maximum lines or entries (default 2000)'),
+  },
+  ['path']
+);
+
+const WRITE = fn(
+  'write',
+  'Write a UTF-8 text file, creating parent directories as needed.',
+  {
+    path: str('Absolute path, or a path relative to the working directory'),
+    content: str('Content to write to the file'),
+  },
+  ['path', 'content']
+);
+
+const EDIT = fn(
+  'edit',
+  'Edit files using LINE#ID anchors from read output for precise, safe modifications. ' +
+    'Each read line is "LINE#ID|content". Copy tags exactly. One call can batch edits for one file; ' +
+    'all anchors reference the original file state and are applied bottom-up. ' +
+    'replace removes pos..end and inserts lines; append/prepend insert after/before an anchor; ' +
+    'no anchors mean EOF/BOF. lines:null or [] deletes with replace. ' +
+    'For simple edits, path + oldString + newString also works.',
+  {
+    filePath: str('Absolute path to the file to edit'),
+    delete: bool('Delete the file instead of editing'),
+    rename: str('Rename the file after edits'),
+    edits: arr('Hashline edit operations', {
+      type: 'object',
+      properties: {
+        op: { type: 'string', enum: ['replace', 'append', 'prepend'] },
+        pos: str('Primary anchor in LINE#ID format'),
+        end: str('Range end anchor in LINE#ID format'),
+        lines: {
+          anyOf: [arr('Replacement lines'), str('Newline-delimited replacement text'), { type: 'null' }],
+        },
+      },
+      required: ['op', 'lines'],
+    }),
+    path: str('Simple-edit path (legacy)'),
+    oldString: str('Exact text to find (simple edit)'),
+    newString: str('Replacement text (simple edit)'),
+    replaceAll: bool('Replace all occurrences (simple edit)'),
+  }
+);
+
+const GLOB = fn(
+  'glob',
+  'Fast file pattern matching tool with safety limits (60s timeout, 100 file limit). ' +
+    'Supports glob patterns like "**/*.js" or "src/**/*.ts". Returns matching file paths sorted by modification time.',
+  {
+    pattern: str('The glob pattern to match files against'),
+    path: str('Directory to search in; defaults to the working directory'),
+    hidden: bool('Include hidden files and directories'),
+    limit: num('Maximum number of files (default 100)'),
+  },
+  ['pattern']
+);
+
+const GREP = fn(
+  'grep',
+  'Fast content search tool with safety limits (60s timeout, 256KB output). ' +
+    'Searches file contents using regular expressions. Filter files with include (e.g. "*.js", "*.{ts,tsx}"). ' +
+    'Output modes: content, files_with_matches (default), count.',
+  {
+    pattern: str('The regex pattern to search for in file contents'),
+    include: str('File pattern to include (e.g. "*.js")'),
+    path: str('Directory to search; defaults to the working directory'),
+    output_mode: { type: 'string', enum: ['content', 'files_with_matches', 'count'] },
+    head_limit: num('Limit output to the first N entries; 0 means no limit'),
+  },
+  ['pattern']
+);
+
+const SHELL = fn(
+  'shell',
+  'Execute a shell command and return stdout, stderr, and exit code. Supports workdir, timeout, and background mode.',
+  {
+    command: str('Shell command string to execute'),
+    workdir: str('Working directory'),
+    timeout: num('Timeout in milliseconds (default 120000, 0 disables)'),
+    background: bool('Start in the background and return a job id'),
+  },
+  ['command']
+);
+
+const WEBFETCH = fn(
+  'webfetch',
+  'Fetch content from an HTTP or HTTPS URL and return it as text, markdown, or HTML. Markdown is the default.',
+  {
+    url: str('The HTTP or HTTPS URL to fetch'),
+    format: { type: 'string', enum: ['text', 'markdown', 'html'] },
+    timeout: num('Timeout in seconds (1-120, default 30)'),
+  },
+  ['url']
+);
+
+const WEBSEARCH = fn(
+  'websearch',
+  'Search the public web with DuckDuckGo. Use for current events, facts you are unsure about, or anything beyond training data.',
+  {
+    query: str("Search query, in the user's language if appropriate"),
+    max_results: num('How many results to return (1-8)'),
+  },
+  ['query']
+);
+
+const PATCH = fn(
+  'patch',
+  'Apply a unified diff patch to the working tree using git apply.',
+  { patchText: str('The full patch text describing add, update, and delete operations') },
+  ['patchText']
+);
+
+const SKILL = fn(
+  'skill',
+  'Load a Skill by name and return its instructions. Use without leading slash. Skills may come from files or MCP prompts.',
+  {
+    name: str("The skill name (e.g. 'test-skill' or 'Character Design')"),
+    arguments: obj('Optional MCP Skill arguments'),
+    sessionID: str('Optional session id; defaults to the current session'),
+  },
+  ['name']
+);
+
+const SKILL_MCP = fn(
+  'skill_mcp',
+  'List MCP tools, or call one MCP tool by server and tool name.',
+  {
+    server: str('MCP server id or name'),
+    tool: str('MCP tool name'),
+    arguments: obj('Tool arguments'),
+  }
+);
+
+const SESSION_LIST = fn('session_list', 'List YAH sessions with id, title, and message count.', {});
+const SESSION_READ = fn(
+  'session_read',
+  'Read messages from a YAH session. Omit sessionID for the current session.',
+  {
+    sessionID: str('Session id'),
+    offset: num('0-based message offset'),
+    limit: num('Maximum messages (default 30, max 100)'),
+  }
+);
+const SESSION_SEARCH = fn(
+  'session_search',
+  'Search message text across YAH sessions.',
+  { query: str('Text to search for'), sessionID: str('Optional session id') },
+  ['query']
+);
+const SESSION_INFO = fn(
+  'session_info',
+  'Show metadata for a YAH session: project, message count, MCP switches, fold state, queue.',
+  { sessionID: str('Session id') }
+);
+
+const TASK_CREATE = fn(
+  'task_create',
+  'Create a task in the local YAH task list.',
+  {
+    subject: str('Short task subject'),
+    description: str('Task details'),
+    status: str('pending | in_progress | completed | cancelled'),
+    priority: str('low | medium | high'),
+    depends_on: arr('Task ids that must complete first', { type: 'string' }),
+  },
+  ['subject']
+);
+const TASK_GET = fn('task_get', 'Get a local task by id.', { id: str('Task id') }, ['id']);
+const TASK_LIST = fn(
+  'task_list',
+  'List local tasks, optionally filtered by status.',
+  { status: str('Filter by status') }
+);
+const TASK_UPDATE = fn(
+  'task_update',
+  'Update a local task.',
+  {
+    id: str('Task id'),
+    subject: str('New subject'),
+    description: str('New description'),
+    status: str('New status'),
+    priority: str('New priority'),
+    depends_on: arr('New dependency ids', { type: 'string' }),
+  },
+  ['id']
+);
+
+const BACKGROUND_OUTPUT = fn(
+  'background_output',
+  'Read output and status of a background job.',
+  { id: str('Background job id') },
+  ['id']
+);
+const BACKGROUND_CANCEL = fn(
+  'background_cancel',
+  'Cancel a background job by id.',
+  { id: str('Background job id') },
+  ['id']
+);
+const MONITOR_START = fn(
+  'monitor_start',
+  'Start a background command and return its monitor id.',
+  {
+    command: str('Command to run'),
+    workdir: str('Working directory'),
+    timeout: num('Timeout in milliseconds'),
+  },
+  ['command']
+);
+const MONITOR_STOP = fn(
+  'monitor_stop',
+  'Stop a monitored background command.',
+  { id: str('Monitor id') },
+  ['id']
+);
+const MONITOR_LIST = fn('monitor_list', 'List monitored background commands.', {});
+const MONITOR_OUTPUT = fn(
+  'monitor_output',
+  'Read output from a monitored background command.',
+  { id: str('Monitor id') },
+  ['id']
+);
+const INTERACTIVE_BASH = fn(
+  'interactive_bash',
+  'Run a shell command (interactive tmux sessions are not available on Windows; this runs a normal shell command).',
+  {
+    command: str('Command to run'),
+    workdir: str('Working directory'),
+    timeout: num('Timeout in milliseconds'),
+  },
+  ['command']
+);
+
+const TASK = fn(
+  'task',
+  'Delegate a focused task to a subagent. The subagent runs one model request without tools and returns a concise result.',
+  {
+    description: str('A short 3-5 word description of the task'),
+    prompt: str('The task for the subagent to perform'),
+    subagent_type: str('Agent label (e.g. general, explore)'),
+    model: str('Optional model id'),
+    background: bool('Run in the background (currently synchronous)'),
+  },
+  ['description', 'prompt']
+);
+const SUBAGENT = fn(
+  'subagent',
+  'Run a focused subagent task. Alias of task with OpenCode-style arguments.',
+  {
+    agent: str('Agent label'),
+    description: str('A short 3-5 word label for the task'),
+    prompt: str('The task for the subagent to perform'),
+    model: str('Optional model id'),
+    sessionID: str('Optional session id'),
+    background: bool('Run in the background (currently synchronous)'),
+  },
+  ['agent', 'description', 'prompt']
+);
+const CALL_OMO_AGENT = fn(
+  'call_omo_agent',
+  'Call an OMO-style subagent with a prompt. Alias of task.',
+  {
+    description: str('A short description of the task'),
+    prompt: str('The task for the subagent'),
+    subagent_type: str('Agent label'),
+    model: str('Optional model id'),
+    background: bool('Run in the background (currently synchronous)'),
+  },
+  ['description', 'prompt']
+);
+const DELEGATE_TASK = fn(
+  'delegate_task',
+  'Delegate a task to a subagent. Alias of task.',
+  {
+    description: str('A short description of the task'),
+    prompt: str('The task for the subagent'),
+    subagent_type: str('Agent label'),
+    model: str('Optional model id'),
+    background: bool('Run in the background (currently synchronous)'),
+  },
+  ['description', 'prompt']
+);
+
+const CREATE_GOAL = fn(
+  'create_goal',
+  'Create a local goal with an objective.',
+  { objective: str('Goal objective'), status: str('active | completed | cancelled'), progress: str('Progress note') },
+  ['objective']
+);
+const UPDATE_GOAL = fn(
+  'update_goal',
+  'Update a local goal.',
+  { id: str('Goal id'), objective: str('New objective'), status: str('New status'), progress: str('New progress') },
+  ['id']
+);
+const GET_GOAL = fn('get_goal', 'Get the latest goal, or a goal by id.', { id: str('Goal id') });
+
+const LIST_MCP_RESOURCES = fn('list_mcp_resources', 'List resources exposed by connected MCP servers.', {});
+const READ_MCP_RESOURCE = fn(
+  'read_mcp_resource',
+  'Read an MCP resource by server and URI.',
+  { server: str('MCP server id or name'), uri: str('Resource URI') },
+  ['server', 'uri']
+);
+
+const QUESTION = fn(
+  'question',
+  'Ask the user one or more questions. YAH returns the questions as text; ask them in your reply.',
+  {
+    questions: arr('Questions to ask', {
+      type: 'object',
+      properties: {
+        question: str('The question'),
+        header: str('Very short label'),
+        options: arr('Optional choices', {
+          type: 'object',
+          properties: { label: str('Choice label'), description: str('Choice details') },
+          required: ['label', 'description'],
+        }),
+      },
+      required: ['question'],
+    }),
+  },
+  ['questions']
+);
+
+const LOOK_AT = fn(
+  'look_at',
+  'Inspect an image with the multimodal model and return a description.',
+  { path: str('Image path'), prompt: str('What to look for') },
+  ['path']
+);
+
+const SESSION_RENAME = fn(
+  'session_rename',
+  'Rename a YAH session. Omit sessionID to rename the current session.',
+  { sessionID: str('Session id'), title: str('New session title') },
+  ['title']
+);
+const MODELS = fn(
+  'models',
+  'Search available models.',
+  { query: str('Text to search in model names and ids'), provider: str('Provider filter'), limit: num('Max results') }
+);
+const WORKTREE_LIST = fn('worktree_list', "List the current git repository's worktrees.", {});
+const WORKTREE_CREATE = fn(
+  'worktree_create',
+  'Create a named git worktree next to the repository.',
+  { name: str('Worktree name') },
+  ['name']
+);
+const WORKTREE_REMOVE = fn(
+  'worktree_remove',
+  'Remove a git worktree.',
+  { directory: str('Absolute worktree path'), force: bool('Discard modified/untracked files') },
+  ['directory']
+);
+
+const TEAM_CREATE = fn(
+  'team_create',
+  'Create a local team record with optional members.',
+  {
+    name: str('Team name'),
+    members: arr('Members', {
+      type: 'object',
+      properties: { name: str('Member name'), role: str('Member role') },
+      required: ['name'],
+    }),
+  },
+  ['name']
+);
+const TEAM_DELETE = fn('team_delete', 'Delete a local team record.', { name: str('Team name') }, ['name']);
+const TEAM_LIST = fn('team_list', 'List local team records.', {});
+const TEAM_STATUS = fn('team_status', 'Show a local team record.', { name: str('Team name') }, ['name']);
+const TEAM_SEND_MESSAGE = fn(
+  'team_send_message',
+  'Append a message to a local team mailbox.',
+  { team: str('Team name'), from: str('Sender'), to: str('Recipient'), message: str('Message') },
+  ['team', 'message']
+);
+const TEAM_TASK_CREATE = fn(
+  'team_task_create',
+  'Create a task in a local team record.',
+  { team: str('Team name'), subject: str('Subject'), description: str('Details'), assignee: str('Assignee') },
+  ['team', 'subject']
+);
+const TEAM_TASK_LIST = fn('team_task_list', 'List tasks in a local team record.', { team: str('Team name') }, ['team']);
+const TEAM_TASK_UPDATE = fn(
+  'team_task_update',
+  'Update a task in a local team record.',
+  {
+    team: str('Team name'),
+    id: str('Task id'),
+    subject: str('New subject'),
+    description: str('New details'),
+    assignee: str('New assignee'),
+    status: str('New status'),
+  },
+  ['team', 'id']
+);
+const TEAM_TASK_GET = fn(
+  'team_task_get',
+  'Get a task from a local team record.',
+  { team: str('Team name'), id: str('Task id') },
+  ['team', 'id']
+);
+const TEAM_SHUTDOWN_REQUEST = fn(
+  'team_shutdown_request',
+  'Mark a local team member as shutdown-requested.',
+  { team: str('Team name'), member: str('Member name or id') },
+  ['team', 'member']
+);
+const TEAM_APPROVE_SHUTDOWN = fn(
+  'team_approve_shutdown',
+  'Mark a local team member as shut down.',
+  { team: str('Team name'), member: str('Member name or id') },
+  ['team', 'member']
+);
+const TEAM_REJECT_SHUTDOWN = fn(
+  'team_reject_shutdown',
+  'Return a local team member to active status.',
+  { team: str('Team name'), member: str('Member name or id') },
+  ['team', 'member']
+);
+
+const OPENCODE = [
+  READ,
+  WRITE,
+  SHELL,
+  WEBFETCH,
+  WEBSEARCH,
+  PATCH,
+  SESSION_RENAME,
+  MODELS,
+  WORKTREE_LIST,
+  WORKTREE_CREATE,
+  WORKTREE_REMOVE,
+  QUESTION,
+  SUBAGENT,
+  LIST_MCP_RESOURCES,
+  READ_MCP_RESOURCE,
+];
+
+const OMO = [
+  GLOB,
+  GREP,
+  EDIT,
+  SKILL,
+  SKILL_MCP,
+  SESSION_LIST,
+  SESSION_READ,
+  SESSION_SEARCH,
+  SESSION_INFO,
+  TASK_CREATE,
+  TASK_GET,
+  TASK_LIST,
+  TASK_UPDATE,
+  BACKGROUND_OUTPUT,
+  BACKGROUND_CANCEL,
+  MONITOR_START,
+  MONITOR_STOP,
+  MONITOR_LIST,
+  MONITOR_OUTPUT,
+  INTERACTIVE_BASH,
+  TASK,
+  CALL_OMO_AGENT,
+  DELEGATE_TASK,
+  CREATE_GOAL,
+  UPDATE_GOAL,
+  GET_GOAL,
+  LOOK_AT,
+  TEAM_CREATE,
+  TEAM_DELETE,
+  TEAM_LIST,
+  TEAM_STATUS,
+  TEAM_SEND_MESSAGE,
+  TEAM_TASK_CREATE,
+  TEAM_TASK_LIST,
+  TEAM_TASK_UPDATE,
+  TEAM_TASK_GET,
+  TEAM_SHUTDOWN_REQUEST,
+  TEAM_APPROVE_SHUTDOWN,
+  TEAM_REJECT_SHUTDOWN,
+];
+
+const LEGACY = [
+  fn(
+    'web_search',
+    'Alias of websearch: search the public web with DuckDuckGo.',
+    { query: str('Search query'), max_results: num('How many results (1-8)') },
+    ['query']
+  ),
+  fn(
+    'read_file',
+    'Alias of read: read a UTF-8 text file with numbered lines.',
+    {
+      path: str('Absolute path or path relative to the working directory'),
+      offset: num('1-based line number to start from'),
+      limit: num('Maximum lines (1-2000)'),
+    },
+    ['path']
+  ),
+];
+
+function mergedDefinitions() {
+  const byName = new Map();
+  for (const definition of [...LEGACY, ...OPENCODE, ...OMO]) {
+    byName.set(definition.function.name, definition);
+  }
+  return [...byName.values()];
+}
+
+module.exports = { mergedDefinitions, OPENCODE, OMO, LEGACY };

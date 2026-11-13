@@ -493,6 +493,60 @@ async function runAgent({
   return finalText;
 }
 
+async function runSubagent({ apiKey, system, prompt, signal }) {
+  const key = String(apiKey || '').trim();
+  if (!key) throw new Error('missing API key');
+  const body = {
+    model: MODEL,
+    messages: [
+      {
+        role: 'system',
+        content:
+          system ||
+          'You are a focused subagent. Complete the task and return a concise result. Do not ask questions.',
+      },
+      { role: 'user', content: String(prompt || '') },
+    ],
+    stream: true,
+    stream_options: { include_usage: true },
+  };
+  const result = await streamChat({ apiKey: key, body, signal });
+  return result.content || result.reasoning || '';
+}
+
+async function runVisionSubagent({
+  apiKey,
+  system,
+  prompt,
+  imageUrl,
+  signal,
+}) {
+  const key = String(apiKey || '').trim();
+  if (!key) throw new Error('missing API key');
+  const body = {
+    model: MODEL,
+    messages: [
+      {
+        role: 'system',
+        content:
+          system ||
+          'You are a focused multimodal subagent. Describe and analyze the image accurately.',
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: String(prompt || 'Describe this image.') },
+          { type: 'image_url', image_url: { url: String(imageUrl || '') } },
+        ],
+      },
+    ],
+    stream: true,
+    stream_options: { include_usage: true },
+  };
+  const result = await streamChat({ apiKey: key, body, signal });
+  return result.content || result.reasoning || '';
+}
+
 module.exports = {
   ENDPOINT,
   MODEL,
@@ -514,4 +568,6 @@ module.exports = {
   streamChat,
   toolAssistantMessage,
   runAgent,
+  runSubagent,
+  runVisionSubagent,
 };
