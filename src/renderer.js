@@ -296,6 +296,7 @@ let dragFrame = 0;
 let dragFromComposer = false;
 let suppressNextCardClick = false;
 let turnFlashTimer = 0;
+let cardAnchorFrame = 0;
 
 function currentSession() {
   return state.sessions[state.current];
@@ -501,6 +502,29 @@ function applyOpenKey(key, opts) {
   applyOpenKeys(openKeySet(key), opts);
 }
 
+function anchorCardTitle(element, targetTop, duration = 360) {
+  cancelAnimationFrame(cardAnchorFrame);
+  cardAnchorFrame = 0;
+  if (!element || !element.isConnected) return;
+  const started = performance.now();
+  const step = (now) => {
+    if (!element.isConnected) {
+      cardAnchorFrame = 0;
+      return;
+    }
+    const delta = element.getBoundingClientRect().top - targetTop;
+    if (Math.abs(delta) > 0.5) {
+      dom.messages.scrollTop += delta;
+    }
+    if (now - started < duration) {
+      cardAnchorFrame = requestAnimationFrame(step);
+    } else {
+      cardAnchorFrame = 0;
+    }
+  };
+  cardAnchorFrame = requestAnimationFrame(step);
+}
+
 function toggleCard(key) {
   const card = cardByKey(key);
   if (!card) return;
@@ -512,8 +536,11 @@ function toggleCard(key) {
     return;
   }
 
+  const head = card.querySelector('.card-head') || card;
+  const anchorTop = head.getBoundingClientRect().top;
   state.openCardKey = key;
   applyOpenKey(key);
+  anchorCardTitle(head, anchorTop);
 }
 
 function previewLine(text) {
