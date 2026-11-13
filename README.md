@@ -14,9 +14,9 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 扁平化界面：没有阴影和模糊面板；用角色栏、细竖线、文字层级和很淡的圆角暖色底区分，唯一例外是 Space 输入框的透明毛玻璃遮罩
 - 全局使用 Resource Han Rounded CN（资源圆体，SIL OFL）：界面、对话正文、工具/JSON 查看器统一圆体
 - 对话正文重新排版：回答 15.5px、过程 13px、1.8 行高、居中阅读列、统一段落间距；`一、二、三、` 这类章节标题自动加粗并着色
-- 聊天内容接近窗口上下边缘时渐进淡出，不会生硬地被边界切断
-- 对话按回合分组：左边是窄角色栏，显示 `YOU` / `YAH`；用户 prompt 始终显示，回答是主内容，思考和工具作为次级过程
-- 用户 prompt 用一个小 `YOU` 边框标记 + 左侧 2px 暖色竖线，不再用全宽标题框；回合之间 48px 间距
+- 聊天内容接近窗口上下边缘时渐隐范围更宽、更明显，不会生硬地被边界切断
+- 对话按回合分组：每个回合用左侧一条暖色竖线包住；用户 prompt 始终显示，回答是主内容，思考和工具作为次级过程
+- 用户 prompt 直接作为回合开头，不再有左侧 `YOU` / `YAH` 角色列；回合之间 48px 间距
 - 思考过程单独显示为 `thinking` 条目，和最终 `response` 分开；回传按 pi 风格处理：同一 provider/api/model 时作为 assistant 消息的 `reasoning_content` 回传，不拼进 `content`，换模型时丢弃
 - 回答和过程条目的标题行可点击展开/折叠；按住并拖动超过 4px 则改为拖动窗口，松开后不会误触展开/折叠
 - 展开一条时其他条目自动折叠；生成中自动跟随最新条目，非生成时默认展开最后一条回答
@@ -143,7 +143,7 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 页面是扁平化暖色主题，使用 `assets\fonts` 里的 Resource Han Rounded CN 圆体（Regular / Bold，SIL OFL，许可证见 `assets\fonts\OFL-ResourceHanRounded.txt`）：
 
 - 整个窗口使用纯色奶油底，没有阴影或 backdrop blur；当前展开的条目有一层很淡的圆角暖色底，Space 输入框的透明毛玻璃遮罩除外；
-- 对话轮次用 `YOU` / `YAH` 角色栏和 prompt 左侧暖色竖线区分，回答与过程用字号和缩进分层；
+- 每个对话回合用左侧一条暖色竖线包住，回答与过程用字号和缩进分层；
 - 输入框、设置、raw 查看器和切换界面都是纯色平面面板；
 - 窗口保留 Windows 11 DWM 原生圆角（`roundedCorners: true`），不再用 `setShape`；
 - 系统不支持时只影响窗口材质，不影响布局和功能。

@@ -46,6 +46,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border-radius: 18px;
   background: var(--solid);
   color: var(--text);
   font-family: var(--font);

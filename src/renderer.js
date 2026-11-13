@@ -402,24 +402,12 @@ function isNearBottom() {
   );
 }
 
-function appendRow(card, options = {}) {
+function appendRow(card, options = {}, container = dom.messages) {
   const row = el('div', 'msg');
-  if (card.classList.contains('user')) row.classList.add('turn-start');
   if (options.process) row.classList.add('process-row');
   if (card.classList.contains('answer-card')) row.classList.add('answer-row');
-
-  const gutter = el('div', 'msg-gutter');
-  if (options.role === 'YOU') {
-    gutter.append(el('span', 'role-chip role-you', 'YOU'));
-  } else if (options.role === 'YAH') {
-    const label = el('span', 'role-yah');
-    label.append(el('i', 'role-dot'));
-    label.append(el('span', 'role-label', 'YAH'));
-    gutter.append(label);
-  }
-
-  row.append(gutter, card);
-  dom.messages.append(row);
+  row.append(card);
+  container.append(row);
 }
 
 function messageCardKey(index) {
@@ -913,7 +901,7 @@ function autoCardKey() {
   return streamingAutoKey() || lastCardKey(currentSession());
 }
 
-function renderAgentMessage(msg, msgIndex) {
+function renderAgentMessage(msg, msgIndex, container) {
   const steps = Array.isArray(msg.steps) ? msg.steps : [];
   const rich = isRichTrace(steps);
   const streaming = state.streaming && msg === state.streamMessage;
@@ -950,7 +938,7 @@ function renderAgentMessage(msg, msgIndex) {
       body.append(textNode);
     }
     if (streaming) card.classList.add('streaming');
-    appendRow(card, { role: 'YAH' });
+    appendRow(card, {}, container);
     return;
   }
 
@@ -958,7 +946,6 @@ function renderAgentMessage(msg, msgIndex) {
     (last, step, index) => (step.kind === 'text' ? index : last),
     -1
   );
-  const roleIndex = lastTextIndex >= 0 ? lastTextIndex : 0;
 
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i];
@@ -979,12 +966,15 @@ function renderAgentMessage(msg, msgIndex) {
           minimalHead: primary,
           process: !primary,
         }),
-        { role: i === roleIndex ? 'YAH' : null, process: !primary }
+        { process: !primary },
+        container
       );
     } else if (step.kind === 'call' || step.kind === 'result') {
-      appendRow(renderToolCard(step, msg, stepCardKey(msgIndex, i)), {
-        process: true,
-      });
+      appendRow(
+        renderToolCard(step, msg, stepCardKey(msgIndex, i)),
+        { process: true },
+        container
+      );
     }
   }
 }
@@ -1017,20 +1007,28 @@ function renderMessages({ animate = true } = {}) {
     return;
   }
 
+  let currentTurn = null;
   session.msgs.forEach((msg, index) => {
-    if (msg.role === 'Agent') {
-      renderAgentMessage(msg, index);
+    if (msg.role === 'User') {
+      currentTurn = el('section', 'turn');
+      dom.messages.append(currentTurn);
+      appendRow(
+        promptCard({
+          key: messageCardKey(index),
+          text: msg.text,
+          onInspect: () => inspectUserMessage(msg),
+        }),
+        {},
+        currentTurn
+      );
       return;
     }
 
-    appendRow(
-      promptCard({
-        key: messageCardKey(index),
-        text: msg.text,
-        onInspect: () => inspectUserMessage(msg),
-      }),
-      { role: 'YOU' }
-    );
+    if (!currentTurn) {
+      currentTurn = el('section', 'turn');
+      dom.messages.append(currentTurn);
+    }
+    renderAgentMessage(msg, index, currentTurn);
   });
 
   const autoKey = autoCardKey();
