@@ -621,7 +621,7 @@ body.ring-open #window-controls {
   max-width: 1200px;
   min-height: 0;
   margin: 0 auto;
-  padding: 64px 32px 88px;
+  padding: 48px 32px 88px;
   overflow-y: auto;
   overflow-anchor: none;
   -webkit-mask-image: linear-gradient(
@@ -868,7 +868,7 @@ body.ring-open #window-controls {
   width: 100%;
   flex: none;
   min-height: 54px;
-  margin: 0 0 12px;
+  margin: 0 0 48px;
   padding: 0 18px;
   border: 1px solid var(--line);
   border-radius: 14px;
