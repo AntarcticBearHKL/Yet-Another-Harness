@@ -323,6 +323,7 @@ test('session MCP switches and step metrics round-trip', () => {
             collapsedProcessKeys: ['p:0'],
             viewMode: null,
           },
+          pendingQueue: ['next question', 'another'],
           msgs: [
             { role: 'User', text: 'hi', request: null, steps: [], requests: [] },
             {
@@ -362,6 +363,10 @@ test('session MCP switches and step metrics round-trip', () => {
       collapsedProcessKeys: ['p:0'],
       viewMode: null,
     });
+    assert.deepEqual(loaded.sessions[0].pendingQueue, [
+      'next question',
+      'another',
+    ]);
     assert.deepEqual(loaded.sessions[0].msgs[1].steps[0].metrics, {
       startedAt: 100,
     });
@@ -384,6 +389,7 @@ test('session MCP switches and step metrics round-trip', () => {
             collapsedProcessKeys: ['p:0', 'p:1'],
             viewMode: 'replies',
           },
+          pendingQueue: ['edited question'],
           msgs: [],
         },
       ],
@@ -398,6 +404,7 @@ test('session MCP switches and step metrics round-trip', () => {
       collapsedProcessKeys: ['p:0', 'p:1'],
       viewMode: 'replies',
     });
+    assert.deepEqual(loaded.sessions[0].pendingQueue, ['edited question']);
     assert.equal(loaded.sessions[0].msgs.length, 2);
   });
 });

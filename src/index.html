@@ -22,6 +22,7 @@
 
           <div id="composer" class="composer-overlay" role="dialog" aria-modal="true" aria-label="New message" aria-hidden="true" inert>
             <div class="composer-box">
+              <div id="composer-context" class="composer-context"></div>
               <textarea id="input" rows="4" spellcheck="false" placeholder="输入新对话…" aria-label="New message"></textarea>
               <button id="send" class="send-btn" aria-label="Send">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -309,6 +310,16 @@
           class="edge-blur edge-blur-short edge-blur-bottom"
           aria-hidden="true"
         ></div>
+      </div>
+    </div>
+
+    <div id="mcp-config" class="mcp-config hidden" role="dialog" aria-modal="true" aria-label="MCP" aria-hidden="true">
+      <div class="mcp-config-panel">
+        <div class="mcp-config-head">
+          <span class="mcp-config-title">MCP</span>
+          <span id="mcp-config-summary" class="mcp-config-summary"></span>
+        </div>
+        <div id="mcp-config-grid" class="mcp-config-grid"></div>
       </div>
     </div>
 

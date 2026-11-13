@@ -861,6 +861,203 @@ body.ring-open #window-controls {
   }
 }
 
+.mcp-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  flex: none;
+  min-height: 28px;
+  margin: 0 0 12px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(252, 246, 238, 0.72);
+  color: var(--dim);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-align: left;
+}
+
+.mcp-summary:hover {
+  background: var(--hover);
+}
+
+.mcp-summary-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent-soft);
+}
+
+.mcp-summary-label {
+  color: var(--dim);
+  font-weight: 700;
+}
+
+.mcp-summary-count {
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.mcp-config {
+  position: fixed;
+  inset: 0;
+  z-index: 72;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(251, 246, 239, 0.12);
+  -webkit-backdrop-filter: blur(18px) saturate(1.06);
+  backdrop-filter: blur(18px) saturate(1.06);
+}
+
+.mcp-config.hidden {
+  display: none;
+}
+
+.mcp-config-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(900px, 100%);
+  max-height: min(74vh, 680px);
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(251, 246, 239, 0.78);
+  -webkit-backdrop-filter: blur(14px) saturate(1.04);
+  backdrop-filter: blur(14px) saturate(1.04);
+  overflow: hidden;
+}
+
+.mcp-config-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 2px 4px 14px;
+}
+
+.mcp-config-title {
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.mcp-config-summary {
+  color: var(--faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mcp-config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+  min-height: 0;
+  padding: 2px;
+  overflow-y: auto;
+}
+
+.mcp-server-button {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  min-height: 88px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(252, 246, 238, 0.62);
+  color: var(--text-soft);
+  text-align: left;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.mcp-server-button:hover {
+  background: var(--hover);
+}
+
+.mcp-server-button.on {
+  border-color: var(--accent);
+  background: rgba(185, 111, 61, 0.1);
+}
+
+.mcp-server-button.off {
+  opacity: 0.62;
+}
+
+.mcp-server-button.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mcp-server-button-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.mcp-server-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.mcp-server-dot.connected {
+  background: #6f9161;
+}
+
+.mcp-server-dot.connecting {
+  background: var(--accent);
+}
+
+.mcp-server-dot.error {
+  background: #c05a4a;
+}
+
+.mcp-server-dot.disabled {
+  background: rgba(74, 54, 40, 0.18);
+}
+
+.mcp-server-name {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-server-state {
+  margin-left: auto;
+  flex: none;
+  color: var(--faint);
+  font-size: 9.5px;
+}
+
+.mcp-server-meta {
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.mcp-config-empty {
+  grid-column: 1 / -1;
+  padding: 42px 20px;
+  color: var(--faint);
+  font-size: 12px;
+  text-align: center;
+}
+
 .turn {
   position: relative;
   width: 100%;
@@ -1670,7 +1867,8 @@ body.ring-open #window-controls {
   display: flex;
   flex-direction: column;
   width: min(760px, 100%);
-  height: clamp(170px, 32vh, 260px);
+  min-height: clamp(170px, 32vh, 260px);
+  max-height: min(76vh, 600px);
   border: 1px solid var(--line);
   border-radius: 18px;
   background: rgba(251, 246, 239, 0.72);
@@ -1690,11 +1888,144 @@ body.ring-open #window-controls {
   border-color: var(--accent);
 }
 
+.composer-context {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: none;
+  padding: 12px 14px 0;
+}
+
+.composer-context:empty {
+  display: none;
+}
+
+.composer-context .mcp-summary {
+  margin: 0;
+}
+
+.composer-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 164px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(252, 246, 238, 0.5);
+  overflow-y: auto;
+}
+
+.composer-queue-empty {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 8px;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 3px 5px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: rgba(252, 246, 238, 0.55);
+}
+
+.queue-row:hover {
+  background: var(--hover);
+}
+
+.queue-row.dragging {
+  opacity: 0.45;
+}
+
+.queue-row.drop-before {
+  border-top-color: var(--accent);
+}
+
+.queue-row.drop-after {
+  border-bottom-color: var(--accent);
+}
+
+.queue-drag {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 26px;
+  flex: none;
+  color: var(--faint);
+  font-size: 12px;
+  letter-spacing: -1px;
+  cursor: grab;
+  user-select: none;
+}
+
+.queue-drag:active {
+  cursor: grabbing;
+}
+
+.queue-drag svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.queue-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.queue-action {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--faint);
+}
+
+.queue-action:hover {
+  background: var(--hover);
+  color: var(--text-soft);
+}
+
+.queue-action.remove:hover {
+  color: #b05445;
+}
+
+.queue-action svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 #input {
   flex: 1;
-  min-height: 0;
+  min-height: 96px;
   width: 100%;
-  padding: 20px 64px 20px 22px;
+  padding: 16px 64px 20px 22px;
   border: 0;
   outline: 0;
   resize: none;

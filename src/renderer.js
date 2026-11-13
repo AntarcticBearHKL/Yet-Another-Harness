@@ -14,6 +14,7 @@ const dom = {
   composer: $('composer'),
   input: $('input'),
   send: $('send'),
+  composerContext: $('composer-context'),
   switcher: $('switcher'),
   switcherList: $('switcher-list'),
   switcherSettings: $('switcher-settings'),
@@ -48,6 +49,9 @@ const dom = {
   webContentTitle: $('web-content-title'),
   webContentBody: $('web-content-body'),
   webContentClose: $('web-content-close'),
+  mcpConfig: $('mcp-config'),
+  mcpConfigSummary: $('mcp-config-summary'),
+  mcpConfigGrid: $('mcp-config-grid'),
 };
 
 const state = {
@@ -97,7 +101,7 @@ const state = {
   mcpServers: [],
   mcpServersLoading: false,
   mcpServersFetchedAt: 0,
-  mcpBlockExpanded: new Set(),
+  mcpConfigSessionId: null,
 };
 
 async function requestJson(path, options = {}) {
@@ -374,6 +378,9 @@ function structurePayload() {
         ? session.mcpDisabled
         : [],
       foldState: session.foldState || null,
+      pendingQueue: Array.isArray(session.pendingQueue)
+        ? session.pendingQueue
+        : [],
       msgs: [],
     })),
     current: state.current,
@@ -432,7 +439,9 @@ function updateControls() {
   }
 
   dom.input.disabled = false;
-  dom.input.placeholder = '输入新对话…';
+  dom.input.placeholder = state.streaming
+    ? '输入排队消息…'
+    : '输入新对话…';
   updateSendState();
 }
 
@@ -1535,121 +1544,140 @@ async function loadMcpServers(force = false) {
   } finally {
     state.mcpServersLoading = false;
     const session = currentSession();
-    if (session) renderMcpBlock(session);
+    if (session) renderMcpSummary(session);
+    if (state.composerOpen) renderComposerContext();
+    if (state.mcpConfigSessionId) renderMcpConfig();
   }
 }
 
-function renderMcpBlock(session, container = dom.messages) {
-  if (!session || !container) return;
-  const existing = container.querySelector('.mcp-context');
-  const expanded = state.mcpBlockExpanded.has(session.id);
-  const block = el('section', 'mcp-context');
-  block.classList.toggle('expanded', expanded);
-
-  const head = el('button', 'mcp-context-head');
-  head.type = 'button';
-  head.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-  head.append(el('span', 'mcp-context-dot'));
-  head.append(el('span', 'mcp-context-label', 'MCP'));
-  const total = state.mcpServers.length;
-  const enabledCount = state.mcpServers.filter((server) =>
+function mcpEnabledCount(session) {
+  return state.mcpServers.filter((server) =>
     mcpBlockServerEnabled(session, server)
   ).length;
-  head.append(
-    el(
-      'span',
-      'mcp-context-summary',
-      total
-        ? `${enabledCount}/${total} 开启`
-        : state.mcpServersLoading
-          ? '加载中…'
-          : '未配置'
-    )
-  );
-  head.append(
-    el('span', 'mcp-context-chevron', expanded ? '⌄' : '›')
-  );
-  head.addEventListener('click', () => {
-    if (expanded) state.mcpBlockExpanded.delete(session.id);
-    else {
-      state.mcpBlockExpanded.add(session.id);
-      void loadMcpServers(true);
-    }
-    renderMcpBlock(session, container);
-  });
-  block.append(head);
+}
 
-  if (expanded) {
-    const body = el('div', 'mcp-context-body');
-    if (state.mcpServers.length === 0) {
-      body.append(
-        el(
-          'div',
-          'mcp-context-empty',
-          state.mcpServersLoading ? '加载中…' : '还没有 MCP 服务器'
-        )
-      );
-    } else {
-      for (const server of state.mcpServers) {
-        const row = el('div', 'mcp-context-row');
-        row.append(
-          el(
-            'span',
-            `mcp-context-status ${server.status || 'idle'}`
-          )
-        );
-        const info = el('div', 'mcp-context-info');
-        info.append(el('span', 'mcp-context-name', server.name));
-        const meta = [
-          String(server.transport || '').toUpperCase(),
-          server.source === 'opencode' ? 'OpenCode' : '本机',
-          server.enabled === false
-            ? '已禁用'
-            : `${server.toolCount || 0} 工具`,
-        ]
-          .filter(Boolean)
-          .join(' · ');
-        info.append(el('span', 'mcp-context-meta', meta));
-        row.append(info);
+function mcpSummaryText(session) {
+  const total = state.mcpServers.length;
+  if (!total) return state.mcpServersLoading ? '加载中' : '0/0';
+  return `${mcpEnabledCount(session)}/${total}`;
+}
 
-        const toggle = el('button', 'mcp-context-toggle');
-        toggle.type = 'button';
-        const enabled = mcpBlockServerEnabled(session, server);
-        toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-        toggle.classList.toggle('on', enabled);
-        toggle.disabled = server.enabled === false;
-        const track = el('span', 'mcp-context-toggle-track');
-        track.append(el('span', 'mcp-context-toggle-knob'));
-        toggle.append(track);
-        if (server.enabled !== false) {
-          toggle.addEventListener('click', () => {
-            const disabled = new Set(
-              Array.isArray(session.mcpDisabled)
-                ? session.mcpDisabled
-                : []
-            );
-            if (disabled.has(server.id)) disabled.delete(server.id);
-            else disabled.add(server.id);
-            session.mcpDisabled = [...disabled];
-            saveChatsSoon();
-            renderMcpBlock(session, container);
-          });
-        }
-        row.append(toggle);
-        body.append(row);
-      }
-    }
-    const foot = el('div', 'mcp-context-foot');
-    const manage = el('button', 'mcp-context-manage', '管理服务器');
-    manage.type = 'button';
-    manage.addEventListener('click', () => openMcp());
-    foot.append(manage);
-    body.append(foot);
-    block.append(body);
+function buildMcpSummary(session, onClick) {
+  const button = el('button', 'mcp-summary');
+  button.type = 'button';
+  button.setAttribute(
+    'aria-label',
+    `MCP ${mcpSummaryText(session)}，点击配置`
+  );
+  button.append(el('span', 'mcp-summary-dot'));
+  button.append(el('span', 'mcp-summary-label', 'MCP'));
+  button.append(el('span', 'mcp-summary-count', mcpSummaryText(session)));
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+function renderMcpSummary(session, container = dom.messages) {
+  if (!session || !container || session !== currentSession()) return;
+  const existing = container.querySelector('.mcp-summary');
+  const summary = buildMcpSummary(session, () => openMcpConfig(session.id));
+  if (existing) existing.replaceWith(summary);
+  else container.prepend(summary);
+}
+
+function openMcpConfig(sessionId) {
+  const session = state.sessions.find((item) => item.id === sessionId);
+  if (!session || !dom.mcpConfig) return;
+  state.mcpConfigSessionId = sessionId;
+  dom.mcpConfig.classList.remove('hidden');
+  dom.mcpConfig.setAttribute('aria-hidden', 'false');
+  renderMcpConfig();
+  void loadMcpServers(true);
+}
+
+function closeMcpConfig() {
+  if (!dom.mcpConfig) return;
+  state.mcpConfigSessionId = null;
+  dom.mcpConfig.classList.add('hidden');
+  dom.mcpConfig.setAttribute('aria-hidden', 'true');
+}
+
+function renderMcpConfig() {
+  if (!dom.mcpConfigGrid) return;
+  const session = state.sessions.find(
+    (item) => item.id === state.mcpConfigSessionId
+  );
+  if (!session) {
+    closeMcpConfig();
+    return;
   }
-
-  if (existing) existing.replaceWith(block);
-  else container.prepend(block);
+  const total = state.mcpServers.length;
+  dom.mcpConfigSummary.textContent = total
+    ? `${mcpEnabledCount(session)}/${total} 开启`
+    : state.mcpServersLoading
+      ? '加载中…'
+      : '没有 MCP 服务器';
+  dom.mcpConfigGrid.replaceChildren();
+  if (total === 0) {
+    dom.mcpConfigGrid.append(
+      el(
+        'div',
+        'mcp-config-empty',
+        state.mcpServersLoading ? '正在加载 MCP 服务器…' : '还没有 MCP 服务器'
+      )
+    );
+    return;
+  }
+  for (const server of state.mcpServers) {
+    const enabled = mcpBlockServerEnabled(session, server);
+    const button = el('button', 'mcp-server-button');
+    button.type = 'button';
+    button.classList.toggle('on', enabled);
+    button.classList.toggle('off', !enabled);
+    button.classList.toggle('disabled', server.enabled === false);
+    button.disabled = server.enabled === false;
+    button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    const head = el('span', 'mcp-server-button-head');
+    head.append(
+      el(
+        'span',
+        `mcp-server-dot ${
+          server.enabled === false ? 'disabled' : server.status || 'idle'
+        }`
+      )
+    );
+    head.append(el('span', 'mcp-server-name', server.name));
+    head.append(
+      el(
+        'span',
+        'mcp-server-state',
+        server.enabled === false ? '已禁用' : enabled ? '开启' : '关闭'
+      )
+    );
+    button.append(head);
+    const meta = [
+      String(server.transport || '').toUpperCase(),
+      server.source === 'opencode' ? 'OpenCode' : '自定义',
+      `${server.toolCount || 0} 工具`,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    button.append(el('span', 'mcp-server-meta', meta));
+    if (server.enabled !== false) {
+      button.addEventListener('click', () => {
+        const disabled = new Set(
+          Array.isArray(session.mcpDisabled) ? session.mcpDisabled : []
+        );
+        if (disabled.has(server.id)) disabled.delete(server.id);
+        else disabled.add(server.id);
+        session.mcpDisabled = [...disabled];
+        saveChatsSoon();
+        renderMcpConfig();
+        renderMcpSummary(session);
+        if (state.composerOpen) renderComposerContext();
+      });
+    }
+    dom.mcpConfigGrid.append(button);
+  }
 }
 
 function renderMessages({ animate = true } = {}) {
@@ -1665,7 +1693,7 @@ function renderMessages({ animate = true } = {}) {
   state.forceScroll = false;
 
   dom.messages.replaceChildren();
-  if (session) renderMcpBlock(session, dom.messages);
+  if (session) renderMcpSummary(session, dom.messages);
   if (!session) {
     state.openCardKey = null;
     state.renderedOpenKeys = new Set();
@@ -1911,11 +1939,16 @@ function openComposer() {
   if (!dom.settingsOverlay.classList.contains('hidden')) return;
   if (!dom.rawOverlay.classList.contains('hidden')) return;
   if (state.switcherOpen) return;
+  if (dom.mcpConfig && !dom.mcpConfig.classList.contains('hidden')) return;
 
   state.composerOpen = true;
   dom.composer.inert = false;
   dom.composer.setAttribute('aria-hidden', 'false');
   dom.composer.classList.add('open');
+  dom.input.placeholder = state.streaming
+    ? '输入排队消息…'
+    : '输入新对话…';
+  renderComposerContext();
   requestAnimationFrame(() => {
     if (!state.composerOpen) return;
     dom.input.focus();
@@ -2088,17 +2121,8 @@ function openMcpConfigForSession(sessionId) {
     (session) => session.id === sessionId
   );
   if (index < 0) return;
-  state.mcpBlockExpanded.add(sessionId);
   selectSession(index);
-  requestAnimationFrame(() => {
-    dom.messages.scrollTop = 0;
-    const block = dom.messages.querySelector('.mcp-context');
-    if (!block) return;
-    block.classList.remove('flash');
-    void block.offsetWidth;
-    block.classList.add('flash');
-    setTimeout(() => block.classList.remove('flash'), 950);
-  });
+  openMcpConfig(sessionId);
 }
 
 function highlightSwitcher(index) {
@@ -2172,13 +2196,14 @@ function newProject() {
 function renderAll() {
   if (state.switcherOpen) renderSwitcher();
   renderMessages();
+  if (state.composerOpen) renderComposerContext();
   updateControls();
   connectChatEvents(currentSession()?.id || null);
 }
 
 function updateSendState() {
   dom.send.disabled =
-    !currentSession() || state.streaming || dom.input.value.trim() === '';
+    !currentSession() || dom.input.value.trim() === '';
 }
 
 function syncDraftTitle() {
@@ -2201,13 +2226,20 @@ function newSession(projectId) {
     state.projects.find((project) => project.id === projectId)?.id ||
     currentSession()?.projectId ||
     state.projects[0].id;
+  const siblings = state.sessions.filter(
+    (item) => item.projectId === targetProjectId
+  );
+  const previous = siblings[siblings.length - 1];
   const session = {
     id: makeId(),
     title: `Chat ${state.seq}`,
     system: DEFAULT_SYSTEM_PROMPT,
     projectId: targetProjectId,
-    mcpDisabled: [],
+    mcpDisabled: Array.isArray(previous?.mcpDisabled)
+      ? [...previous.mcpDisabled]
+      : [],
     foldState: null,
+    pendingQueue: [],
     msgs: [],
   };
   state.sessions.push(session);
@@ -2273,14 +2305,8 @@ async function requestSessionTitle(session, text) {
   }
 }
 
-async function sendMessage() {
-  if (state.streaming) return;
-  const text = dom.input.value.trim();
-  if (!text) return;
-  closeComposer();
-
-  const session = currentSession();
-  if (!session) return;
+async function startPrompt(session, text, { clearInput = false } = {}) {
+  if (!session || !text) return;
   state.viewMode = null;
   state.foldRestored = false;
   state.foldSessionId = session.id;
@@ -2291,7 +2317,7 @@ async function sendMessage() {
 
   state.streamMessage = agent;
   state.forceScroll = true;
-  dom.input.value = '';
+  if (clearInput) dom.input.value = '';
   updateSendState();
   if (firstMessage) requestSessionTitle(session, text);
 
@@ -2333,6 +2359,208 @@ async function sendMessage() {
   }
 }
 
+async function sendMessage() {
+  const text = dom.input.value.trim();
+  if (!text) return;
+  const session = currentSession();
+  if (!session) return;
+
+  if (
+    state.streaming ||
+    (Array.isArray(session.pendingQueue) && session.pendingQueue.length > 0)
+  ) {
+    if (!Array.isArray(session.pendingQueue)) session.pendingQueue = [];
+    session.pendingQueue.push(text);
+    dom.input.value = '';
+    updateSendState();
+    saveChatsSoon();
+    if (state.composerOpen) renderComposerContext();
+    if (!state.streaming) processNextQueuedPrompt(session);
+    return;
+  }
+
+  closeComposer();
+  await startPrompt(session, text, { clearInput: true });
+}
+
+function queueActionButton(kind, label, svg, onClick) {
+  const button = el('button', `queue-action ${kind}`);
+  button.type = 'button';
+  button.setAttribute('aria-label', label);
+  button.innerHTML = svg;
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    onClick();
+  });
+  return button;
+}
+
+function renderQueueRow(session, text, index) {
+  const row = el('div', 'queue-row');
+  row.draggable = true;
+
+  const handle = el('span', 'queue-drag');
+  handle.innerHTML =
+    '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="4" r="1.2"/><circle cx="11" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="11" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/><circle cx="11" cy="12" r="1.2"/></svg>';
+  row.append(handle);
+  row.append(el('span', 'queue-text', text));
+
+  const actions = el('div', 'queue-actions');
+  actions.append(
+    queueActionButton(
+      'edit',
+      '编辑排队消息',
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L20 8l-4-4L4 16v4z"/><path d="M14 6l4 4"/></svg>',
+      () => editQueuedPrompt(session, index)
+    ),
+    queueActionButton(
+      'send',
+      '发送排队消息',
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3L10 14"/><path d="M21 3l-7 18-4-7-7-4 18-7z"/></svg>',
+      () => sendQueuedPrompt(session, index)
+    ),
+    queueActionButton(
+      'remove',
+      '删除排队消息',
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+      () => removeQueuedPrompt(session, index)
+    )
+  );
+  row.append(actions);
+
+  row.addEventListener('dragstart', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest('.queue-drag')) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(index));
+    row.classList.add('dragging');
+  });
+  row.addEventListener('dragend', () => {
+    row.classList.remove('dragging');
+  });
+  row.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    const rect = row.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2;
+    row.classList.toggle('drop-after', after);
+    row.classList.toggle('drop-before', !after);
+  });
+  row.addEventListener('dragleave', () => {
+    row.classList.remove('drop-before', 'drop-after');
+  });
+  row.addEventListener('drop', (event) => {
+    event.preventDefault();
+    const rect = row.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2;
+    row.classList.remove('drop-before', 'drop-after');
+    const from = Number(event.dataTransfer.getData('text/plain'));
+    if (!Number.isInteger(from)) return;
+    let to = index + (after ? 1 : 0);
+    if (from < to) to -= 1;
+    moveQueuedPrompt(session, from, to);
+  });
+  return row;
+}
+
+function renderComposerQueue(session) {
+  const box = el('div', 'composer-queue');
+  const queue = Array.isArray(session.pendingQueue)
+    ? session.pendingQueue
+    : [];
+  if (queue.length === 0) {
+    box.append(el('div', 'composer-queue-empty', '暂无待处理消息'));
+    return box;
+  }
+  queue.forEach((text, index) => {
+    box.append(renderQueueRow(session, text, index));
+  });
+  return box;
+}
+
+function renderComposerContext() {
+  if (!dom.composerContext) return;
+  const session = currentSession();
+  if (!session) {
+    dom.composerContext.replaceChildren();
+    return;
+  }
+  if (session.msgs.length === 0) {
+    dom.composerContext.replaceChildren(
+      buildMcpSummary(session, () => openMcpConfig(session.id))
+    );
+    return;
+  }
+  dom.composerContext.replaceChildren(renderComposerQueue(session));
+}
+
+function removeQueuedPrompt(session, index) {
+  if (!Array.isArray(session.pendingQueue)) return;
+  session.pendingQueue.splice(index, 1);
+  saveChatsSoon();
+  if (state.composerOpen) renderComposerContext();
+}
+
+function editQueuedPrompt(session, index) {
+  if (!Array.isArray(session.pendingQueue)) return;
+  const [text] = session.pendingQueue.splice(index, 1);
+  if (text === undefined) return;
+  saveChatsSoon();
+  if (!state.composerOpen) openComposer();
+  dom.input.value = text;
+  updateSendState();
+  if (state.composerOpen) renderComposerContext();
+  requestAnimationFrame(() => {
+    dom.input.focus();
+    const end = dom.input.value.length;
+    dom.input.setSelectionRange(end, end);
+  });
+}
+
+function sendQueuedPrompt(session, index) {
+  if (!Array.isArray(session.pendingQueue)) return;
+  const [text] = session.pendingQueue.splice(index, 1);
+  if (text === undefined) return;
+  if (state.streaming) {
+    session.pendingQueue.unshift(text);
+    saveChatsSoon();
+    if (state.composerOpen) renderComposerContext();
+    return;
+  }
+  saveChatsSoon();
+  if (state.composerOpen) renderComposerContext();
+  void startPrompt(session, text);
+}
+
+function moveQueuedPrompt(session, from, to) {
+  if (!Array.isArray(session.pendingQueue)) return;
+  if (from === to || from < 0 || from >= session.pendingQueue.length) return;
+  const [text] = session.pendingQueue.splice(from, 1);
+  if (text === undefined) return;
+  const target = Math.max(0, Math.min(to, session.pendingQueue.length));
+  session.pendingQueue.splice(target, 0, text);
+  saveChatsSoon();
+  if (state.composerOpen) renderComposerContext();
+}
+
+function processNextQueuedPrompt(session) {
+  if (!session || state.streaming) return;
+  if (
+    !Array.isArray(session.pendingQueue) ||
+    session.pendingQueue.length === 0
+  ) {
+    return;
+  }
+  if (session !== currentSession()) return;
+  const text = session.pendingQueue.shift();
+  if (text === undefined) return;
+  saveChatsSoon();
+  if (state.composerOpen) renderComposerContext();
+  void startPrompt(session, text);
+}
+
 async function refreshChats() {
   try {
     const chats = await api.loadChats();
@@ -2353,6 +2581,11 @@ async function refreshChats() {
 }
 
 function finishStream() {
+  const finishedSession = state.streamMessage
+    ? state.sessions.find((session) =>
+        session.msgs.includes(state.streamMessage)
+      )
+    : currentSession();
   const stick = isNearBottom();
   state.streaming = false;
   state.requestId = null;
@@ -2385,6 +2618,7 @@ function finishStream() {
       dom.messages.scrollTop = dom.messages.scrollHeight;
     });
   }
+  processNextQueuedPrompt(finishedSession);
 }
 
 function openRawRequest(body, label) {
@@ -2948,6 +3182,12 @@ function onRightMouseDown(event) {
   const switcherOpen =
     state.switcherOpen || dom.switcher.classList.contains('open');
 
+  if (dom.mcpConfig && !dom.mcpConfig.classList.contains('hidden')) {
+    closeRingMenu();
+    closeMcpConfig();
+    state.ringSuppress = true;
+    return;
+  }
   if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
     closeRingMenu();
     closeWebContent();
@@ -3319,6 +3559,11 @@ function bindEvents() {
       state.ringSuppress = false;
       return;
     }
+    if (dom.mcpConfig && !dom.mcpConfig.classList.contains('hidden')) {
+      closeRingMenu();
+      closeMcpConfig();
+      return;
+    }
     if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
       closeRingMenu();
       closeWebContent();
@@ -3411,6 +3656,9 @@ function bindEvents() {
   dom.rawOverlay.addEventListener('click', (event) => {
     if (event.target === dom.rawOverlay) closeRawRequest();
   });
+  dom.mcpConfig?.addEventListener('click', (event) => {
+    if (event.target === dom.mcpConfig) closeMcpConfig();
+  });
 
   $('mobile-compose')?.addEventListener('click', openComposer);
   dom.send.addEventListener('click', sendMessage);
@@ -3466,6 +3714,13 @@ function bindEvents() {
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
         closeConfirm();
+      }
+      return;
+    }
+    if (dom.mcpConfig && !dom.mcpConfig.classList.contains('hidden')) {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        closeMcpConfig();
       }
       return;
     }
@@ -3961,6 +4216,8 @@ async function boot() {
         system: DEFAULT_SYSTEM_PROMPT,
         projectId: DEFAULT_PROJECT.id,
         mcpDisabled: [],
+        foldState: null,
+        pendingQueue: [],
         msgs: [],
       },
     ];

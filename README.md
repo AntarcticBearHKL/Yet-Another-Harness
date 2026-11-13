@@ -49,7 +49,9 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 主界面按住右键弹出环形菜单：工具、Skill、MCP；把鼠标拖到对应扇区后松开右键打开对应信息界面
 - Tab 工作区按住右键弹出二级环形菜单，且不会关闭 Tab：项目上显示「改名 / 删除」，具体对话上显示「改名 / 配置 MCP」，空白处显示「最小化 / 最大化 / 关闭」
 - 删除项目需要二次确认，并连同项目下的所有对话一起删除
-- 每个对话顶部有独立的 MCP 块，集中列出所有服务器、来源、工具数和开关；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
+- 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
+- 输入框（Space）里：空对话上方显示同样的 MCP 摘要按钮；已有对话上方显示排队消息框，生成中仍可继续输入，消息按顺序排队、一行一条，左侧拖动排序，行尾是编辑 / 立即发送 / 删除三个纯图标按钮；当前生成结束后自动按顺序处理队列
+- 新建对话默认继承同项目上一个对话的 MCP 服务器开关配置
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
 - 工具和 Skill 面板是无标题的左右分栏：工具页左侧按分类列出内置工具（搜索 / 文件 / 系统 / 代理等），右侧显示名称、说明、参数；MCP 工具只出现在独立的 MCP 工作区，不混进工具目录；MCP 工作区左侧服务器、右侧工具 / 资源 / 提示词 / 日志 / 概览；没有内容时显示空状态
 - 聊天里的 MCP 工具调用显示为「MCP 调用」，不会和内置工具的「工具调用」混在一起；调用参数和返回结果仍然合并在同一个卡片里
@@ -59,7 +61,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 所有区域隐藏滚动条，滚轮/触控板仍然可以滚动
 - 后端服务用 SQLite（`node:sqlite`，WAL）管理会话；设置和 API key 存 `settings.json`，窗口位置存 `window.json`
 - MCP 服务器分两类：OpenCode 配置里的服务器自动继承（只读），以及 YAH 自己的 `%APPDATA%\yah\mcp.json` 自定义服务器；支持 STDIO、Streamable HTTP、legacy SSE，支持表单添加和粘贴 `mcpServers` / `mcp.servers` JSON
-- OpenCode 中启用的 MCP 启动时自动连接，默认对所有对话开放；每个对话顶部的 MCP 块可以单独开关服务器，关闭后请求里不再带该服务器的工具；OpenCode 中禁用的服务器会显示但不会连接；工具名统一为 `mcp__<server>__<tool>`
+- OpenCode 中启用的 MCP 启动时自动连接，默认对所有对话开放；每个对话顶部的 MCP 摘要按钮可以单独开关服务器，关闭后请求里不再带该服务器的工具；OpenCode 中禁用的服务器会显示但不会连接；工具名统一为 `mcp__<server>__<tool>`
 - MCP 工作区左侧是服务器列表（顶部没有标题和数字，底部只有「添加服务器」），右侧可以查看 tools / resources / prompts / logs / overview，手动调用工具、读取资源、获取提示词，并把工具、结果、资源或提示词插入输入框；没有服务器时空状态在整个内容区上下居中
 - 全局禁用鼠标框选和右键菜单；只有输入框保留文本选择
 
@@ -148,7 +150,7 @@ agent 循环、工具、SQLite、API key 都在本地后端。`contextIsolation:
 ## 数据
 
 - `%APPDATA%\yah\chats.db`：所有对话数据（SQLite，WAL）
-  - `sessions`：会话 id、标题、system、排序、该会话禁用的 MCP 服务器、折叠状态（`fold_state` JSON）
+  - `sessions`：会话 id、标题、system、排序、该会话禁用的 MCP 服务器、折叠状态（`fold_state` JSON）、排队消息（`pending_queue` JSON）
   - `messages`：每个会话的消息角色和文字
   - `steps`：工具调用/返回、文本片段、轮次、工具耗时和 LLM 首 token/tok-s 指标
   - `requests`：每条助手消息每轮的原始请求 body（gzip 压缩的 JSON BLOB）
