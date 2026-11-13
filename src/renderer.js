@@ -196,6 +196,15 @@ function setCardExpanded(card, expanded) {
   if (body) body.inert = !expanded;
   const head = card.querySelector('.card-head');
   if (head) head.setAttribute('aria-expanded', String(expanded));
+  requestAnimationFrame(() => updateCardClip(card));
+}
+
+function updateCardClip(card) {
+  if (!card) return;
+  const scroller = card.querySelector('.card-text, .json-view, .tool-text');
+  if (!scroller) return;
+  const clipped = scroller.scrollHeight > scroller.clientHeight + 1;
+  scroller.classList.toggle('is-clipped', clipped);
 }
 
 function openKeySet(key) {
@@ -264,8 +273,8 @@ function makeCard(opts) {
     head.append(badge);
   }
 
-  card.title = opts.onInspect
-    ? 'Click header to expand/collapse · double-click to view raw request body'
+  card.title = opts.onFullContent
+    ? 'Click header to expand/collapse · double-click content for full view · Ctrl+double-click for raw request'
     : 'Click header to expand/collapse';
 
   head.addEventListener('click', (event) => {
@@ -279,17 +288,6 @@ function makeCard(opts) {
     toggleCard(opts.key);
   });
 
-  if (typeof opts.onInspect === 'function') {
-    card.addEventListener('dblclick', (event) => {
-      if (event.target instanceof Element && event.target.closest('button')) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      opts.onInspect();
-    });
-  }
-
   const bodyWrap = el('div', 'card-body-wrap');
   bodyWrap.inert = true;
   const body = el('div', 'card-body');
@@ -297,6 +295,22 @@ function makeCard(opts) {
   body.append(inner);
   bodyWrap.append(body);
   card.append(head, bodyWrap);
+
+  bodyWrap.addEventListener('dblclick', (event) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest('button, a, input, textarea')
+    ) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.ctrlKey && typeof opts.onInspect === 'function') {
+      opts.onInspect();
+      return;
+    }
+    opts.onFullContent?.();
+  });
 
   return { card, head, body: inner, bodyWrap };
 }
@@ -329,8 +343,35 @@ function renderTextContent(container, text) {
   }
 }
 
+function textFromCard(card) {
+  const node = card.querySelector('.card-text');
+  if (!node) return '';
+  const blocks = [...node.querySelectorAll('.text-block')];
+  if (blocks.length === 0) return node.textContent;
+  return blocks.map((block) => block.textContent).join('\n\n');
+}
+
+function openFullContent(payload) {
+  api.openContent(payload).catch((error) => {
+    console.error('open content window failed', error);
+  });
+}
+
 function textCard({ key, kind, title, meta, text, streaming, onInspect }) {
-  const { card, body } = makeCard({ key, kind, title, meta, onInspect });
+  const { card, body } = makeCard({
+    key,
+    kind,
+    title,
+    meta,
+    onInspect,
+    onFullContent: () =>
+      openFullContent({
+        key,
+        title: [title, meta].filter(Boolean).join(' · '),
+        kind: 'text',
+        text: textFromCard(card),
+      }),
+  });
   if (text) {
     const textNode = el('div', 'card-text');
     renderTextContent(textNode, text);
@@ -480,6 +521,8 @@ function inspectUserMessage(msg) {
 
 function renderToolCard(step, msg, key) {
   const call = step.kind === 'call';
+  const raw = call ? step.arguments : step.output;
+  const structured = parseStructured(raw);
   const { card, body } = makeCard({
     key,
     kind: call ? 'tool-call' : 'tool-result',
@@ -489,11 +532,17 @@ function renderToolCard(step, msg, key) {
       ? null
       : { text: step.ok === false ? 'error' : 'ok', error: step.ok === false },
     onInspect: () => inspectStep(msg, step),
+    onFullContent: () =>
+      openFullContent({
+        key,
+        title: `${call ? '工具调用' : '工具返回'} · ${step.name || 'tool'}`,
+        kind: 'tool',
+        text: String(raw ?? ''),
+        json: structured,
+      }),
   });
   if (!call && step.ok === false) card.classList.add('error');
 
-  const raw = call ? step.arguments : step.output;
-  const structured = parseStructured(raw);
   if (structured) {
     body.append(jsonView(structured));
   } else {
@@ -565,6 +614,13 @@ function renderAgentMessage(msg, msgIndex) {
       onInspect: () => {
         openRawRequest(requestAt(msg, 0), rawRoundLabel(0));
       },
+      onFullContent: () =>
+        openFullContent({
+          key: agentCardKey(msgIndex),
+          title: '对话 · response',
+          kind: 'text',
+          text: msg.text,
+        }),
     });
     for (const step of steps) {
       if (step.kind !== 'status') continue;
@@ -1453,6 +1509,8 @@ function bindEvents() {
       if (body) body.append(textNode);
     }
     renderTextContent(textNode, last.text);
+    api.updateContent({ key, text: last.text });
+    updateCardClip(card);
     card.classList.add('streaming');
 
     const stick = isNearBottom();

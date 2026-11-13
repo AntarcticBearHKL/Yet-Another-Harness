@@ -23,6 +23,11 @@ contextBridge.exposeInMainWorld('yah', {
   onChatDone: (callback) => subscribe('chat:done', callback),
   onChatError: (callback) => subscribe('chat:error', callback),
 
+  openContent: (payload) => ipcRenderer.invoke('content:open', payload),
+  updateContent: (payload) => ipcRenderer.send('content:update', payload),
+  onContentInit: (callback) => subscribe('content:init', callback),
+  onContentUpdate: (callback) => subscribe('content:update', callback),
+
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),

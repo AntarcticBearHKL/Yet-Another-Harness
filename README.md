@@ -21,6 +21,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 点击任意条目的标题行即可展开/折叠；展开一条时其他条目自动折叠；生成中仍自动跟随最新条目，非生成时默认最后一张
 - 当前展开的条目有暖色底高亮，带 8px 圆角；折叠条目 hover 高亮为直角
 - 展开条目时固定当前滚动位置，不会因为高度变化丢失阅读位置
+- 展开正文默认最多 5 行，超出部分底部渐隐；双击正文在独立窗口查看全文，流式内容会实时同步；Ctrl + 双击正文查看 raw request body
 - Ctrl + 滚轮按条目导航：收起当前条目，跳到上/下一条并把目标标题定位到顶部附近，目标立即展开；普通滚轮仍是连续滚动
 - Shift + 滚轮只在用户 `prompt` 条目之间切换并立即展开；从任意条目开始，向下找下一条 prompt，向上找上一条 prompt
 - 条目展开/折叠和 Tab 切换界面都有过渡动画；Tab 界面约 0.1s 淡入淡出
@@ -29,7 +30,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 项目、项目归属和对话一起持久化到 SQLite；工作区空白区域仍然可以按住左键拖动窗口
 - 有弹窗（Tab 切换器、设置、raw 查看器）打开时，右键等于关闭弹窗
 - 工具调用的 JSON 参数和 JSON 输出用带语法着色、可折叠节点的查看器展示
-- 双击任意对话卡片可以查看该轮实际发给模型的原始请求 body，完整 JSON 树可逐层折叠
+- Ctrl + 双击任意对话卡片可以查看该轮实际发给模型的原始请求 body，完整 JSON 树可逐层折叠
 - 所有区域隐藏滚动条，滚轮/触控板仍然可以滚动
 - 会话用 SQLite（`node:sqlite`，WAL）管理；设置和 API key 仍存 `settings.json`
 - 全局禁用鼠标框选和右键菜单；只有输入框保留文本选择
@@ -58,14 +59,17 @@ LIVE_SEARCH=1 npm test   # 额外跑一条真实 DuckDuckGo 搜索
 ## 架构
 
 ```
-src/main.js       BrowserWindow、IPC、窗口控制、chat:send
+src/main.js       BrowserWindow、IPC、窗口控制、chat:send、全文窗口
 src/preload.js    contextBridge 暴露给渲染进程的 API
 src/deepseek.js   OpenCode Go SSE + tool_calls 累积 + agent loop
 src/tools.js      免费 web_search（DuckDuckGo HTML）
 src/store.js      chats.db（SQLite/WAL）+ settings.json 原子写 + 旧版迁移
-src/renderer.js   聊天、全屏对话切换、设置浮层
+src/renderer.js   聊天、项目工作区、设置浮层、全文窗口入口
 src/index.html    页面骨架
 src/styles.css    主题、气泡、浮层、输入区
+src/content.html  独立全文窗口页面
+src/content.css   全文窗口排版和圆体
+src/content.js    全文窗口渲染和流式更新
 ```
 
 渲染进程只负责画；网络请求、API key、工具执行都在主进程。`contextIsolation: true`，

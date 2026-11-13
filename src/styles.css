@@ -780,7 +780,28 @@ button {
   display: flex;
   flex-direction: column;
   gap: 0.85em;
+  max-height: calc(5 * 1.8em);
+  overflow: hidden;
   white-space: normal;
+}
+
+.message-card.thinking .card-text {
+  max-height: calc(5 * 1.7em);
+}
+
+.card-text.is-clipped,
+.json-view.is-clipped,
+.tool-text.is-clipped {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - 26px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - 26px),
+    transparent 100%
+  );
 }
 
 .text-block {
@@ -836,9 +857,9 @@ button {
 
 /* JSON 查看器：语法着色 + 节点折叠 */
 .json-view {
-  max-height: 380px;
+  max-height: calc(5 * 1.75em);
   padding: 10px 12px;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(74, 54, 40, 0.035);
@@ -939,10 +960,10 @@ button {
 }
 
 .tool-text {
-  max-height: 380px;
+  max-height: calc(5 * 1.7em);
   margin: 0;
   padding: 10px 12px;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(74, 54, 40, 0.035);

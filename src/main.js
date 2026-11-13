@@ -45,6 +45,7 @@ let mainWindow = null;
 let settings = null;
 let saveBoundsTimer = null;
 const activeChats = new Set();
+const contentWindows = new Map();
 let dragState = null;
 
 function clampBounds(bounds) {
@@ -108,6 +109,71 @@ function saveBounds() {
   }
 }
 
+function openContentWindow(payload) {
+  const key = String(payload?.key || '');
+  const title = String(payload?.title || 'YAH - Content');
+
+  if (key) {
+    for (const entry of contentWindows.values()) {
+      if (entry.key !== key || entry.win.isDestroyed()) continue;
+      entry.payload = payload;
+      entry.win.setTitle(title);
+      if (!entry.win.webContents.isLoading()) {
+        entry.win.webContents.send('content:init', payload);
+      }
+      entry.win.show();
+      entry.win.focus();
+      return entry.win.id;
+    }
+  }
+
+  const win = new BrowserWindow({
+    width: 940,
+    height: 760,
+    minWidth: 520,
+    minHeight: 360,
+    title,
+    icon: path.join(__dirname, '..', 'assets', 'yah.ico'),
+    frame: false,
+    transparent: false,
+    backgroundColor: '#fbf6ef',
+    roundedCorners: true,
+    thickFrame: true,
+    hasShadow: true,
+    show: false,
+    resizable: true,
+    center: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      spellcheck: false,
+    },
+  });
+
+  const webContentsId = win.webContents.id;
+  const entry = { win, key, payload };
+  contentWindows.set(webContentsId, entry);
+
+  win.loadFile(path.join(__dirname, 'content.html'));
+  win.once('ready-to-show', () => win.show());
+  win.webContents.on('did-finish-load', () => {
+    if (!win.isDestroyed()) win.webContents.send('content:init', entry.payload);
+  });
+  win.on('closed', () => {
+    contentWindows.delete(webContentsId);
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event) => {
+    event.preventDefault();
+  });
+  return win.id;
+}
+
 function createWindow() {
   settings = store.loadSettings();
   const bounds = clampBounds(settings.window);
@@ -150,6 +216,10 @@ function createWindow() {
   mainWindow.on('close', saveBounds);
   mainWindow.on('closed', () => {
     mainWindow = null;
+    for (const entry of [...contentWindows.values()]) {
+      if (!entry.win.isDestroyed()) entry.win.close();
+    }
+    contentWindows.clear();
   });
 
   mainWindow.webContents.on('context-menu', (event) => {
@@ -238,7 +308,21 @@ if (gotLock) {
       if (mainWindow.isMaximized()) mainWindow.unmaximize();
       else mainWindow.maximize();
     });
-    ipcMain.on('window:close', () => mainWindow?.close());
+    ipcMain.on('window:close', (event) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      (win || mainWindow)?.close();
+    });
+    ipcMain.handle('content:open', (_event, payload) =>
+      openContentWindow(payload)
+    );
+    ipcMain.on('content:update', (_event, payload) => {
+      const key = String(payload?.key || '');
+      if (!key) return;
+      for (const entry of contentWindows.values()) {
+        if (entry.key !== key || entry.win.isDestroyed()) continue;
+        entry.win.webContents.send('content:update', payload);
+      }
+    });
     ipcMain.on('window:drag-start', (event, point) => {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (!win || win.isDestroyed() || win.isMaximized() || win.isFullScreen()) {
