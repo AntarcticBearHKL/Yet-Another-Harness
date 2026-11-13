@@ -404,6 +404,20 @@ if (gotLock) {
       return win?.isMaximized() ?? false;
     });
     ipcMain.handle('app:version', () => app.getVersion());
+    ipcMain.handle('dialog:pick-directories', async (event) => {
+      const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+      const result = await dialog.showOpenDialog(win, {
+        properties: ['openDirectory', 'multiSelections'],
+      });
+      return result.canceled ? [] : result.filePaths;
+    });
+    ipcMain.handle('fs:is-directory', (_event, target) => {
+      try {
+        return fs.statSync(String(target || '')).isDirectory();
+      } catch {
+        return false;
+      }
+    });
 
     app.on('activate', async () => {
       if (BrowserWindow.getAllWindows().length !== 0) return;

@@ -423,6 +423,7 @@ async function runAgent({
   history,
   mcpDisabled,
   allowedTools,
+  toolContext,
   onDelta,
   onRequest,
   onUsage,
@@ -491,7 +492,11 @@ async function runAgent({
         round,
         startedAt,
       });
-      const output = await tools.execute(call.name, call.arguments);
+      const output = await tools.execute(
+        call.name,
+        call.arguments,
+        toolContext
+      );
       onToolResult?.({
         name: call.name,
         arguments: call.arguments,

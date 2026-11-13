@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const store = require('../store');
+const { guardPath } = require('./guard');
 
 let providers = {
   skillService: null,
@@ -38,10 +39,11 @@ async function subagentTool(args) {
   }
 }
 
-async function lookAtTool(args) {
+async function lookAtTool(args, context = null) {
   const raw = String(args.path || '').trim();
   if (!raw) return 'tool error: look_at requires "path"';
   const abs = path.resolve(raw);
+  await guardPath(abs, context, { tool: 'look_at' });
   const stat = await fs.promises.stat(abs).catch(() => null);
   if (!stat || !stat.isFile()) return `tool error: image not found: ${raw}`;
   if (stat.size > 10 * 1024 * 1024) return 'tool error: image is larger than 10 MB';

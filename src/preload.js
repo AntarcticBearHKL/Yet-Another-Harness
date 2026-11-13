@@ -1,6 +1,6 @@
 'use strict';
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 function subscribe(channel, callback) {
   const listener = (_event, data) => callback(data);
@@ -26,4 +26,13 @@ contextBridge.exposeInMainWorld('yah', {
   isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
   version: () => ipcRenderer.invoke('app:version'),
   platform: process.platform,
+  getPathForFile: (file) => {
+    try {
+      return webUtils.getPathForFile(file) || '';
+    } catch {
+      return '';
+    }
+  },
+  pickDirectories: () => ipcRenderer.invoke('dialog:pick-directories'),
+  isDirectory: (target) => ipcRenderer.invoke('fs:is-directory', target),
 });

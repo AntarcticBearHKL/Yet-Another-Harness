@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline');
 const mcp = require('./mcp-registry');
+const { guardPath } = require('./tools/guard');
 const { mergedDefinitions } = require('./tools/definitions');
 const files = require('./tools/files');
 const processTools = require('./tools/process');
@@ -33,7 +34,7 @@ function definitions(options = {}) {
   return all.filter((definition) => allowed.has(definition.function?.name));
 }
 
-async function execute(name, args) {
+async function execute(name, args, context = null) {
   let value;
   try {
     value = JSON.parse(args || '{}');
@@ -53,7 +54,7 @@ async function execute(name, args) {
     }
 
     if (name === 'read_file') {
-      return await readFileTool(value);
+      return await readFileTool(value, context);
     }
 
     const handlers = {
@@ -113,7 +114,7 @@ async function execute(name, args) {
       team_reject_shutdown: stateTools.teamRejectShutdown,
     };
     const handler = handlers[name];
-    if (handler) return await handler(value);
+    if (handler) return await handler(value, context);
     if (mcp.isMcpTool(name)) return mcp.execute(name, args);
     return `tool error: unknown tool "${name}"`;
   } catch (error) {
@@ -229,12 +230,13 @@ function statusLabel(name, args) {
   return `tool: ${name}`;
 }
 
-async function readFileTool(value) {
+async function readFileTool(value, context = null) {
   const rawPath = String(value.path ?? '').trim();
   if (!rawPath) {
     return 'tool error: read_file requires a non-empty "path"';
   }
   const abs = path.resolve(rawPath);
+  await guardPath(abs, context, { tool: 'read_file' });
   const offset = Math.max(1, Number(value.offset) || 1);
   const limit = Math.max(1, Math.min(2000, Number(value.limit) || 200));
 

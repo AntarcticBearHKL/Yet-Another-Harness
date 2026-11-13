@@ -472,6 +472,72 @@
       </div>
     </div>
 
+    <div id="project-overlay" class="overlay hidden" aria-hidden="true">
+      <div class="overlay-panel project-panel">
+        <div class="overlay-head">
+          <h2 id="project-title">NEW PROJECT</h2>
+        </div>
+        <div class="divider"></div>
+        <label class="project-field">
+          <span class="project-field-label">项目名称</span>
+          <input
+            id="project-name"
+            class="text-input"
+            type="text"
+            spellcheck="false"
+            placeholder="Project"
+          />
+        </label>
+        <div id="project-drop" class="project-drop" tabindex="0">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+            <path d="M12 11v5M9.5 13.5 12 11l2.5 2.5" />
+          </svg>
+          <div class="project-drop-title">拖入文件夹</div>
+          <div class="project-drop-hint">
+            可以拖入任意多个目录；也可以点击这里选择文件夹
+          </div>
+        </div>
+        <div id="project-dirs" class="project-dirs"></div>
+        <div id="project-error" class="project-error hidden"></div>
+        <div class="overlay-actions">
+          <button id="project-cancel" class="pill" type="button">
+            Cancel
+          </button>
+          <button id="project-save" class="pill primary" type="button">
+            Create
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="approval-overlay" class="overlay hidden" aria-hidden="true">
+      <div class="overlay-panel approval-panel">
+        <div class="overlay-head">
+          <h2>TOOL ACCESS</h2>
+        </div>
+        <div class="divider"></div>
+        <p class="approval-text">
+          工具请求访问项目开发目录之外的路径，需要人工审核。
+        </p>
+        <div class="approval-row">
+          <span>工具</span>
+          <code id="approval-tool"></code>
+        </div>
+        <div id="approval-path" class="approval-path"></div>
+        <div class="approval-dirs">
+          <div class="approval-dirs-label">当前项目目录</div>
+          <div id="approval-dirs"></div>
+        </div>
+        <div class="overlay-actions">
+          <button id="approval-deny" class="pill" type="button">拒绝</button>
+          <button id="approval-allow" class="pill primary" type="button">
+            允许一次
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div id="settings-overlay" class="overlay hidden">
       <div class="overlay-panel settings-panel">
         <div class="overlay-head">

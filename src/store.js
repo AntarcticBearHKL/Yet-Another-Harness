@@ -13,8 +13,8 @@ const { DatabaseSync } = require('node:sqlite');
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 9;
-const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
+const SCHEMA_VERSION = 10;
+const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1', directories: [] };
 
 let dataDir = null;
 let legacyDir = null;
@@ -185,6 +185,22 @@ function normalizePendingQueue(raw) {
   return out.slice(0, 100);
 }
 
+function normalizeDirectories(raw) {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const value of raw) {
+    const text = String(value || '').trim();
+    if (!text) continue;
+    const resolved = path.resolve(text);
+    if (seen.has(resolved)) continue;
+    seen.add(resolved);
+    out.push(resolved);
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
 function normalizeProjects(raw) {
   const projects = [];
   const seen = new Set();
@@ -197,10 +213,13 @@ function normalizeProjects(raw) {
       projects.push({
         id,
         name: String(project.name || `Project ${index + 1}`),
+        directories: normalizeDirectories(project.directories),
       });
     }
   }
-  if (projects.length === 0) projects.push({ ...DEFAULT_PROJECT });
+  if (projects.length === 0) {
+    projects.push({ ...DEFAULT_PROJECT, directories: [] });
+  }
   return projects;
 }
 
@@ -352,6 +371,7 @@ const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  directories TEXT,
   sort_order INTEGER NOT NULL
 );
 
@@ -512,6 +532,12 @@ function ensureSchema(database) {
       database.exec('ALTER TABLE messages ADD COLUMN usage TEXT');
     }
 
+    // v9 -> v10: project development directories.
+    const projectColumns = database.prepare('PRAGMA table_info(projects)').all();
+    if (!projectColumns.some((column) => column.name === 'directories')) {
+      database.exec('ALTER TABLE projects ADD COLUMN directories TEXT');
+    }
+
     const projectCount =
       Number(database.prepare('SELECT COUNT(*) AS n FROM projects').get().n) || 0;
     if (projectCount === 0) {
@@ -584,11 +610,19 @@ function hashSession(session) {
 function readChats() {
   const database = openDb();
   const projectRows = database
-    .prepare('SELECT id, name FROM projects ORDER BY sort_order ASC')
+    .prepare('SELECT id, name, directories FROM projects ORDER BY sort_order ASC')
     .all();
   const projects = projectRows.length
-    ? projectRows.map((row) => ({ id: row.id, name: row.name }))
-    : [{ ...DEFAULT_PROJECT }];
+    ? projectRows.map((row) => {
+        let directories = [];
+        try {
+          directories = normalizeDirectories(JSON.parse(row.directories || '[]'));
+        } catch {
+          directories = [];
+        }
+        return { id: row.id, name: row.name, directories };
+      })
+    : [{ ...DEFAULT_PROJECT, directories: [] }];
   const projectIds = new Set(projects.map((project) => project.id));
 
   const sessionRows = database
@@ -811,10 +845,11 @@ function writeChats(chats) {
        updated_at = excluded.updated_at`
   );
   const upsertProject = database.prepare(
-    `INSERT INTO projects (id, name, sort_order)
-     VALUES (?, ?, ?)
+    `INSERT INTO projects (id, name, directories, sort_order)
+     VALUES (?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
+       directories = excluded.directories,
        sort_order = excluded.sort_order`
   );
   const deleteProject = database.prepare('DELETE FROM projects WHERE id = ?');
@@ -851,7 +886,12 @@ function writeChats(chats) {
   try {
     normalized.projects.forEach((project, order) => {
       incomingProjects.add(project.id);
-      upsertProject.run(project.id, project.name, order);
+      upsertProject.run(
+        project.id,
+        project.name,
+        JSON.stringify(project.directories || []),
+        order
+      );
     });
 
     normalized.sessions.forEach((session, order) => {
@@ -1000,10 +1040,11 @@ function saveStructure(chats) {
   const database = openDb();
 
   const upsertProject = database.prepare(
-    `INSERT INTO projects (id, name, sort_order)
-     VALUES (?, ?, ?)
+    `INSERT INTO projects (id, name, directories, sort_order)
+     VALUES (?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
+       directories = excluded.directories,
        sort_order = excluded.sort_order`
   );
   const upsertSession = database.prepare(
@@ -1047,7 +1088,12 @@ function saveStructure(chats) {
   try {
     normalized.projects.forEach((project, order) => {
       incomingProjects.add(project.id);
-      upsertProject.run(project.id, project.name, order);
+      upsertProject.run(
+        project.id,
+        project.name,
+        JSON.stringify(project.directories || []),
+        order
+      );
     });
 
     normalized.sessions.forEach((session, order) => {

@@ -160,6 +160,47 @@ test('glob and grep search the filesystem', async () => {
   }
 });
 
+test('file tools require approval outside project directories', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-guard-tools-'));
+  const inside = path.join(dir, 'inside.txt');
+  const outside = path.join(os.tmpdir(), 'yah-guard-outside.txt');
+  fs.writeFileSync(inside, 'inside');
+  const context = {
+    enforceProjectRoots: true,
+    allowedDirs: [dir],
+    approve: async () => false,
+  };
+  try {
+    const allowedRead = await tools.execute(
+      'read',
+      JSON.stringify({ path: inside }),
+      context
+    );
+    assert.match(allowedRead, /inside/);
+    const deniedRead = await tools.execute(
+      'read',
+      JSON.stringify({ path: outside }),
+      context
+    );
+    assert.match(deniedRead, /access denied by user/);
+    const allowedWrite = await tools.execute(
+      'write',
+      JSON.stringify({ path: inside, content: 'ok' }),
+      context
+    );
+    assert.match(allowedWrite, /Wrote/);
+    const deniedWrite = await tools.execute(
+      'write',
+      JSON.stringify({ path: outside, content: 'x' }),
+      context
+    );
+    assert.match(deniedWrite, /access denied by user/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(outside, { force: true });
+  }
+});
+
 test('shell runs a command', async () => {
   const out = await tools.execute(
     'shell',

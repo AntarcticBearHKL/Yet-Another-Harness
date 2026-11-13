@@ -1,11 +1,13 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const store = require('../src/store');
 const deepseek = require('../src/deepseek');
 
 const activeRuns = new Map();
 const sessionRuns = new Map();
 const subscribers = new Map();
+const pendingApprovals = new Map();
 
 function subscribe(sessionId, fn) {
   if (!subscribers.has(sessionId)) subscribers.set(sessionId, new Set());
@@ -38,6 +40,37 @@ function emit(sessionId, runId, type, payload = {}) {
   } catch (error) {
     console.error('append event failed', type, error);
     return null;
+  }
+}
+
+function requestToolApproval(sessionId, runId, request) {
+  return new Promise((resolve) => {
+    const approvalId = crypto.randomUUID();
+    pendingApprovals.set(approvalId, { resolve, runId, sessionId });
+    emit(sessionId, runId, 'tool.approval', {
+      id: approvalId,
+      tool: String(request?.tool || 'file'),
+      path: String(request?.path || ''),
+      allowedDirs: Array.isArray(request?.allowedDirs)
+        ? request.allowedDirs.map(String)
+        : [],
+    });
+  });
+}
+
+function resolveApproval(approvalId, approved) {
+  const entry = pendingApprovals.get(String(approvalId || ''));
+  if (!entry) return false;
+  pendingApprovals.delete(String(approvalId));
+  entry.resolve(Boolean(approved));
+  return true;
+}
+
+function denyRunApprovals(runId) {
+  for (const [approvalId, entry] of pendingApprovals) {
+    if (entry.runId !== runId) continue;
+    pendingApprovals.delete(approvalId);
+    entry.resolve(false);
   }
 }
 
@@ -152,6 +185,21 @@ function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null 
     .filter(Boolean)
     .join('\n\n');
 
+  const chats = store.loadChats();
+  const project = chats.projects.find(
+    (item) => item.id === session.projectId
+  );
+  const allowedDirs = Array.isArray(project?.directories)
+    ? project.directories
+    : [];
+  const toolContext = {
+    enforceProjectRoots: true,
+    sessionId,
+    projectId: session.projectId,
+    allowedDirs,
+    approve: (request) => requestToolApproval(sessionId, id, request),
+  };
+
   deepseek
     .runAgent({
       apiKey,
@@ -161,6 +209,7 @@ function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null 
         ? session.mcpDisabled
         : [],
       allowedTools: Array.isArray(agentConfig?.tools) ? agentConfig.tools : null,
+      toolContext,
       sessionId,
       signal: state.controller.signal,
       onDelta: (delta, round, reasoning) => {
@@ -264,6 +313,7 @@ function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null 
       emit(sessionId, id, 'run.error', { error: message });
     })
     .finally(() => {
+      denyRunApprovals(id);
       activeRuns.delete(id);
       if (sessionRuns.get(sessionId) === id) sessionRuns.delete(sessionId);
     });
@@ -274,6 +324,7 @@ function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null 
 function cancelRun(runId) {
   const state = activeRuns.get(String(runId || ''));
   if (!state) return false;
+  denyRunApprovals(state.runId);
   state.controller.abort();
   return true;
 }
@@ -282,6 +333,7 @@ function cancelSessionRuns(sessionIds) {
   const wanted = new Set(sessionIds);
   for (const [runId, state] of activeRuns) {
     if (wanted.has(state.sessionId)) {
+      denyRunApprovals(runId);
       state.controller.abort();
       activeRuns.delete(runId);
       if (sessionRuns.get(state.sessionId) === runId) {
@@ -296,5 +348,6 @@ module.exports = {
   startRun,
   cancelRun,
   cancelSessionRuns,
+  resolveApproval,
   activeRunForSession: (sessionId) => sessionRuns.get(sessionId) || null,
 };

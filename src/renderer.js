@@ -44,6 +44,20 @@ const dom = {
   confirmText: $('confirm-text'),
   confirmCancel: $('confirm-cancel'),
   confirmOk: $('confirm-ok'),
+  projectOverlay: $('project-overlay'),
+  projectTitle: $('project-title'),
+  projectName: $('project-name'),
+  projectDrop: $('project-drop'),
+  projectDirs: $('project-dirs'),
+  projectError: $('project-error'),
+  projectCancel: $('project-cancel'),
+  projectSave: $('project-save'),
+  approvalOverlay: $('approval-overlay'),
+  approvalTool: $('approval-tool'),
+  approvalPath: $('approval-path'),
+  approvalDirs: $('approval-dirs'),
+  approvalDeny: $('approval-deny'),
+  approvalAllow: $('approval-allow'),
   rawBody: $('raw-body'),
   rawMeta: $('raw-meta'),
   apiKey: $('api-key'),
@@ -136,6 +150,8 @@ const state = {
   slashIndex: 0,
   slashSkills: [],
   slashDismissed: false,
+  approvalQueue: [],
+  activeApproval: null,
 };
 
 async function requestJson(path, options = {}) {
@@ -299,6 +315,11 @@ const api = {
   dragMove: (point) => shell?.dragMove?.(point),
   dragEnd: () => shell?.dragEnd?.(),
   isMaximized: () => shell?.isMaximized?.() ?? Promise.resolve(false),
+  getPathForFile: (file) =>
+    shell?.getPathForFile?.(file) || String(file?.path || ''),
+  pickDirectories: () => shell?.pickDirectories?.() ?? Promise.resolve([]),
+  isDirectory: (target) =>
+    shell?.isDirectory?.(target) ?? Promise.resolve(false),
 
   loadSettings: () => requestJson('/api/settings'),
   saveSettings: (settings) =>
@@ -309,6 +330,11 @@ const api = {
   loadAgents: () => requestJson('/api/agents'),
   saveAgents: (agents) =>
     requestJson('/api/agents', { method: 'POST', body: { agents } }),
+  resolveApproval: (id, approved) =>
+    requestJson(`/api/approvals/${encodeURIComponent(id)}`, {
+      method: 'POST',
+      body: { approved },
+    }),
   deleteSession: (id) =>
     requestJson(`/api/sessions/${encodeURIComponent(id)}`, {
       method: 'DELETE',
@@ -353,6 +379,7 @@ const api = {
   onChatTiming: (callback) => subscribeEvent('assistant.timing', callback),
   onChatToolCall: (callback) => subscribeEvent('tool.call', callback),
   onChatToolResult: (callback) => subscribeEvent('tool.result', callback),
+  onToolApproval: (callback) => subscribeEvent('tool.approval', callback),
   onChatDone: (callback) => subscribeEvent('run.done', callback),
   onChatError: (callback) => subscribeEvent('run.error', callback),
   onRunStarted: (callback) => subscribeEvent('run.started', callback),
@@ -372,6 +399,7 @@ let cardAnchorFrame = 0;
 let toolTimer = 0;
 let renameTarget = null;
 let confirmAction = null;
+let projectDialog = null;
 
 function currentSession() {
   return state.sessions[state.current];
@@ -2151,6 +2179,192 @@ function saveRename() {
   if (state.switcherOpen) renderSwitcher();
 }
 
+function projectDirectories(project) {
+  return Array.isArray(project?.directories) ? project.directories : [];
+}
+
+function showProjectError(message) {
+  if (!dom.projectError) return;
+  dom.projectError.textContent = message;
+  dom.projectError.classList.toggle('hidden', !message);
+}
+
+function renderProjectDialogDirs() {
+  if (!dom.projectDirs) return;
+  dom.projectDirs.replaceChildren();
+  const dirs = projectDialog?.directories || [];
+  if (dirs.length === 0) {
+    dom.projectDirs.append(
+      el('div', 'project-dirs-empty', '还没有选择开发目录')
+    );
+  } else {
+    dirs.forEach((dir, index) => {
+      const row = el('div', 'project-dir');
+      row.append(el('span', 'project-dir-path', dir));
+      const remove = el('button', 'project-dir-remove');
+      remove.type = 'button';
+      remove.setAttribute('aria-label', '移除目录');
+      remove.innerHTML =
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+      remove.addEventListener('click', () => {
+        if (!projectDialog) return;
+        projectDialog.directories.splice(index, 1);
+        renderProjectDialogDirs();
+      });
+      row.append(remove);
+      dom.projectDirs.append(row);
+    });
+  }
+  dom.projectSave.disabled =
+    !projectDialog ||
+    !String(projectDialog.name || '').trim() ||
+    dirs.length === 0;
+}
+
+function openProjectDialog(mode = 'new', projectId = null) {
+  if (!dom.projectOverlay) return;
+  const editing = mode === 'edit';
+  const project = editing
+    ? state.projects.find((item) => item.id === projectId)
+    : null;
+  if (editing && !project) return;
+  projectDialog = {
+    mode: editing ? 'edit' : 'new',
+    projectId: editing ? project.id : null,
+    name: editing ? project.name : `Project ${state.projects.length + 1}`,
+    directories: editing ? [...projectDirectories(project)] : [],
+  };
+  dom.projectTitle.textContent = editing ? 'PROJECT DIRECTORIES' : 'NEW PROJECT';
+  dom.projectName.value = projectDialog.name;
+  dom.projectSave.textContent = editing ? 'Save' : 'Create';
+  showProjectError('');
+  renderProjectDialogDirs();
+  dom.projectOverlay.classList.remove('hidden');
+  dom.projectOverlay.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => {
+    dom.projectName.focus();
+    dom.projectName.setSelectionRange(0, dom.projectName.value.length);
+  });
+}
+
+function closeProjectDialog() {
+  if (!dom.projectOverlay) return;
+  projectDialog = null;
+  dom.projectOverlay.classList.add('hidden');
+  dom.projectOverlay.setAttribute('aria-hidden', 'true');
+}
+
+async function addProjectDirectory(target) {
+  const raw = String(target || '').trim();
+  if (!raw || !projectDialog) return;
+  const isDir = await api.isDirectory(raw);
+  if (!isDir) {
+    showProjectError(`不是文件夹：${raw}`);
+    return;
+  }
+  if (
+    projectDialog.directories.some(
+      (dir) => dir.toLowerCase() === raw.toLowerCase()
+    )
+  ) {
+    return;
+  }
+  projectDialog.directories.push(raw);
+  showProjectError('');
+  renderProjectDialogDirs();
+}
+
+function saveProjectDialog() {
+  if (!projectDialog) return;
+  const name = String(projectDialog.name || '').trim();
+  if (!name) {
+    showProjectError('请填写项目名称');
+    return;
+  }
+  if (projectDialog.directories.length === 0) {
+    showProjectError('至少需要选择一个开发目录');
+    return;
+  }
+  if (projectDialog.mode === 'edit') {
+    const project = state.projects.find(
+      (item) => item.id === projectDialog.projectId
+    );
+    if (!project) {
+      closeProjectDialog();
+      return;
+    }
+    project.name = name;
+    project.directories = [...projectDialog.directories];
+  } else {
+    const project = {
+      id: makeId(),
+      name,
+      directories: [...projectDialog.directories],
+    };
+    state.projects.push(project);
+    state.switcherProjectId = project.id;
+  }
+  closeProjectDialog();
+  saveChatsSoon();
+  if (state.switcherOpen) renderSwitcher();
+  renderAll();
+}
+
+function showNextToolApproval() {
+  if (!dom.approvalOverlay) return;
+  const next = state.approvalQueue.shift();
+  if (!next) {
+    state.activeApproval = null;
+    dom.approvalOverlay.classList.add('hidden');
+    dom.approvalOverlay.setAttribute('aria-hidden', 'true');
+    return;
+  }
+  state.activeApproval = next;
+  dom.approvalTool.textContent = next.tool || 'file';
+  dom.approvalPath.textContent = next.path || '';
+  dom.approvalDirs.replaceChildren();
+  const dirs = Array.isArray(next.allowedDirs) ? next.allowedDirs : [];
+  if (dirs.length === 0) {
+    dom.approvalDirs.append(
+      el('div', 'approval-dir', '当前项目还没有配置开发目录')
+    );
+  } else {
+    for (const dir of dirs) {
+      dom.approvalDirs.append(el('div', 'approval-dir', dir));
+    }
+  }
+  dom.approvalOverlay.classList.remove('hidden');
+  dom.approvalOverlay.setAttribute('aria-hidden', 'false');
+}
+
+function enqueueToolApproval(payload) {
+  if (!payload?.id) return;
+  state.approvalQueue.push(payload);
+  if (!state.activeApproval) showNextToolApproval();
+}
+
+async function resolveToolApproval(approved) {
+  const current = state.activeApproval;
+  if (!current) return;
+  state.activeApproval = null;
+  dom.approvalOverlay.classList.add('hidden');
+  dom.approvalOverlay.setAttribute('aria-hidden', 'true');
+  try {
+    await api.resolveApproval(current.id, approved);
+  } catch (error) {
+    console.error('resolve approval failed', error);
+  }
+  showNextToolApproval();
+}
+
+function clearToolApprovals() {
+  state.approvalQueue = [];
+  state.activeApproval = null;
+  if (!dom.approvalOverlay) return;
+  dom.approvalOverlay.classList.add('hidden');
+  dom.approvalOverlay.setAttribute('aria-hidden', 'true');
+}
+
 function openConfirm({ title, text, action }) {
   dom.confirmTitle.textContent = title;
   dom.confirmText.textContent = text;
@@ -2285,15 +2499,7 @@ function createChatFromSwitcher() {
 
 function newProject() {
   ensureProjects();
-  const project = {
-    id: makeId(),
-    name: `Project ${state.projects.length + 1}`,
-  };
-  state.projects.push(project);
-  state.switcherProjectId = project.id;
-  state.switcherIndex = 0;
-  saveChatsSoon();
-  renderSwitcher();
+  openProjectDialog('new');
 }
 
 function renderAll() {
@@ -3223,6 +3429,7 @@ async function refreshChats() {
 }
 
 function finishStream() {
+  clearToolApprovals();
   const finishedSession = state.streamMessage
     ? state.sessions.find((session) =>
         session.msgs.includes(state.streamMessage)
@@ -3477,6 +3684,8 @@ const RING_ICONS = {
     '<path d="M4 20h4L19 9l-4-4L4 16v4ZM14 6l4 4"/>',
   trash:
     '<path d="M4 6h16M9 6V4h6v2M6 6l1 14h10l1-14M10 10v7M14 10v7"/>',
+  folder:
+    '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>',
   mcp: '<path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0V8ZM12 16v5"/>',
   minimize: '<path d="M4 12h16"/>',
   maximize: '<path d="M5 5h14v14H5z"/>',
@@ -3846,6 +4055,11 @@ function openSwitcherRingMenu(event) {
           action: () => openRename('project', projectId),
         },
         {
+          label: '配置目录',
+          icon: RING_ICONS.folder,
+          action: () => openProjectDialog('edit', projectId),
+        },
+        {
           label: '删除',
           icon: RING_ICONS.trash,
           action: () => deleteProject(projectId),
@@ -3914,6 +4128,11 @@ function openSwitcherRingMenu(event) {
 
 function onRightMouseDown(event) {
   if (event.button !== 2) return;
+  if (dom.approvalOverlay && !dom.approvalOverlay.classList.contains('hidden')) {
+    resolveToolApproval(false);
+    state.ringSuppress = true;
+    return;
+  }
 
   const switcherOpen =
     state.switcherOpen || dom.switcher.classList.contains('open');
@@ -3944,6 +4163,11 @@ function onRightMouseDown(event) {
   }
   if (!dom.confirmOverlay.classList.contains('hidden')) {
     closeConfirm();
+    state.ringSuppress = true;
+    return;
+  }
+  if (dom.projectOverlay && !dom.projectOverlay.classList.contains('hidden')) {
+    closeProjectDialog();
     state.ringSuppress = true;
     return;
   }
@@ -4759,6 +4983,10 @@ function bindEvents() {
   // 整体禁用鼠标右键菜单与框选；有弹窗时右键等于关闭
   document.addEventListener('contextmenu', (event) => {
     event.preventDefault();
+    if (dom.approvalOverlay && !dom.approvalOverlay.classList.contains('hidden')) {
+      resolveToolApproval(false);
+      return;
+    }
     if (state.ringSuppress) {
       state.ringSuppress = false;
       return;
@@ -4780,6 +5008,10 @@ function bindEvents() {
     }
     if (!dom.confirmOverlay.classList.contains('hidden')) {
       closeConfirm();
+      return;
+    }
+    if (dom.projectOverlay && !dom.projectOverlay.classList.contains('hidden')) {
+      closeProjectDialog();
       return;
     }
     if (dom.skillArgsOverlay && !dom.skillArgsOverlay.classList.contains('hidden')) {
@@ -4861,6 +5093,51 @@ function bindEvents() {
   dom.confirmOverlay.addEventListener('click', (event) => {
     if (event.target === dom.confirmOverlay) closeConfirm();
   });
+
+  dom.projectCancel?.addEventListener('click', closeProjectDialog);
+  dom.projectSave?.addEventListener('click', saveProjectDialog);
+  dom.projectOverlay?.addEventListener('click', (event) => {
+    if (event.target === dom.projectOverlay) closeProjectDialog();
+  });
+  dom.projectName?.addEventListener('input', () => {
+    if (!projectDialog) return;
+    projectDialog.name = dom.projectName.value;
+    dom.projectSave.disabled =
+      !projectDialog.name.trim() || projectDialog.directories.length === 0;
+  });
+  dom.projectDrop?.addEventListener('click', async () => {
+    const paths = await api.pickDirectories();
+    for (const path of paths) await addProjectDirectory(path);
+  });
+  dom.projectDrop?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      dom.projectDrop.click();
+    }
+  });
+  dom.projectDrop?.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    dom.projectDrop.classList.add('dragging');
+  });
+  dom.projectDrop?.addEventListener('dragleave', () => {
+    dom.projectDrop.classList.remove('dragging');
+  });
+  dom.projectDrop?.addEventListener('drop', async (event) => {
+    event.preventDefault();
+    dom.projectDrop.classList.remove('dragging');
+    const files = [...(event.dataTransfer?.files || [])];
+    for (const file of files) {
+      const path = api.getPathForFile(file);
+      if (path) await addProjectDirectory(path);
+    }
+  });
+
+  dom.approvalDeny?.addEventListener('click', () => resolveToolApproval(false));
+  dom.approvalAllow?.addEventListener('click', () => resolveToolApproval(true));
+  dom.approvalOverlay?.addEventListener('click', (event) => {
+    if (event.target === dom.approvalOverlay) resolveToolApproval(false);
+  });
+
   dom.rawOverlay.addEventListener('click', (event) => {
     if (event.target === dom.rawOverlay) closeRawRequest();
   });
@@ -4969,6 +5246,16 @@ function bindEvents() {
   );
 
   document.addEventListener('keydown', (event) => {
+    if (
+      dom.approvalOverlay &&
+      !dom.approvalOverlay.classList.contains('hidden')
+    ) {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        resolveToolApproval(false);
+      }
+      return;
+    }
     if (!dom.renameOverlay.classList.contains('hidden')) {
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
@@ -4980,6 +5267,13 @@ function bindEvents() {
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
         closeConfirm();
+      }
+      return;
+    }
+    if (dom.projectOverlay && !dom.projectOverlay.classList.contains('hidden')) {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        closeProjectDialog();
       }
       return;
     }
@@ -5203,6 +5497,14 @@ function bindEvents() {
       const blocked = () =>
         !dom.rawOverlay.classList.contains('hidden') ||
         !dom.settingsOverlay.classList.contains('hidden') ||
+        Boolean(
+          dom.approvalOverlay &&
+            !dom.approvalOverlay.classList.contains('hidden')
+        ) ||
+        Boolean(
+          dom.projectOverlay &&
+            !dom.projectOverlay.classList.contains('hidden')
+        ) ||
         state.switcherOpen ||
         state.composerOpen ||
         state.catalogOpen ||
@@ -5418,6 +5720,11 @@ function bindEvents() {
     if (!requestId || requestId === state.requestId) return;
     if (state.streaming) return;
     refreshChats();
+  });
+
+  api.onToolApproval(({ requestId, id, tool, path, allowedDirs }) => {
+    if (requestId !== state.requestId) return;
+    enqueueToolApproval({ id, tool, path, allowedDirs });
   });
 
   api.onChatDone(({ requestId, text, usage }) => {

@@ -8,6 +8,7 @@ const {
   formatHashLines,
   applyHashlineEdits,
 } = require('./hashline');
+const { guardPath } = require('./guard');
 
 const MAX_READ_LINES = 2000;
 const MAX_READ_CHARS = 120_000;
@@ -23,8 +24,9 @@ function isBinary(buffer) {
   return buffer.includes(0);
 }
 
-async function readTool(args) {
+async function readTool(args, context = null) {
   const abs = resolvePath(args.path);
+  await guardPath(abs, context, { tool: 'read' });
   const stat = await fs.promises.stat(abs).catch(() => null);
   if (!stat) return `tool error: path does not exist: ${args.path}`;
   if (stat.isDirectory()) {
@@ -73,8 +75,9 @@ async function readTool(args) {
   }`;
 }
 
-async function writeTool(args) {
+async function writeTool(args, context = null) {
   const abs = resolvePath(args.path);
+  await guardPath(abs, context, { tool: 'write' });
   const content = String(args.content ?? '');
   await fs.promises.mkdir(path.dirname(abs), { recursive: true });
   await fs.promises.writeFile(abs, content, 'utf8');
@@ -99,12 +102,14 @@ function simpleEdit(abs, oldString, newString, replaceAll) {
   return `Updated ${abs} (${replaceAll ? count : 1} replacement${count === 1 ? '' : 's'})`;
 }
 
-async function editTool(args) {
+async function editTool(args, context = null) {
   if (args.path && (args.oldString !== undefined || args.newString !== undefined)) {
     const abs = resolvePath(args.path);
+    await guardPath(abs, context, { tool: 'edit' });
     return simpleEdit(abs, args.oldString, args.newString, Boolean(args.replaceAll));
   }
   const abs = resolvePath(args.filePath || args.path);
+  await guardPath(abs, context, { tool: 'edit' });
   if (args.delete === true) {
     await fs.promises.unlink(abs);
     return `Deleted ${abs}`;
@@ -115,6 +120,7 @@ async function editTool(args) {
   let result = `Updated ${abs}`;
   if (args.rename) {
     const target = resolvePath(args.rename);
+    await guardPath(target, context, { tool: 'edit' });
     await fs.promises.mkdir(path.dirname(target), { recursive: true });
     await fs.promises.rename(abs, target);
     result += ` and moved to ${target}`;
@@ -188,10 +194,13 @@ function runProcess(command, args, options = {}) {
   });
 }
 
-async function globTool(args) {
+async function globTool(args, context = null) {
   const pattern = String(args.pattern || '').trim();
   if (!pattern) return 'tool error: glob requires "pattern"';
-  const root = resolvePath(args.path || '.');
+  const root = resolvePath(
+    args.path || (context?.allowedDirs?.[0] || '.')
+  );
+  await guardPath(root, context, { tool: 'glob' });
   const limit = Math.max(1, Math.min(500, Number(args.limit) || 100));
   const rgArgs = ['--files', '--no-messages', '--glob', pattern];
   if (args.hidden === true) rgArgs.push('--hidden');
@@ -226,10 +235,13 @@ async function globTool(args) {
   }`;
 }
 
-async function grepTool(args) {
+async function grepTool(args, context = null) {
   const pattern = String(args.pattern || '');
   if (!pattern) return 'tool error: grep requires "pattern"';
-  const root = resolvePath(args.path || '.');
+  const root = resolvePath(
+    args.path || (context?.allowedDirs?.[0] || '.')
+  );
+  await guardPath(root, context, { tool: 'grep' });
   let cwd = root;
   let searchPath = '.';
   try {
@@ -274,9 +286,36 @@ async function grepTool(args) {
   }`;
 }
 
-async function patchTool(args) {
+function patchPaths(text) {
+  const paths = new Set();
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const diff = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
+    if (diff) {
+      paths.add(diff[2]);
+      continue;
+    }
+    const plus = line.match(/^\+\+\+ b\/(.+)$/);
+    if (plus && plus[1] !== '/dev/null') {
+      paths.add(plus[1]);
+      continue;
+    }
+    const minus = line.match(/^--- a\/(.+)$/);
+    if (minus && minus[1] !== '/dev/null') {
+      paths.add(minus[1]);
+    }
+  }
+  return [...paths];
+}
+
+async function patchTool(args, context = null) {
   const patchText = String(args.patchText || '');
   if (!patchText.trim()) return 'tool error: patchText is required';
+  const cwd = context?.allowedDirs?.[0] || process.cwd();
+  for (const relative of patchPaths(patchText)) {
+    await guardPath(path.resolve(cwd, relative), context, {
+      tool: 'patch',
+    });
+  }
   const temp = path.join(
     process.env.TEMP || process.env.TMP || process.cwd(),
     `yah-patch-${Date.now()}.diff`
@@ -284,7 +323,7 @@ async function patchTool(args) {
   await fs.promises.writeFile(temp, patchText, 'utf8');
   try {
     const result = await runProcess('git', ['apply', '--whitespace=nowarn', temp], {
-      cwd: process.cwd(),
+      cwd,
       timeout: 60_000,
     });
     if (result.code !== 0) {
