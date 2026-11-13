@@ -20,7 +20,6 @@ const dom = {
   switcherSettings: $('switcher-settings'),
   projectList: $('project-list'),
   projectNew: $('project-new'),
-  projectTitle: $('project-title'),
   settingsOverlay: $('settings-overlay'),
   rawOverlay: $('raw-overlay'),
   rawBody: $('raw-body'),
@@ -752,16 +751,6 @@ function renderMessages({ animate = true } = {}) {
   });
 }
 
-function sessionPreview(session) {
-  for (let i = session.msgs.length - 1; i >= 0; i -= 1) {
-    const text = String(session.msgs[i].text || '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (text) return text.slice(0, 140);
-  }
-  return 'No messages yet';
-}
-
 function renderSwitcher() {
   ensureProjects();
   const project =
@@ -770,20 +759,12 @@ function renderSwitcher() {
   state.switcherProjectId = project.id;
   const sessions = sessionsInProject(project.id);
 
-  const counts = new Map();
-  for (const session of state.sessions) {
-    counts.set(session.projectId, (counts.get(session.projectId) || 0) + 1);
-  }
-
   dom.projectList.replaceChildren();
   state.projects.forEach((item) => {
     const row = el('button', 'project-row');
     row.type = 'button';
     if (item.id === project.id) row.classList.add('selected');
     row.append(el('span', 'project-name', item.name));
-    row.append(
-      el('span', 'project-count', String(counts.get(item.id) || 0))
-    );
     row.addEventListener('click', () => {
       state.switcherProjectId = item.id;
       const next = sessionsInProject(item.id);
@@ -796,14 +777,10 @@ function renderSwitcher() {
     dom.projectList.append(row);
   });
 
-  if (dom.projectTitle) dom.projectTitle.textContent = project.name;
-
   dom.switcherList.replaceChildren();
   if (sessions.length === 0) {
     state.switcherIndex = 0;
-    dom.switcherList.append(
-      el('div', 'switcher-empty', 'No chats in this project yet.')
-    );
+    dom.switcherList.append(el('div', 'switcher-empty', 'No chats yet'));
     return;
   }
 
@@ -820,11 +797,7 @@ function renderSwitcher() {
 
     const top = el('div', 'switch-top');
     top.append(el('span', 'switch-title', session.title || `Chat ${localIndex + 1}`));
-    if (globalIndex === state.current) {
-      top.append(el('span', 'switch-badge', 'CURRENT'));
-    }
 
-    const preview = el('div', 'switch-preview', sessionPreview(session));
     const trash = el('button', 'trash switch-trash');
     trash.type = 'button';
     trash.title = 'Delete chat';
@@ -861,7 +834,7 @@ function renderSwitcher() {
       renderSwitcher();
     });
 
-    card.append(top, preview, trash);
+    card.append(top, trash);
     dom.switcherList.append(card);
   });
 
