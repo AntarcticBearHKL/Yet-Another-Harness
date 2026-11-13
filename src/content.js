@@ -8,6 +8,42 @@ const closeButton = document.getElementById('content-close');
 let currentKey = null;
 let currentKind = 'text';
 
+let windowDrag = null;
+let dragPoint = null;
+let dragFrame = 0;
+
+const DRAG_EXCLUDE =
+  'button, a, input, textarea, select, label, [contenteditable="true"]';
+
+function onWindowDragStart(event) {
+  if (event.button !== 0) return;
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (target.closest(DRAG_EXCLUDE)) return;
+  windowDrag = { x: event.screenX, y: event.screenY };
+  api.dragStart({ x: event.screenX, y: event.screenY });
+}
+
+function onWindowDragMove(event) {
+  if (!windowDrag) return;
+  dragPoint = { x: event.screenX, y: event.screenY };
+  if (dragFrame) return;
+  dragFrame = requestAnimationFrame(() => {
+    dragFrame = 0;
+    if (!windowDrag || !dragPoint) return;
+    api.dragMove(dragPoint);
+  });
+}
+
+function onWindowDragEnd() {
+  if (!windowDrag) return;
+  windowDrag = null;
+  dragPoint = null;
+  cancelAnimationFrame(dragFrame);
+  dragFrame = 0;
+  api.dragEnd();
+}
+
 function isTextHeading(block) {
   const line = block.split('\n', 1)[0].trim();
   return (
@@ -107,3 +143,9 @@ closeButton.addEventListener('click', () => api.close());
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') api.close();
 });
+
+// 和主窗口一致：按住左键在任意非交互区域拖动窗口
+document.addEventListener('mousedown', onWindowDragStart);
+document.addEventListener('mousemove', onWindowDragMove);
+document.addEventListener('mouseup', onWindowDragEnd);
+window.addEventListener('blur', onWindowDragEnd);
