@@ -1163,6 +1163,33 @@ body.ring-open #window-controls {
   color: #b23a2f;
 }
 
+.message-card.error .card-dot {
+  background: #b23a2f;
+}
+
+.message-card.error .card-title {
+  color: #b23a2f;
+}
+
+.tool-section-label {
+  margin: 12px 0 6px;
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.tool-section-label:first-child {
+  margin-top: 0;
+}
+
+.tool-running {
+  margin-top: 10px;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .message-card.streaming .text-block:last-child::after {
   content: "▍";
   margin-left: 2px;
@@ -1490,6 +1517,54 @@ body.ring-open #window-controls {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.pairing-col {
+  gap: 8px;
+}
+
+.pairing-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+}
+
+.pairing-qr {
+  width: 132px;
+  height: 132px;
+  flex: none;
+  border-radius: 8px;
+  background: #fff8f0;
+}
+
+.pairing-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.pairing-address {
+  color: var(--text-soft);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pairing-password {
+  color: var(--dim);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11.5px;
+  word-break: break-all;
+}
+
+.pairing-hint {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .text-input {
@@ -2257,7 +2332,7 @@ body.maximized .mcp {
   flex: 1;
   gap: 2px;
   min-height: 0;
-  padding: 4px 0 8px;
+  padding: 14px 0 8px;
   overflow-y: auto;
 }
 
@@ -2320,6 +2395,10 @@ body.maximized .mcp {
 
 .mcp-dot.error {
   background: #c05a4a;
+}
+
+.mcp-dot.disabled {
+  background: rgba(74, 54, 40, 0.18);
 }
 
 .mcp-server-body {
@@ -2487,6 +2566,10 @@ body.maximized .mcp {
   color: var(--accent-deep);
 }
 
+.mcp-status.disabled {
+  color: var(--faint);
+}
+
 .mcp-transport {
   padding: 1px 6px;
   border: 1px solid var(--line);
@@ -2500,6 +2583,10 @@ body.maximized .mcp {
   display: flex;
   flex: none;
   gap: 6px;
+}
+
+.mcp-actions .hidden {
+  display: none;
 }
 
 .pill.danger {
@@ -2530,6 +2617,12 @@ body.maximized .mcp {
 
 .mcp-error.hidden {
   display: none;
+}
+
+.mcp-error.notice {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--dim);
 }
 
 .mcp-tabs {

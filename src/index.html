@@ -102,22 +102,13 @@
     >
       <div class="mcp-body">
         <aside class="mcp-side">
-          <div class="mcp-side-head">
-            <span class="mcp-side-title">MCP</span>
-            <span id="mcp-server-count" class="mcp-count">0</span>
-          </div>
           <div id="mcp-server-list" class="mcp-server-list"></div>
-          <div class="mcp-side-actions">
-            <button id="mcp-add" class="mcp-add" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              添加服务器
-            </button>
-            <button id="mcp-reload" class="mcp-reload" type="button">
-              重新加载配置
-            </button>
-          </div>
+          <button id="mcp-add" class="mcp-add" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            添加服务器
+          </button>
         </aside>
         <section class="mcp-main">
           <div id="mcp-empty" class="mcp-empty">
@@ -448,6 +439,23 @@
             autocomplete="off"
             spellcheck="false"
           />
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="setting-col pairing-col">
+          <div class="setting-row">
+            <span>手机连接</span>
+            <span id="pairing-state" class="muted small">加载中…</span>
+          </div>
+          <div class="pairing-card">
+            <img id="pairing-qr" class="pairing-qr" alt="手机连接二维码" />
+            <div class="pairing-info">
+              <div id="pairing-address" class="pairing-address">—</div>
+              <div id="pairing-password" class="pairing-password">—</div>
+              <div class="pairing-hint">手机与电脑连同一 Wi-Fi，用 YAH 手机端扫码</div>
+            </div>
+          </div>
         </div>
 
         <div class="spacer"></div>

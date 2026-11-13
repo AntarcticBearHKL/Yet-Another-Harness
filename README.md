@@ -46,9 +46,9 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - Ctrl + 双击任意对话卡片可以查看该轮实际发给模型的原始请求 body，完整 JSON 树可逐层折叠
 - 所有区域隐藏滚动条，滚轮/触控板仍然可以滚动
 - 后端服务用 SQLite（`node:sqlite`，WAL）管理会话；设置和 API key 存 `settings.json`，窗口位置存 `window.json`
-- MCP 服务器配置保存在 `%APPDATA%\yah\mcp.json`；支持 STDIO、Streamable HTTP、legacy SSE，支持表单添加和粘贴 `mcpServers` / `mcp.servers` JSON
-- 所有 MCP 服务器启动时自动连接，所有工具对所有对话自动开放，没有 per-chat 开关；工具名统一为 `mcp__<server>__<tool>`
-- MCP 工作区可以查看 tools / resources / prompts / logs / overview，手动调用工具、读取资源、获取提示词，并把工具、结果、资源或提示词插入输入框
+- MCP 服务器分两类：OpenCode 配置里的服务器自动继承（只读），以及 YAH 自己的 `%APPDATA%\yah\mcp.json` 自定义服务器；支持 STDIO、Streamable HTTP、legacy SSE，支持表单添加和粘贴 `mcpServers` / `mcp.servers` JSON
+- OpenCode 中启用的 MCP 启动时自动连接，所有工具对所有对话自动开放，没有 per-chat 开关；OpenCode 中禁用的服务器会显示但不会连接；工具名统一为 `mcp__<server>__<tool>`
+- MCP 工作区左侧是服务器列表（顶部没有标题和数字，底部只有「添加服务器」），右侧可以查看 tools / resources / prompts / logs / overview，手动调用工具、读取资源、获取提示词，并把工具、结果、资源或提示词插入输入框；没有服务器时空状态在整个内容区上下居中
 - 全局禁用鼠标框选和右键菜单；只有输入框保留文本选择
 
 旧的 Rust/Slint 版已经删除；新开发都在 `D:\Dev\Harness\yah`。
@@ -94,7 +94,8 @@ LIVE_SEARCH=1 npm test   # 额外跑一条真实 DuckDuckGo 搜索
 ```
 server/index.js    本地后端：HTTP API、SSE、静态页面、远程 Basic Auth
 server/runner.js   agent 主循环、工具执行、消息/事件持久化
-server/mcp/config.js   MCP 配置存储、JSON 配置解析
+server/mcp/config.js   MCP 自定义配置存储、JSON 配置解析
+server/mcp/opencode.js OpenCode 配置发现与 MCP 服务器继承
 server/mcp/transport.js STDIO / Streamable HTTP / legacy SSE 传输
 server/mcp/client.js   MCP JSON-RPC 客户端、握手、能力缓存
 server/mcp/manager.js  MCP 连接生命周期、自动重连、工具/资源/提示词调用
@@ -143,7 +144,8 @@ agent 循环、工具、SQLite、API key 都在本地后端。`contextIsolation:
   - `app_state`：当前会话 id 和标题序号
   - 运行时还会出现 `chats.db-wal` / `chats.db-shm`；备份时不要只复制 `chats.db`
 - `%APPDATA%\yah\settings.json`：API key（后端读取，网页端拿不到）
-- `%APPDATA%\yah\mcp.json`：MCP 服务器配置（STDIO 命令/参数/环境变量，或远程 URL/Headers）
+- `%APPDATA%\yah\mcp.json`：YAH 自己添加的 MCP 服务器配置（STDIO 命令/参数/环境变量，或远程 URL/Headers）
+- OpenCode 的 `opencode.json(c)`：MCP 服务器会自动继承，不在 YAH 的 `mcp.json` 里复制
 - `%APPDATA%\yah\window.json`：桌面窗口位置和尺寸
 - `%APPDATA%\yah\server.pid`：本地后端进程号，`stop-server.cmd` 用它停止服务
 
@@ -175,7 +177,7 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 - 流式响应里的 `delta.tool_calls` 按 `index` 把 `function.arguments` 拼起来。
 - 模型要工具时：把 assistant 的 tool_calls 放回 messages，顺序执行工具，追加
   `role: 'tool'` 结果，再请求模型；最多 **6 轮**。
-- 工具执行期间在对话里依次插入 `TOOL CALL`（完整参数）和 `TOOL RESULT`（完整输出）气泡，正文继续流式输出。
+- 工具执行期间，调用参数和返回结果合并到同一个「工具调用」卡片里：展开后先显示「调用参数」，再显示「返回结果」；返回前显示「等待工具返回…」，不会拆成两个气泡。正文继续流式输出。
 - 工具调用和结果作为步骤持久化；每次模型请求的原始 body 也存 SQLite，可在卡片上双击查看。
 
 `web_search` 抓 `https://html.duckduckgo.com/html/?q=...`，解析 `result__a` /
@@ -188,8 +190,17 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 
 ## MCP
 
-MCP 工作区从环形菜单的 `MCP` 扇区打开。服务器配置存在 `%APPDATA%\yah\mcp.json`，
-也可以直接粘贴 OpenCode / Claude 风格的 JSON：
+MCP 工作区从环形菜单的 `MCP` 扇区打开。YAH 会自动继承 OpenCode 配置里的 MCP 服务器，
+读取顺序是全局 `~/.config/opencode/opencode.json(c)`、`%APPDATA%` / `%LOCALAPPDATA%` 下的
+OpenCode 配置、OpenChamber managed 配置，最后是当前 workspace 及各级父目录的
+`opencode.json(c)` / `.opencode/opencode.json(c)`；后面的层覆盖前面的同名服务器。
+
+OpenCode 里的服务器是只读继承：YAH 里会显示「OpenCode」来源，不能编辑或删除；改
+OpenCode 配置后重新打开 MCP 页面（或调用 `/api/mcp/state`）就会同步。OpenCode 中
+`enabled: false` / `disabled: true` 的服务器会显示为「已禁用」，但不会自动连接。
+
+YAH 自己添加的服务器保存在 `%APPDATA%\yah\mcp.json`，也可以直接粘贴 OpenCode / Claude
+风格的 JSON：
 
 ```json
 {
@@ -212,8 +223,8 @@ MCP 工作区从环形菜单的 `MCP` 扇区打开。服务器配置存在 `%APP
 
 - 传输：STDIO（`command` + `args` + `cwd` + `env`）、Streamable HTTP（`url` + `headers`）、
   legacy SSE（`type: "sse"` + `url`）。
-- 启动时所有服务器自动连接；失败后按 5s / 10s / 20s / 40s / 60s 退避重连。MCP 工作区里的
-  「重连」和「刷新」只影响连接与能力缓存，没有关闭 MCP 的开关。
+- 启动时所有启用的服务器自动连接；失败后按 5s / 10s / 20s / 40s / 60s 退避重连。MCP 工作区里的
+  「重连」和「刷新」只影响连接与能力缓存，没有关闭 MCP 的开关；OpenCode 禁用的服务器不会连接。
 - 每个已连接服务器的 tools 会自动合并进 agent 工具列表，所有对话都能调用，不需要插入。
   工具名是 `mcp__<server>__<tool>`（服务器名和工具名里的非字母数字字符会换成 `_`）。
 - 工具结果会转成纯文本回给模型；图片、二进制、resource_link 用占位文字表示。资源、提示词和

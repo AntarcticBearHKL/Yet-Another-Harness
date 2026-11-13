@@ -24,6 +24,10 @@ const dom = {
   rawMeta: $('raw-meta'),
   apiKey: $('api-key'),
   apiKeyState: $('api-key-state'),
+  pairingQr: $('pairing-qr'),
+  pairingState: $('pairing-state'),
+  pairingAddress: $('pairing-address'),
+  pairingPassword: $('pairing-password'),
   ringMenu: $('ring-menu'),
   ringSvg: $('ring-svg'),
   catalog: $('catalog'),
@@ -911,36 +915,125 @@ function inspectUserMessage(msg) {
   );
 }
 
-function renderToolCard(step, msg, key) {
-  const call = step.kind === 'call';
-  const raw = call ? step.arguments : step.output;
-  const structured = parseStructured(raw);
+function pairToolSteps(steps) {
+  const resultForCall = new Map();
+  const pairedResults = new Set();
+  if (!Array.isArray(steps)) return { resultForCall, pairedResults };
+  for (let i = 0; i < steps.length; i += 1) {
+    const step = steps[i];
+    if (!step || step.kind !== 'call') continue;
+    for (let j = i + 1; j < steps.length; j += 1) {
+      const candidate = steps[j];
+      if (!candidate || candidate.kind !== 'result') continue;
+      if (pairedResults.has(j)) continue;
+      if (candidate.round !== step.round) continue;
+      if (candidate.name !== step.name) continue;
+      resultForCall.set(i, j);
+      pairedResults.add(j);
+      break;
+    }
+  }
+  return { resultForCall, pairedResults };
+}
+
+function lastRenderableStepIndex(steps) {
+  if (!Array.isArray(steps) || steps.length === 0) return -1;
+  const { pairedResults } = pairToolSteps(steps);
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    if (steps[i]?.kind === 'result' && pairedResults.has(i)) continue;
+    return i;
+  }
+  return steps.length - 1;
+}
+
+function combinedToolJson(name, callStep, resultStep) {
+  const payload = { name };
+  if (callStep) {
+    payload.arguments =
+      parseStructured(callStep.arguments) ?? String(callStep.arguments ?? '');
+  }
+  if (resultStep) {
+    payload.ok = resultStep.ok !== false;
+    payload.result =
+      parseStructured(resultStep.output) ?? String(resultStep.output ?? '');
+  }
+  return payload;
+}
+
+function combinedToolText(name, callStep, resultStep) {
+  const parts = [];
+  if (callStep) {
+    parts.push(`# ${name} · 调用参数\n${callStep.arguments || ''}`);
+  }
+  if (resultStep) {
+    parts.push(`# ${name} · 返回结果\n${resultStep.output || ''}`);
+  }
+  return parts.join('\n\n');
+}
+
+function renderToolCard(callStep, resultStep, msg, key) {
+  const call = callStep && callStep.kind === 'call' ? callStep : null;
+  const result =
+    resultStep && resultStep.kind === 'result' ? resultStep : null;
+  const stepForInspect = call || result;
+  const name = call?.name || result?.name || 'tool';
+  const argsRaw = call?.arguments ?? '';
+  const resultRaw = result?.output ?? '';
+  const argsStructured = parseStructured(argsRaw);
+  const resultStructured = parseStructured(resultRaw);
+  const running = Boolean(call && !result);
+  const ok = result ? result.ok !== false : true;
+  const title = call ? '工具调用' : '工具返回';
+  const previewRaw = result ? resultRaw : argsRaw;
+  const previewStructured = result ? resultStructured : argsStructured;
+  const preview = running
+    ? `运行中… ${previewFromRaw(argsRaw, argsStructured)}`
+    : previewFromRaw(previewRaw, previewStructured);
   const { card, body } = makeCard({
     key,
     kind: call ? 'tool-call' : 'tool-result',
-    title: call ? '工具调用' : '工具返回',
-    meta: step.name || 'tool',
-    preview: previewFromRaw(raw, structured),
-    badge: call
-      ? null
-      : { text: step.ok === false ? 'error' : 'ok', error: step.ok === false },
-    onInspect: () => inspectStep(msg, step),
+    title,
+    meta: name,
+    preview,
+    badge: result
+      ? { text: ok ? 'ok' : 'error', error: !ok }
+      : null,
+    onInspect: () => inspectStep(msg, stepForInspect),
     process: true,
     onFullContent: () =>
       openFullContent({
         key,
-        title: `${call ? '工具调用' : '工具返回'} · ${step.name || 'tool'}`,
+        title: `${title} · ${name}`,
         kind: 'tool',
-        text: String(raw ?? ''),
-        json: structured,
+        text: combinedToolText(name, call, result),
+        json: combinedToolJson(name, call, result),
       }),
   });
-  if (!call && step.ok === false) card.classList.add('error');
+  if (result && result.ok === false) card.classList.add('error');
 
-  if (structured) {
-    body.append(jsonView(structured));
-  } else {
-    body.append(el('pre', 'tool-text', String(raw ?? '')));
+  if (call) {
+    body.append(el('div', 'tool-section-label', '调用参数'));
+    if (argsStructured) {
+      body.append(jsonView(argsStructured));
+    } else {
+      body.append(el('pre', 'tool-text', String(argsRaw ?? '')));
+    }
+  }
+  if (result) {
+    body.append(
+      el(
+        'div',
+        'tool-section-label',
+        result.ok === false ? '返回结果 · 错误' : '返回结果'
+      )
+    );
+    if (resultStructured) {
+      body.append(jsonView(resultStructured));
+    } else {
+      body.append(el('pre', 'tool-text', String(resultRaw ?? '')));
+    }
+  } else if (call) {
+    body.append(el('div', 'tool-running', '等待工具返回…'));
   }
   return card;
 }
@@ -967,10 +1060,9 @@ function lastCardKey(session) {
       (last, step, stepIndex) => (step.kind === 'text' ? stepIndex : last),
       -1
     );
-    return stepCardKey(
-      index,
-      lastTextIndex >= 0 ? lastTextIndex : steps.length - 1
-    );
+    if (lastTextIndex >= 0) return stepCardKey(index, lastTextIndex);
+    const lastStep = lastRenderableStepIndex(steps);
+    return stepCardKey(index, lastStep >= 0 ? lastStep : steps.length - 1);
   }
   return agentCardKey(index);
 }
@@ -985,7 +1077,10 @@ function streamingAutoKey() {
   const steps = Array.isArray(state.streamMessage.steps)
     ? state.streamMessage.steps
     : [];
-  if (steps.length > 0) return stepCardKey(index, steps.length - 1);
+  if (steps.length > 0) {
+    const lastStep = lastRenderableStepIndex(steps);
+    return stepCardKey(index, lastStep >= 0 ? lastStep : steps.length - 1);
+  }
 
   // 还没有第一个 token：先展开用户刚发的那条消息
   if (!state.streamMessage.text) {
@@ -1047,6 +1142,7 @@ function renderAgentMessage(msg, msgIndex, container) {
     (last, step, index) => (step.kind === 'text' ? index : last),
     -1
   );
+  const { resultForCall, pairedResults } = pairToolSteps(steps);
 
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i];
@@ -1071,9 +1167,19 @@ function renderAgentMessage(msg, msgIndex, container) {
         { process: !primary },
         container
       );
-    } else if (step.kind === 'call' || step.kind === 'result') {
+    } else if (step.kind === 'call') {
+      const resultIndex = resultForCall.get(i);
+      const resultStep =
+        resultIndex === undefined ? null : steps[resultIndex];
       appendRow(
-        renderToolCard(step, msg, stepCardKey(msgIndex, i)),
+        renderToolCard(step, resultStep, msg, stepCardKey(msgIndex, i)),
+        { process: true },
+        container
+      );
+    } else if (step.kind === 'result') {
+      if (pairedResults.has(i)) continue;
+      appendRow(
+        renderToolCard(null, step, msg, stepCardKey(msgIndex, i)),
         { process: true },
         container
       );
@@ -1664,10 +1770,38 @@ function closeRawRequest() {
   dom.rawOverlay.classList.add('hidden');
 }
 
+async function loadPairing() {
+  if (!dom.pairingQr) return;
+  dom.pairingState.textContent = '加载中…';
+  dom.pairingQr.removeAttribute('src');
+  dom.pairingAddress.textContent = '—';
+  dom.pairingPassword.textContent = '—';
+  try {
+    const data = await requestJson('/api/pairing');
+    if (!data?.enabled || !data.qr) {
+      dom.pairingState.textContent = '未开启';
+      dom.pairingAddress.textContent = data?.host
+        ? `${data.host}:${data.port}`
+        : '没有可用的局域网地址';
+      dom.pairingPassword.textContent = '设置 YAH_LAN=1 并重启后端';
+      return;
+    }
+    dom.pairingQr.src = data.qr;
+    dom.pairingState.textContent = '已开启';
+    dom.pairingAddress.textContent = `${data.host}:${data.port}`;
+    dom.pairingPassword.textContent = `密码 ${data.password}`;
+  } catch (error) {
+    dom.pairingState.textContent = '加载失败';
+    dom.pairingAddress.textContent = error.message || String(error);
+    dom.pairingPassword.textContent = '确认后端已启动';
+  }
+}
+
 function openSettings() {
   closeComposer();
   applySettings();
   dom.settingsOverlay.classList.remove('hidden');
+  void loadPairing();
 }
 
 function closeSettings() {

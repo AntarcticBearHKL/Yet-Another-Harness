@@ -11,6 +11,7 @@ const {
   normalizeServer,
   parseConfigText,
 } = require('../server/mcp/config');
+const { parseJsonc, extractServerEntries } = require('../server/mcp/opencode');
 const { McpClient } = require('../server/mcp/client');
 const { createMcpHttpServer } = require('../test-fixtures/mcp-http-server');
 const registry = require('../src/mcp-registry');
@@ -67,6 +68,25 @@ test('parseConfigText reads mcpServers and mcp.servers', () => {
   );
   assert.equal(second.length, 1);
   assert.equal(second[0].transport, 'http');
+});
+
+test('OpenCode JSONC and mcp.servers entries are parsed', () => {
+  const data = parseJsonc(`{
+    // OpenCode config with comments
+    "mcp": {
+      "servers": {
+        "demo": {
+          "type": "local",
+          "command": ["node", "server.js"],
+          "disabled": true,
+        },
+      },
+    },
+  }`);
+  const entries = extractServerEntries(data);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].name, 'demo');
+  assert.equal(entries[0].raw.disabled, true);
 });
 
 test('config store persists add / update / remove', () => {

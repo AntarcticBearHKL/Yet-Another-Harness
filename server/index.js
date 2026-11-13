@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
+const QRCode = require('qrcode');
 
 const store = require('../src/store');
 const tools = require('../src/tools');
@@ -25,6 +26,11 @@ const LOCAL_PORT = Number(process.env.YAH_LOCAL_PORT) || 3789;
 const REMOTE_PORT = Number(process.env.YAH_REMOTE_PORT) || 3790;
 const REMOTE_USER = process.env.YAH_REMOTE_USER || 'yah';
 const REMOTE_PASSWORD = process.env.YAH_REMOTE_PASSWORD || '';
+const LAN_HOST = '0.0.0.0';
+const LAN_PORT = Number(process.env.YAH_LAN_PORT) || 3791;
+const LAN_USER = process.env.YAH_LAN_USER || 'yah';
+const LAN_ENABLED = process.env.YAH_LAN !== '0';
+const LAN_PASSWORD = loadLanPassword();
 const PID_FILE = path.join(DATA_DIR, 'server.pid');
 
 const mcpManager = new McpManager({
@@ -104,8 +110,54 @@ function timingSafeEqual(a, b) {
   return crypto.timingSafeEqual(left, right);
 }
 
-function authorized(req) {
-  if (!REMOTE_PASSWORD) return false;
+function loadLanPassword() {
+  const fromEnv = String(process.env.YAH_LAN_PASSWORD || '').trim();
+  if (fromEnv) return fromEnv;
+  const file = path.join(DATA_DIR, 'lan.json');
+  try {
+    if (fs.existsSync(file)) {
+      const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (saved?.password) return String(saved.password);
+    }
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const password = crypto.randomBytes(9).toString('base64url');
+    fs.writeFileSync(file, `${JSON.stringify({ password }, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+    return password;
+  } catch (error) {
+    console.error('load LAN password failed', error);
+    return crypto.randomBytes(9).toString('base64url');
+  }
+}
+
+function getLanAddresses() {
+  const addresses = [];
+  for (const [name, entries] of Object.entries(os.networkInterfaces())) {
+    for (const entry of entries || []) {
+      if (entry.family !== 'IPv4' || entry.internal) continue;
+      if (
+        /vEthernet|WSL|VirtualBox|VMware|Hyper-V|Loopback|Bluetooth|Tailscale|ZeroTier|Docker/i.test(
+          name
+        )
+      ) {
+        continue;
+      }
+      addresses.push(entry.address);
+    }
+  }
+  const rank = (ip) => {
+    if (ip.startsWith('192.168.')) return 0;
+    if (ip.startsWith('10.')) return 1;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return 2;
+    return 3;
+  };
+  return [...new Set(addresses)].sort((a, b) => rank(a) - rank(b));
+}
+
+function authorized(req, auth) {
+  if (!auth?.password) return false;
   const header = String(req.headers.authorization || '');
   if (!header.startsWith('Basic ')) return false;
   let decoded = '';
@@ -117,8 +169,8 @@ function authorized(req) {
   const index = decoded.indexOf(':');
   if (index < 0) return false;
   return (
-    timingSafeEqual(decoded.slice(0, index), REMOTE_USER) &&
-    timingSafeEqual(decoded.slice(index + 1), REMOTE_PASSWORD)
+    timingSafeEqual(decoded.slice(0, index), auth.user) &&
+    timingSafeEqual(decoded.slice(index + 1), auth.password)
   );
 }
 
@@ -128,6 +180,39 @@ function settingsView() {
     String(process.env.OPENCODE_API_KEY || settings.apiKey || '').trim()
   );
   return { hasApiKey, apiKey: '' };
+}
+
+async function respondPairing(res) {
+  const addresses = LAN_ENABLED ? getLanAddresses() : [];
+  const host = addresses[0] || '';
+  const enabled = Boolean(LAN_ENABLED && host);
+  const url = enabled
+    ? `yah://pair?host=${encodeURIComponent(host)}&port=${LAN_PORT}&user=${encodeURIComponent(
+        LAN_USER
+      )}&password=${encodeURIComponent(LAN_PASSWORD)}`
+    : '';
+  let qr = '';
+  if (url) {
+    try {
+      qr = await QRCode.toDataURL(url, {
+        margin: 1,
+        width: 320,
+        color: { dark: '#2b211a', light: '#fff8f0' },
+      });
+    } catch (error) {
+      console.error('generate pairing QR failed', error);
+    }
+  }
+  sendJson(res, 200, {
+    enabled,
+    host,
+    port: LAN_PORT,
+    user: LAN_USER,
+    password: LAN_PASSWORD,
+    addresses,
+    url,
+    qr,
+  });
 }
 
 function titleFallback(text) {
@@ -292,6 +377,11 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && pathname === '/api/pairing') {
+    void respondPairing(res);
+    return true;
+  }
+
   if (req.method === 'GET' && pathname === '/api/catalog') {
     void mcpManager.ensureConnections();
     sendJson(res, 200, {
@@ -449,6 +539,16 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && pathname === '/api/events/last') {
+    const sessionId = String(url.searchParams.get('sessionId') || '');
+    if (!sessionId) {
+      sendJson(res, 400, { error: 'sessionId is required' });
+      return true;
+    }
+    sendJson(res, 200, { seq: store.lastEventSeq(sessionId) });
+    return true;
+  }
+
   if (req.method === 'GET' && pathname === '/api/events') {
     const sessionId = String(url.searchParams.get('sessionId') || '');
     if (!sessionId) {
@@ -602,9 +702,9 @@ function serveStatic(req, res, url) {
   });
 }
 
-function makeServer({ remote }) {
+function makeServer({ auth = null } = {}) {
   return http.createServer((req, res) => {
-    if (remote && !authorized(req)) {
+    if (auth && !authorized(req, auth)) {
       res.writeHead(401, {
         'WWW-Authenticate': 'Basic realm="YAH", charset="UTF-8"',
         'Content-Type': 'text/plain; charset=utf-8',
@@ -632,19 +732,38 @@ function makeServer({ remote }) {
 }
 
 let remoteServer = null;
-const localServer = makeServer({ remote: false });
+let lanServer = null;
+const localServer = makeServer();
 
 function startRemote() {
   if (!REMOTE_PASSWORD) {
     console.log('YAH remote disabled (set YAH_REMOTE_PASSWORD to enable)');
     return;
   }
-  remoteServer = makeServer({ remote: true });
+  remoteServer = makeServer({
+    auth: { user: REMOTE_USER, password: REMOTE_PASSWORD },
+  });
   remoteServer.on('error', (error) => {
     console.error('remote server error', error);
   });
   remoteServer.listen(REMOTE_PORT, HOST, () => {
     console.log(`YAH remote: http://${HOST}:${REMOTE_PORT}`);
+  });
+}
+
+function startLan() {
+  if (!LAN_ENABLED) {
+    console.log('YAH LAN disabled (YAH_LAN=0)');
+    return;
+  }
+  lanServer = makeServer({
+    auth: { user: LAN_USER, password: LAN_PASSWORD },
+  });
+  lanServer.on('error', (error) => {
+    console.error('LAN server error', error);
+  });
+  lanServer.listen(LAN_PORT, LAN_HOST, () => {
+    console.log(`YAH LAN: http://${LAN_HOST}:${LAN_PORT}`);
   });
 }
 
@@ -665,12 +784,18 @@ localServer.listen(LOCAL_PORT, HOST, () => {
   mcpManager.start();
   console.log(`YAH local: http://${HOST}:${LOCAL_PORT}`);
   startRemote();
+  startLan();
 });
 
 function shutdown() {
   mcpManager.closeAll();
   try {
     if (remoteServer) remoteServer.close();
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (lanServer) lanServer.close();
   } catch {
     /* ignore */
   }

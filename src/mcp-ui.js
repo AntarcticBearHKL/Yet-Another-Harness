@@ -7,10 +7,8 @@
 const mcpDom = {
   overlay: document.getElementById('mcp-overlay'),
   close: document.getElementById('mcp-close'),
-  serverCount: document.getElementById('mcp-server-count'),
   serverList: document.getElementById('mcp-server-list'),
   add: document.getElementById('mcp-add'),
-  reload: document.getElementById('mcp-reload'),
   empty: document.getElementById('mcp-empty'),
   detail: document.getElementById('mcp-detail'),
   title: document.getElementById('mcp-title'),
@@ -99,6 +97,7 @@ const MCP_STATUS_LABEL = {
   connecting: '连接中',
   connected: '已连接',
   error: '连接失败',
+  disabled: '已禁用',
 };
 
 /* ------------------------------------------------------------------ utils */
@@ -167,10 +166,11 @@ function mcpToast(message, tone = 'info') {
   }, 2600);
 }
 
-function mcpShowError(message) {
+function mcpShowError(message, notice = false) {
   if (!mcpDom.error) return;
   mcpDom.error.textContent = message;
   mcpDom.error.classList.toggle('hidden', !message);
+  mcpDom.error.classList.toggle('notice', Boolean(message && notice));
 }
 
 function mcpJsonView(value) {
@@ -438,17 +438,11 @@ function mcpSelectedServer() {
 
 function mcpRenderServerList() {
   if (!mcpDom.serverList) return;
-  mcpDom.serverCount.textContent = String(mcpState.servers.length);
   mcpDom.serverList.replaceChildren();
   const servers = [...mcpState.servers].sort((left, right) =>
     left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })
   );
-  if (servers.length === 0) {
-    mcpDom.serverList.append(
-      mcpEl('div', 'mcp-side-empty', '还没有服务器')
-    );
-    return;
-  }
+  if (servers.length === 0) return;
   for (const server of servers) {
     const row = mcpEl('button', 'mcp-server-row');
     row.type = 'button';
@@ -457,12 +451,17 @@ function mcpRenderServerList() {
     const dot = mcpStatusDot(server.status);
     const body = mcpEl('span', 'mcp-server-body');
     body.append(mcpEl('span', 'mcp-server-name', server.name));
-    const meta = mcpEl(
-      'span',
-      'mcp-server-meta',
-      `${server.transport.toUpperCase()}${server.status === 'connected' ? ` · ${server.toolCount} 工具` : ''}`
-    );
-    body.append(meta);
+    const meta = [
+      server.transport.toUpperCase(),
+      server.source === 'opencode' ? 'OpenCode' : '',
+      server.enabled === false ? '已禁用' : '',
+      server.status === 'error' ? '连接失败' : '',
+      server.status === 'connecting' ? '连接中' : '',
+      server.status === 'connected' ? `${server.toolCount} 工具` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    body.append(mcpEl('span', 'mcp-server-meta', meta));
     row.append(dot, body);
     row.addEventListener('click', () => mcpSelectServer(server.id));
     mcpDom.serverList.append(row);
@@ -485,10 +484,25 @@ function mcpRenderHeader() {
   mcpDom.title.textContent = server.name;
   mcpDom.status.textContent = mcpStatusLabel(server.status);
   mcpDom.status.className = `mcp-status ${server.status || 'idle'}`;
-  mcpDom.transport.textContent = server.transport.toUpperCase();
-  mcpShowError(server.error || '');
-  mcpDom.refresh.disabled = server.status !== 'connected';
-  mcpDom.reconnect.disabled = server.status === 'connecting';
+  mcpDom.transport.textContent = `${server.transport.toUpperCase()}${
+    server.source === 'opencode' ? ' · OPENCODE' : ''
+  }`;
+  const inherited = server.source === 'opencode';
+  const disabled = server.enabled === false;
+  if (disabled) {
+    mcpShowError(
+      '这个服务器在 OpenCode 配置中已禁用。启用后 YAH 会自动连接。',
+      true
+    );
+  } else {
+    mcpShowError(server.error || '');
+  }
+  mcpDom.refresh.disabled = server.status !== 'connected' || disabled;
+  mcpDom.reconnect.disabled = server.status === 'connecting' || disabled;
+  mcpDom.edit.classList.toggle('hidden', inherited);
+  mcpDom.edit.disabled = inherited;
+  mcpDom.remove.classList.toggle('hidden', inherited);
+  mcpDom.remove.disabled = inherited;
   mcpDom.remove.textContent = mcpState.deleteArmed ? '确认删除' : '删除';
   mcpDom.remove.classList.toggle('danger-solid', mcpState.deleteArmed);
   mcpRenderTabs();
@@ -643,7 +657,14 @@ function mcpRenderToolDetail() {
   const server = mcpSelectedServer();
   if (!server) return;
   if (server.status !== 'connected') {
-    pane.append(mcpConnectGate('连接后可以查看并调用工具', '重连'));
+    pane.append(
+      mcpConnectGate(
+        server.enabled === false
+          ? '这个服务器在 OpenCode 配置中已禁用。'
+          : '连接后可以查看并调用工具',
+        server.enabled === false ? null : '重连'
+      )
+    );
     return;
   }
   const tool = mcpSelectedTool();
@@ -1317,7 +1338,14 @@ function mcpRenderResourceDetail() {
   const server = mcpSelectedServer();
   if (!server) return;
   if (server.status !== 'connected') {
-    pane.append(mcpConnectGate('连接后可以读取资源', '重连'));
+    pane.append(
+      mcpConnectGate(
+        server.enabled === false
+          ? '这个服务器在 OpenCode 配置中已禁用。'
+          : '连接后可以读取资源',
+        server.enabled === false ? null : '重连'
+      )
+    );
     return;
   }
 
@@ -1554,7 +1582,14 @@ function mcpRenderPromptDetail() {
   const server = mcpSelectedServer();
   if (!server) return;
   if (server.status !== 'connected') {
-    pane.append(mcpConnectGate('连接后可以获取提示词', '重连'));
+    pane.append(
+      mcpConnectGate(
+        server.enabled === false
+          ? '这个服务器在 OpenCode 配置中已禁用。'
+          : '连接后可以获取提示词',
+        server.enabled === false ? null : '重连'
+      )
+    );
     return;
   }
   const prompt = mcpSelectedPrompt();
@@ -1836,6 +1871,14 @@ function mcpRenderOverviewTab() {
   configCard.append(mcpEl('span', 'mcp-section-kicker', '配置'));
   const configList = mcpEl('div', 'mcp-config-list');
   const rows = [
+    [
+      '来源',
+      detail.source === 'opencode' ? 'OpenCode' : '本机 mcp.json',
+    ],
+    [
+      '配置文件',
+      detail.sourcePath || (detail.source === 'opencode' ? 'OpenCode 配置' : 'mcp.json'),
+    ],
     ['传输', detail.transport?.toUpperCase() || '—'],
     ['命令', detail.command ? [detail.command, ...(detail.args || [])].join(' ') : '—'],
     ['工作目录', detail.cwd || '—'],
@@ -2195,6 +2238,10 @@ function mcpOpenForm(editId) {
   const server = editId
     ? mcpState.servers.find((item) => item.id === editId)
     : null;
+  if (server?.source === 'opencode') {
+    mcpToast('来自 OpenCode 的服务器请在 OpenCode 配置中修改');
+    return;
+  }
   mcpResetForm();
   mcpState.formOpen = true;
   mcpState.formEditId = editId || null;
@@ -2307,19 +2354,13 @@ async function mcpSaveForm() {
 
 /* ----------------------------------------------------------------- actions */
 
-async function mcpReloadConfig() {
-  try {
-    await requestJson('/api/mcp/reload', { method: 'POST', body: {} });
-    await mcpRefreshState();
-    mcpToast('配置已重新加载', 'success');
-  } catch (error) {
-    mcpToast(error.message, 'error');
-  }
-}
-
 async function mcpReconnect() {
   const server = mcpSelectedServer();
   if (!server) return;
+  if (server.enabled === false) {
+    mcpToast('这个服务器在 OpenCode 配置中已禁用');
+    return;
+  }
   mcpToast('正在重连…');
   try {
     await requestJson(
@@ -2336,6 +2377,10 @@ async function mcpReconnect() {
 async function mcpRefreshCapabilities() {
   const server = mcpSelectedServer();
   if (!server) return;
+  if (server.enabled === false) {
+    mcpToast('这个服务器在 OpenCode 配置中已禁用');
+    return;
+  }
   try {
     await requestJson(
       `/api/mcp/servers/${encodeURIComponent(server.id)}/refresh`,
@@ -2351,6 +2396,10 @@ async function mcpRefreshCapabilities() {
 async function mcpRemoveServer() {
   const server = mcpSelectedServer();
   if (!server) return;
+  if (server.source === 'opencode') {
+    mcpToast('来自 OpenCode 的服务器不能在这里删除');
+    return;
+  }
   if (!mcpState.deleteArmed) {
     mcpState.deleteArmed = true;
     mcpRenderHeader();
@@ -2382,7 +2431,6 @@ async function mcpRemoveServer() {
 function mcpBindEvents() {
   mcpDom.close.addEventListener('click', closeMcp);
   mcpDom.add.addEventListener('click', () => mcpOpenForm(null));
-  mcpDom.reload.addEventListener('click', () => void mcpReloadConfig());
   mcpDom.refresh.addEventListener('click', () => void mcpRefreshCapabilities());
   mcpDom.reconnect.addEventListener('click', () => void mcpReconnect());
   mcpDom.edit.addEventListener('click', () => {

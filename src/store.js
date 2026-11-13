@@ -1052,6 +1052,15 @@ function listEvents(sessionId, afterSeq = 0) {
   });
 }
 
+function lastEventSeq(sessionId) {
+  const row = openDb()
+    .prepare(
+      'SELECT COALESCE(MAX(seq), 0) AS seq FROM events WHERE session_id = ?'
+    )
+    .get(sessionId);
+  return Number(row?.seq) || 0;
+}
+
 function createRun(runId, sessionId, status = 'running') {
   const startedAt = Date.now();
   openDb()
@@ -1109,6 +1118,7 @@ module.exports = {
   updateMessage,
   appendEvent,
   listEvents,
+  lastEventSeq,
   createRun,
   updateRun,
   activeRunForSession,

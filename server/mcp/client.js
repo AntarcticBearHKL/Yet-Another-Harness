@@ -30,7 +30,16 @@ class JsonRpcPeer extends EventEmitter {
   }
 
   sendRaw(message) {
-    this.transport.send(message);
+    try {
+      const sent = this.transport.send(message);
+      if (sent && typeof sent.catch === 'function') {
+        sent.catch(() => {
+          /* ignored */
+        });
+      }
+    } catch {
+      /* ignored */
+    }
   }
 
   request(method, params, timeoutMs = 60_000) {
@@ -50,12 +59,21 @@ class JsonRpcPeer extends EventEmitter {
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer, method });
       try {
-        this.transport.send({
+        const sent = this.transport.send({
           jsonrpc: '2.0',
           id,
           method,
           params: params ?? {},
         });
+        if (sent && typeof sent.catch === 'function') {
+          sent.catch((error) => {
+            const pending = this.pending.get(id);
+            if (!pending) return;
+            this.pending.delete(id);
+            clearTimeout(pending.timer);
+            pending.reject(error);
+          });
+        }
       } catch (error) {
         clearTimeout(timer);
         this.pending.delete(id);
@@ -72,17 +90,35 @@ class JsonRpcPeer extends EventEmitter {
     );
     const message = { jsonrpc: '2.0', method };
     if (params !== undefined) message.params = params;
-    this.transport.send(message);
+    return this.transport.send(message);
   }
 
   respond(id, result) {
-    this.transport.send({ jsonrpc: '2.0', id, result });
+    try {
+      const sent = this.transport.send({ jsonrpc: '2.0', id, result });
+      if (sent && typeof sent.catch === 'function') {
+        sent.catch(() => {
+          /* ignored */
+        });
+      }
+    } catch {
+      /* ignored */
+    }
   }
 
   respondError(id, code, message, data) {
     const error = { code, message };
     if (data !== undefined) error.data = data;
-    this.transport.send({ jsonrpc: '2.0', id, error });
+    try {
+      const sent = this.transport.send({ jsonrpc: '2.0', id, error });
+      if (sent && typeof sent.catch === 'function') {
+        sent.catch(() => {
+          /* ignored */
+        });
+      }
+    } catch {
+      /* ignored */
+    }
   }
 
   handleMessage(message) {
