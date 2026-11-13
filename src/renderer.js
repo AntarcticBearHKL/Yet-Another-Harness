@@ -1193,8 +1193,9 @@ function renderSwitcher() {
     trash.innerHTML =
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6H20M9 6V4H15V6M6 6L7 20H17L18 6M10 10V17M14 10V17"/></svg>';
 
+    card.dataset.index = String(localIndex);
     card.addEventListener('click', () => selectSession(globalIndex));
-    top.addEventListener('mouseenter', () => selectSession(globalIndex));
+    card.addEventListener('mouseenter', () => highlightSwitcher(localIndex));
 
     trash.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -1353,12 +1354,39 @@ function closeSwitcher() {
   dom.switcher.setAttribute('aria-hidden', 'true');
 }
 
+function highlightSwitcher(index) {
+  if (!state.switcherOpen) return;
+  const sessions = sessionsInProject(state.switcherProjectId);
+  if (index < 0 || index >= sessions.length) return;
+  state.switcherIndex = index;
+  const cards = [...dom.switcherList.querySelectorAll('.switch-card')];
+  cards.forEach((card, cardIndex) => {
+    card.classList.toggle('selected', cardIndex === index);
+  });
+  const selected = cards[index];
+  if (selected) selected.scrollIntoView({ block: 'nearest' });
+}
+
 function moveSwitcher(delta) {
   const sessions = sessionsInProject(state.switcherProjectId);
   if (sessions.length === 0) return;
-  state.switcherIndex =
-    (state.switcherIndex + delta + sessions.length) % sessions.length;
-  renderSwitcher();
+  highlightSwitcher(
+    (state.switcherIndex + delta + sessions.length) % sessions.length
+  );
+}
+
+function commitSwitcherSelection() {
+  const sessions = sessionsInProject(state.switcherProjectId);
+  const session = sessions[state.switcherIndex];
+  if (!session) {
+    closeSwitcher();
+    return;
+  }
+  if (session === currentSession()) {
+    closeSwitcher();
+    return;
+  }
+  selectSession(state.sessions.indexOf(session));
 }
 
 function selectSession(index) {
@@ -2216,7 +2244,7 @@ function bindEvents() {
       cancelTabHold();
       if (!dom.settingsOverlay.classList.contains('hidden')) return;
       event.preventDefault();
-      if (state.switcherOpen) closeSwitcher();
+      if (state.switcherOpen) commitSwitcherSelection();
     }
   });
 
