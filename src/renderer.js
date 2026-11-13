@@ -287,6 +287,7 @@ let windowDrag = null;
 let dragPoint = null;
 let dragFrame = 0;
 let dragFromComposer = false;
+let suppressNextCardClick = false;
 
 function currentSession() {
   return state.sessions[state.current];
@@ -539,6 +540,10 @@ function makeCard(opts) {
       : 'Click header to expand/collapse';
 
     head.addEventListener('click', (event) => {
+      if (suppressNextCardClick) {
+        suppressNextCardClick = false;
+        return;
+      }
       if (event.detail > 1) return;
       if (
         event.target instanceof Element &&
@@ -1530,7 +1535,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .card-head';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -1554,15 +1559,34 @@ function onWindowDragStart(event) {
   if (!dom.settingsOverlay.classList.contains('hidden')) return;
   if (target instanceof HTMLElement && hitsScrollbar(target, event)) return;
 
-  windowDrag = { x: event.screenX, y: event.screenY };
+  const isCardHead = Boolean(target.closest('.card-head'));
+  suppressNextCardClick = false;
+  windowDrag = {
+    x: event.screenX,
+    y: event.screenY,
+    started: !isCardHead,
+    isCardHead,
+  };
   dragFromComposer = Boolean(
     state.composerOpen && target.closest('#composer')
   );
-  api.dragStart({ x: event.screenX, y: event.screenY });
+  if (!isCardHead) {
+    api.dragStart({ x: event.screenX, y: event.screenY });
+  }
 }
 
 function onWindowDragMove(event) {
   if (!windowDrag) return;
+
+  if (!windowDrag.started) {
+    const dx = event.screenX - windowDrag.x;
+    const dy = event.screenY - windowDrag.y;
+    if (Math.hypot(dx, dy) < 4) return;
+    windowDrag.started = true;
+    if (windowDrag.isCardHead) suppressNextCardClick = true;
+    api.dragStart({ x: windowDrag.x, y: windowDrag.y });
+  }
+
   dragPoint = { x: event.screenX, y: event.screenY };
   if (dragFrame) return;
   dragFrame = requestAnimationFrame(() => {
@@ -1574,13 +1598,20 @@ function onWindowDragMove(event) {
 
 function onWindowDragEnd() {
   if (!windowDrag) return;
+  const wasCardHead = windowDrag.isCardHead;
+  const started = windowDrag.started;
   const refocusComposer = dragFromComposer && state.composerOpen;
   dragFromComposer = false;
   windowDrag = null;
   dragPoint = null;
   cancelAnimationFrame(dragFrame);
   dragFrame = 0;
-  api.dragEnd();
+  if (started) api.dragEnd();
+  if (wasCardHead && started) {
+    setTimeout(() => {
+      suppressNextCardClick = false;
+    }, 300);
+  }
   if (refocusComposer) {
     requestAnimationFrame(() => {
       if (!state.composerOpen || !document.hasFocus()) return;
