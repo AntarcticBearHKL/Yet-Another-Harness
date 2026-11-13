@@ -1868,15 +1868,15 @@ body.ring-open #window-controls {
   inset: 0;
   z-index: 15;
   display: flex;
-  align-items: center;
   justify-content: center;
-  padding: 32px;
+  padding: clamp(40px, 10vh, 120px) 32px 32px;
   background: rgba(251, 246, 239, 0.1);
   -webkit-backdrop-filter: blur(18px) saturate(1.06);
   backdrop-filter: blur(18px) saturate(1.06);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+  overflow-y: auto;
   transition:
     opacity 180ms ease,
     visibility 0s linear 180ms;
@@ -1889,11 +1889,21 @@ body.ring-open #window-controls {
   transition: opacity 180ms ease;
 }
 
+.composer-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(760px, 100%);
+  max-height: 100%;
+  min-height: 0;
+  margin: auto 0;
+}
+
 .composer-box {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(760px, 100%);
+  width: 100%;
   min-height: clamp(170px, 32vh, 260px);
   max-height: min(76vh, 600px);
   border: 1px solid var(--line);
@@ -1904,7 +1914,8 @@ body.ring-open #window-controls {
   transform: translateY(10px) scale(0.985);
   transition:
     transform 180ms ease,
-    border-color 120ms ease;
+    border-color 120ms ease,
+    background 120ms ease;
 }
 
 #composer.open .composer-box {
@@ -1915,12 +1926,21 @@ body.ring-open #window-controls {
   border-color: var(--accent);
 }
 
+.composer-box.skill-mode {
+  border-color: var(--accent);
+  background: rgba(185, 111, 61, 0.09);
+}
+
+.composer-box.skill-mode:focus-within {
+  border-color: var(--accent-deep);
+}
+
 .composer-context {
   display: flex;
   flex-direction: column;
   gap: 8px;
   flex: none;
-  padding: 12px 14px 0;
+  padding: 0;
 }
 
 .composer-context:empty {
@@ -1929,66 +1949,54 @@ body.ring-open #window-controls {
 
 .composer-context .mcp-summary {
   margin: 0;
+  align-self: flex-start;
 }
 
-.composer-skills {
+.composer-tokens {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
   flex: none;
-  padding: 8px 14px 0;
+  padding: 12px 16px 0;
 }
 
-.composer-skills.hidden {
+.composer-tokens.hidden {
   display: none;
 }
 
-.skill-line {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.skill-line-label {
-  flex: none;
-  color: var(--faint);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.skill-chip {
+.skill-token {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 24px;
   padding: 0 9px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--accent);
   border-radius: 999px;
-  background: rgba(252, 246, 238, 0.62);
-  color: var(--dim);
-  font-size: 10.5px;
+  background: rgba(185, 111, 61, 0.14);
+  color: var(--accent-deep);
+  font-size: 11px;
   line-height: 1;
 }
 
-.skill-chip:hover {
-  background: var(--hover);
+.skill-token-slash {
+  font-weight: 700;
+  opacity: 0.72;
 }
 
-.skill-chip.attached {
-  border-color: var(--accent);
-  background: rgba(185, 111, 61, 0.1);
-  color: var(--text-soft);
+.skill-token-name {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.skill-chip-source {
+.skill-token-source {
   color: var(--faint);
   font-size: 8.5px;
   letter-spacing: 0.04em;
 }
 
-.skill-chip-remove {
+.skill-token-remove {
   display: grid;
   place-items: center;
   width: 16px;
@@ -1998,12 +2006,12 @@ body.ring-open #window-controls {
   color: var(--faint);
 }
 
-.skill-chip-remove:hover {
+.skill-token-remove:hover {
   background: var(--hover);
   color: var(--text-soft);
 }
 
-.skill-chip-remove svg {
+.skill-token-remove svg {
   width: 10px;
   height: 10px;
   fill: none;
@@ -2012,9 +2020,88 @@ body.ring-open #window-controls {
   stroke-linecap: round;
 }
 
-.skill-empty {
+.skill-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: none;
+  max-height: min(34vh, 260px);
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(251, 246, 239, 0.82);
+  -webkit-backdrop-filter: blur(14px) saturate(1.04);
+  backdrop-filter: blur(14px) saturate(1.04);
+  box-shadow: 0 18px 40px rgba(120, 80, 40, 0.12);
+  overflow-y: auto;
+}
+
+.skill-popup.hidden {
+  display: none;
+}
+
+.skill-popup-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 12px 0 14px;
+  border-radius: 9px;
+  color: var(--dim);
+  text-align: left;
+}
+
+.skill-popup-item::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 9px;
+  bottom: 9px;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.skill-popup-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.skill-popup-item.selected {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.skill-popup-item.selected::before {
+  background: var(--accent);
+}
+
+.skill-popup-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-popup-source {
+  flex: none;
   color: var(--faint);
   font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.skill-popup-empty {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 12px;
+  color: var(--faint);
+  font-size: 11.5px;
 }
 
 .skill-args-panel {

@@ -61,6 +61,43 @@ test('file skills are listed and resolved', () => {
   });
 });
 
+test('file skills get a category', () => {
+  return withSkillDirs((root, data) => {
+    fs.mkdirSync(path.join(root, 'skills'), { recursive: true });
+    fs.mkdirSync(path.join(data, 'skills'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, 'skills', 'demo.md'),
+      '---\nname: Demo Skill\ndescription: Built in\n---\n\nUse the demo skill.\n'
+    );
+    fs.writeFileSync(
+      path.join(data, 'skills', 'mine.md'),
+      '---\nname: My Skill\ndescription: User skill\n---\n\nUse my skill.\n'
+    );
+    fs.writeFileSync(
+      path.join(data, 'skills', 'draw.md'),
+      '---\nname: Draw Skill\ndescription: Drawing\ncategory: 绘画\n---\n\nDraw.\n'
+    );
+    const service = createSkillService({
+      root,
+      dataDir: data,
+      mcpManager: { promptList: () => [] },
+    });
+    const skills = service.list({});
+    assert.equal(
+      skills.find((skill) => skill.name === 'Demo Skill').category,
+      '内置'
+    );
+    assert.equal(
+      skills.find((skill) => skill.name === 'My Skill').category,
+      '系统'
+    );
+    assert.equal(
+      skills.find((skill) => skill.name === 'Draw Skill').category,
+      '绘画'
+    );
+  });
+});
+
 test('MCP prompts become per-session skills and resolve', async () => {
   await withSkillDirs(async (root, data) => {
     const calls = [];

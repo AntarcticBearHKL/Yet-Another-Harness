@@ -51,11 +51,15 @@ function readSkillFile(filePath, source) {
   const { meta, body } = parseFrontmatter(text);
   if (!body) return null;
   const base = path.basename(filePath, path.extname(filePath));
+  const category = String(
+    meta.category || (source === 'user' ? '系统' : '内置')
+  ).trim();
   return {
     id: `${source}:${base}`,
     name: String(meta.name || base),
     description: String(meta.description || ''),
     keywords: parseKeywords(meta.keywords),
+    category,
     source: source === 'user' ? '用户' : '内置',
     sourceKind: source,
     body,

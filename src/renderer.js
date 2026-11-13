@@ -17,7 +17,9 @@ const dom = {
   input: $('input'),
   send: $('send'),
   composerContext: $('composer-context'),
-  composerSkills: $('composer-skills'),
+  composerBox: $('composer-box'),
+  composerTokens: $('composer-tokens'),
+  skillPopup: $('skill-popup'),
   skillArgsOverlay: $('skill-args-overlay'),
   skillArgsTitle: $('skill-args-title'),
   skillArgsDesc: $('skill-args-desc'),
@@ -118,6 +120,10 @@ const state = {
   skillsFetchedAt: 0,
   attachedSkills: [],
   skillArgsTarget: null,
+  slashOpen: false,
+  slashIndex: 0,
+  slashSkills: [],
+  slashDismissed: false,
 };
 
 async function requestJson(path, options = {}) {
@@ -2282,7 +2288,8 @@ function renderAll() {
 
 function updateSendState() {
   dom.send.disabled =
-    !currentSession() || dom.input.value.trim() === '';
+    !currentSession() ||
+    (dom.input.value.trim() === '' && state.attachedSkills.length === 0);
 }
 
 function syncDraftTitle() {
@@ -2446,8 +2453,6 @@ async function startPrompt(
 }
 
 async function sendMessage() {
-  const text = dom.input.value.trim();
-  if (!text) return;
   const session = currentSession();
   if (!session) return;
   const skills = state.attachedSkills.map((skill) => ({
@@ -2455,6 +2460,10 @@ async function sendMessage() {
     name: skill.name,
     arguments: { ...(skill.arguments || {}) },
   }));
+  const inputText = dom.input.value.trim();
+  const text =
+    inputText || (skills.length ? `/${skills[0].name}` : '');
+  if (!text) return;
 
   if (
     state.streaming ||
@@ -2463,6 +2472,7 @@ async function sendMessage() {
     if (!Array.isArray(session.pendingQueue)) session.pendingQueue = [];
     session.pendingQueue.push({ text, skills });
     dom.input.value = '';
+    state.slashDismissed = false;
     clearAttachedSkills();
     updateSendState();
     saveChatsSoon();
@@ -2472,6 +2482,7 @@ async function sendMessage() {
   }
 
   closeComposer();
+  state.slashDismissed = false;
   clearAttachedSkills();
   await startPrompt(session, text, { clearInput: true, skills });
 }
@@ -2594,18 +2605,21 @@ function renderComposerContext() {
     dom.composerContext.replaceChildren();
     return;
   }
-  if (session.msgs.length === 0) {
-    dom.composerContext.replaceChildren(
-      buildMcpSummary(session, () => openMcpConfig(session.id))
-    );
-    return;
-  }
-  dom.composerContext.replaceChildren(renderComposerQueue(session));
+  dom.composerContext.replaceChildren(
+    buildMcpSummary(session, () => openMcpConfig(session.id)),
+    renderComposerQueue(session)
+  );
+}
+
+function skillCategory(skill) {
+  if (skill?.sourceKind === 'mcp') return skill.serverName || 'MCP';
+  const category = String(skill?.category || '').trim();
+  if (category) return category;
+  return skill?.sourceKind === 'user' ? '系统' : '内置';
 }
 
 function skillSourceLabel(skill) {
-  if (skill?.sourceKind === 'mcp') return skill.serverName || 'MCP';
-  return skill?.source || 'Skill';
+  return skillCategory(skill);
 }
 
 function skillScore(skill, tokens) {
@@ -2627,13 +2641,20 @@ function skillScore(skill, tokens) {
   return score;
 }
 
-function filteredSkillSuggestions() {
-  const query = dom.input.value.trim().toLowerCase();
-  const tokens = query.split(/\s+/).filter(Boolean);
+function slashQuery() {
+  const value = dom.input.value;
+  if (!value.startsWith('/')) return null;
+  return value.slice(1);
+}
+
+function filteredSlashSkills() {
+  const query = slashQuery();
+  if (query === null) return [];
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const available = state.skills.filter(
     (skill) => !state.attachedSkills.some((item) => item.id === skill.id)
   );
-  if (tokens.length === 0) return available.slice(0, 6);
+  if (tokens.length === 0) return available.slice(0, 8);
   return available
     .map((skill) => ({ skill, score: skillScore(skill, tokens) }))
     .filter((item) => item.score > 0)
@@ -2642,7 +2663,7 @@ function filteredSkillSuggestions() {
         b.score - a.score ||
         String(a.skill.name || '').localeCompare(String(b.skill.name || ''))
     )
-    .slice(0, 6)
+    .slice(0, 8)
     .map((item) => item.skill);
 }
 
@@ -2684,62 +2705,92 @@ async function loadSkills(force = false) {
 }
 
 function renderComposerSkills() {
-  if (!dom.composerSkills) return;
-  if (!state.composerOpen) {
-    dom.composerSkills.classList.add('hidden');
-    dom.composerSkills.replaceChildren();
-    return;
-  }
-  const suggestions = filteredSkillSuggestions();
+  renderComposerTokens();
+  renderSlashPopup();
+}
+
+function renderComposerTokens() {
+  if (!dom.composerTokens) return;
   const attached = state.attachedSkills;
-  const showLoading = state.skillsLoading && state.skills.length === 0;
-  if (!attached.length && !suggestions.length && !showLoading) {
-    dom.composerSkills.classList.add('hidden');
-    dom.composerSkills.replaceChildren();
+  dom.composerTokens.replaceChildren();
+  dom.composerTokens.classList.toggle('hidden', attached.length === 0);
+  dom.composerBox?.classList.toggle('skill-mode', attached.length > 0);
+  attached.forEach((skill, index) => {
+    const token = el('span', 'skill-token');
+    token.append(el('span', 'skill-token-slash', '/'));
+    token.append(el('span', 'skill-token-name', skill.name));
+    token.append(el('span', 'skill-token-source', skillSourceLabel(skill)));
+    const remove = el('button', 'skill-token-remove');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', '移除 Skill');
+    remove.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    remove.addEventListener('click', (event) => {
+      event.stopPropagation();
+      removeAttachedSkill(index);
+    });
+    token.append(remove);
+    dom.composerTokens.append(token);
+  });
+}
+
+function renderSlashPopup() {
+  if (!dom.skillPopup) return;
+  const query = state.composerOpen ? slashQuery() : null;
+  if (query === null || state.slashDismissed) {
+    state.slashOpen = false;
+    state.slashSkills = [];
+    state.slashIndex = 0;
+    dom.skillPopup.classList.add('hidden');
+    dom.skillPopup.replaceChildren();
     return;
   }
-  dom.composerSkills.classList.remove('hidden');
-  const lines = [];
-  if (attached.length) {
-    const line = el('div', 'skill-line');
-    line.append(el('span', 'skill-line-label', '已选'));
-    attached.forEach((skill, index) => {
-      const chip = el('span', 'skill-chip attached');
-      chip.append(el('span', '', skill.name));
-      chip.append(el('span', 'skill-chip-source', skillSourceLabel(skill)));
-      const remove = el('button', 'skill-chip-remove');
-      remove.type = 'button';
-      remove.setAttribute('aria-label', '移除 Skill');
-      remove.innerHTML =
-        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-      remove.addEventListener('click', (event) => {
-        event.stopPropagation();
-        removeAttachedSkill(index);
-      });
-      chip.append(remove);
-      line.append(chip);
-    });
-    lines.push(line);
+  const skills = filteredSlashSkills();
+  state.slashOpen = true;
+  state.slashSkills = skills;
+  if (state.slashIndex >= skills.length) {
+    state.slashIndex = Math.max(0, skills.length - 1);
   }
-  if (suggestions.length || showLoading) {
-    const line = el('div', 'skill-line');
-    line.append(
-      el('span', 'skill-line-label', dom.input.value.trim() ? '联想' : 'Skill')
+  dom.skillPopup.classList.remove('hidden');
+  dom.skillPopup.replaceChildren();
+  if (skills.length === 0) {
+    dom.skillPopup.append(
+      el(
+        'div',
+        'skill-popup-empty',
+        state.skillsLoading ? '加载 Skill…' : '没有匹配的 Skill'
+      )
     );
-    for (const skill of suggestions) {
-      const chip = el('button', 'skill-chip');
-      chip.type = 'button';
-      chip.append(el('span', '', skill.name));
-      chip.append(el('span', 'skill-chip-source', skillSourceLabel(skill)));
-      chip.addEventListener('click', () => selectSkill(skill));
-      line.append(chip);
-    }
-    if (showLoading && suggestions.length === 0) {
-      line.append(el('span', 'skill-empty', '加载 Skill…'));
-    }
-    lines.push(line);
+    return;
   }
-  dom.composerSkills.replaceChildren(...lines);
+  skills.forEach((skill, index) => {
+    const item = el('button', 'skill-popup-item');
+    item.type = 'button';
+    if (index === state.slashIndex) item.classList.add('selected');
+    item.append(el('span', 'skill-popup-name', skill.name || skill.id));
+    item.append(el('span', 'skill-popup-source', skillSourceLabel(skill)));
+    item.addEventListener('mousedown', (event) => event.preventDefault());
+    item.addEventListener('click', () => chooseSlashSkill(skill));
+    dom.skillPopup.append(item);
+  });
+}
+
+function moveSlashSelection(delta) {
+  if (!state.slashOpen || state.slashSkills.length === 0) return;
+  const count = state.slashSkills.length;
+  state.slashIndex = (state.slashIndex + delta + count) % count;
+  renderSlashPopup();
+}
+
+function chooseSlashSkill(skill) {
+  if (!skill) return;
+  state.slashOpen = false;
+  state.slashIndex = 0;
+  state.slashDismissed = false;
+  dom.input.value = '';
+  updateSendState();
+  selectSkill(skill);
+  renderComposerSkills();
 }
 
 function selectSkill(skill) {
@@ -2762,9 +2813,11 @@ function attachSkill(skill, args = {}) {
     source: skill.source || '',
     sourceKind: skill.sourceKind || '',
     serverName: skill.serverName || '',
+    category: skill.category || '',
     arguments: { ...args },
   });
   renderComposerSkills();
+  updateSendState();
   if (state.composerOpen) dom.input.focus();
 }
 
@@ -2772,12 +2825,15 @@ function removeAttachedSkill(index) {
   if (index < 0 || index >= state.attachedSkills.length) return;
   state.attachedSkills.splice(index, 1);
   renderComposerSkills();
+  updateSendState();
+  if (state.composerOpen) dom.input.focus();
 }
 
 function clearAttachedSkills() {
   if (state.attachedSkills.length === 0) return;
   state.attachedSkills = [];
   renderComposerSkills();
+  updateSendState();
 }
 
 function resetComposerSkills() {
@@ -2785,7 +2841,12 @@ function resetComposerSkills() {
   state.skills = [];
   state.skillsSessionId = null;
   state.skillsFetchedAt = 0;
+  state.slashOpen = false;
+  state.slashIndex = 0;
+  state.slashSkills = [];
+  state.slashDismissed = false;
   renderComposerSkills();
+  updateSendState();
 }
 
 function openSkillArgs(skill) {
@@ -2866,11 +2927,18 @@ function editQueuedPrompt(session, index) {
       : [];
   saveChatsSoon();
   if (!state.composerOpen) openComposer();
-  state.attachedSkills = skills.map((skill) => ({
-    id: skill.id,
-    name: skill.name,
-    arguments: { ...(skill.arguments || {}) },
-  }));
+  state.attachedSkills = skills.map((skill) => {
+    const known = state.skills.find((entry) => entry.id === skill.id);
+    return {
+      id: skill.id,
+      name: skill.name || known?.name || skill.id,
+      source: known?.source || '',
+      sourceKind: known?.sourceKind || '',
+      serverName: known?.serverName || '',
+      category: known?.category || '',
+      arguments: { ...(skill.arguments || {}) },
+    };
+  });
   dom.input.value = text;
   updateSendState();
   if (state.composerOpen) renderComposerContext();
@@ -3739,7 +3807,46 @@ function toolCountsByGroup(tools) {
   return counts;
 }
 
-function ensureCatalogSelection(data) {
+function skillCatalogGroups(data) {
+  const locals = [];
+  const servers = [];
+  const localMap = new Map();
+  const serverMap = new Map();
+  for (const skill of Array.isArray(data?.skills) ? data.skills : []) {
+    if (skill.sourceKind === 'mcp') {
+      const key = String(skill.serverId || skill.serverName || 'MCP');
+      if (!serverMap.has(key)) {
+        const entry = {
+          id: `server:${key}`,
+          label: skill.serverName || 'MCP',
+          count: 0,
+        };
+        serverMap.set(key, entry);
+        servers.push(entry);
+      }
+      serverMap.get(key).count += 1;
+    } else {
+      const category = skillCategory(skill);
+      if (!localMap.has(category)) {
+        const entry = { id: `local:${category}`, label: category, count: 0 };
+        localMap.set(category, entry);
+        locals.push(entry);
+      }
+      localMap.get(category).count += 1;
+    }
+  }
+  return { locals, servers };
+}
+
+function ensureCatalogSelection(data, page) {
+  if (page === 'skills') {
+    const { locals, servers } = skillCatalogGroups(data);
+    const all = [...locals, ...servers];
+    if (!all.some((item) => item.id === state.catalogKind)) {
+      state.catalogKind = all[0]?.id || 'local:内置';
+    }
+    return;
+  }
   if (!state.catalogKind?.startsWith('tool:')) return;
   const counts = toolCountsByGroup(data?.tools);
   const groupId = state.catalogKind.slice(5);
@@ -3758,7 +3865,48 @@ function closeCatalog() {
   dom.catalog.setAttribute('aria-hidden', 'true');
 }
 
+function catalogCategoryButton(item, selectedKind) {
+  const button = el('button', 'catalog-category');
+  button.type = 'button';
+  button.dataset.kind = item.id;
+  if (item.id === selectedKind) button.classList.add('selected');
+  button.append(el('span', 'catalog-category-name', item.label));
+  button.append(el('span', 'catalog-category-count', String(item.count)));
+  button.addEventListener('click', () => selectCatalogKind(item.id));
+  return button;
+}
+
 function renderCatalogCategories(data, selectedKind, page) {
+  dom.catalogCategories.replaceChildren();
+
+  if (page === 'skills') {
+    const { locals, servers } = skillCatalogGroups(data);
+    const localSection = el('div', 'catalog-section');
+    localSection.append(el('div', 'catalog-section-label', 'Skill'));
+    if (locals.length === 0) {
+      localSection.append(
+        catalogCategoryButton(
+          { id: 'local:内置', label: '内置', count: 0 },
+          selectedKind
+        )
+      );
+    } else {
+      for (const item of locals) {
+        localSection.append(catalogCategoryButton(item, selectedKind));
+      }
+    }
+    dom.catalogCategories.append(localSection);
+    if (servers.length > 0) {
+      const serverSection = el('div', 'catalog-section');
+      serverSection.append(el('div', 'catalog-section-label', 'MCP'));
+      for (const item of servers) {
+        serverSection.append(catalogCategoryButton(item, selectedKind));
+      }
+      dom.catalogCategories.append(serverSection);
+    }
+    return;
+  }
+
   let items;
   if (page === 'tools') {
     const toolCounts = toolCountsByGroup(data?.tools);
@@ -3777,24 +3925,16 @@ function renderCatalogCategories(data, selectedKind, page) {
   } else {
     items = [
       {
-        id: page,
-        label: page === 'skills' ? 'Skill' : 'MCP',
-        count: Array.isArray(data?.[page]) ? data[page].length : 0,
+        id: 'mcp',
+        label: 'MCP',
+        count: Array.isArray(data?.mcp) ? data.mcp.length : 0,
       },
     ];
   }
 
-  dom.catalogCategories.replaceChildren();
   const wrapper = el('div', 'catalog-section');
   for (const item of items) {
-    const button = el('button', 'catalog-category');
-    button.type = 'button';
-    button.dataset.kind = item.id;
-    if (item.id === selectedKind) button.classList.add('selected');
-    button.append(el('span', 'catalog-category-name', item.label));
-    button.append(el('span', 'catalog-category-count', String(item.count)));
-    button.addEventListener('click', () => selectCatalogKind(item.id));
-    wrapper.append(button);
+    wrapper.append(catalogCategoryButton(item, selectedKind));
   }
   dom.catalogCategories.append(wrapper);
 }
@@ -3876,9 +4016,20 @@ function renderCatalogEntryItem(kind, entry) {
   if (entry.description) {
     item.append(el('div', 'catalog-desc', entry.description));
   }
-  const meta = [entry.source, entry.transport, entry.status]
-    .filter(Boolean)
-    .join(' · ');
+  const meta =
+    kind === 'skills'
+      ? [
+          skillCategory(entry),
+          entry.sourceKind === 'mcp' ? 'MCP' : '',
+          Array.isArray(entry.arguments) && entry.arguments.length
+            ? `${entry.arguments.length} 个参数`
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : [entry.source, entry.transport, entry.status]
+          .filter(Boolean)
+          .join(' · ');
   if (meta) item.append(el('div', 'catalog-meta', meta));
   return item;
 }
@@ -3891,12 +4042,16 @@ function renderCatalogList(kind, entries) {
     return;
   }
 
+  if (kind === 'skills') {
+    for (const entry of entries) {
+      dom.catalogList.append(renderCatalogEntryItem(kind, entry));
+    }
+    return;
+  }
+
   const groups = new Map();
   for (const entry of entries) {
-    const label =
-      kind === 'skills'
-        ? entry.source || '全部'
-        : entry.transport || entry.status || '全部';
+    const label = entry.transport || entry.status || '全部';
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label).push(entry);
   }
@@ -3918,12 +4073,31 @@ function renderCatalogContent(kind) {
   dom.catalogList.replaceChildren();
   if (kind?.startsWith('tool:')) {
     renderCatalogToolGroup(kind.slice(5));
-  } else {
-    renderCatalogList(
-      kind,
-      kind === 'skills' ? state.catalogData?.skills : state.catalogData?.mcp
-    );
+    return;
   }
+  if (kind?.startsWith('local:')) {
+    const category = kind.slice('local:'.length);
+    const entries = (state.catalogData?.skills || []).filter(
+      (skill) =>
+        skill.sourceKind !== 'mcp' && skillCategory(skill) === category
+    );
+    renderCatalogList('skills', entries);
+    return;
+  }
+  if (kind?.startsWith('server:')) {
+    const key = kind.slice('server:'.length);
+    const entries = (state.catalogData?.skills || []).filter(
+      (skill) =>
+        skill.sourceKind === 'mcp' &&
+        String(skill.serverId || skill.serverName || 'MCP') === key
+    );
+    renderCatalogList('skills', entries);
+    return;
+  }
+  renderCatalogList(
+    kind,
+    kind === 'skills' ? state.catalogData?.skills : state.catalogData?.mcp
+  );
 }
 
 async function openCatalog(kind) {
@@ -3934,7 +4108,8 @@ async function openCatalog(kind) {
     page === 'skills' ? 'Skill' : page === 'mcp' ? 'MCP' : '工具'
   );
   state.catalogOpen = true;
-  state.catalogKind = page === 'tools' ? 'tool:search' : page;
+  state.catalogKind =
+    page === 'tools' ? 'tool:search' : page === 'skills' ? 'local:内置' : 'mcp';
   state.catalogData = null;
   const request = ++state.catalogRequest;
   dom.catalog.classList.remove('single');
@@ -3949,7 +4124,7 @@ async function openCatalog(kind) {
     const data = await api.loadCatalog();
     if (!state.catalogOpen || request !== state.catalogRequest) return;
     state.catalogData = data;
-    if (page === 'tools') ensureCatalogSelection(data);
+    ensureCatalogSelection(data, page);
     renderCatalogCategories(data, state.catalogKind, page);
     renderCatalogContent(state.catalogKind);
   } catch (error) {
@@ -4106,12 +4281,48 @@ function bindEvents() {
   $('mobile-compose')?.addEventListener('click', openComposer);
   dom.send.addEventListener('click', sendMessage);
   dom.input.addEventListener('input', () => {
+    state.slashDismissed = false;
+    state.slashIndex = 0;
     updateSendState();
     syncDraftTitle();
     renderComposerSkills();
   });
   dom.input.addEventListener('keydown', (event) => {
     if (event.isComposing || event.keyCode === 229) return;
+    if (state.slashOpen) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        moveSlashSelection(1);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        moveSlashSelection(-1);
+        return;
+      }
+      if (event.key === 'Enter' && !event.shiftKey) {
+        if (state.slashSkills.length > 0) {
+          event.preventDefault();
+          chooseSlashSkill(state.slashSkills[state.slashIndex]);
+          return;
+        }
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        state.slashDismissed = true;
+        renderSlashPopup();
+        return;
+      }
+    }
+    if (
+      event.key === 'Backspace' &&
+      dom.input.value === '' &&
+      state.attachedSkills.length > 0
+    ) {
+      event.preventDefault();
+      removeAttachedSkill(state.attachedSkills.length - 1);
+      return;
+    }
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       sendMessage();
@@ -4223,14 +4434,17 @@ function bindEvents() {
         closeComposer();
         return;
       }
-      if (
-        (event.code === 'Space' || event.key === ' ') &&
-        !event.repeat &&
-        !event.isComposing &&
-        !dom.input.value.trim()
-      ) {
+      if (event.code === 'Space' || event.key === ' ') {
+        if (event.repeat || event.isComposing) return;
+        const target = event.target;
+        if (
+          target instanceof Element &&
+          target.closest('input, textarea, [contenteditable="true"]')
+        ) {
+          return;
+        }
         event.preventDefault();
-        closeComposer();
+        dom.input.focus();
         return;
       }
       return;
@@ -4346,10 +4560,7 @@ function bindEvents() {
           target.closest('input, textarea, [contenteditable="true"]')) ||
         (active instanceof Element &&
           active.closest('input, textarea, [contenteditable="true"]'));
-      const onControl =
-        (target instanceof Element && target.closest('button, a, select')) ||
-        (active instanceof Element && active.closest('button, a, select'));
-      if (inEditable || onControl) return;
+      if (inEditable) return;
       event.preventDefault();
       openComposer();
     }
