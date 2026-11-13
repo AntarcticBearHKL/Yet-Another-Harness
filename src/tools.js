@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline');
+const mcp = require('./mcp-registry');
 
 // 免费 web_search：DuckDuckGo 公开 HTML 端点，不需要 API key。
 // 解析 result__a / result__snippet，把 uddg= 重定向解成真实 URL。
@@ -70,6 +71,7 @@ function definitions() {
         },
       },
     },
+    ...mcp.definitions(),
   ];
 }
 
@@ -103,6 +105,10 @@ async function execute(name, args) {
     }
   }
 
+  if (mcp.isMcpTool(name)) {
+    return mcp.execute(name, args);
+  }
+
   return `tool error: unknown tool "${name}"`;
 }
 
@@ -121,6 +127,9 @@ function statusLabel(name, args) {
     const filePath = String(value.path ?? '');
     const base = filePath ? path.basename(filePath) : '';
     return base ? `read_file: ${base}` : 'read_file';
+  }
+  if (mcp.isMcpTool(name)) {
+    return mcp.statusLabel(name, args);
   }
   return `tool: ${name}`;
 }

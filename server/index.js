@@ -10,6 +10,7 @@ const store = require('../src/store');
 const tools = require('../src/tools');
 const deepseek = require('../src/deepseek');
 const runner = require('./runner');
+const { McpManager } = require('./mcp/manager');
 
 const ROOT = path.resolve(__dirname, '..');
 const APP_DATA =
@@ -26,6 +27,11 @@ const REMOTE_USER = process.env.YAH_REMOTE_USER || 'yah';
 const REMOTE_PASSWORD = process.env.YAH_REMOTE_PASSWORD || '';
 const PID_FILE = path.join(DATA_DIR, 'server.pid');
 
+const mcpManager = new McpManager({
+  dataDir: DATA_DIR,
+  version: require('../package.json').version,
+});
+
 let pidWritten = false;
 
 const STATIC_FILES = new Map([
@@ -35,6 +41,7 @@ const STATIC_FILES = new Map([
   ['/resize.css', 'resize.css'],
   ['/resize.js', 'resize.js'],
   ['/renderer.js', 'renderer.js'],
+  ['/mcp-ui.js', 'mcp-ui.js'],
   ['/content.html', 'content.html'],
   ['/content.css', 'content.css'],
   ['/content.js', 'content.js'],
@@ -286,11 +293,159 @@ function handleApi(req, res, url) {
   }
 
   if (req.method === 'GET' && pathname === '/api/catalog') {
+    void mcpManager.ensureConnections();
     sendJson(res, 200, {
       tools: tools.definitions(),
       skills: [],
-      mcp: [],
+      mcp: mcpManager.catalogEntries(),
     });
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/mcp/state') {
+    void mcpManager.ensureConnections();
+    sendJson(res, 200, mcpManager.getState());
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/mcp/events') {
+    openMcpEventStream(req, res);
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/mcp/reload') {
+    mcpManager
+      .reload()
+      .then((state) => sendJson(res, 200, state))
+      .catch((error) => sendJson(res, 400, { error: error.message }));
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/mcp/servers') {
+    readJson(req)
+      .then((body) => {
+        if (typeof body?.json === 'string' && body.json.trim()) {
+          sendJson(res, 200, mcpManager.importServers(body.json));
+          return;
+        }
+        const input = body?.server && typeof body.server === 'object'
+          ? body.server
+          : body;
+        sendJson(res, 200, mcpManager.addServer(input));
+      })
+      .catch((error) => sendJson(res, error.status || 400, { error: error.message }));
+    return true;
+  }
+
+  const mcpMatch = pathname.match(/^\/api\/mcp\/servers\/([^/]+)(?:\/(.+))?$/);
+  if (mcpMatch) {
+    let serverId = '';
+    try {
+      serverId = decodeURIComponent(mcpMatch[1]);
+    } catch {
+      sendJson(res, 400, { error: 'bad server id' });
+      return true;
+    }
+    const action = mcpMatch[2] || '';
+    const method = req.method;
+
+    if (method === 'GET' && !action) {
+      const snapshot = mcpManager.snapshot(serverId);
+      if (!snapshot) {
+        sendJson(res, 404, { error: 'MCP 服务器不存在' });
+        return true;
+      }
+      sendJson(res, 200, snapshot);
+      return true;
+    }
+
+    if (method === 'PUT' && !action) {
+      readJson(req)
+        .then((body) => {
+          const input = body?.server && typeof body.server === 'object'
+            ? body.server
+            : body;
+          sendJson(res, 200, mcpManager.updateServer(serverId, input));
+        })
+        .catch((error) => sendJson(res, error.status || 400, { error: error.message }));
+      return true;
+    }
+
+    if (method === 'DELETE' && !action) {
+      try {
+        sendJson(res, 200, mcpManager.removeServer(serverId));
+      } catch (error) {
+        sendJson(res, 400, { error: error.message });
+      }
+      return true;
+    }
+
+    if (method === 'POST' && action === 'reconnect') {
+      mcpManager
+        .reconnect(serverId)
+        .then((snapshot) => sendJson(res, 200, snapshot))
+        .catch((error) => sendJson(res, 400, { error: error.message }));
+      return true;
+    }
+
+    if (method === 'POST' && action === 'refresh') {
+      mcpManager
+        .refresh(serverId)
+        .then((payload) => sendJson(res, 200, payload))
+        .catch((error) => sendJson(res, 400, { error: error.message }));
+      return true;
+    }
+
+    if (method === 'POST' && action === 'tools/call') {
+      readJson(req)
+        .then(async (body) => {
+          const name = String(body?.name || '');
+          const args =
+            body?.arguments && typeof body.arguments === 'object'
+              ? body.arguments
+              : {};
+          if (!name) throw new Error('tool name is required');
+          const result = await mcpManager.callTool(serverId, name, args);
+          sendJson(res, 200, result);
+        })
+        .catch((error) => sendJson(res, 400, { error: error.message }));
+      return true;
+    }
+
+    if (method === 'POST' && action === 'resources/read') {
+      readJson(req)
+        .then(async (body) => {
+          const uri = String(body?.uri || '').trim();
+          if (!uri) throw new Error('resource uri is required');
+          const result = await mcpManager.readResource(serverId, uri);
+          sendJson(res, 200, result);
+        })
+        .catch((error) => sendJson(res, 400, { error: error.message }));
+      return true;
+    }
+
+    if (method === 'POST' && action === 'prompts/get') {
+      readJson(req)
+        .then(async (body) => {
+          const name = String(body?.name || '').trim();
+          const args =
+            body?.arguments && typeof body.arguments === 'object'
+              ? body.arguments
+              : {};
+          if (!name) throw new Error('prompt name is required');
+          const result = await mcpManager.getPrompt(serverId, name, args);
+          sendJson(res, 200, result);
+        })
+        .catch((error) => sendJson(res, 400, { error: error.message }));
+      return true;
+    }
+
+    if (method === 'POST' && action === 'logs/clear') {
+      sendJson(res, 200, mcpManager.clearLogs(serverId));
+      return true;
+    }
+
+    sendJson(res, 404, { error: 'not found' });
     return true;
   }
 
@@ -355,6 +510,35 @@ function openEventStream(req, res, sessionId, after) {
   }
   replaying = false;
   for (const event of buffered) sendEvent(event);
+
+  const heartbeat = setInterval(() => {
+    if (!closed) res.write(': ping\n\n');
+  }, 15000);
+
+  req.on('close', () => {
+    closed = true;
+    clearInterval(heartbeat);
+    unsubscribe();
+    res.end();
+  });
+}
+
+function openMcpEventStream(req, res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write(': connected\n\n');
+
+  let closed = false;
+  const send = (event) => {
+    if (closed) return;
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+  send({ type: 'state', state: mcpManager.getState() });
+  const unsubscribe = mcpManager.subscribe(send);
 
   const heartbeat = setInterval(() => {
     if (!closed) res.write(': ping\n\n');
@@ -478,11 +662,13 @@ localServer.listen(LOCAL_PORT, HOST, () => {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(PID_FILE, String(process.pid), 'utf8');
   pidWritten = true;
+  mcpManager.start();
   console.log(`YAH local: http://${HOST}:${LOCAL_PORT}`);
   startRemote();
 });
 
 function shutdown() {
+  mcpManager.closeAll();
   try {
     if (remoteServer) remoteServer.close();
   } catch {

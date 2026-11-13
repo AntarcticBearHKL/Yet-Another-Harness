@@ -1810,7 +1810,7 @@ const RING_ITEMS = [
   {
     label: 'MCP',
     icon: '<path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0V8ZM12 16v5"/>',
-    action: () => openCatalog('mcp'),
+    action: () => openMcp(),
   },
 ];
 
@@ -1942,6 +1942,11 @@ function updateRingFromPointer(event) {
 function onRightMouseDown(event) {
   if (event.button !== 2) return;
 
+  if (window.mcpOverlayOpen?.()) {
+    window.closeMcp?.();
+    state.ringSuppress = true;
+    return;
+  }
   if (state.catalogOpen) {
     closeCatalog();
     state.ringSuppress = true;
@@ -1986,6 +1991,11 @@ const CATALOG_EMPTY = {
   mcp: '还没有连接 MCP。',
 };
 const TOOL_GROUPS = [
+  {
+    id: 'mcp',
+    label: 'MCP',
+    pattern: /^mcp__/i,
+  },
   {
     id: 'search',
     label: '搜索',
@@ -2286,6 +2296,10 @@ function bindEvents() {
       return;
     }
     if (state.ringOpen) return;
+    if (window.mcpOverlayOpen?.()) {
+      window.closeMcp?.();
+      return;
+    }
     if (state.catalogOpen) {
       closeCatalog();
       return;
@@ -2374,6 +2388,14 @@ function bindEvents() {
   });
 
   document.addEventListener('keydown', (event) => {
+    if (window.mcpOverlayOpen?.()) {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        window.closeMcp?.();
+      }
+      return;
+    }
+
     if (state.ringOpen) {
       if (event.key === 'Escape') {
         event.preventDefault();

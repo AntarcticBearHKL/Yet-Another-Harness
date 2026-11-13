@@ -40,12 +40,15 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 项目、项目归属和对话一起持久化到 SQLite；工作区空白区域仍然可以按住左键拖动窗口
 - 有弹窗（Tab 切换器、设置、raw 查看器）打开时，右键等于关闭弹窗
 - 主界面按住右键弹出环形菜单：工具、Skill、MCP；把鼠标拖到对应扇区后松开右键打开对应信息界面
-- 工具、Skill、MCP 面板都是无标题的左右分栏：工具页左侧按分类列出工具（搜索 / 文件 / 系统 / 代理等），Skill/MCP 左侧显示各自类型和数量，右侧显示内容（名称、说明、参数）；三者仍是独立页面；没有内容时显示空状态
+- 工具和 Skill 面板是无标题的左右分栏：工具页左侧按分类列出工具（搜索 / 文件 / 系统 / MCP / 代理等），右侧显示名称、说明、参数；MCP 是独立的全屏工作区，左侧服务器、右侧工具 / 资源 / 提示词 / 日志 / 概览；没有内容时显示空状态
 - 所有空状态（无对话、无消息、无工具/Skill/MCP、raw 为空、全文为空）统一在可用区域居中，颜色比正文淡一档
 - 工具调用的 JSON 参数和 JSON 输出用带语法着色、可折叠节点的查看器展示
 - Ctrl + 双击任意对话卡片可以查看该轮实际发给模型的原始请求 body，完整 JSON 树可逐层折叠
 - 所有区域隐藏滚动条，滚轮/触控板仍然可以滚动
 - 后端服务用 SQLite（`node:sqlite`，WAL）管理会话；设置和 API key 存 `settings.json`，窗口位置存 `window.json`
+- MCP 服务器配置保存在 `%APPDATA%\yah\mcp.json`；支持 STDIO、Streamable HTTP、legacy SSE，支持表单添加和粘贴 `mcpServers` / `mcp.servers` JSON
+- 所有 MCP 服务器启动时自动连接，所有工具对所有对话自动开放，没有 per-chat 开关；工具名统一为 `mcp__<server>__<tool>`
+- MCP 工作区可以查看 tools / resources / prompts / logs / overview，手动调用工具、读取资源、获取提示词，并把工具、结果、资源或提示词插入输入框
 - 全局禁用鼠标框选和右键菜单；只有输入框保留文本选择
 
 旧的 Rust/Slint 版已经删除；新开发都在 `D:\Dev\Harness\yah`。
@@ -91,12 +94,19 @@ LIVE_SEARCH=1 npm test   # 额外跑一条真实 DuckDuckGo 搜索
 ```
 server/index.js    本地后端：HTTP API、SSE、静态页面、远程 Basic Auth
 server/runner.js   agent 主循环、工具执行、消息/事件持久化
+server/mcp/config.js   MCP 配置存储、JSON 配置解析
+server/mcp/transport.js STDIO / Streamable HTTP / legacy SSE 传输
+server/mcp/client.js   MCP JSON-RPC 客户端、握手、能力缓存
+server/mcp/manager.js  MCP 连接生命周期、自动重连、工具/资源/提示词调用
+server/mcp/format.js   MCP 结果转纯文本
 src/main.js        Electron 壳：窗口、拖动/缩放、全文窗口、拉起/连接后端
 src/preload.js     只暴露窗口拖动/缩放和全文窗口能力
 src/deepseek.js    OpenCode Go SSE + tool_calls 累积 + agent loop（后端）
-src/tools.js       免费 web_search（DuckDuckGo HTML，后端）
+src/tools.js       免费 web_search、read_file 和 MCP 工具路由（后端）
+src/mcp-registry.js MCP 工具到 OpenAI function 的映射（后端）
 src/store.js       chats.db（SQLite/WAL）+ settings.json 原子写 + 旧版迁移
 src/renderer.js    网页客户端：聊天、项目工作区、设置、环形菜单、HTTP/SSE
+src/mcp-ui.js      MCP 工作区：服务器、工具、资源、提示词、日志、概览
 src/index.html     页面骨架
 src/styles.css     主题、布局、浮层、输入区
 src/resize.js      无边框窗口的边缘缩放手柄（桌面端）
@@ -133,6 +143,7 @@ agent 循环、工具、SQLite、API key 都在本地后端。`contextIsolation:
   - `app_state`：当前会话 id 和标题序号
   - 运行时还会出现 `chats.db-wal` / `chats.db-shm`；备份时不要只复制 `chats.db`
 - `%APPDATA%\yah\settings.json`：API key（后端读取，网页端拿不到）
+- `%APPDATA%\yah\mcp.json`：MCP 服务器配置（STDIO 命令/参数/环境变量，或远程 URL/Headers）
 - `%APPDATA%\yah\window.json`：桌面窗口位置和尺寸
 - `%APPDATA%\yah\server.pid`：本地后端进程号，`stop-server.cmd` 用它停止服务
 
@@ -160,7 +171,7 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 
 ## Tool calling
 
-- 每次请求带 `tools: [web_search, read_file]` 和 `tool_choice: 'auto'`。
+- 每次请求带 `tools: [web_search, read_file, ...MCP tools]` 和 `tool_choice: 'auto'`。
 - 流式响应里的 `delta.tool_calls` 按 `index` 把 `function.arguments` 拼起来。
 - 模型要工具时：把 assistant 的 tool_calls 放回 messages，顺序执行工具，追加
   `role: 'tool'` 结果，再请求模型；最多 **6 轮**。
@@ -175,6 +186,46 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 （默认 200 行，最多 2000 行 / 100k 字符），自动拒绝目录和二进制文件。相对路径按后端
 进程工作目录解析，跨项目读取建议用绝对路径。
 
+## MCP
+
+MCP 工作区从环形菜单的 `MCP` 扇区打开。服务器配置存在 `%APPDATA%\yah\mcp.json`，
+也可以直接粘贴 OpenCode / Claude 风格的 JSON：
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "D:\\Dev"]
+    },
+    "remote": {
+      "type": "remote",
+      "url": "https://example.com/mcp",
+      "headers": { "Authorization": "Bearer ..." }
+    }
+  }
+}
+```
+
+也支持 `mcp.servers`、`servers`、数组和单个服务器对象。表单和 JSON 两种添加方式可以混用；
+编辑服务器时只能改表单（避免 JSON 里漏字段覆盖掉原有配置）。
+
+- 传输：STDIO（`command` + `args` + `cwd` + `env`）、Streamable HTTP（`url` + `headers`）、
+  legacy SSE（`type: "sse"` + `url`）。
+- 启动时所有服务器自动连接；失败后按 5s / 10s / 20s / 40s / 60s 退避重连。MCP 工作区里的
+  「重连」和「刷新」只影响连接与能力缓存，没有关闭 MCP 的开关。
+- 每个已连接服务器的 tools 会自动合并进 agent 工具列表，所有对话都能调用，不需要插入。
+  工具名是 `mcp__<server>__<tool>`（服务器名和工具名里的非字母数字字符会换成 `_`）。
+- 工具结果会转成纯文本回给模型；图片、二进制、resource_link 用占位文字表示。资源、提示词和
+  工具结果都可以在 MCP 工作区里点「插入到对话」，插入到 Space 输入框，编辑后再发送。
+- 工具、资源、提示词都支持表单/JSON 参数（工具）、手动调用、原始响应 JSON、日志
+  （protocol / stderr / stdout / info）和概览（serverInfo、capabilities、instructions、配置）。
+- MCP 日志和连接状态通过 `/api/mcp/events` SSE 实时推送；所有接口和聊天接口一样受远程
+  Basic Auth 保护。
+
+测试用 `test-fixtures/mcp-server.js`（STDIO）和 `test-fixtures/mcp-http-server.js`
+（Streamable HTTP），`npm test` 会覆盖握手、工具调用、资源读取、提示词获取和工具名映射。
+
 ## 和 Rust 版的差异
 
 - 用 Chromium 渲染，字体/布局与 Slint 版略有差异。
@@ -187,5 +238,5 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 
 - 只在 Windows 上实际验证；Electron 其他平台能启动，但没有 acrylic。
 - DuckDuckGo 是抓公开 HTML，没有官方 SLA。
-- 工具串行执行，没有并行；tool_calls 不落盘。
+- 工具串行执行，没有并行；MCP 工具调用同样走串行队列。
 - 窗口位置/大小会保存；换了显示器后按工作区钳制。
