@@ -2669,7 +2669,12 @@ function renderAgentPicker() {
     select.value = current;
   } else {
     select.value = '';
-    if (session && current) {
+    if (
+      session &&
+      current &&
+      state.agentsFetchedAt &&
+      !state.agentsLoading
+    ) {
       session.agentId = '';
       saveChatsSoon();
     }
