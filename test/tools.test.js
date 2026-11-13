@@ -2,6 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const tools = require('../src/tools');
 
 const SAMPLE = `
@@ -30,10 +33,58 @@ test('ddg redirect urls are unwrapped', () => {
   assert.equal(tools._test.decodeDdgUrl(href), 'https://slint.dev/');
 });
 
-test('definitions expose web_search', () => {
+test('definitions expose web_search and read_file', () => {
   const defs = tools.definitions();
   assert.equal(defs[0].type, 'function');
   assert.equal(defs[0].function.name, 'web_search');
+  assert.equal(defs[1].function.name, 'read_file');
+});
+
+test('read_file returns numbered lines and supports paging', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-read-'));
+  const file = path.join(dir, 'sample.txt');
+  fs.writeFileSync(file, 'alpha\nbeta\ngamma\n');
+  try {
+    const full = await tools.execute(
+      'read_file',
+      JSON.stringify({ path: file })
+    );
+    assert.match(full, /1: alpha/);
+    assert.match(full, /2: beta/);
+    assert.match(full, /3: gamma/);
+
+    const page = await tools.execute(
+      'read_file',
+      JSON.stringify({ path: file, offset: 2, limit: 1 })
+    );
+    assert.match(page, /2: beta/);
+    assert.doesNotMatch(page, /1: alpha/);
+    assert.match(page, /offset=3/);
+
+    const empty = path.join(dir, 'empty.txt');
+    fs.writeFileSync(empty, '');
+    assert.match(
+      await tools.execute('read_file', JSON.stringify({ path: empty })),
+      /empty file/
+    );
+
+    const binary = path.join(dir, 'binary.dat');
+    fs.writeFileSync(binary, Buffer.from([0, 1, 2, 3]));
+    assert.match(
+      await tools.execute('read_file', JSON.stringify({ path: binary })),
+      /binary file/
+    );
+
+    assert.match(
+      await tools.execute(
+        'read_file',
+        JSON.stringify({ path: path.join(dir, 'missing.txt') })
+      ),
+      /tool error/
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('status label is short and readable', () => {

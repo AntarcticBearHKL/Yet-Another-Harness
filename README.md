@@ -157,16 +157,20 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 
 ## Tool calling
 
-- 每次请求带 `tools: [web_search]` 和 `tool_choice: 'auto'`。
+- 每次请求带 `tools: [web_search, read_file]` 和 `tool_choice: 'auto'`。
 - 流式响应里的 `delta.tool_calls` 按 `index` 把 `function.arguments` 拼起来。
 - 模型要工具时：把 assistant 的 tool_calls 放回 messages，顺序执行工具，追加
   `role: 'tool'` 结果，再请求模型；最多 **6 轮**。
 - 工具执行期间在对话里依次插入 `TOOL CALL`（完整参数）和 `TOOL RESULT`（完整输出）气泡，正文继续流式输出。
-- 工具调用和结果不落盘，只保存最终回复。
+- 工具调用和结果作为步骤持久化；每次模型请求的原始 body 也存 SQLite，可在卡片上双击查看。
 
 `web_search` 抓 `https://html.duckduckgo.com/html/?q=...`，解析 `result__a` /
 `result__snippet`，把 `uddg=` 重定向解成真实 URL，去标签、解 HTML 实体。免费、无 key，
 但 DuckDuckGo 可能限流/弹 CAPTCHA；这时返回 `tool error`，模型可以换个说法再搜。
+
+`read_file` 读取本地 UTF-8 文本文件，返回带行号的内容；支持 `offset` / `limit` 分页
+（默认 200 行，最多 2000 行 / 100k 字符），自动拒绝目录和二进制文件。相对路径按后端
+进程工作目录解析，跨项目读取建议用绝对路径。
 
 ## 和 Rust 版的差异
 

@@ -1,5 +1,9 @@
 'use strict';
 
+const fs = require('node:fs');
+const path = require('node:path');
+const readline = require('node:readline');
+
 // 免费 web_search：DuckDuckGo 公开 HTML 端点，不需要 API key。
 // 解析 result__a / result__snippet，把 uddg= 重定向解成真实 URL。
 
@@ -35,44 +39,180 @@ function definitions() {
         },
       },
     },
+    {
+      type: 'function',
+      function: {
+        name: 'read_file',
+        description:
+          'Read a UTF-8 text file from the local filesystem. Returns numbered lines. ' +
+          'Use offset and limit to page through large files.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description:
+                'Absolute path, or a path relative to the harness working directory.',
+            },
+            offset: {
+              type: 'integer',
+              description: '1-based line number to start from.',
+              minimum: 1,
+            },
+            limit: {
+              type: 'integer',
+              description: 'Maximum number of lines to return (1-2000).',
+              minimum: 1,
+              maximum: 2000,
+            },
+          },
+          required: ['path'],
+        },
+      },
+    },
   ];
 }
 
 async function execute(name, args) {
-  if (name !== 'web_search') {
-    return `tool error: unknown tool "${name}"`;
-  }
-
   let value;
   try {
     value = JSON.parse(args || '{}');
   } catch (error) {
     return `tool error: invalid JSON arguments: ${error.message}`;
   }
+  if (!value || typeof value !== 'object') value = {};
 
-  const query = String(value.query ?? '').trim();
-  if (!query) {
-    return 'tool error: web_search requires a non-empty "query"';
+  if (name === 'web_search') {
+    const query = String(value.query ?? '').trim();
+    if (!query) {
+      return 'tool error: web_search requires a non-empty "query"';
+    }
+    const max = Math.max(1, Math.min(8, Number(value.max_results) || 5));
+    try {
+      return await webSearch(query, max);
+    } catch (error) {
+      return `tool error: ${error.message}`;
+    }
   }
-  const max = Math.max(1, Math.min(8, Number(value.max_results) || 5));
 
-  try {
-    return await webSearch(query, max);
-  } catch (error) {
-    return `tool error: ${error.message}`;
+  if (name === 'read_file') {
+    try {
+      return await readFileTool(value);
+    } catch (error) {
+      return `tool error: ${error.message}`;
+    }
   }
+
+  return `tool error: unknown tool "${name}"`;
 }
 
 function statusLabel(name, args) {
-  if (name !== 'web_search') return `tool: ${name}`;
-  let query = '';
+  let value = {};
   try {
-    query = String(JSON.parse(args || '{}').query ?? '');
+    value = JSON.parse(args || '{}');
   } catch {
     /* ignore */
   }
-  query = Array.from(query).slice(0, 48).join('');
-  return query ? `web_search: ${query}` : 'web_search';
+  if (name === 'web_search') {
+    const query = Array.from(String(value.query ?? '')).slice(0, 48).join('');
+    return query ? `web_search: ${query}` : 'web_search';
+  }
+  if (name === 'read_file') {
+    const filePath = String(value.path ?? '');
+    const base = filePath ? path.basename(filePath) : '';
+    return base ? `read_file: ${base}` : 'read_file';
+  }
+  return `tool: ${name}`;
+}
+
+async function readFileTool(value) {
+  const rawPath = String(value.path ?? '').trim();
+  if (!rawPath) {
+    return 'tool error: read_file requires a non-empty "path"';
+  }
+  const abs = path.resolve(rawPath);
+  const offset = Math.max(1, Number(value.offset) || 1);
+  const limit = Math.max(1, Math.min(2000, Number(value.limit) || 200));
+
+  let stat;
+  try {
+    stat = await fs.promises.stat(abs);
+  } catch (error) {
+    return `tool error: cannot read "${rawPath}": ${error.code || error.message}`;
+  }
+  if (!stat.isFile()) {
+    return `tool error: "${rawPath}" is not a file`;
+  }
+
+  try {
+    const handle = await fs.promises.open(abs, 'r');
+    try {
+      const sample = Buffer.alloc(4096);
+      const { bytesRead } = await handle.read(sample, 0, sample.length, 0);
+      if (sample.subarray(0, bytesRead).includes(0)) {
+        return `tool error: "${rawPath}" looks like a binary file`;
+      }
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    return `tool error: cannot read "${rawPath}": ${error.code || error.message}`;
+  }
+
+  const stream = fs.createReadStream(abs, { encoding: 'utf8' });
+  const lines = readline.createInterface({
+    input: stream,
+    crlfDelay: Infinity,
+  });
+  const output = [];
+  const MAX_LINE = 4000;
+  const MAX_CHARS = 100_000;
+  let chars = 0;
+  let lineNo = 0;
+  let truncated = false;
+
+  try {
+    for await (const rawLine of lines) {
+      lineNo += 1;
+      if (lineNo < offset) continue;
+      if (output.length >= limit) {
+        truncated = true;
+        break;
+      }
+      let line = lineNo === 1 ? rawLine.replace(/^\uFEFF/, '') : rawLine;
+      if (line.length > MAX_LINE) {
+        line = `${line.slice(0, MAX_LINE - 1)}…`;
+      }
+      if (chars + line.length > MAX_CHARS) {
+        truncated = true;
+        break;
+      }
+      output.push(`${lineNo}: ${line}`);
+      chars += line.length + 1;
+    }
+  } catch (error) {
+    return `tool error: cannot read "${rawPath}": ${error.code || error.message}`;
+  } finally {
+    lines.close();
+    stream.destroy();
+  }
+
+  if (output.length === 0) {
+    if (lineNo === 0) {
+      return `${abs}\n(empty file)`;
+    }
+    if (offset > lineNo) {
+      return `tool error: offset ${offset} is beyond end of file (${lineNo} lines)`;
+    }
+    return `tool error: no lines at offset ${offset}`;
+  }
+
+  const last = offset + output.length - 1;
+  let result = `${abs}\n${output.join('\n')}`;
+  if (truncated) {
+    result += `\n… truncated at line ${last}; use offset=${last + 1} to continue`;
+  }
+  return result;
 }
 
 async function webSearch(query, max) {
