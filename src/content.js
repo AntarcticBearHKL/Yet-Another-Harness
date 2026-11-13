@@ -149,6 +149,18 @@ window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') api.close();
 });
 
+// 禁止原生 hover tooltip
+document.addEventListener(
+  'mouseover',
+  (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const titled = target.closest('[title]');
+    if (titled) titled.removeAttribute('title');
+  },
+  true
+);
+
 // 和主窗口一致：按住左键在任意非交互区域拖动窗口
 document.addEventListener('mousedown', onWindowDragStart);
 document.addEventListener('mousemove', onWindowDragMove);

@@ -574,9 +574,12 @@ function makeCard(opts) {
     head.append(el('span', 'card-meta', opts.meta || ''));
     if (opts.usage) {
       const usage = el('span', 'card-usage', usageText(opts.usage));
-      usage.title = `输入命中 ${Number(opts.usage.hit) || 0} · 输入未命中 ${
-        Number(opts.usage.miss) || 0
-      } · 输出 ${Number(opts.usage.output) || 0}`;
+      usage.setAttribute(
+        'aria-label',
+        `输入命中 ${Number(opts.usage.hit) || 0} · 输入未命中 ${
+          Number(opts.usage.miss) || 0
+        } · 输出 ${Number(opts.usage.output) || 0}`
+      );
       head.append(usage);
     }
     if (opts.badge) {
@@ -584,10 +587,6 @@ function makeCard(opts) {
       if (opts.badge.error) badge.classList.add('error');
       head.append(badge);
     }
-
-    card.title = opts.onFullContent
-      ? 'Click header or preview to expand/collapse · double-click content for full view · Ctrl+double-click for raw request'
-      : 'Click header or preview to expand/collapse';
 
     head.addEventListener('click', (event) => {
       if (suppressNextCardClick) {
@@ -610,7 +609,6 @@ function makeCard(opts) {
     previewWrap = el('div', 'card-preview-wrap');
     const preview = el('div', 'card-preview');
     const previewText = el('span', 'card-preview-text', opts.preview);
-    previewText.title = opts.preview;
     preview.append(previewText);
     previewWrap.append(preview);
     previewWrap.addEventListener('click', (event) => {
@@ -1200,7 +1198,6 @@ function renderSwitcher() {
 
   const addProject = el('button', 'project-add', '+');
   addProject.type = 'button';
-  addProject.title = 'New project';
   addProject.setAttribute('aria-label', 'New project');
   addProject.addEventListener('click', newProject);
   dom.projectList.append(addProject);
@@ -1230,7 +1227,6 @@ function renderSwitcher() {
 
     const trash = el('button', 'trash switch-trash');
     trash.type = 'button';
-    trash.title = 'Delete chat';
     trash.setAttribute('aria-label', 'Delete chat');
     if (state.pendingDelete === localIndex) trash.classList.add('armed');
     trash.innerHTML =
@@ -2250,6 +2246,18 @@ async function openCatalog(kind) {
 
 function bindEvents() {
   buildRingMenu();
+
+  // 禁止原生 hover tooltip：进入元素时清掉残留的 title
+  document.addEventListener(
+    'mouseover',
+    (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const titled = target.closest('[title]');
+      if (titled) titled.removeAttribute('title');
+    },
+    true
+  );
 
   // 整体禁用鼠标右键菜单与框选；有弹窗时右键等于关闭
   document.addEventListener('contextmenu', (event) => {
