@@ -1972,15 +1972,6 @@ body.ring-open #window-controls {
   border-color: var(--accent);
 }
 
-.composer-box.skill-mode {
-  border-color: var(--accent);
-  background: rgba(185, 111, 61, 0.09);
-}
-
-.composer-box.skill-mode:focus-within {
-  border-color: var(--accent-deep);
-}
-
 .composer-context {
   display: flex;
   flex-direction: column;
@@ -2066,23 +2057,56 @@ body.ring-open #window-controls {
 }
 
 .skill-popup {
+  position: absolute;
+  z-index: 8;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  flex: none;
-  max-height: min(34vh, 260px);
+  width: min(320px, calc(100% - 24px));
+  max-height: min(240px, 40vh);
   padding: 6px;
   border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(251, 246, 239, 0.82);
-  -webkit-backdrop-filter: blur(14px) saturate(1.04);
-  backdrop-filter: blur(14px) saturate(1.04);
-  box-shadow: 0 18px 40px rgba(120, 80, 40, 0.12);
+  border-radius: 12px;
+  background: rgba(251, 246, 239, 0.9);
+  -webkit-backdrop-filter: blur(16px) saturate(1.04);
+  backdrop-filter: blur(16px) saturate(1.04);
+  box-shadow: 0 16px 36px rgba(120, 80, 40, 0.16);
   overflow-y: auto;
 }
 
 .skill-popup.hidden {
   display: none;
+}
+
+.skill-popup-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  margin-bottom: 3px;
+  padding: 5px 8px 6px;
+  border-bottom: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.skill-popup-icon {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.skill-popup-count {
+  margin-left: auto;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .skill-popup-item {

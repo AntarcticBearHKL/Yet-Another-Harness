@@ -2736,7 +2736,6 @@ function renderComposerTokens() {
   const attached = state.attachedSkills;
   dom.composerTokens.replaceChildren();
   dom.composerTokens.classList.toggle('hidden', attached.length === 0);
-  dom.composerBox?.classList.toggle('skill-mode', attached.length > 0);
   attached.forEach((skill, index) => {
     const token = el('span', 'skill-token');
     token.append(el('span', 'skill-token-slash', '/'));
@@ -2754,6 +2753,69 @@ function renderComposerTokens() {
     token.append(remove);
     dom.composerTokens.append(token);
   });
+}
+
+function caretPointInTextarea(textarea) {
+  const style = window.getComputedStyle(textarea);
+  const mirror = document.createElement('div');
+  mirror.style.position = 'absolute';
+  mirror.style.top = '-9999px';
+  mirror.style.left = '-9999px';
+  mirror.style.visibility = 'hidden';
+  mirror.style.pointerEvents = 'none';
+  mirror.style.whiteSpace = 'pre-wrap';
+  mirror.style.wordWrap = 'break-word';
+  mirror.style.overflow = 'hidden';
+  mirror.style.boxSizing = 'border-box';
+  mirror.style.width = `${textarea.clientWidth}px`;
+  mirror.style.font = style.font;
+  mirror.style.fontFamily = style.fontFamily;
+  mirror.style.fontSize = style.fontSize;
+  mirror.style.fontWeight = style.fontWeight;
+  mirror.style.lineHeight = style.lineHeight;
+  mirror.style.letterSpacing = style.letterSpacing;
+  mirror.style.padding = style.padding;
+  mirror.style.border = style.border;
+  mirror.style.textAlign = style.textAlign;
+  mirror.textContent = textarea.value.slice(
+    0,
+    textarea.selectionStart ?? textarea.value.length
+  );
+  const marker = document.createElement('span');
+  marker.textContent = '\u200b';
+  mirror.append(marker);
+  document.body.append(mirror);
+  const mirrorRect = mirror.getBoundingClientRect();
+  const markerRect = marker.getBoundingClientRect();
+  mirror.remove();
+  const lineHeight = Number.parseFloat(style.lineHeight) || 20;
+  return {
+    left: markerRect.left - mirrorRect.left - textarea.scrollLeft,
+    top: markerRect.top - mirrorRect.top - textarea.scrollTop,
+    lineHeight,
+  };
+}
+
+function positionSlashPopup() {
+  if (!dom.skillPopup || !dom.composerBox || !dom.input) return;
+  if (dom.skillPopup.classList.contains('hidden')) return;
+  const caret = caretPointInTextarea(dom.input);
+  const box = dom.composerBox;
+  const popupWidth = Math.min(320, Math.max(200, box.clientWidth - 24));
+  dom.skillPopup.style.width = `${popupWidth}px`;
+  const maxLeft = Math.max(12, box.clientWidth - popupWidth - 12);
+  const left = Math.max(
+    12,
+    Math.min(maxLeft, dom.input.offsetLeft + caret.left)
+  );
+  let top = dom.input.offsetTop + caret.top + caret.lineHeight + 4;
+  dom.skillPopup.style.left = `${left}px`;
+  dom.skillPopup.style.top = `${top}px`;
+  const rect = dom.skillPopup.getBoundingClientRect();
+  if (rect.bottom > window.innerHeight - 12) {
+    const above = dom.input.offsetTop + caret.top - rect.height - 4;
+    dom.skillPopup.style.top = `${Math.max(12, above)}px`;
+  }
 }
 
 function renderSlashPopup() {
@@ -2775,6 +2837,11 @@ function renderSlashPopup() {
   }
   dom.skillPopup.classList.remove('hidden');
   dom.skillPopup.replaceChildren();
+  const head = el('div', 'skill-popup-head');
+  head.innerHTML =
+    '<svg class="skill-popup-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/></svg><span>Skill</span>';
+  head.append(el('span', 'skill-popup-count', String(skills.length)));
+  dom.skillPopup.append(head);
   if (skills.length === 0) {
     dom.skillPopup.append(
       el(
@@ -2783,6 +2850,7 @@ function renderSlashPopup() {
         state.skillsLoading ? '加载 Skill…' : '没有匹配的 Skill'
       )
     );
+    positionSlashPopup();
     return;
   }
   skills.forEach((skill, index) => {
@@ -2795,6 +2863,7 @@ function renderSlashPopup() {
     item.addEventListener('click', () => chooseSlashSkill(skill));
     dom.skillPopup.append(item);
   });
+  positionSlashPopup();
 }
 
 function moveSlashSelection(delta) {
@@ -4474,6 +4543,15 @@ function bindEvents() {
       sendMessage();
     }
   });
+
+  const repositionSlashPopup = () => {
+    if (state.slashOpen) positionSlashPopup();
+  };
+  dom.input.addEventListener('keyup', repositionSlashPopup);
+  dom.input.addEventListener('click', repositionSlashPopup);
+  dom.input.addEventListener('select', repositionSlashPopup);
+  dom.input.addEventListener('scroll', repositionSlashPopup);
+  window.addEventListener('resize', repositionSlashPopup);
 
   $('win-min')?.addEventListener('click', () => api.minimize());
   $('win-max')?.addEventListener('click', () => api.maximize());
