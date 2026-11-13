@@ -26,6 +26,7 @@
   --ink: #fff8f0;
 
   --text: #2b211a;
+  --text-soft: #4a3a2e;
   --dim: #6f5d4f;
   --faint: #9a8878;
 
@@ -804,6 +805,7 @@ body.maximized #app {
 }
 
 .message-card.answer-card .card-body {
+  color: var(--text-soft);
   font-size: 15.5px;
   line-height: 1.8;
 }
