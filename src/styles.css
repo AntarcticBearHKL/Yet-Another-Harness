@@ -332,6 +332,8 @@ body.maximized .web-content {
 }
 
 .pane-foot {
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
   flex: none;
@@ -369,11 +371,13 @@ body.maximized .web-content {
 
 .project-list,
 .switcher-list {
+  --edge-fade: 24px;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
   gap: 2px;
+  padding: 48px 0 24px;
   overflow-y: auto;
 }
 
@@ -467,6 +471,7 @@ body.maximized .web-content {
   border-radius: 8px;
   background: transparent;
   cursor: pointer;
+  scroll-margin: 24px 0;
   transition: background 120ms ease;
 }
 
@@ -621,6 +626,29 @@ body.maximized .web-content {
   );
 }
 
+.catalog-list,
+.catalog-categories,
+.project-list,
+.switcher-list,
+.raw-body,
+.web-content-body {
+  --edge-fade: 32px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--edge-fade),
+    #000 calc(100% - var(--edge-fade)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--edge-fade),
+    #000 calc(100% - var(--edge-fade)),
+    transparent 100%
+  );
+}
+
 .turn {
   position: relative;
   width: 100%;
@@ -710,6 +738,10 @@ body.maximized .web-content {
     rgba(0, 0, 0, 0.65) 40%,
     transparent 100%
   );
+}
+
+.edge-blur-short {
+  height: 56px;
 }
 
 .message-card {
@@ -1274,7 +1306,7 @@ body.maximized .web-content {
   width: min(760px, 100%);
   height: clamp(170px, 32vh, 260px);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 18px;
   background: rgba(251, 246, 239, 0.72);
   -webkit-backdrop-filter: blur(14px) saturate(1.04);
   backdrop-filter: blur(14px) saturate(1.04);
@@ -1363,13 +1395,15 @@ body.maximized .web-content {
 }
 
 .overlay-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 18px 20px 16px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 18px;
   background: var(--solid);
+  overflow: hidden;
 }
 
 .settings-panel {
@@ -1378,6 +1412,8 @@ body.maximized .web-content {
 }
 
 .overlay-head {
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -1445,6 +1481,8 @@ body.maximized .web-content {
 }
 
 .overlay-actions {
+  position: relative;
+  z-index: 5;
   display: flex;
   justify-content: flex-end;
   gap: 6px;
@@ -1461,8 +1499,10 @@ body.maximized .web-content {
 }
 
 .raw-body {
+  --edge-fade: 24px;
   flex: 1;
   min-height: 0;
+  padding: 20px 0;
   overflow: auto;
 }
 
@@ -1581,6 +1621,8 @@ body.ring-open #messages {
 }
 
 .catalog-head {
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1626,6 +1668,7 @@ body.ring-open #messages {
   flex: 1;
   gap: 2px;
   min-height: 0;
+  padding: 40px 0 24px;
   overflow-y: auto;
 }
 
@@ -1724,7 +1767,7 @@ body.ring-open #messages {
   max-width: 1100px;
   min-height: 0;
   margin: 0 auto;
-  padding: 8px 24px 40px;
+  padding: 40px 24px 40px;
   overflow-y: auto;
 }
 
@@ -1879,6 +1922,8 @@ body.ring-open #messages {
 }
 
 .web-content-head {
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1903,7 +1948,7 @@ body.ring-open #messages {
   max-width: 920px;
   min-height: 0;
   margin: 0 auto;
-  padding: 8px 24px 40px;
+  padding: 32px 24px 40px;
   overflow-y: auto;
 }
 
