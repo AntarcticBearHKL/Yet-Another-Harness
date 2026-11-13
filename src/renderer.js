@@ -291,6 +291,7 @@ let dragPoint = null;
 let dragFrame = 0;
 let dragFromComposer = false;
 let suppressNextCardClick = false;
+let turnFlashTimer = 0;
 
 function currentSession() {
   return state.sessions[state.current];
@@ -1240,71 +1241,43 @@ function cancelTabHold() {
   state.tabHeld = false;
 }
 
-function scrollCardToTop(card, offset = 48) {
-  const container = dom.messages;
-  const containerRect = container.getBoundingClientRect();
-  const cardRect = card.getBoundingClientRect();
-  container.scrollTop += cardRect.top - containerRect.top - offset;
+function turnAtViewportTop(turns) {
+  const containerTop = dom.messages.getBoundingClientRect().top + 48;
+  let index = 0;
+  for (let i = 0; i < turns.length; i += 1) {
+    index = i;
+    if (turns[i].getBoundingClientRect().bottom > containerTop) break;
+  }
+  return index;
 }
 
-function navigateBlock(direction, { selector = null } = {}) {
-  const allCards = [...dom.messages.querySelectorAll('.message-card')];
-  if (allCards.length === 0) return;
+function scrollTurnToTop(turn, offset = 48) {
+  const container = dom.messages;
+  const containerRect = container.getBoundingClientRect();
+  const turnRect = turn.getBoundingClientRect();
+  container.scrollTop += turnRect.top - containerRect.top - offset;
+}
 
-  const cards = selector
-    ? allCards.filter((card) => card.matches(selector))
-    : allCards;
-  if (cards.length === 0) return;
+function flashTurnTitle(turn) {
+  const prompt = turn.querySelector('.message-card.prompt-card');
+  if (!prompt) return;
+  prompt.classList.remove('turn-flash');
+  void prompt.offsetWidth;
+  prompt.classList.add('turn-flash');
+  clearTimeout(turnFlashTimer);
+  turnFlashTimer = setTimeout(() => {
+    prompt.classList.remove('turn-flash');
+  }, 950);
+}
 
-  let currentKey = state.openCardKey;
-  if (!currentKey) {
-    for (const key of state.renderedOpenKeys) {
-      currentKey = key;
-      break;
-    }
-  }
-
-  const allIndex = allCards.findIndex(
-    (card) => card.dataset.cardKey === currentKey
-  );
-  const filteredIndex = cards.findIndex(
-    (card) => card.dataset.cardKey === currentKey
-  );
-
-  let targetIndex;
-  if (filteredIndex >= 0) {
-    targetIndex = filteredIndex + direction;
-  } else if (allIndex >= 0) {
-    if (direction > 0) {
-      // 当前展开的不是目标类型：取它后面的第一个
-      targetIndex = cards.findIndex(
-        (card) => allCards.indexOf(card) > allIndex
-      );
-    } else {
-      // 当前展开的不是目标类型：取它前面的最后一个
-      targetIndex = -1;
-      for (let i = 0; i < cards.length; i += 1) {
-        if (allCards.indexOf(cards[i]) < allIndex) targetIndex = i;
-      }
-    }
-  } else {
-    targetIndex = direction > 0 ? 0 : cards.length - 1;
-  }
-
-  if (targetIndex < 0 || targetIndex >= cards.length) return;
-
-  const target = cards[targetIndex];
-  const targetKey = target.dataset.cardKey;
-  state.openCardKey = targetKey;
-
-  // 先瞬间折叠所有块，把目标块定位到固定高度后立刻展开
-  for (const card of allCards) {
-    card.classList.add('no-anim');
-    setCardExpanded(card, false);
-  }
-  void dom.messages.offsetHeight;
-  scrollCardToTop(target);
-  applyOpenKey(targetKey, { instant: true });
+function navigateTurn(direction) {
+  const turns = [...dom.messages.querySelectorAll('.turn')];
+  if (turns.length === 0) return;
+  const current = turnAtViewportTop(turns);
+  const target = current + direction;
+  if (target < 0 || target >= turns.length) return;
+  scrollTurnToTop(turns[target]);
+  flashTurnTitle(turns[target]);
 }
 
 function openComposer() {
@@ -2481,14 +2454,19 @@ function bindEvents() {
   document.addEventListener(
     'wheel',
     (event) => {
-      if (!event.ctrlKey && !event.shiftKey) return;
+      if (!event.ctrlKey) return;
 
-      // Ctrl+wheel / Shift+wheel 始终拦截，避免页面缩放或横向滚动
+      // Ctrl+wheel 按对话回合导航；Shift+wheel 不再拦截
       event.preventDefault();
       if (!dom.rawOverlay.classList.contains('hidden')) return;
       if (!dom.settingsOverlay.classList.contains('hidden')) return;
       if (state.switcherOpen) return;
       if (state.composerOpen) return;
+      if (state.catalogOpen) return;
+      if (state.ringOpen) return;
+      if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
+        return;
+      }
 
       const delta = event.deltaY || event.deltaX;
       if (delta === 0) return;
@@ -2497,13 +2475,7 @@ function bindEvents() {
       if (now - state.lastWheelNav < 25) return;
       state.lastWheelNav = now;
 
-      const direction = delta > 0 ? 1 : -1;
-      if (event.ctrlKey) {
-        navigateBlock(direction);
-      } else {
-        // Shift+wheel：只在用户 prompt 条目之间切换
-        navigateBlock(direction, { selector: '.message-card.user' });
-      }
+      navigateTurn(delta > 0 ? 1 : -1);
     },
     { passive: false }
   );

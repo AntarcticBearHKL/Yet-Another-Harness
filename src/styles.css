@@ -918,6 +918,36 @@ body.maximized .web-content {
   font-weight: 500;
 }
 
+.message-card.prompt-card.turn-flash {
+  animation: turn-flash 900ms ease;
+}
+
+.message-card.prompt-card.turn-flash .prompt-text {
+  animation: turn-title-flash 900ms ease;
+}
+
+@keyframes turn-flash {
+  0% {
+    background: rgba(185, 111, 61, 0.2);
+  }
+  65% {
+    background: rgba(185, 111, 61, 0.08);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+@keyframes turn-title-flash {
+  0%,
+  50% {
+    color: var(--accent-deep);
+  }
+  100% {
+    color: var(--text);
+  }
+}
+
 .card-preview-wrap {
   display: grid;
   grid-template-rows: 1fr;
