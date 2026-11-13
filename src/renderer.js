@@ -708,9 +708,9 @@ function compactTokens(value) {
 
 function usageText(usage) {
   if (!usage) return '';
-  return `${compactTokens(usage.hit)}/${compactTokens(
+  return `${compactTokens(usage.hit)} / ${compactTokens(
     usage.miss
-  )}/${compactTokens(usage.output)}`;
+  )} / ${compactTokens(usage.output)}`;
 }
 
 function contextTokensForMessage(msg) {
@@ -834,6 +834,7 @@ function makeCard(opts) {
       head.append(el('span', 'card-title', opts.title || ''));
     }
     head.append(el('span', 'card-meta', opts.meta || ''));
+    const tail = el('div', 'card-tail');
     if (opts.timing) {
       const timingText =
         typeof opts.timing === 'string'
@@ -847,7 +848,7 @@ function makeCard(opts) {
           timing.dataset.startedAt = String(startedAt);
           startToolTimer();
         }
-        head.append(timing);
+        tail.append(timing);
       }
     }
     if (opts.usage) {
@@ -858,13 +859,18 @@ function makeCard(opts) {
           Number(opts.usage.miss) || 0
         } · 输出 ${Number(opts.usage.output) || 0}`
       );
-      head.append(usage);
+      tail.append(usage);
     }
     if (opts.badge) {
-      const badge = el('span', 'card-badge', opts.badge.text);
-      if (opts.badge.error) badge.classList.add('error');
-      head.append(badge);
+      const badge = el(
+        'span',
+        `card-badge ${opts.badge.error ? 'error' : 'ok'}`
+      );
+      badge.append(el('span', 'card-badge-dot'));
+      badge.append(el('span', 'card-badge-text', opts.badge.text));
+      tail.append(badge);
     }
+    if (tail.childElementCount > 0) head.append(tail);
 
     head.addEventListener('click', (event) => {
       if (suppressNextCardClick) {
@@ -1403,11 +1409,11 @@ function renderAgentMessage(msg, msgIndex, container) {
       key: agentCardKey(msgIndex),
       kind: 'agent',
       title: '回复',
-      meta: '回复',
+      meta: '',
       preview: previewLine(msg.text),
       usage: msg.usage,
       primary: true,
-      minimalHead: true,
+      minimalHead: false,
       onInspect: () => {
         openRawRequest(requestAt(msg, 0), rawRoundLabel(0));
       },
@@ -1461,6 +1467,9 @@ function renderAgentMessage(msg, msgIndex, container) {
       count + (isVisibleProcessStep(step, index) ? 1 : 0),
     0
   );
+  const processErrorCount = steps.filter(
+    (step) => step.kind === 'result' && step.ok === false
+  ).length;
 
   let processBody = null;
   if (processCount > 0) {
@@ -1484,6 +1493,16 @@ function renderAgentMessage(msg, msgIndex, container) {
     head.append(el('span', 'process-group-dot'));
     head.append(el('span', 'process-group-label', '过程'));
     head.append(el('span', 'process-group-count', String(processCount)));
+    if (processErrorCount > 0) {
+      const errorChip = el('span', 'process-group-error');
+      errorChip.append(el('span', 'process-group-error-dot'));
+      errorChip.append(el('span', '', `${processErrorCount} error`));
+      head.append(errorChip);
+    }
+    const chevron = el('span', 'process-group-chevron');
+    chevron.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+    head.append(chevron);
     head.addEventListener('click', () => {
       if (state.viewMode) {
         state.collapsedProcessKeys = new Set(
@@ -1570,15 +1589,15 @@ function renderAgentMessage(msg, msgIndex, container) {
         textCard({
           key: stepCardKey(msgIndex, lastTextIndex),
           kind: 'agent',
-          title: '回答',
-          meta: '回复',
+          title: '回复',
+          meta: '',
           text: step.text,
           usage: msg.usage,
           timing: formatLlmTiming(metrics, false),
           streaming: streaming && lastTextIndex === steps.length - 1,
           onInspect: () => inspectStep(msg, step),
           primary: true,
-          minimalHead: true,
+          minimalHead: false,
           process: false,
         }),
         {},
