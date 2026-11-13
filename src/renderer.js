@@ -1222,7 +1222,7 @@ function renderAgentMessage(msg, msgIndex, container) {
       'aria-expanded',
       group.classList.contains('collapsed') ? 'false' : 'true'
     );
-    head.append(el('span', 'process-group-chevron', '›'));
+    head.append(el('span', 'process-group-dot'));
     head.append(el('span', 'process-group-label', '过程'));
     head.append(el('span', 'process-group-count', String(processCount)));
     head.addEventListener('click', () => {
