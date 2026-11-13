@@ -428,6 +428,15 @@ button {
   background: var(--selected);
 }
 
+/* 当前正在查看的对话只保留 CURRENT 标记，不再用背景色高亮 */
+.switch-card.current {
+  background: transparent;
+}
+
+.switch-card.current:hover {
+  background: var(--hover);
+}
+
 .switch-top {
   display: flex;
   align-items: center;
