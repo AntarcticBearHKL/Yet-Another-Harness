@@ -790,13 +790,13 @@ button {
   display: flex;
   flex-direction: column;
   gap: 0.85em;
-  max-height: calc(5 * 1.8em);
+  max-height: calc(10 * 1.8em);
   overflow: hidden;
   white-space: normal;
 }
 
 .message-card.thinking .card-text {
-  max-height: calc(5 * 1.7em);
+  max-height: calc(10 * 1.7em);
 }
 
 .card-text.is-clipped,
@@ -867,7 +867,7 @@ button {
 
 /* JSON 查看器：语法着色 + 节点折叠 */
 .json-view {
-  max-height: calc(5 * 1.75em);
+  max-height: calc(10 * 1.75em);
   padding: 10px 12px;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -970,7 +970,7 @@ button {
 }
 
 .tool-text {
-  max-height: calc(5 * 1.7em);
+  max-height: calc(10 * 1.7em);
   margin: 0;
   padding: 10px 12px;
   overflow: hidden;
@@ -1000,9 +1000,9 @@ button {
   align-items: center;
   justify-content: center;
   padding: 32px;
-  background: rgba(251, 246, 239, 0.18);
-  -webkit-backdrop-filter: blur(26px) saturate(1.08);
-  backdrop-filter: blur(26px) saturate(1.08);
+  background: rgba(251, 246, 239, 0.1);
+  -webkit-backdrop-filter: blur(18px) saturate(1.06);
+  backdrop-filter: blur(18px) saturate(1.06);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -1026,7 +1026,9 @@ button {
   height: clamp(170px, 32vh, 260px);
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: var(--solid);
+  background: rgba(251, 246, 239, 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(1.04);
+  backdrop-filter: blur(14px) saturate(1.04);
   transform: translateY(10px) scale(0.985);
   transition:
     transform 180ms ease,
