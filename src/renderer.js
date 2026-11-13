@@ -2255,6 +2255,15 @@ function bindEvents() {
     true
   );
 
+  // 禁用 Chromium 默认的中键拖拽/自动滚动
+  document.addEventListener(
+    'mousedown',
+    (event) => {
+      if (event.button === 1) event.preventDefault();
+    },
+    true
+  );
+
   // 整体禁用鼠标右键菜单与框选；有弹窗时右键等于关闭
   document.addEventListener('contextmenu', (event) => {
     event.preventDefault();

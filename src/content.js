@@ -161,6 +161,15 @@ document.addEventListener(
   true
 );
 
+// 禁用 Chromium 默认的中键拖拽/自动滚动
+document.addEventListener(
+  'mousedown',
+  (event) => {
+    if (event.button === 1) event.preventDefault();
+  },
+  true
+);
+
 // 和主窗口一致：按住左键在任意非交互区域拖动窗口
 document.addEventListener('mousedown', onWindowDragStart);
 document.addEventListener('mousemove', onWindowDragMove);
