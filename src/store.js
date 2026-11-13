@@ -13,7 +13,8 @@ const { DatabaseSync } = require('node:sqlite');
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
+const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
 
 let dataDir = null;
 let legacyDir = null;
@@ -45,6 +46,7 @@ function defaultSettings() {
 function defaultChats() {
   // 允许没有会话：删光后保持空状态，不自动补一个空对话
   return {
+    projects: [{ ...DEFAULT_PROJECT }],
     sessions: [],
     current: 0,
     seq: 0,
@@ -117,10 +119,33 @@ function normalizeStep(step) {
   return label ? { kind: 'status', label, ok: step.ok !== false } : null;
 }
 
+function normalizeProjects(raw) {
+  const projects = [];
+  const seen = new Set();
+  if (Array.isArray(raw)) {
+    for (const [index, project] of raw.entries()) {
+      if (!project || typeof project !== 'object') continue;
+      const id = String(project.id || crypto.randomUUID());
+      if (seen.has(id)) continue;
+      seen.add(id);
+      projects.push({
+        id,
+        name: String(project.name || `Project ${index + 1}`),
+      });
+    }
+  }
+  if (projects.length === 0) projects.push({ ...DEFAULT_PROJECT });
+  return projects;
+}
+
 function normalizeChats(raw) {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.sessions)) {
     return defaultChats();
   }
+
+  const projects = normalizeProjects(raw.projects);
+  const projectIds = new Set(projects.map((project) => project.id));
+  const fallbackProjectId = projects[0].id;
 
   const sessions = raw.sessions
     .filter((session) => session && typeof session === 'object')
@@ -152,16 +177,26 @@ function normalizeChats(raw) {
             })
         : [];
 
+      const projectId = projectIds.has(String(session.projectId))
+        ? String(session.projectId)
+        : fallbackProjectId;
+
       return {
         id: String(session.id || crypto.randomUUID()),
         title: String(session.title || `Chat ${index + 1}`),
         system: String(session.system ?? DEFAULT_SYSTEM_PROMPT),
+        projectId,
         msgs,
       };
     });
 
   if (sessions.length === 0) {
-    return { sessions: [], current: 0, seq: 0 };
+    return {
+      projects,
+      sessions: [],
+      current: 0,
+      seq: 0,
+    };
   }
 
   const current = Math.min(
@@ -170,6 +205,7 @@ function normalizeChats(raw) {
   );
 
   return {
+    projects,
     sessions,
     current,
     seq: Math.max(
@@ -236,10 +272,17 @@ function saveSettings(settings) {
 }
 
 const SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS projects (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  sort_order INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   system TEXT NOT NULL,
+  project_id TEXT,
   sort_order INTEGER NOT NULL,
   content_hash TEXT NOT NULL,
   updated_at INTEGER NOT NULL
@@ -291,6 +334,7 @@ INSERT OR IGNORE INTO app_state (id, current_session_id, title_seq)
 VALUES (1, NULL, 0);
 
 CREATE INDEX IF NOT EXISTS idx_sessions_order ON sessions(sort_order);
+CREATE INDEX IF NOT EXISTS idx_projects_order ON projects(sort_order);
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, seq);
 CREATE INDEX IF NOT EXISTS idx_steps_message ON steps(session_id, message_seq, seq);
 CREATE INDEX IF NOT EXISTS idx_requests_message ON requests(session_id, message_seq, round);
@@ -324,6 +368,29 @@ function ensureSchema(database) {
   database.exec('BEGIN IMMEDIATE');
   try {
     database.exec(SCHEMA_SQL);
+
+    // v1 -> v2: add project_id to existing sessions and create a default project.
+    const columns = database.prepare('PRAGMA table_info(sessions)').all();
+    if (!columns.some((column) => column.name === 'project_id')) {
+      database.exec('ALTER TABLE sessions ADD COLUMN project_id TEXT');
+    }
+
+    const projectCount =
+      Number(database.prepare('SELECT COUNT(*) AS n FROM projects').get().n) || 0;
+    if (projectCount === 0) {
+      database
+        .prepare('INSERT INTO projects (id, name, sort_order) VALUES (?, ?, 0)')
+        .run(DEFAULT_PROJECT.id, DEFAULT_PROJECT.name);
+    }
+    const fallbackProject = database
+      .prepare('SELECT id FROM projects ORDER BY sort_order ASC LIMIT 1')
+      .get();
+    database
+      .prepare(
+        "UPDATE sessions SET project_id = ? WHERE project_id IS NULL OR project_id = ''"
+      )
+      .run(fallbackProject.id);
+
     database.exec('COMMIT');
   } catch (error) {
     try {
@@ -368,6 +435,7 @@ function hashSession(session) {
       JSON.stringify({
         title: session.title,
         system: session.system,
+        projectId: session.projectId,
         msgs: session.msgs,
       })
     )
@@ -376,10 +444,27 @@ function hashSession(session) {
 
 function readChats() {
   const database = openDb();
-  const sessionRows = database
-    .prepare('SELECT id, title, system FROM sessions ORDER BY sort_order ASC')
+  const projectRows = database
+    .prepare('SELECT id, name FROM projects ORDER BY sort_order ASC')
     .all();
-  if (sessionRows.length === 0) return defaultChats();
+  const projects = projectRows.length
+    ? projectRows.map((row) => ({ id: row.id, name: row.name }))
+    : [{ ...DEFAULT_PROJECT }];
+  const projectIds = new Set(projects.map((project) => project.id));
+
+  const sessionRows = database
+    .prepare(
+      'SELECT id, title, system, project_id FROM sessions ORDER BY sort_order ASC'
+    )
+    .all();
+  if (sessionRows.length === 0) {
+    return {
+      projects,
+      sessions: [],
+      current: 0,
+      seq: 0,
+    };
+  }
 
   const messageRows = database
     .prepare(
@@ -402,7 +487,15 @@ function readChats() {
   const bySession = new Map(
     sessionRows.map((row) => [
       row.id,
-      { id: row.id, title: row.title, system: row.system, msgs: [] },
+      {
+        id: row.id,
+        title: row.title,
+        system: row.system,
+        projectId: projectIds.has(row.project_id)
+          ? row.project_id
+          : projects[0].id,
+        msgs: [],
+      },
     ])
   );
   const messageByKey = new Map();
@@ -483,6 +576,7 @@ function readChats() {
   }
 
   return {
+    projects,
     sessions: sessionRows.map((row) => bySession.get(row.id)),
     current,
     seq: Math.max(sessionRows.length, Number(state.title_seq) || 0),
@@ -501,14 +595,29 @@ function writeChats(chats) {
   );
 
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, project_id, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
+       project_id = excluded.project_id,
        sort_order = excluded.sort_order,
        content_hash = excluded.content_hash,
        updated_at = excluded.updated_at`
+  );
+  const upsertProject = database.prepare(
+    `INSERT INTO projects (id, name, sort_order)
+     VALUES (?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name,
+       sort_order = excluded.sort_order`
+  );
+  const deleteProject = database.prepare('DELETE FROM projects WHERE id = ?');
+  const existingProjects = new Set(
+    database
+      .prepare('SELECT id FROM projects')
+      .all()
+      .map((row) => row.id)
   );
   const deleteMessages = database.prepare(
     'DELETE FROM messages WHERE session_id = ?'
@@ -530,10 +639,16 @@ function writeChats(chats) {
   );
 
   const incoming = new Set();
+  const incomingProjects = new Set();
   const now = Date.now();
 
   database.exec('BEGIN IMMEDIATE');
   try {
+    normalized.projects.forEach((project, order) => {
+      incomingProjects.add(project.id);
+      upsertProject.run(project.id, project.name, order);
+    });
+
     normalized.sessions.forEach((session, order) => {
       incoming.add(session.id);
       const hash = hashSession(session);
@@ -541,6 +656,7 @@ function writeChats(chats) {
         session.id,
         session.title,
         session.system,
+        session.projectId,
         order,
         hash,
         now
@@ -585,6 +701,9 @@ function writeChats(chats) {
 
     for (const id of existing.keys()) {
       if (!incoming.has(id)) deleteSession.run(id);
+    }
+    for (const id of existingProjects) {
+      if (!incomingProjects.has(id)) deleteProject.run(id);
     }
 
     const current = normalized.sessions[normalized.current];

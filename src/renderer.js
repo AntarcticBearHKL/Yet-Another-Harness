@@ -2,6 +2,7 @@
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
+const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
 const NO_KEY_HINT =
   'No OpenCode Go API key yet. Hold Tab and open Settings to paste your key.';
 
@@ -17,6 +18,9 @@ const dom = {
   switcherList: $('switcher-list'),
   switcherNew: $('switcher-new'),
   switcherSettings: $('switcher-settings'),
+  projectList: $('project-list'),
+  projectNew: $('project-new'),
+  projectTitle: $('project-title'),
   settingsOverlay: $('settings-overlay'),
   rawOverlay: $('raw-overlay'),
   rawBody: $('raw-body'),
@@ -27,6 +31,7 @@ const dom = {
 
 const state = {
   sessions: [],
+  projects: [],
   current: 0,
   seq: 1,
   settings: {
@@ -34,6 +39,7 @@ const state = {
   },
   switcherOpen: false,
   switcherIndex: 0,
+  switcherProjectId: null,
   composerOpen: false,
   openCardKey: null,
   renderedOpenKeys: new Set(),
@@ -60,6 +66,27 @@ function currentSession() {
   return state.sessions[state.current];
 }
 
+function ensureProjects() {
+  if (!Array.isArray(state.projects)) state.projects = [];
+  if (state.projects.length === 0) {
+    state.projects = [{ ...DEFAULT_PROJECT }];
+  }
+  const ids = new Set(state.projects.map((project) => project.id));
+  for (const session of state.sessions) {
+    if (!ids.has(session.projectId)) {
+      session.projectId = state.projects[0].id;
+    }
+  }
+  if (!state.switcherProjectId || !ids.has(state.switcherProjectId)) {
+    state.switcherProjectId =
+      currentSession()?.projectId || state.projects[0].id;
+  }
+}
+
+function sessionsInProject(projectId = state.switcherProjectId) {
+  return state.sessions.filter((session) => session.projectId === projectId);
+}
+
 function makeId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -76,6 +103,7 @@ function saveChatsNow() {
   state.saveTimer = null;
   api
     .saveChats({
+      projects: state.projects,
       sessions: state.sessions,
       current: state.current,
       seq: state.seq,
@@ -673,28 +701,64 @@ function sessionPreview(session) {
 }
 
 function renderSwitcher() {
-  dom.switcherList.replaceChildren();
+  ensureProjects();
+  const project =
+    state.projects.find((item) => item.id === state.switcherProjectId) ||
+    state.projects[0];
+  state.switcherProjectId = project.id;
+  const sessions = sessionsInProject(project.id);
 
-  if (state.sessions.length === 0) {
+  const counts = new Map();
+  for (const session of state.sessions) {
+    counts.set(session.projectId, (counts.get(session.projectId) || 0) + 1);
+  }
+
+  dom.projectList.replaceChildren();
+  state.projects.forEach((item) => {
+    const row = el('button', 'project-row');
+    row.type = 'button';
+    if (item.id === project.id) row.classList.add('selected');
+    row.append(el('span', 'project-name', item.name));
+    row.append(
+      el('span', 'project-count', String(counts.get(item.id) || 0))
+    );
+    row.addEventListener('click', () => {
+      state.switcherProjectId = item.id;
+      const next = sessionsInProject(item.id);
+      const current = currentSession();
+      state.switcherIndex = Math.max(0, next.indexOf(current));
+      state.pendingDelete = -1;
+      clearTimeout(state.deleteTimer);
+      renderSwitcher();
+    });
+    dom.projectList.append(row);
+  });
+
+  if (dom.projectTitle) dom.projectTitle.textContent = project.name;
+
+  dom.switcherList.replaceChildren();
+  if (sessions.length === 0) {
+    state.switcherIndex = 0;
     dom.switcherList.append(
-      el('div', 'switcher-empty', 'No chats yet. Click New chat to start one.')
+      el('div', 'switcher-empty', 'No chats in this project yet.')
     );
     return;
   }
 
   state.switcherIndex = Math.max(
     0,
-    Math.min(state.switcherIndex, state.sessions.length - 1)
+    Math.min(state.switcherIndex, sessions.length - 1)
   );
 
-  state.sessions.forEach((session, index) => {
+  sessions.forEach((session, localIndex) => {
+    const globalIndex = state.sessions.indexOf(session);
     const card = el('div', 'switch-card');
-    if (index === state.current) card.classList.add('current');
-    if (index === state.switcherIndex) card.classList.add('selected');
+    if (globalIndex === state.current) card.classList.add('current');
+    if (localIndex === state.switcherIndex) card.classList.add('selected');
 
     const top = el('div', 'switch-top');
-    top.append(el('span', 'switch-title', session.title || `Chat ${index + 1}`));
-    if (index === state.current) {
+    top.append(el('span', 'switch-title', session.title || `Chat ${localIndex + 1}`));
+    if (globalIndex === state.current) {
       top.append(el('span', 'switch-badge', 'CURRENT'));
     }
 
@@ -703,28 +767,30 @@ function renderSwitcher() {
     trash.type = 'button';
     trash.title = 'Delete chat';
     trash.setAttribute('aria-label', 'Delete chat');
-    if (state.pendingDelete === index) trash.classList.add('armed');
+    if (state.pendingDelete === localIndex) trash.classList.add('armed');
     trash.innerHTML =
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6H20M9 6V4H15V6M6 6L7 20H17L18 6M10 10V17M14 10V17"/></svg>';
 
-    card.addEventListener('click', () => selectSession(index));
+    card.addEventListener('click', () => selectSession(globalIndex));
     card.addEventListener('mouseenter', () => {
-      if (state.switcherIndex === index) return;
-      state.switcherIndex = index;
+      if (state.switcherIndex === localIndex) return;
+      state.switcherIndex = localIndex;
       dom.switcherList
         .querySelectorAll('.switch-card')
-        .forEach((node, i) => node.classList.toggle('selected', i === index));
+        .forEach((node, i) =>
+          node.classList.toggle('selected', i === localIndex)
+        );
     });
 
     trash.addEventListener('click', (event) => {
       event.stopPropagation();
-      if (state.pendingDelete === index) {
+      if (state.pendingDelete === localIndex) {
         state.pendingDelete = -1;
         clearTimeout(state.deleteTimer);
-        deleteSession(index);
+        deleteSession(globalIndex);
         return;
       }
-      state.pendingDelete = index;
+      state.pendingDelete = localIndex;
       clearTimeout(state.deleteTimer);
       state.deleteTimer = setTimeout(() => {
         state.pendingDelete = -1;
@@ -844,8 +910,17 @@ function closeComposer() {
 function openSwitcher() {
   if (!dom.settingsOverlay.classList.contains('hidden')) return;
   closeComposer();
+  ensureProjects();
+  const session = currentSession();
   state.switcherOpen = true;
-  state.switcherIndex = state.current;
+  state.switcherProjectId =
+    session?.projectId || state.projects[0].id;
+  state.switcherIndex = Math.max(
+    0,
+    sessionsInProject(state.switcherProjectId).findIndex(
+      (item) => item === session
+    )
+  );
   state.pendingDelete = -1;
   renderSwitcher();
   dom.switcher.inert = false;
@@ -865,16 +940,17 @@ function closeSwitcher() {
 }
 
 function moveSwitcher(delta) {
-  if (state.sessions.length === 0) return;
+  const sessions = sessionsInProject(state.switcherProjectId);
+  if (sessions.length === 0) return;
   state.switcherIndex =
-    (state.switcherIndex + delta + state.sessions.length) %
-    state.sessions.length;
+    (state.switcherIndex + delta + sessions.length) % sessions.length;
   renderSwitcher();
 }
 
 function selectSession(index) {
   if (index < 0 || index >= state.sessions.length) return;
   state.current = index;
+  state.switcherProjectId = state.sessions[index].projectId;
   state.forceScroll = true;
   state.pendingDelete = -1;
   clearTimeout(state.deleteTimer);
@@ -884,8 +960,22 @@ function selectSession(index) {
 }
 
 function createChatFromSwitcher() {
+  const projectId = state.switcherProjectId;
   closeSwitcher();
-  newSession();
+  newSession(projectId);
+}
+
+function newProject() {
+  ensureProjects();
+  const project = {
+    id: makeId(),
+    name: `Project ${state.projects.length + 1}`,
+  };
+  state.projects.push(project);
+  state.switcherProjectId = project.id;
+  state.switcherIndex = 0;
+  saveChatsSoon();
+  renderSwitcher();
 }
 
 function renderAll() {
@@ -899,17 +989,24 @@ function updateSendState() {
     !currentSession() || state.streaming || dom.input.value.trim() === '';
 }
 
-function newSession() {
+function newSession(projectId) {
+  ensureProjects();
   if (state.sessions.length === 0) state.seq = 0;
   state.seq += 1;
+  const targetProjectId =
+    state.projects.find((project) => project.id === projectId)?.id ||
+    currentSession()?.projectId ||
+    state.projects[0].id;
   state.sessions.push({
     id: makeId(),
     title: `Chat ${state.seq}`,
     system: DEFAULT_SYSTEM_PROMPT,
+    projectId: targetProjectId,
     msgs: [],
   });
   state.current = state.sessions.length - 1;
   state.forceScroll = true;
+  state.switcherProjectId = targetProjectId;
   dom.input.value = '';
   updateSendState();
   saveChatsSoon();
@@ -1126,6 +1223,7 @@ function bindEvents() {
   window.addEventListener('blur', onWindowDragEnd);
 
   dom.switcherNew.addEventListener('click', createChatFromSwitcher);
+  dom.projectNew.addEventListener('click', newProject);
   dom.switcherSettings.addEventListener('click', () => {
     closeSwitcher();
     openSettings();
@@ -1225,7 +1323,10 @@ function bindEvents() {
           return;
         }
         event.preventDefault();
-        selectSession(state.switcherIndex);
+        const session = sessionsInProject(state.switcherProjectId)[
+          state.switcherIndex
+        ];
+        if (session) selectSession(state.sessions.indexOf(session));
       }
       return;
     }
@@ -1456,6 +1557,7 @@ function bindEvents() {
     clearTimeout(state.settingsTimer);
     try {
       api.saveChatsSync({
+        projects: state.projects,
         sessions: state.sessions,
         current: state.current,
         seq: state.seq,
@@ -1474,16 +1576,19 @@ async function boot() {
       api.loadChats(),
     ]);
     state.settings = settings;
+    state.projects = chats.projects || [];
     state.sessions = chats.sessions;
     state.current = chats.current;
     state.seq = chats.seq;
   } catch (error) {
     console.error('load failed', error);
+    state.projects = [{ ...DEFAULT_PROJECT }];
     state.sessions = [
       {
         id: makeId(),
         title: 'Chat 1',
         system: DEFAULT_SYSTEM_PROMPT,
+        projectId: DEFAULT_PROJECT.id,
         msgs: [],
       },
     ];
@@ -1497,6 +1602,7 @@ async function boot() {
       session.system = DEFAULT_SYSTEM_PROMPT;
     }
   });
+  ensureProjects();
 
   bindEvents();
   applySettings();

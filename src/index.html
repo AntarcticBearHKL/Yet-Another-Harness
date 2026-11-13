@@ -63,17 +63,31 @@
     >
       <div class="switcher-head">
         <div>
-          <div class="switcher-kicker">CONVERSATIONS</div>
-          <h2 id="switcher-title">切换对话</h2>
+          <div class="switcher-kicker">WORKSPACE</div>
+          <h2 id="switcher-title">项目与对话</h2>
         </div>
         <div class="switcher-actions">
-          <button id="switcher-new" class="pill primary">New chat</button>
           <button id="switcher-settings" class="pill">Settings</button>
         </div>
       </div>
-      <div id="switcher-list" class="switcher-list"></div>
+      <div class="switcher-body">
+        <aside class="project-pane">
+          <div class="pane-head">
+            <span class="pane-kicker">PROJECTS</span>
+            <button id="project-new" class="pill compact">New project</button>
+          </div>
+          <div id="project-list" class="project-list"></div>
+        </aside>
+        <section class="conversation-pane">
+          <div class="pane-head">
+            <span class="pane-kicker">CONVERSATIONS · <span id="project-title"></span></span>
+            <button id="switcher-new" class="pill primary">New chat</button>
+          </div>
+          <div id="switcher-list" class="switcher-list"></div>
+        </section>
+      </div>
       <div class="switcher-foot">
-        按住 Tab 显示 · 松开收起 · ↑↓ 选择 · Enter 切换
+        按住 Tab 显示 · 松开收起 · ↑↓ 选择对话 · Enter 切换 · 点击左侧项目
       </div>
     </div>
 

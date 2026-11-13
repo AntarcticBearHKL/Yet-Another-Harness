@@ -24,6 +24,8 @@ function withStoreDir(run) {
 
 test('default chats can be empty', () => {
   const chats = store.defaultChats();
+  assert.equal(chats.projects.length, 1);
+  assert.equal(chats.projects[0].name, 'Project 1');
   assert.equal(chats.sessions.length, 0);
   assert.equal(chats.current, 0);
   assert.equal(chats.seq, 0);
@@ -31,6 +33,7 @@ test('default chats can be empty', () => {
 
 test('normalizing an empty chat list keeps it empty', () => {
   const chats = store.normalizeChats({ sessions: [], current: 0, seq: 3 });
+  assert.equal(chats.projects.length, 1);
   assert.equal(chats.sessions.length, 0);
   assert.equal(chats.seq, 0);
 });
@@ -43,6 +46,7 @@ test('normalizing existing chats keeps them', () => {
   });
   assert.equal(chats.sessions.length, 1);
   assert.equal(chats.sessions[0].title, 'Chat 3');
+  assert.equal(chats.sessions[0].projectId, chats.projects[0].id);
   assert.equal(chats.seq, 3);
 });
 
@@ -157,11 +161,16 @@ test('legacy api_key is normalized', () => {
 test('sqlite round-trips sessions, steps and raw requests', () => {
   withStoreDir(() => {
     store.saveChats({
+      projects: [
+        { id: 'p1', name: 'Project A' },
+        { id: 'p2', name: 'Project B' },
+      ],
       sessions: [
         {
           id: 's1',
           title: 'Chat 1',
           system: 'sys',
+          projectId: 'p2',
           msgs: [
             {
               role: 'User',
@@ -203,7 +212,10 @@ test('sqlite round-trips sessions, steps and raw requests', () => {
     });
 
     const loaded = store.loadChats();
+    assert.equal(loaded.projects.length, 2);
+    assert.equal(loaded.projects[1].name, 'Project B');
     assert.equal(loaded.sessions.length, 1);
+    assert.equal(loaded.sessions[0].projectId, 'p2');
     assert.equal(loaded.sessions[0].msgs.length, 2);
     assert.deepEqual(loaded.sessions[0].msgs[1].steps[0], {
       kind: 'thinking',
@@ -245,7 +257,12 @@ test('legacy chats.json migrates into sqlite and is kept as a backup', () => {
     );
 
     const loaded = store.loadChats();
+    assert.equal(loaded.projects.length, 1);
     assert.equal(loaded.sessions.length, 1);
+    assert.equal(
+      loaded.sessions[0].projectId,
+      loaded.projects[0].id
+    );
     assert.equal(loaded.sessions[0].title, 'Old Chat');
     assert.equal(loaded.sessions[0].msgs[0].text, 'hello');
     assert.ok(fs.existsSync(path.join(dir, 'chats.json.pre-sqlite')));
