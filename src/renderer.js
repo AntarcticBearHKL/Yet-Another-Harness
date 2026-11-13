@@ -2605,10 +2605,13 @@ function renderComposerContext() {
     dom.composerContext.replaceChildren();
     return;
   }
-  dom.composerContext.replaceChildren(
-    buildMcpSummary(session, () => openMcpConfig(session.id)),
-    renderComposerQueue(session)
-  );
+  if (session.msgs.length === 0) {
+    dom.composerContext.replaceChildren(
+      buildMcpSummary(session, () => openMcpConfig(session.id))
+    );
+    return;
+  }
+  dom.composerContext.replaceChildren(renderComposerQueue(session));
 }
 
 function skillCategory(skill) {

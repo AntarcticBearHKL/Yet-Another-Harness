@@ -862,19 +862,19 @@ body.ring-open #window-controls {
 }
 
 .mcp-summary {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 7px;
-  align-self: flex-start;
+  gap: 9px;
+  width: 100%;
   flex: none;
-  min-height: 28px;
+  min-height: 54px;
   margin: 0 0 12px;
-  padding: 0 11px;
+  padding: 0 18px;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(252, 246, 238, 0.72);
+  border-radius: 14px;
+  background: rgba(252, 246, 238, 0.62);
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   text-align: left;
 }
@@ -897,6 +897,7 @@ body.ring-open #window-controls {
 }
 
 .mcp-summary-count {
+  margin-left: auto;
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
@@ -1949,7 +1950,6 @@ body.ring-open #window-controls {
 
 .composer-context .mcp-summary {
   margin: 0;
-  align-self: flex-start;
 }
 
 .composer-tokens {
@@ -2157,22 +2157,23 @@ body.ring-open #window-controls {
 .composer-queue {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-height: 164px;
-  padding: 6px;
+  gap: 6px;
+  width: 100%;
+  max-height: 190px;
+  padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(252, 246, 238, 0.5);
+  border-radius: 14px;
+  background: rgba(252, 246, 238, 0.62);
   overflow-y: auto;
 }
 
 .composer-queue-empty {
   display: flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0 8px;
+  min-height: 48px;
+  padding: 0 16px;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .queue-row {
