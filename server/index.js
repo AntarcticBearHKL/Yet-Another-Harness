@@ -11,6 +11,7 @@ const store = require('../src/store');
 const tools = require('../src/tools');
 const deepseek = require('../src/deepseek');
 const runner = require('./runner');
+const usage = require('./usage');
 const { McpManager } = require('./mcp/manager');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -272,6 +273,22 @@ function handleApi(req, res, url) {
 
   if (req.method === 'GET' && pathname === '/api/settings') {
     sendJson(res, 200, settingsView());
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/usage') {
+    const apiKey = String(
+      process.env.OPENCODE_API_KEY || store.loadSettings().apiKey || ''
+    ).trim();
+    usage
+      .getUsage(apiKey)
+      .then((data) => sendJson(res, 200, data))
+      .catch((error) =>
+        sendJson(res, 200, {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      );
     return true;
   }
 

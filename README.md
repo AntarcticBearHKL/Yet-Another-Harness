@@ -40,6 +40,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 项目、项目归属和对话一起持久化到 SQLite；工作区空白区域仍然可以按住左键拖动窗口
 - 有弹窗（Tab 切换器、设置、raw 查看器）打开时，右键等于关闭弹窗
 - 主界面按住右键弹出环形菜单：工具、Skill、MCP；把鼠标拖到对应扇区后松开右键打开对应信息界面
+- 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
 - 工具和 Skill 面板是无标题的左右分栏：工具页左侧按分类列出工具（搜索 / 文件 / 系统 / MCP / 代理等），右侧显示名称、说明、参数；MCP 是独立的全屏工作区，左侧服务器、右侧工具 / 资源 / 提示词 / 日志 / 概览；没有内容时显示空状态
 - 所有空状态（无对话、无消息、无工具/Skill/MCP、raw 为空、全文为空）统一在可用区域居中，颜色比正文淡一档
 - 工具调用的 JSON 参数和 JSON 输出用带语法着色、可折叠节点的查看器展示
@@ -93,6 +94,7 @@ LIVE_SEARCH=1 npm test   # 额外跑一条真实 DuckDuckGo 搜索
 
 ```
 server/index.js    本地后端：HTTP API、SSE、静态页面、远程 Basic Auth
+server/usage.js    OpenCode Go 额度查询（/api/usage，60 秒缓存）
 server/runner.js   agent 主循环、工具执行、消息/事件持久化
 server/mcp/config.js   MCP 自定义配置存储、JSON 配置解析
 server/mcp/opencode.js OpenCode 配置发现与 MCP 服务器继承

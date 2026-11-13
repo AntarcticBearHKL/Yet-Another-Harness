@@ -75,6 +75,12 @@ const state = {
   catalogKind: null,
   catalogData: null,
   catalogRequest: 0,
+  usage: {
+    data: null,
+    loading: false,
+    error: '',
+    fetchedAt: 0,
+  },
 };
 
 async function requestJson(path, options = {}) {
@@ -2031,6 +2037,10 @@ const RING_INNER = 64;
 const RING_LABEL_RADIUS = 91;
 const RING_DEAD_ZONE = 34;
 const RING_GAP = 3;
+const RING_SELECT_RADIUS = RING_OUTER + 60;
+const RING_USAGE_RADIUS = 225;
+const RING_VISUAL_HALF_W = 170;
+const RING_VISUAL_HALF_H = 330;
 
 const RING_ITEMS = [
   {
@@ -2053,6 +2063,8 @@ const RING_ITEMS = [
 let ringCenterPoint = { x: 0, y: 0 };
 let ringSegments = [];
 let ringLabels = [];
+let ringUsagePanel = null;
+let ringUsageRows = [];
 
 function ringPolar(radius, angleDeg) {
   const rad = (angleDeg * Math.PI) / 180;
@@ -2077,12 +2089,103 @@ function ringSectorPath(inner, outer, startAngle, endAngle) {
   ].join(' ');
 }
 
+function formatUsageReset(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  const now = new Date();
+  const time = `${String(date.getHours()).padStart(2, '0')}:${String(
+    date.getMinutes()
+  ).padStart(2, '0')}`;
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  if (sameDay) return `${time} 重置`;
+  return `${date.getMonth() + 1}/${date.getDate()} ${time} 重置`;
+}
+
+function usageErrorText(error) {
+  if (!error) return '暂无数据';
+  const text = String(error);
+  if (text === 'no_api_key') return '未设置 API key';
+  if (text.startsWith('HTTP 401') || text.startsWith('HTTP 403')) {
+    return 'API key 无效';
+  }
+  return '获取失败';
+}
+
+function renderUsageCards() {
+  if (!ringUsageRows.length) return;
+  const data = state.usage.data;
+  const loading = state.usage.loading;
+  const error = state.usage.error;
+  if (ringUsagePanel) {
+    ringUsagePanel.classList.toggle('loading', loading && !data);
+  }
+  for (const entry of ringUsageRows) {
+    const meter = data ? data[entry.key] : null;
+    entry.row.classList.toggle('limited', Boolean(meter?.limited));
+    if (meter) {
+      const percent = Math.max(
+        0,
+        Math.min(100, Number(meter.percent) || 0)
+      );
+      entry.percent.textContent = `${Math.round(percent)}%`;
+      entry.fill.style.width = `${percent}%`;
+      entry.reset.textContent = meter.limited
+        ? `已限流 · ${formatUsageReset(meter.resetsAt)}`
+        : formatUsageReset(meter.resetsAt);
+    } else {
+      entry.percent.textContent = loading ? '…' : '—';
+      entry.fill.style.width = '0%';
+      entry.reset.textContent = loading ? '加载中…' : usageErrorText(error);
+    }
+  }
+}
+
+async function loadUsage(force = false) {
+  const now = Date.now();
+  if (state.usage.loading) return;
+  if (
+    !force &&
+    state.usage.data &&
+    now - state.usage.fetchedAt < 60_000
+  ) {
+    renderUsageCards();
+    return;
+  }
+  state.usage.loading = true;
+  state.usage.error = '';
+  renderUsageCards();
+  try {
+    const data = await requestJson('/api/usage');
+    if (data?.ok) {
+      state.usage.data = data.usage;
+      state.usage.fetchedAt = Date.now();
+      state.usage.error = '';
+    } else if (!state.usage.data) {
+      state.usage.error = data?.error || 'usage_unavailable';
+    }
+  } catch (error) {
+    if (!state.usage.data) {
+      state.usage.error = error.message || 'usage_unavailable';
+    }
+  } finally {
+    state.usage.loading = false;
+    renderUsageCards();
+  }
+}
+
 function buildRingMenu() {
   const svgNS = 'http://www.w3.org/2000/svg';
   dom.ringSvg.replaceChildren();
   for (const label of ringLabels) label.remove();
   ringSegments = [];
   ringLabels = [];
+  dom.ringMenu.querySelectorAll('.ring-usage-layer').forEach((node) => node.remove());
+  ringUsagePanel = null;
+  ringUsageRows = [];
 
   const step = 360 / RING_ITEMS.length;
   RING_ITEMS.forEach((item, index) => {
@@ -2104,6 +2207,43 @@ function buildRingMenu() {
     dom.ringMenu.append(label);
     ringLabels.push(label);
   });
+
+  const usageLayer = el('div', 'ring-usage-layer');
+  const panel = el('div', 'ring-usage-panel');
+  const panelPoint = ringPolar(RING_USAGE_RADIUS, -90);
+  panel.style.left = `${panelPoint.x}px`;
+  panel.style.top = `${panelPoint.y}px`;
+  panel.append(el('div', 'ring-usage-title', 'usage'));
+  const usageItems = [
+    { key: 'rolling', label: '5 小时' },
+    { key: 'weekly', label: '本周' },
+    { key: 'monthly', label: '本月' },
+  ];
+  ringUsageRows = [];
+  for (const item of usageItems) {
+    const row = el('div', 'ring-usage-row');
+    const head = el('div', 'ring-usage-head');
+    head.append(el('span', 'ring-usage-label', item.label));
+    const percent = el('span', 'ring-usage-percent', '—');
+    head.append(percent);
+    const bar = el('div', 'ring-usage-bar');
+    const fill = el('div', 'ring-usage-bar-fill');
+    bar.append(fill);
+    const reset = el('div', 'ring-usage-reset', '加载中…');
+    row.append(head, bar, reset);
+    panel.append(row);
+    ringUsageRows.push({
+      key: item.key,
+      row,
+      percent,
+      fill,
+      reset,
+    });
+  }
+  usageLayer.append(panel);
+  dom.ringMenu.append(usageLayer);
+  ringUsagePanel = panel;
+  renderUsageCards();
 }
 
 function updateRingSelection(index) {
@@ -2119,7 +2259,8 @@ function updateRingSelection(index) {
 function ringIndexForPoint(x, y) {
   const dx = x - ringCenterPoint.x;
   const dy = y - ringCenterPoint.y;
-  if (Math.hypot(dx, dy) < RING_DEAD_ZONE) return -1;
+  const distance = Math.hypot(dx, dy);
+  if (distance < RING_DEAD_ZONE || distance > RING_SELECT_RADIUS) return -1;
 
   const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
   const step = 360 / RING_ITEMS.length;
@@ -2139,15 +2280,14 @@ function ringIndexForPoint(x, y) {
 function openRingMenu(x, y) {
   if (state.ringOpen) closeRingMenu();
 
-  const half = RING_SIZE / 2;
   const margin = 6;
   const cx = Math.min(
-    window.innerWidth - half - margin,
-    Math.max(half + margin, x)
+    window.innerWidth - RING_VISUAL_HALF_W - margin,
+    Math.max(RING_VISUAL_HALF_W + margin, x)
   );
   const cy = Math.min(
-    window.innerHeight - half - margin,
-    Math.max(half + margin, y)
+    window.innerHeight - RING_VISUAL_HALF_H - margin,
+    Math.max(RING_VISUAL_HALF_H + margin, y)
   );
 
   ringCenterPoint = { x: cx, y: cy };
@@ -2159,6 +2299,7 @@ function openRingMenu(x, y) {
   document.body.classList.add('ring-open');
   dom.ringMenu.setAttribute('aria-hidden', 'false');
   dom.ringMenu.classList.add('open');
+  void loadUsage();
 }
 
 function closeRingMenu() {
@@ -3047,6 +3188,7 @@ async function boot() {
   applySettings();
   renderAll();
   updateSendState();
+  void loadUsage();
 }
 
 boot();

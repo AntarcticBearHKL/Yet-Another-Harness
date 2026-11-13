@@ -1784,6 +1784,98 @@ body.ring-open #messages {
   stroke-linejoin: round;
 }
 
+/* 圆环外侧的 usage 数据面板：只读，不参与交互 */
+.ring-usage-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ring-usage-panel {
+  position: absolute;
+  width: 250px;
+  padding: 11px 14px 12px;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--solid);
+  color: var(--text);
+  pointer-events: none;
+}
+
+.ring-usage-title {
+  margin-bottom: 8px;
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: lowercase;
+}
+
+.ring-usage-row + .ring-usage-row {
+  margin-top: 9px;
+}
+
+.ring-usage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ring-usage-label {
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.ring-usage-percent {
+  color: var(--accent-deep);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.ring-usage-bar {
+  height: 3px;
+  margin: 5px 0 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgba(74, 54, 40, 0.1);
+}
+
+.ring-usage-bar-fill {
+  width: 0;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 200ms ease;
+}
+
+.ring-usage-reset {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ring-usage-row.limited .ring-usage-percent {
+  color: #b23a2f;
+}
+
+.ring-usage-row.limited .ring-usage-bar-fill {
+  background: #b23a2f;
+}
+
+.ring-usage-panel.loading .ring-usage-percent {
+  color: var(--faint);
+}
+
 /* ---------------------------------------------------------------- catalog */
 .catalog {
   position: fixed;
