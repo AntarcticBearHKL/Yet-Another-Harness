@@ -111,6 +111,19 @@ body {
   margin: 0 auto;
 }
 
+.content-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 170px);
+  padding: 24px;
+  color: var(--faint);
+  opacity: 0.72;
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}
+
 .text-block {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

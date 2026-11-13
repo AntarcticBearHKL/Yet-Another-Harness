@@ -172,6 +172,12 @@ function renderWebContent(payload) {
     dom.webContentBody.append(pre);
     return;
   }
+  if (!String(payload?.text ?? '').trim()) {
+    dom.webContentBody.append(
+      el('div', 'web-content-empty', '还没有内容')
+    );
+    return;
+  }
   renderTextContent(dom.webContentBody, payload?.text);
 }
 
@@ -395,10 +401,23 @@ function isNearBottom() {
   );
 }
 
-function appendRow(card) {
+function appendRow(card, options = {}) {
   const row = el('div', 'msg');
   if (card.classList.contains('user')) row.classList.add('turn-start');
-  row.append(card);
+  if (options.process) row.classList.add('process-row');
+  if (card.classList.contains('answer-card')) row.classList.add('answer-row');
+
+  const gutter = el('div', 'msg-gutter');
+  if (options.role === 'YOU') {
+    gutter.append(el('span', 'role-chip role-you', 'YOU'));
+  } else if (options.role === 'YAH') {
+    const label = el('span', 'role-yah');
+    label.append(el('i', 'role-dot'));
+    label.append(el('span', 'role-label', 'YAH'));
+    gutter.append(label);
+  }
+
+  row.append(gutter, card);
   dom.messages.append(row);
 }
 
@@ -423,6 +442,7 @@ function cardByKey(key) {
 }
 
 function setCardExpanded(card, expanded) {
+  if (card.classList.contains('always-open')) expanded = true;
   card.classList.toggle('collapsed', !expanded);
   const body = card.querySelector('.card-body-wrap');
   if (body) body.inert = !expanded;
@@ -479,6 +499,7 @@ function applyOpenKey(key, opts) {
 function toggleCard(key) {
   const card = cardByKey(key);
   if (!card) return;
+  if (card.classList.contains('always-open')) return;
 
   if (!card.classList.contains('collapsed')) {
     state.openCardKey = null;
@@ -493,40 +514,50 @@ function toggleCard(key) {
 function makeCard(opts) {
   const card = el('div', `message-card ${opts.kind}`);
   card.dataset.cardKey = opts.key;
-  card.classList.add('collapsed');
+  if (opts.primary) card.classList.add('answer-card');
+  if (opts.process) card.classList.add('process-card');
+  if (opts.alwaysOpen) card.classList.add('always-open');
+  if (opts.headless) card.classList.add('headless');
+  if (!opts.alwaysOpen) card.classList.add('collapsed');
 
-  const head = el('div', 'card-head');
-  head.append(el('span', 'card-dot'));
-  head.append(el('span', 'card-title', opts.title));
-  head.append(el('span', 'card-meta', opts.meta || ''));
-  if (opts.badge) {
-    const badge = el('span', 'card-badge', opts.badge.text);
-    if (opts.badge.error) badge.classList.add('error');
-    head.append(badge);
+  let head = null;
+  if (!opts.headless) {
+    head = el('div', 'card-head');
+    head.append(el('span', 'card-dot'));
+    if (!opts.minimalHead) {
+      head.append(el('span', 'card-title', opts.title || ''));
+    }
+    head.append(el('span', 'card-meta', opts.meta || ''));
+    if (opts.badge) {
+      const badge = el('span', 'card-badge', opts.badge.text);
+      if (opts.badge.error) badge.classList.add('error');
+      head.append(badge);
+    }
+
+    card.title = opts.onFullContent
+      ? 'Click header to expand/collapse · double-click content for full view · Ctrl+double-click for raw request'
+      : 'Click header to expand/collapse';
+
+    head.addEventListener('click', (event) => {
+      if (event.detail > 1) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest('button, a, input, textarea')
+      ) {
+        return;
+      }
+      toggleCard(opts.key);
+    });
   }
 
-  card.title = opts.onFullContent
-    ? 'Click header to expand/collapse · double-click content for full view · Ctrl+double-click for raw request'
-    : 'Click header to expand/collapse';
-
-  head.addEventListener('click', (event) => {
-    if (event.detail > 1) return;
-    if (
-      event.target instanceof Element &&
-      event.target.closest('button, a, input, textarea')
-    ) {
-      return;
-    }
-    toggleCard(opts.key);
-  });
-
   const bodyWrap = el('div', 'card-body-wrap');
-  bodyWrap.inert = true;
+  bodyWrap.inert = !opts.alwaysOpen;
   const body = el('div', 'card-body');
   const inner = el('div', 'card-body-inner');
   body.append(inner);
   bodyWrap.append(body);
-  card.append(head, bodyWrap);
+  if (head) card.append(head, bodyWrap);
+  else card.append(bodyWrap);
 
   bodyWrap.addEventListener('dblclick', (event) => {
     if (
@@ -589,17 +620,31 @@ function openFullContent(payload) {
   });
 }
 
-function textCard({ key, kind, title, meta, text, streaming, onInspect }) {
+function textCard({
+  key,
+  kind,
+  title,
+  meta,
+  text,
+  streaming,
+  onInspect,
+  primary,
+  minimalHead,
+  process,
+}) {
   const { card, body } = makeCard({
     key,
     kind,
     title,
     meta,
     onInspect,
+    primary,
+    minimalHead,
+    process,
     onFullContent: () =>
       openFullContent({
         key,
-        title: [title, meta].filter(Boolean).join(' · '),
+        title: [title, meta].filter(Boolean).join(' · ') || '回答',
         kind: 'text',
         text: textFromCard(card),
       }),
@@ -610,6 +655,30 @@ function textCard({ key, kind, title, meta, text, streaming, onInspect }) {
     body.append(textNode);
   }
   if (streaming) card.classList.add('streaming');
+  return card;
+}
+
+function promptCard({ key, text, onInspect }) {
+  const { card, body } = makeCard({
+    key,
+    kind: 'user',
+    title: '',
+    meta: '',
+    onInspect,
+    headless: true,
+    alwaysOpen: true,
+    onFullContent: () =>
+      openFullContent({
+        key,
+        title: 'prompt',
+        kind: 'text',
+        text: textFromCard(card),
+      }),
+  });
+  card.classList.add('prompt-card');
+  const textNode = el('div', 'card-text prompt-text');
+  renderTextContent(textNode, text);
+  body.append(textNode);
   return card;
 }
 
@@ -764,6 +833,7 @@ function renderToolCard(step, msg, key) {
       ? null
       : { text: step.ok === false ? 'error' : 'ok', error: step.ok === false },
     onInspect: () => inspectStep(msg, step),
+    process: true,
     onFullContent: () =>
       openFullContent({
         key,
@@ -801,7 +871,14 @@ function lastCardKey(session) {
 
   const steps = Array.isArray(msg.steps) ? msg.steps : [];
   if (isRichTrace(steps) && steps.length > 0) {
-    return stepCardKey(index, steps.length - 1);
+    const lastTextIndex = steps.reduce(
+      (last, step, stepIndex) => (step.kind === 'text' ? stepIndex : last),
+      -1
+    );
+    return stepCardKey(
+      index,
+      lastTextIndex >= 0 ? lastTextIndex : steps.length - 1
+    );
   }
   return agentCardKey(index);
 }
@@ -841,15 +918,17 @@ function renderAgentMessage(msg, msgIndex) {
     const { card, body } = makeCard({
       key: agentCardKey(msgIndex),
       kind: 'agent',
-      title: '对话',
+      title: '回答',
       meta: 'response',
+      primary: true,
+      minimalHead: true,
       onInspect: () => {
         openRawRequest(requestAt(msg, 0), rawRoundLabel(0));
       },
       onFullContent: () =>
         openFullContent({
           key: agentCardKey(msgIndex),
-          title: '对话 · response',
+          title: '回答 · response',
           kind: 'text',
           text: msg.text,
         }),
@@ -866,28 +945,41 @@ function renderAgentMessage(msg, msgIndex) {
       body.append(textNode);
     }
     if (streaming) card.classList.add('streaming');
-    appendRow(card);
+    appendRow(card, { role: 'YAH' });
     return;
   }
+
+  const lastTextIndex = steps.reduce(
+    (last, step, index) => (step.kind === 'text' ? index : last),
+    -1
+  );
+  const roleIndex = lastTextIndex >= 0 ? lastTextIndex : 0;
 
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i];
     if (step.kind === 'text' || step.kind === 'thinking') {
       if (!step.text && !(streaming && i === steps.length - 1)) continue;
       const thinking = step.kind === 'thinking';
+      const primary = !thinking && i === lastTextIndex;
       appendRow(
         textCard({
           key: stepCardKey(msgIndex, i),
           kind: thinking ? 'thinking' : 'agent',
-          title: thinking ? '思考' : '对话',
-          meta: thinking ? 'thinking' : 'response',
+          title: thinking ? '思考' : primary ? '回答' : '过程',
+          meta: thinking ? 'thinking' : primary ? 'response' : 'text',
           text: step.text,
           streaming: streaming && i === steps.length - 1,
           onInspect: () => inspectStep(msg, step),
-        })
+          primary,
+          minimalHead: primary,
+          process: !primary,
+        }),
+        { role: i === roleIndex ? 'YAH' : null, process: !primary }
       );
     } else if (step.kind === 'call' || step.kind === 'result') {
-      appendRow(renderToolCard(step, msg, stepCardKey(msgIndex, i)));
+      appendRow(renderToolCard(step, msg, stepCardKey(msgIndex, i)), {
+        process: true,
+      });
     }
   }
 }
@@ -909,14 +1001,14 @@ function renderMessages({ animate = true } = {}) {
     state.openCardKey = null;
     state.renderedOpenKeys = new Set();
     state.renderedSessionId = null;
-    dom.messages.append(el('div', 'empty', 'No chats yet. Hold Tab to create one.'));
+    dom.messages.append(el('div', 'empty', '还没有对话，按住 Tab 新建'));
     return;
   }
   if (session.msgs.length === 0) {
     state.openCardKey = null;
     state.renderedOpenKeys = new Set();
     state.renderedSessionId = sessionId;
-    dom.messages.append(el('div', 'empty', 'No messages yet. Press Space to type.'));
+    dom.messages.append(el('div', 'empty', '还没有消息，按 Space 输入'));
     return;
   }
 
@@ -927,14 +1019,12 @@ function renderMessages({ animate = true } = {}) {
     }
 
     appendRow(
-      textCard({
+      promptCard({
         key: messageCardKey(index),
-        kind: 'user',
-        title: '对话',
-        meta: 'prompt',
         text: msg.text,
         onInspect: () => inspectUserMessage(msg),
-      })
+      }),
+      { role: 'YOU' }
     );
   });
 
@@ -986,28 +1076,32 @@ function renderSwitcher() {
   state.switcherProjectId = project.id;
   const sessions = sessionsInProject(project.id);
 
+  const selectProject = (projectId) => {
+    if (state.switcherProjectId === projectId) return;
+    state.switcherProjectId = projectId;
+    const next = sessionsInProject(projectId);
+    const current = currentSession();
+    state.switcherIndex = Math.max(0, next.indexOf(current));
+    state.pendingDelete = -1;
+    clearTimeout(state.deleteTimer);
+    renderSwitcher();
+  };
+
   dom.projectList.replaceChildren();
   state.projects.forEach((item) => {
     const row = el('button', 'project-row');
     row.type = 'button';
     if (item.id === project.id) row.classList.add('selected');
     row.append(el('span', 'project-name', item.name));
-    row.addEventListener('click', () => {
-      state.switcherProjectId = item.id;
-      const next = sessionsInProject(item.id);
-      const current = currentSession();
-      state.switcherIndex = Math.max(0, next.indexOf(current));
-      state.pendingDelete = -1;
-      clearTimeout(state.deleteTimer);
-      renderSwitcher();
-    });
+    row.addEventListener('click', () => selectProject(item.id));
+    row.addEventListener('mouseenter', () => selectProject(item.id));
     dom.projectList.append(row);
   });
 
   dom.switcherList.replaceChildren();
   if (sessions.length === 0) {
     state.switcherIndex = 0;
-    dom.switcherList.append(el('div', 'switcher-empty', 'No chats yet'));
+    dom.switcherList.append(el('div', 'switcher-empty', '还没有对话'));
     return;
   }
 
@@ -1034,15 +1128,7 @@ function renderSwitcher() {
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6H20M9 6V4H15V6M6 6L7 20H17L18 6M10 10V17M14 10V17"/></svg>';
 
     card.addEventListener('click', () => selectSession(globalIndex));
-    card.addEventListener('mouseenter', () => {
-      if (state.switcherIndex === localIndex) return;
-      state.switcherIndex = localIndex;
-      dom.switcherList
-        .querySelectorAll('.switch-card')
-        .forEach((node, i) =>
-          node.classList.toggle('selected', i === localIndex)
-        );
-    });
+    top.addEventListener('mouseenter', () => selectSession(globalIndex));
 
     trash.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -1419,7 +1505,7 @@ function openRawRequest(body, label) {
       el(
         'div',
         'raw-empty',
-        'No raw request body recorded for this card. Capture starts with new messages.'
+        '没有可显示的原始请求'
       )
     );
   }
@@ -1756,7 +1842,7 @@ function renderCatalogTools(tools) {
 function renderCatalogList(kind, entries) {
   if (!Array.isArray(entries) || entries.length === 0) {
     dom.catalogList.append(
-      el('div', 'catalog-empty', CATALOG_EMPTY[kind] || 'Nothing here yet.')
+      el('div', 'catalog-empty', CATALOG_EMPTY[kind] || '还没有内容。')
     );
     return;
   }
@@ -1781,7 +1867,7 @@ async function openCatalog(kind) {
   state.catalogKind = kind;
   dom.catalogTitle.textContent = CATALOG_TITLES[kind] || kind;
   dom.catalogList.replaceChildren(
-    el('div', 'catalog-empty', 'Loading…')
+    el('div', 'catalog-empty', '加载中…')
   );
   dom.catalog.classList.remove('hidden');
   dom.catalog.setAttribute('aria-hidden', 'false');
@@ -1799,7 +1885,7 @@ async function openCatalog(kind) {
     console.error('load catalog failed', error);
     if (!state.catalogOpen || state.catalogKind !== kind) return;
     dom.catalogList.replaceChildren(
-      el('div', 'catalog-empty', 'Failed to load.')
+      el('div', 'catalog-empty', '加载失败。')
     );
   }
 }

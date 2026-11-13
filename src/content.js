@@ -59,8 +59,8 @@ function renderTextBlocks(container, text) {
   if (blocks.length === 0) {
     container.append(
       Object.assign(document.createElement('div'), {
-        className: 'text-block',
-        textContent: 'No content yet.',
+        className: 'content-empty',
+        textContent: '还没有内容',
       })
     );
     return;
