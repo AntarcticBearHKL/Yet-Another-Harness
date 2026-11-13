@@ -47,7 +47,7 @@ test('request body includes tools and streaming', () => {
   assert.equal(body.tools[0].function.name, 'web_search');
 });
 
-test('messages from history include thinking steps in order', () => {
+test('messages from history keep thinking separate for the same route', () => {
   const messages = deepseek.messagesFromHistory(
     [
       { role: 'User', text: 'hi', request: null },
@@ -65,12 +65,67 @@ test('messages from history include thinking steps in order', () => {
           },
           { kind: 'text', text: 'answer', round: 1 },
         ],
+        requests: [{ model: deepseek.MODEL }],
       },
     ],
     ''
   );
   assert.equal(messages[1].role, 'assistant');
-  assert.equal(messages[1].content, 'reasoning\n\nanswer');
+  assert.equal(messages[1].content, 'answer');
+  assert.equal(messages[1].reasoning_content, 'reasoning');
+});
+
+test('thinking is dropped when the historical route differs', () => {
+  const base = {
+    role: 'Agent',
+    text: 'answer',
+    request: '',
+    steps: [
+      { kind: 'thinking', text: 'reasoning', round: 0 },
+      { kind: 'text', text: 'answer', round: 1 },
+    ],
+  };
+  const sameModel = deepseek.messagesFromHistory(
+    [
+      { role: 'User', text: 'hi', request: null },
+      { ...base, requests: [{ model: deepseek.MODEL }] },
+    ],
+    ''
+  );
+  assert.equal(sameModel[1].reasoning_content, 'reasoning');
+
+  const otherModel = deepseek.messagesFromHistory(
+    [
+      { role: 'User', text: 'hi', request: null },
+      { ...base, requests: [{ model: 'another-model' }] },
+    ],
+    ''
+  );
+  assert.equal(otherModel[1].content, 'answer');
+  assert.equal('reasoning_content' in otherModel[1], false);
+
+  const unknownRoute = deepseek.messagesFromHistory(
+    [
+      { role: 'User', text: 'hi', request: null },
+      base,
+    ],
+    ''
+  );
+  assert.equal('reasoning_content' in unknownRoute[1], false);
+});
+
+test('tool assistant message keeps reasoning separate from content', () => {
+  const message = deepseek.toolAssistantMessage({
+    content: '',
+    reasoning: 'think',
+    toolCalls: [
+      { id: 'call_1', name: 'web_search', arguments: '{}' },
+    ],
+  });
+  assert.equal(message.content, null);
+  assert.equal(message.reasoning_content, 'think');
+  assert.equal(message.tool_calls[0].type, 'function');
+  assert.equal(message.tool_calls[0].function.name, 'web_search');
 });
 
 test('messages from history fall back to text without steps', () => {

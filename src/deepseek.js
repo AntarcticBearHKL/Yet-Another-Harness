@@ -8,16 +8,18 @@ const tools = require('./tools');
 
 const ENDPOINT = 'https://opencode.ai/inference/go/openai/v1/chat/completions';
 const MODEL = 'deepseek-v4.1-flash';
+const PROVIDER = 'opencode-go';
+const API = 'openai-chat-completions';
+const REASONING_FIELD = 'reasoning_content';
 const USER_AGENT = 'miniharness-electron/0.3.0';
 const MAX_HISTORY = 40;
 const MAX_TOOL_ROUNDS = 6;
 
-function messageContext(msg) {
+function answerText(msg) {
   const steps = Array.isArray(msg?.steps) ? msg.steps : [];
   const parts = [];
   for (const step of steps) {
-    if (!step) continue;
-    if (step.kind !== 'text' && step.kind !== 'thinking') continue;
+    if (!step || step.kind !== 'text') continue;
     const text = String(step.text ?? '');
     if (text) parts.push(text);
   }
@@ -25,7 +27,50 @@ function messageContext(msg) {
   return String(msg?.text ?? '');
 }
 
-function messagesFromHistory(history, system, maxHistory = MAX_HISTORY) {
+function thinkingText(msg) {
+  const steps = Array.isArray(msg?.steps) ? msg.steps : [];
+  const parts = [];
+  for (const step of steps) {
+    if (!step || step.kind !== 'thinking') continue;
+    const text = String(step.text ?? '');
+    if (text) parts.push(text);
+  }
+  return parts.join('\n\n');
+}
+
+function messageRoute(msg) {
+  if (
+    msg?.route &&
+    typeof msg.route === 'object' &&
+    typeof msg.route.provider === 'string' &&
+    typeof msg.route.api === 'string' &&
+    typeof msg.route.model === 'string'
+  ) {
+    return msg.route;
+  }
+
+  const requests = Array.isArray(msg?.requests) ? msg.requests : [];
+  const body = requests.find((item) => item && typeof item === 'object');
+  if (!body || typeof body.model !== 'string' || !body.model) return null;
+  return { provider: PROVIDER, api: API, model: body.model };
+}
+
+function sameRoute(a, b) {
+  return Boolean(
+    a &&
+      b &&
+      a.provider === b.provider &&
+      a.api === b.api &&
+      a.model === b.model
+  );
+}
+
+function messagesFromHistory(
+  history,
+  system,
+  maxHistory = MAX_HISTORY,
+  route = { provider: PROVIDER, api: API, model: MODEL }
+) {
   const messages = [];
   if (system && system.trim()) {
     messages.push({ role: 'system', content: system });
@@ -37,10 +82,20 @@ function messagesFromHistory(history, system, maxHistory = MAX_HISTORY) {
   const start = Math.max(0, usable.length - maxHistory);
 
   for (const msg of usable.slice(start)) {
-    messages.push({
-      role: msg.role === 'User' || msg.role === 'user' ? 'user' : 'assistant',
-      content: messageContext(msg),
-    });
+    if (msg.role === 'User' || msg.role === 'user') {
+      messages.push({ role: 'user', content: String(msg.text ?? '') });
+      continue;
+    }
+
+    // pi 风格：最终回答只放 content；思考是独立的 reasoning_content，
+    // 且只在同一 provider/api/model 的历史里回传。
+    const assistant = { role: 'assistant', content: answerText(msg) };
+    if (sameRoute(messageRoute(msg), route)) {
+      // DeepSeek/OpenAI-compatible 的工具请求要求回传该字段；
+      // 没有可见思考时也保留空字符串，行为与 pi 的 requireReasoning 一致。
+      assistant[REASONING_FIELD] = thinkingText(msg);
+    }
+    messages.push(assistant);
   }
   return messages;
 }
@@ -204,6 +259,23 @@ async function streamChat({ apiKey, body, onDelta, signal, sessionId }) {
 }
 
 /**
+ * 把一次带 tool_calls 的模型输出变成 assistant 消息。
+ * 思考放在独立的 reasoning_content，不拼进 content。
+ */
+function toolAssistantMessage(result) {
+  return {
+    role: 'assistant',
+    content: result.content || null,
+    [REASONING_FIELD]: result.reasoning || '',
+    tool_calls: result.toolCalls.map((call) => ({
+      id: call.id,
+      type: 'function',
+      function: { name: call.name, arguments: call.arguments },
+    })),
+  };
+}
+
+/**
  * 跑完整的一轮用户请求：模型 → 工具 → 模型，最多 MAX_TOOL_ROUNDS 轮。
  * onRequest 收每一轮实际发出去的请求 body；onDelta 收正文增量；
  * onToolCall / onToolResult 收每次工具调用的参数和返回内容。
@@ -219,7 +291,11 @@ async function runAgent({
   signal,
   sessionId,
 }) {
-  const messages = messagesFromHistory(history, system);
+  const messages = messagesFromHistory(history, system, MAX_HISTORY, {
+    provider: PROVIDER,
+    api: API,
+    model: MODEL,
+  });
   let finalText = '';
   let activeRound = 0;
 
@@ -246,18 +322,9 @@ async function runAgent({
       return finalText;
     }
 
-    const assistantText = [result.reasoning, result.content]
-      .filter(Boolean)
-      .join('\n\n');
-    messages.push({
-      role: 'assistant',
-      content: assistantText || null,
-      tool_calls: result.toolCalls.map((call) => ({
-        id: call.id,
-        type: 'function',
-        function: { name: call.name, arguments: call.arguments },
-      })),
-    });
+    // 工具轮里 content 只放回答，reasoning_content 单独放思考；
+    // 这与 pi 对 OpenAI-compatible/DeepSeek 的序列化方式一致。
+    messages.push(toolAssistantMessage(result));
 
     // 中间说明和最终答案在历史里用空行隔开；UI 里它们是分开的气泡。
     if (result.content) {
@@ -296,12 +363,20 @@ async function runAgent({
 module.exports = {
   ENDPOINT,
   MODEL,
+  PROVIDER,
+  API,
+  REASONING_FIELD,
   MAX_HISTORY,
   MAX_TOOL_ROUNDS,
+  answerText,
+  thinkingText,
+  messageRoute,
+  sameRoute,
   messagesFromHistory,
   requestBody,
   parseSseLine,
   ToolCallBuilder,
   streamChat,
+  toolAssistantMessage,
   runAgent,
 };
