@@ -15,6 +15,11 @@ let dragFrame = 0;
 const DRAG_EXCLUDE =
   'button, a, input, textarea, select, label, [contenteditable="true"]';
 
+async function syncMaximized() {
+  const maximized = await api.isMaximized();
+  document.body.classList.toggle('maximized', maximized);
+}
+
 function onWindowDragStart(event) {
   if (event.button !== 0) return;
   const target = event.target;
@@ -149,6 +154,8 @@ document.addEventListener('mousedown', onWindowDragStart);
 document.addEventListener('mousemove', onWindowDragMove);
 document.addEventListener('mouseup', onWindowDragEnd);
 window.addEventListener('blur', onWindowDragEnd);
+window.addEventListener('resize', syncMaximized);
+syncMaximized();
 
 // 右键直接关闭全文窗口
 window.addEventListener('contextmenu', (event) => {

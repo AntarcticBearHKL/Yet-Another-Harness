@@ -47,6 +47,7 @@ let backendProcess = null;
 let saveBoundsTimer = null;
 const contentWindows = new Map();
 let dragState = null;
+let resizeState = null;
 
 function loadWindowState() {
   try {
@@ -315,26 +316,26 @@ if (gotLock) {
         entry.win.webContents.send('content:update', payload);
       }
     });
-    ipcMain.on('window:drag-start', (event, point) => {
+    ipcMain.on('window:drag-start', (event) => {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (!win || win.isDestroyed() || win.isMaximized() || win.isFullScreen()) {
         return;
       }
-      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+      const cursor = screen.getCursorScreenPoint();
       dragState = {
         win,
-        cursorX: point.x,
-        cursorY: point.y,
+        cursorX: cursor.x,
+        cursorY: cursor.y,
         bounds: win.getBounds(),
       };
     });
-    ipcMain.on('window:drag-move', (event, point) => {
+    ipcMain.on('window:drag-move', (event) => {
       if (!dragState || dragState.win.isDestroyed()) return;
       if (dragState.win !== BrowserWindow.fromWebContents(event.sender)) return;
-      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+      const cursor = screen.getCursorScreenPoint();
       dragState.win.setPosition(
-        Math.round(dragState.bounds.x + point.x - dragState.cursorX),
-        Math.round(dragState.bounds.y + point.y - dragState.cursorY)
+        Math.round(dragState.bounds.x + cursor.x - dragState.cursorX),
+        Math.round(dragState.bounds.y + cursor.y - dragState.cursorY)
       );
     });
     ipcMain.on('window:drag-end', (event) => {
@@ -342,7 +343,66 @@ if (gotLock) {
       if (dragState.win !== BrowserWindow.fromWebContents(event.sender)) return;
       dragState = null;
     });
-    ipcMain.handle('window:is-maximized', () => mainWindow?.isMaximized() ?? false);
+    ipcMain.on('window:resize-start', (event, payload) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || win.isDestroyed() || win.isMaximized() || win.isFullScreen()) {
+        return;
+      }
+      const direction = String(payload?.direction || '');
+      if (!/^(n|s|e|w|ne|nw|se|sw)$/.test(direction)) return;
+      resizeState = {
+        win,
+        direction,
+        cursor: screen.getCursorScreenPoint(),
+        bounds: win.getBounds(),
+      };
+    });
+    ipcMain.on('window:resize-move', (event) => {
+      if (!resizeState || resizeState.win.isDestroyed()) return;
+      if (resizeState.win !== BrowserWindow.fromWebContents(event.sender)) return;
+
+      const { bounds, direction } = resizeState;
+      const cursor = screen.getCursorScreenPoint();
+      const dx = cursor.x - resizeState.cursor.x;
+      const dy = cursor.y - resizeState.cursor.y;
+      const [minWidth, minHeight] = resizeState.win.getMinimumSize();
+      let { x, y, width, height } = bounds;
+
+      if (direction.includes('e')) width = bounds.width + dx;
+      if (direction.includes('s')) height = bounds.height + dy;
+      if (direction.includes('w')) {
+        width = bounds.width - dx;
+        x = bounds.x + dx;
+      }
+      if (direction.includes('n')) {
+        height = bounds.height - dy;
+        y = bounds.y + dy;
+      }
+      if (width < minWidth) {
+        if (direction.includes('w')) x = bounds.x + bounds.width - minWidth;
+        width = minWidth;
+      }
+      if (height < minHeight) {
+        if (direction.includes('n')) y = bounds.y + bounds.height - minHeight;
+        height = minHeight;
+      }
+
+      resizeState.win.setBounds({
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.round(width),
+        height: Math.round(height),
+      });
+    });
+    ipcMain.on('window:resize-end', (event) => {
+      if (!resizeState) return;
+      if (resizeState.win !== BrowserWindow.fromWebContents(event.sender)) return;
+      resizeState = null;
+    });
+    ipcMain.handle('window:is-maximized', (event) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      return win?.isMaximized() ?? false;
+    });
     ipcMain.handle('app:version', () => app.getVersion());
 
     app.on('activate', async () => {

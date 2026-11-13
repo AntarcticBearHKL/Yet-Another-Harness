@@ -101,7 +101,8 @@ button {
   background: var(--solid);
 }
 
-body.web #app {
+body.web #app,
+body.maximized #app {
   border-radius: 0;
 }
 

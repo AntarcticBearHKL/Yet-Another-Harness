@@ -1546,6 +1546,12 @@ function hitsScrollbar(target, event) {
   );
 }
 
+async function syncMaximized() {
+  if (!api.isElectron) return;
+  const maximized = await api.isMaximized();
+  document.body.classList.toggle('maximized', maximized);
+}
+
 function onWindowDragStart(event) {
   if (!api.isElectron) return;
   if (event.button !== 0) return;
@@ -1575,6 +1581,10 @@ function onWindowDragStart(event) {
 
 function onWindowDragMove(event) {
   if (!windowDrag) return;
+  if (event.buttons === 0) {
+    onWindowDragEnd();
+    return;
+  }
 
   if (!windowDrag.started) {
     const dx = event.screenX - windowDrag.x;
@@ -1962,6 +1972,8 @@ function bindEvents() {
   document.addEventListener('mousemove', onWindowDragMove);
   document.addEventListener('mouseup', onWindowDragEnd);
   window.addEventListener('blur', onWindowDragEnd);
+  window.addEventListener('resize', syncMaximized);
+  syncMaximized();
 
   document.addEventListener('mousedown', onRightMouseDown);
   document.addEventListener('mousemove', updateRingFromPointer);

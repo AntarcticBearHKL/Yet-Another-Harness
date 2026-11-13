@@ -31,6 +31,8 @@ const STATIC_FILES = new Map([
   ['/', 'index.html'],
   ['/index.html', 'index.html'],
   ['/styles.css', 'styles.css'],
+  ['/resize.css', 'resize.css'],
+  ['/resize.js', 'resize.js'],
   ['/renderer.js', 'renderer.js'],
   ['/content.html', 'content.html'],
   ['/content.css', 'content.css'],

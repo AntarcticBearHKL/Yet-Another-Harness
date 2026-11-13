@@ -55,6 +55,10 @@ body {
   user-select: none;
 }
 
+body.maximized {
+  border-radius: 0;
+}
+
 .titlebar {
   display: flex;
   align-items: center;
