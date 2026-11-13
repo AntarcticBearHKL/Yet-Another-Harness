@@ -36,17 +36,10 @@ const state = {
   switcherIndex: 0,
   composerOpen: false,
   openCardKey: null,
-  peekKey: null,
-  peekKeys: new Set(),
   renderedOpenKeys: new Set(),
   renderedSessionId: null,
   renderVersion: 0,
   lastWheelNav: 0,
-  spaceHeld: false,
-  pointerX: 0,
-  pointerY: 0,
-  peekPointerX: 0,
-  peekPointerY: 0,
   tabHeld: false,
   streaming: false,
   requestId: null,
@@ -172,6 +165,8 @@ function setCardExpanded(card, expanded) {
   card.classList.toggle('collapsed', !expanded);
   const body = card.querySelector('.card-body-wrap');
   if (body) body.inert = !expanded;
+  const head = card.querySelector('.card-head');
+  if (head) head.setAttribute('aria-expanded', String(expanded));
 }
 
 function openKeySet(key) {
@@ -197,10 +192,6 @@ function applyOpenKeys(keys, { instant = false } = {}) {
   }
   for (const card of cards) {
     setCardExpanded(card, set.has(card.dataset.cardKey));
-    card.classList.toggle(
-      'peek-target',
-      state.spaceHeld && card.dataset.cardKey === state.peekKey
-    );
   }
   if (instant) {
     requestAnimationFrame(() => {
@@ -215,8 +206,18 @@ function applyOpenKey(key, opts) {
   applyOpenKeys(openKeySet(key), opts);
 }
 
-function peekOpenKeys() {
-  return new Set(state.peekKeys);
+function toggleCard(key) {
+  const card = cardByKey(key);
+  if (!card) return;
+
+  if (!card.classList.contains('collapsed')) {
+    state.openCardKey = null;
+    applyOpenKey(null);
+    return;
+  }
+
+  state.openCardKey = key;
+  applyOpenKey(key);
 }
 
 function makeCard(opts) {
@@ -235,8 +236,19 @@ function makeCard(opts) {
   }
 
   card.title = opts.onInspect
-    ? 'Hold Space to peek · double-click to view raw request body'
-    : 'Hold Space to peek';
+    ? 'Click header to expand/collapse · double-click to view raw request body'
+    : 'Click header to expand/collapse';
+
+  head.addEventListener('click', (event) => {
+    if (event.detail > 1) return;
+    if (
+      event.target instanceof Element &&
+      event.target.closest('button, a, input, textarea')
+    ) {
+      return;
+    }
+    toggleCard(opts.key);
+  });
 
   if (typeof opts.onInspect === 'function') {
     card.addEventListener('dblclick', (event) => {
@@ -572,15 +584,12 @@ function renderMessages({ animate = true } = {}) {
     ? new Set()
     : new Set(state.renderedOpenKeys);
   const prevTop = dom.messages.scrollTop;
-  const stick = !state.peekKey && (state.forceScroll || isNearBottom());
+  const stick = state.forceScroll || isNearBottom();
   state.forceScroll = false;
 
   dom.messages.replaceChildren();
   if (!session) {
     state.openCardKey = null;
-    state.peekKey = null;
-    state.peekKeys.clear();
-    state.spaceHeld = false;
     state.renderedOpenKeys = new Set();
     state.renderedSessionId = null;
     dom.messages.append(el('div', 'empty', 'No chats yet. Hold Tab to create one.'));
@@ -588,9 +597,6 @@ function renderMessages({ animate = true } = {}) {
   }
   if (session.msgs.length === 0) {
     state.openCardKey = null;
-    state.peekKey = null;
-    state.peekKeys.clear();
-    state.spaceHeld = false;
     state.renderedOpenKeys = new Set();
     state.renderedSessionId = sessionId;
     dom.messages.append(el('div', 'empty', 'No messages yet. Press Alt to type.'));
@@ -620,15 +626,7 @@ function renderMessages({ animate = true } = {}) {
   const cards = [...dom.messages.querySelectorAll('.message-card')];
   const cardKeys = new Set(cards.map((card) => card.dataset.cardKey));
 
-  for (const key of [...state.peekKeys]) {
-    if (!cardKeys.has(key)) state.peekKeys.delete(key);
-  }
-  if (state.peekKey && !cardKeys.has(state.peekKey)) {
-    state.peekKey = null;
-  }
-
-  const targetKeys =
-    state.peekKeys.size > 0 ? new Set(state.peekKeys) : openKeySet(autoKey);
+  const targetKeys = openKeySet(autoKey);
   for (const key of [...targetKeys]) {
     if (!cardKeys.has(key)) targetKeys.delete(key);
   }
@@ -644,10 +642,7 @@ function renderMessages({ animate = true } = {}) {
     if (!sameOpenKeys(previousKeys, targetKeys)) {
       requestAnimationFrame(() => {
         if (state.renderVersion !== version) return;
-        const latest =
-          state.peekKeys.size > 0
-            ? peekOpenKeys()
-            : openKeySet(state.openCardKey);
+        const latest = openKeySet(state.openCardKey);
         const keys = new Set();
         for (const key of latest) {
           if (cardKeys.has(key)) keys.add(key);
@@ -661,7 +656,6 @@ function renderMessages({ animate = true } = {}) {
 
   requestAnimationFrame(() => {
     if (state.renderVersion !== version) return;
-    if (state.peekKey) return;
     if (stick) dom.messages.scrollTop = dom.messages.scrollHeight;
     else dom.messages.scrollTop = prevTop;
   });
@@ -752,94 +746,6 @@ function cancelTabHold() {
   state.tabHeld = false;
 }
 
-function cardAtPointer() {
-  const element = document.elementFromPoint(state.pointerX, state.pointerY);
-  if (!(element instanceof Element)) return null;
-  return element.closest('.message-card');
-}
-
-function applyPeekPinned(key) {
-  const target = cardByKey(key);
-  if (!target) return;
-
-  const anchorTop = target.getBoundingClientRect().top;
-  const container = dom.messages;
-
-  // 只展开当前 hover 的条目，其他条目全部折叠；用 instant 避免
-  // 折叠动画把目标标题带着移动。
-  applyOpenKey(key, { instant: true });
-
-  const pin = () => {
-    const drift = target.getBoundingClientRect().top - anchorTop;
-    if (Math.abs(drift) <= 0.5) return;
-
-    const desired = container.scrollTop + drift;
-    if (desired >= 0) {
-      container.scrollTop = desired;
-    } else {
-      // 目标靠近顶部、上方内容折叠后需要负的 scrollTop；
-      // 用临时顶部留白补足，保证标题的屏幕位置不变。
-      container.scrollTop = 0;
-      const currentPad = parseFloat(getComputedStyle(container).paddingTop) || 0;
-      container.style.paddingTop = `${currentPad - desired}px`;
-    }
-  };
-
-  pin();
-  requestAnimationFrame(() => {
-    if (!state.spaceHeld || state.peekKey !== key) return;
-    pin();
-  });
-}
-
-function startSpacePeek(card) {
-  const key = card && card.dataset.cardKey;
-  if (!key) return;
-  state.spaceHeld = true;
-  state.peekKey = key;
-  state.peekKeys.clear();
-  state.peekKeys.add(key);
-  dom.messages.style.removeProperty('padding-top');
-
-  state.peekPointerX = state.pointerX;
-  state.peekPointerY = state.pointerY;
-  applyPeekPinned(key);
-}
-
-function endSpacePeek() {
-  if (!state.spaceHeld && state.peekKeys.size === 0) return;
-  state.spaceHeld = false;
-  state.peekKey = null;
-  state.peekKeys.clear();
-  dom.messages.style.removeProperty('padding-top');
-  applyOpenKeys(openKeySet(state.openCardKey));
-}
-
-function handlePointerMove(event) {
-  state.pointerX = event.clientX;
-  state.pointerY = event.clientY;
-  if (!state.spaceHeld) return;
-
-  if (
-    Math.abs(state.pointerX - state.peekPointerX) < 6 &&
-    Math.abs(state.pointerY - state.peekPointerY) < 6
-  ) {
-    return;
-  }
-
-  const card = cardAtPointer();
-  const key = card && card.dataset.cardKey;
-  if (!key || key === state.peekKey) return;
-
-  state.peekKey = key;
-  state.peekKeys.clear();
-  state.peekKeys.add(key);
-
-  state.peekPointerX = state.pointerX;
-  state.peekPointerY = state.pointerY;
-  applyPeekPinned(key);
-}
-
 function scrollCardToTop(card, offset = 48) {
   const container = dom.messages;
   const containerRect = container.getBoundingClientRect();
@@ -895,8 +801,6 @@ function navigateBlock(direction, { selector = null } = {}) {
 
   const target = cards[targetIndex];
   const targetKey = target.dataset.cardKey;
-  state.peekKey = null;
-  state.peekKeys.clear();
   state.openCardKey = targetKey;
 
   // 先瞬间折叠所有块，把目标块定位到固定高度后立刻展开
@@ -915,7 +819,6 @@ function openComposer() {
   if (!dom.rawOverlay.classList.contains('hidden')) return;
   if (state.switcherOpen) return;
 
-  endSpacePeek();
   state.composerOpen = true;
   dom.composer.inert = false;
   dom.composer.setAttribute('aria-hidden', 'false');
@@ -944,7 +847,6 @@ function toggleComposer() {
 
 function openSwitcher() {
   if (!dom.settingsOverlay.classList.contains('hidden')) return;
-  endSpacePeek();
   closeComposer();
   state.switcherOpen = true;
   state.switcherIndex = state.current;
@@ -976,7 +878,6 @@ function moveSwitcher(delta) {
 
 function selectSession(index) {
   if (index < 0 || index >= state.sessions.length) return;
-  endSpacePeek();
   state.current = index;
   state.forceScroll = true;
   state.pendingDelete = -1;
@@ -1003,7 +904,6 @@ function updateSendState() {
 }
 
 function newSession() {
-  endSpacePeek();
   if (state.sessions.length === 0) state.seq = 0;
   state.seq += 1;
   state.sessions.push({
@@ -1023,7 +923,6 @@ function newSession() {
 
 function deleteSession(index) {
   if (index < 0 || index >= state.sessions.length) return;
-  endSpacePeek();
   state.sessions.splice(index, 1);
 
   if (state.sessions.length === 0) {
@@ -1045,7 +944,6 @@ function sendMessage() {
   if (state.streaming) return;
   const text = dom.input.value.trim();
   if (!text) return;
-  endSpacePeek();
   closeComposer();
 
   const session = currentSession();
@@ -1096,17 +994,13 @@ function finishStream() {
     .forEach((card) => card.classList.remove('streaming'));
 
   state.openCardKey = autoCardKey();
-  if (state.peekKey) {
-    applyPeekPinned(state.peekKey);
-  } else {
-    applyOpenKey(state.openCardKey);
-  }
+  applyOpenKey(state.openCardKey);
 
   updateSendState();
   saveChatsSoon();
   if (state.switcherOpen) renderSwitcher();
 
-  if (!state.peekKey && stick) {
+  if (stick) {
     requestAnimationFrame(() => {
       dom.messages.scrollTop = dom.messages.scrollHeight;
     });
@@ -1114,7 +1008,6 @@ function finishStream() {
 }
 
 function openRawRequest(body, label) {
-  endSpacePeek();
   dom.rawMeta.textContent = label || '';
   dom.rawBody.replaceChildren();
   if (body && typeof body === 'object') {
@@ -1137,7 +1030,6 @@ function closeRawRequest() {
 }
 
 function openSettings() {
-  endSpacePeek();
   closeComposer();
   applySettings();
   dom.settingsOverlay.classList.remove('hidden');
@@ -1150,7 +1042,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .card-head';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -1307,7 +1199,6 @@ function bindEvents() {
       if (state.switcherOpen) return;
       if (event.repeat || state.tabHeld) return;
 
-      endSpacePeek();
       state.tabHeld = true;
       openSwitcher();
       return;
@@ -1352,38 +1243,17 @@ function bindEvents() {
     }
 
     if (event.code === 'Space' || event.key === ' ') {
-      if (event.repeat || state.spaceHeld) return;
-      const active = document.activeElement;
       const target = event.target;
+      const active = document.activeElement;
       const inEditable =
         (target instanceof Element &&
-          target.closest(
-            'input, textarea, [contenteditable="true"]'
-          )) ||
+          target.closest('input, textarea, [contenteditable="true"]')) ||
         (active instanceof Element &&
-          active.closest(
-            'input, textarea, [contenteditable="true"]'
-          ));
-      if (inEditable) {
-        const emptyComposer = active === dom.input && dom.input.value === '';
-        if (!emptyComposer) return;
-      }
-      if (
-        target instanceof Element &&
-        target.closest('button, a, select')
-      ) {
-        return;
-      }
-      if (
-        active instanceof Element &&
-        active.closest('button, a, select')
-      ) {
-        return;
-      }
-      const card = cardAtPointer();
-      if (!card) return;
-      event.preventDefault();
-      startSpacePeek(card);
+          active.closest('input, textarea, [contenteditable="true"]'));
+      const onControl =
+        (target instanceof Element && target.closest('button, a, select')) ||
+        (active instanceof Element && active.closest('button, a, select'));
+      if (!inEditable && !onControl) event.preventDefault();
     }
   });
 
@@ -1394,25 +1264,11 @@ function bindEvents() {
       if (!dom.settingsOverlay.classList.contains('hidden')) return;
       event.preventDefault();
       if (state.switcherOpen) closeSwitcher();
-      return;
     }
-
-    if (event.code === 'Space' || event.key === ' ') {
-      if (!state.spaceHeld) return;
-      event.preventDefault();
-      endSpacePeek();
-    }
-  });
-
-  document.addEventListener('mousemove', handlePointerMove);
-  document.addEventListener('mousedown', (event) => {
-    state.pointerX = event.clientX;
-    state.pointerY = event.clientY;
   });
 
   window.addEventListener('blur', () => {
     cancelTabHold();
-    endSpacePeek();
     if (state.switcherOpen) closeSwitcher();
   });
 
@@ -1427,7 +1283,6 @@ function bindEvents() {
       if (!dom.settingsOverlay.classList.contains('hidden')) return;
       if (state.switcherOpen) return;
       if (state.composerOpen) return;
-      if (state.spaceHeld) return;
 
       const delta = event.deltaY || event.deltaX;
       if (delta === 0) return;
@@ -1503,15 +1358,13 @@ function bindEvents() {
     const stick = isNearBottom();
     state.forceScroll = false;
     state.openCardKey = key;
-    if (state.peekKey) {
-      applyPeekPinned(state.peekKey);
-    } else if (
+    if (
       state.renderedOpenKeys.size !== 1 ||
       !state.renderedOpenKeys.has(key)
     ) {
       applyOpenKey(key);
     }
-    if (stick && !state.peekKey) {
+    if (stick) {
       requestAnimationFrame(() => {
         dom.messages.scrollTop = dom.messages.scrollHeight;
       });

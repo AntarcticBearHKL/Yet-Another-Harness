@@ -539,10 +539,6 @@ button {
   border-radius: 8px;
 }
 
-.message-card.peek-target {
-  background: rgba(185, 111, 61, 0.16);
-}
-
 .message-card.collapsed:hover {
   background: rgba(185, 111, 61, 0.1);
 }
@@ -552,7 +548,7 @@ button {
   align-items: center;
   gap: 8px;
   padding: 12px 14px 10px;
-  cursor: default;
+  cursor: pointer;
   user-select: none;
 }
 
