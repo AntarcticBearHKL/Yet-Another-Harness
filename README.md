@@ -21,7 +21,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 点击任意条目的标题行即可展开/折叠；展开一条时其他条目自动折叠；生成中仍自动跟随最新条目，非生成时默认最后一张
 - 展开的条目保持透明背景，不再加暖色底；折叠条目 hover 高亮为直角
 - 展开条目时固定当前滚动位置，不会因为高度变化丢失阅读位置
-- 展开正文默认最多 10 行，超出部分底部渐隐；双击正文在独立窗口查看全文，流式内容会实时同步；Ctrl + 双击正文查看 raw request body
+- 展开正文默认最多 10 行，超出部分底部渐隐；双击正文查看全文（桌面端独立窗口，网页端全屏），流式内容会实时同步；Ctrl + 双击正文查看 raw request body
 - 全文窗口同样可以按住左键在任意非交互区域拖动，右上角按钮、Esc 或右键关闭
 - Ctrl + 滚轮按条目导航：收起当前条目，跳到上/下一条并把目标标题定位到顶部附近，目标立即展开；普通滚轮仍是连续滚动
 - Shift + 滚轮只在用户 `prompt` 条目之间切换并立即展开；从任意条目开始，向下找下一条 prompt，向上找上一条 prompt
@@ -36,7 +36,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 工具调用的 JSON 参数和 JSON 输出用带语法着色、可折叠节点的查看器展示
 - Ctrl + 双击任意对话卡片可以查看该轮实际发给模型的原始请求 body，完整 JSON 树可逐层折叠
 - 所有区域隐藏滚动条，滚轮/触控板仍然可以滚动
-- 会话用 SQLite（`node:sqlite`，WAL）管理；设置和 API key 仍存 `settings.json`
+- 后端服务用 SQLite（`node:sqlite`，WAL）管理会话；设置和 API key 存 `settings.json`，窗口位置存 `window.json`
 - 全局禁用鼠标框选和右键菜单；只有输入框保留文本选择
 
 旧的 Rust/Slint 版已经删除；新开发都在 `D:\Dev\Harness\yah`。
@@ -51,6 +51,23 @@ npm start
 桌面上有 `YAH - Yet Another Harness.lnk`，直接双击启动（指向 `node_modules\electron\dist\electron.exe`，
 工作目录是本项目，图标是 `assets\yah.ico`）。移动项目目录后需要重新创建快捷方式。
 
+### 前后端分离 / 远程访问
+
+桌面端会自动探测并连接本地后端；如果后端没运行，它会用 Electron 自带的 Node 拉起来。
+需要内网穿透时，先手动启动后端，再开桌面端：
+
+```bat
+set YAH_REMOTE_PASSWORD=your-password
+start-server.cmd
+```
+
+- `start-server.cmd` 启动本地后端：`127.0.0.1:3789` 给桌面端，`127.0.0.1:3790` 给远程入口。
+- 远程入口使用 Basic Auth，用户名默认 `yah`，密码是 `YAH_REMOTE_PASSWORD`；没设置密码时远程入口不启动。
+- 另开窗口运行 `start-tunnel.cmd`（需要把 `cloudflared.exe` 放在项目目录），把公网地址转发到 `127.0.0.1:3790`。
+- 浏览器打开穿透地址即可使用同一个界面；桌面端的窗口按钮在网页里会隐藏。
+- 停止后端：`stop-server.cmd`。
+- 便携数据：在 `start-server.cmd` 里取消 `set YAH_DATA_DIR=%~dp0data` 的注释，数据会放在项目目录的 `data/`。
+
 测试：
 
 ```bash
@@ -58,26 +75,32 @@ npm test
 LIVE_SEARCH=1 npm test   # 额外跑一条真实 DuckDuckGo 搜索
 ```
 
-要求 Node.js 22+（Electron 45 自带 Chromium，不需要单独装浏览器）。
+要求 Node.js 22+（Electron 45 自带 Chromium，不需要单独装浏览器）。`start-server.cmd` 使用 Electron 自带的 Node，不需要另外安装 Node。
 
 ## 架构
 
 ```
-src/main.js       BrowserWindow、IPC、窗口控制、chat:send、全文窗口
-src/preload.js    contextBridge 暴露给渲染进程的 API
-src/deepseek.js   OpenCode Go SSE + tool_calls 累积 + agent loop
-src/tools.js      免费 web_search（DuckDuckGo HTML）
-src/store.js      chats.db（SQLite/WAL）+ settings.json 原子写 + 旧版迁移
-src/renderer.js   聊天、项目工作区、设置浮层、全文窗口入口
-src/index.html    页面骨架
-src/styles.css    主题、气泡、浮层、输入区
-src/content.html  独立全文窗口页面
-src/content.css   全文窗口排版和圆体
-src/content.js    全文窗口渲染和流式更新
+server/index.js    本地后端：HTTP API、SSE、静态页面、远程 Basic Auth
+server/runner.js   agent 主循环、工具执行、消息/事件持久化
+src/main.js        Electron 壳：窗口、拖动、全文窗口、拉起/连接后端
+src/preload.js     只暴露窗口和全文窗口能力
+src/deepseek.js    OpenCode Go SSE + tool_calls 累积 + agent loop（后端）
+src/tools.js       免费 web_search（DuckDuckGo HTML，后端）
+src/store.js       chats.db（SQLite/WAL）+ settings.json 原子写 + 旧版迁移
+src/renderer.js    网页客户端：聊天、项目工作区、设置、环形菜单、HTTP/SSE
+src/index.html     页面骨架
+src/styles.css     主题、布局、浮层、输入区
+src/content.html   桌面端独立全文窗口页面
+src/content.css    全文窗口排版和圆体
+src/content.js     全文窗口渲染和流式更新
+start-server.cmd   启动本地后端（可带远程入口）
+stop-server.cmd    停止本地后端
+start-tunnel.cmd   内网穿透示例（cloudflared）
 ```
 
-渲染进程只负责画；网络请求、API key、工具执行都在主进程。`contextIsolation: true`，
-`nodeIntegration: false`，页面 CSP 只允许本地脚本/样式。
+桌面端和远程网页加载的是同一份 `src/index.html` + `renderer.js`；界面只负责显示和输入，
+agent 循环、工具、SQLite、API key 都在本地后端。`contextIsolation: true`，
+`nodeIntegration: false`，页面 CSP 只允许本地脚本/样式和同源 HTTP/SSE。
 
 ## 模型
 
@@ -94,9 +117,13 @@ src/content.js    全文窗口渲染和流式更新
   - `messages`：每个会话的消息角色和文字
   - `steps`：工具调用/返回、文本片段、轮次
   - `requests`：每条助手消息每轮的原始请求 body（gzip 压缩的 JSON BLOB）
+  - `runs`：一次 agent 执行的状态
+  - `events`：按会话递增的事件日志，用于 SSE 断线重连补发
   - `app_state`：当前会话 id 和标题序号
   - 运行时还会出现 `chats.db-wal` / `chats.db-shm`；备份时不要只复制 `chats.db`
-- `%APPDATA%\yah\settings.json`：API key、窗口位置和尺寸
+- `%APPDATA%\yah\settings.json`：API key（后端读取，网页端拿不到）
+- `%APPDATA%\yah\window.json`：桌面窗口位置和尺寸
+- `%APPDATA%\yah\server.pid`：本地后端进程号，`stop-server.cmd` 用它停止服务
 
 第一次启动时，如果新的 `yah` 数据目录不存在，会从旧的 Electron 目录
 `%APPDATA%\miniharness-electron` 复制数据库和设置；如果数据库还没有会话，会尝试导入旧的 `chats.json`，成功后把原文件
@@ -104,14 +131,15 @@ src/content.js    全文窗口渲染和流式更新
 迁移 `chats.json` 和 `settings.json`（`api_key` → `apiKey`，`window.w/h` → `width/height`）。
 
 API key 和旧版一样是明文存在 `settings.json` 里；本地应用，没接 Windows Credential
-Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key。
+Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key。只有本地后端读取它，
+桌面端和远程网页都拿不到明文；远程入口只返回 `hasApiKey`。
 
 ## 外观
 
 页面是扁平化暖色主题，使用 `assets\fonts` 里的 Resource Han Rounded CN 圆体（Regular / Bold，SIL OFL，许可证见 `assets\fonts\OFL-ResourceHanRounded.txt`）：
 
 - 整个窗口使用纯色奶油底，没有卡片底色、圆角卡片、阴影或 backdrop blur（Space 输入框的透明毛玻璃遮罩除外）；
-- 对话条目用细分隔线和文字/圆点颜色区分；
+- 对话轮次用带边框的 prompt 标题区分，条目本身用文字/圆点颜色区分；
 - 输入框、设置、raw 查看器和切换界面都是纯色平面面板；
 - 窗口保留 Windows 11 DWM 原生圆角（`roundedCorners: true`），不再用 `setShape`；
 - 系统不支持时只影响窗口材质，不影响布局和功能。

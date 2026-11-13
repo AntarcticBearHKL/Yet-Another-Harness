@@ -13,7 +13,7 @@ const { DatabaseSync } = require('node:sqlite');
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
 
 let dataDir = null;
@@ -324,6 +324,25 @@ CREATE TABLE IF NOT EXISTS requests (
     REFERENCES messages(session_id, seq) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS runs (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,
+  started_at INTEGER NOT NULL,
+  ended_at INTEGER,
+  error TEXT
+);
+
+CREATE TABLE IF NOT EXISTS events (
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  seq INTEGER NOT NULL,
+  run_id TEXT,
+  type TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (session_id, seq)
+);
+
 CREATE TABLE IF NOT EXISTS app_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   current_session_id TEXT,
@@ -338,6 +357,8 @@ CREATE INDEX IF NOT EXISTS idx_projects_order ON projects(sort_order);
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, seq);
 CREATE INDEX IF NOT EXISTS idx_steps_message ON steps(session_id, message_seq, seq);
 CREATE INDEX IF NOT EXISTS idx_requests_message ON requests(session_id, message_seq, round);
+CREATE INDEX IF NOT EXISTS idx_runs_session ON runs(session_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id, seq);
 `;
 
 function close() {
@@ -763,6 +784,289 @@ function saveChats(chats) {
   return writeChats(chats);
 }
 
+function metadataHash(session) {
+  return crypto
+    .createHash('sha1')
+    .update(
+      JSON.stringify({
+        title: session.title,
+        system: session.system,
+        projectId: session.projectId,
+      })
+    )
+    .digest('hex');
+}
+
+/**
+ * 只保存项目 / 会话的结构，不碰消息内容。
+ * 消息由 agent runner 增量写入，避免多个客户端用整份状态互相覆盖。
+ */
+function saveStructure(chats) {
+  const normalized = normalizeChats(chats);
+  const database = openDb();
+
+  const upsertProject = database.prepare(
+    `INSERT INTO projects (id, name, sort_order)
+     VALUES (?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name,
+       sort_order = excluded.sort_order`
+  );
+  const upsertSession = database.prepare(
+    `INSERT INTO sessions (id, title, system, project_id, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       title = excluded.title,
+       system = excluded.system,
+       project_id = excluded.project_id,
+       sort_order = excluded.sort_order,
+       content_hash = excluded.content_hash,
+       updated_at = excluded.updated_at`
+  );
+  const updateState = database.prepare(
+    'UPDATE app_state SET current_session_id = ?, title_seq = ? WHERE id = 1'
+  );
+
+  const now = Date.now();
+
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    normalized.projects.forEach((project, order) => {
+      upsertProject.run(project.id, project.name, order);
+    });
+
+    normalized.sessions.forEach((session, order) => {
+      upsertSession.run(
+        session.id,
+        session.title,
+        session.system,
+        session.projectId,
+        order,
+        metadataHash(session),
+        now
+      );
+    });
+
+    const current = normalized.sessions[normalized.current];
+    updateState.run(current ? current.id : null, normalized.seq);
+    database.exec('COMMIT');
+  } catch (error) {
+    try {
+      database.exec('ROLLBACK');
+    } catch {
+      /* ignore */
+    }
+    throw error;
+  }
+
+  return normalized;
+}
+
+function deleteSession(sessionId) {
+  openDb().prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+}
+
+function appendMessage(sessionId, role, text, request) {
+  const database = openDb();
+  const row = database
+    .prepare(
+      'SELECT COALESCE(MAX(seq) + 1, 0) AS seq FROM messages WHERE session_id = ?'
+    )
+    .get(sessionId);
+  const seq = Number(row?.seq) || 0;
+  database
+    .prepare(
+      'INSERT INTO messages (session_id, seq, role, text, request) VALUES (?, ?, ?, ?, ?)'
+    )
+    .run(
+      sessionId,
+      seq,
+      normalizeRole(role),
+      String(text ?? ''),
+      request === undefined ? null : request
+    );
+  database
+    .prepare('UPDATE sessions SET updated_at = ? WHERE id = ?')
+    .run(Date.now(), sessionId);
+  return seq;
+}
+
+function updateMessage(sessionId, seq, msg) {
+  const database = openDb();
+  const steps = Array.isArray(msg?.steps)
+    ? msg.steps.map(normalizeStep).filter(Boolean)
+    : [];
+  const requests = Array.isArray(msg?.requests) ? msg.requests : [];
+
+  const update = database.prepare(
+    'UPDATE messages SET text = ?, request = ? WHERE session_id = ? AND seq = ?'
+  );
+  const deleteSteps = database.prepare(
+    'DELETE FROM steps WHERE session_id = ? AND message_seq = ?'
+  );
+  const insertStep = database.prepare(
+    `INSERT INTO steps
+       (session_id, message_seq, seq, kind, round, text, name, arguments, output, ok, label)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const deleteRequests = database.prepare(
+    'DELETE FROM requests WHERE session_id = ? AND message_seq = ?'
+  );
+  const insertRequest = database.prepare(
+    'INSERT INTO requests (session_id, message_seq, round, body) VALUES (?, ?, ?, ?)'
+  );
+  const touch = database.prepare(
+    'UPDATE sessions SET updated_at = ? WHERE id = ?'
+  );
+
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    update.run(
+      String(msg?.text ?? ''),
+      msg?.request === undefined ? null : msg.request,
+      sessionId,
+      seq
+    );
+
+    deleteSteps.run(sessionId, seq);
+    steps.forEach((step, index) => {
+      insertStep.run(
+        sessionId,
+        seq,
+        index,
+        step.kind,
+        Number.isInteger(step.round) ? step.round : 0,
+        step.text ?? null,
+        step.name ?? null,
+        step.arguments ?? null,
+        step.output ?? null,
+        step.ok === false ? 0 : 1,
+        step.label ?? null
+      );
+    });
+
+    deleteRequests.run(sessionId, seq);
+    requests.forEach((body, round) => {
+      if (!body) return;
+      insertRequest.run(
+        sessionId,
+        seq,
+        round,
+        zlib.gzipSync(Buffer.from(JSON.stringify(body), 'utf8'))
+      );
+    });
+
+    touch.run(Date.now(), sessionId);
+    database.exec('COMMIT');
+  } catch (error) {
+    try {
+      database.exec('ROLLBACK');
+    } catch {
+      /* ignore */
+    }
+    throw error;
+  }
+}
+
+function appendEvent(sessionId, runId, type, payload) {
+  const database = openDb();
+  const row = database
+    .prepare(
+      'SELECT COALESCE(MAX(seq) + 1, 1) AS seq FROM events WHERE session_id = ?'
+    )
+    .get(sessionId);
+  const seq = Number(row?.seq) || 0;
+  const createdAt = Date.now();
+  database
+    .prepare(
+      `INSERT INTO events (session_id, seq, run_id, type, payload, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      sessionId,
+      seq,
+      runId ?? null,
+      String(type),
+      JSON.stringify(payload ?? {}),
+      createdAt
+    );
+  return {
+    sessionId,
+    seq,
+    runId: runId ?? null,
+    type: String(type),
+    payload: payload ?? {},
+    createdAt,
+  };
+}
+
+function listEvents(sessionId, afterSeq = 0) {
+  const rows = openDb()
+    .prepare(
+      `SELECT seq, run_id, type, payload, created_at
+       FROM events
+       WHERE session_id = ? AND seq > ?
+       ORDER BY seq ASC`
+    )
+    .all(sessionId, Number(afterSeq) || 0);
+
+  return rows.map((row) => {
+    let payload = {};
+    try {
+      payload = JSON.parse(row.payload);
+    } catch {
+      /* ignore corrupt event payload */
+    }
+    return {
+      sessionId,
+      seq: Number(row.seq),
+      runId: row.run_id,
+      type: row.type,
+      payload,
+      createdAt: Number(row.created_at),
+    };
+  });
+}
+
+function createRun(runId, sessionId, status = 'running') {
+  const startedAt = Date.now();
+  openDb()
+    .prepare(
+      'INSERT INTO runs (id, session_id, status, started_at) VALUES (?, ?, ?, ?)'
+    )
+    .run(runId, sessionId, status, startedAt);
+  return { id: runId, sessionId, status, startedAt };
+}
+
+function updateRun(runId, status, error = null) {
+  openDb()
+    .prepare(
+      'UPDATE runs SET status = ?, ended_at = ?, error = ? WHERE id = ?'
+    )
+    .run(status, Date.now(), error, runId);
+}
+
+function activeRunForSession(sessionId) {
+  return (
+    openDb()
+      .prepare(
+        `SELECT id, status FROM runs
+         WHERE session_id = ? AND status IN ('running', 'queued')
+         ORDER BY started_at DESC LIMIT 1`
+      )
+      .get(sessionId) || null
+  );
+}
+
+function interruptRuns() {
+  openDb()
+    .prepare(
+      `UPDATE runs SET status = 'interrupted', ended_at = ?
+       WHERE status IN ('running', 'queued')`
+    )
+    .run(Date.now());
+}
+
 module.exports = {
   DEFAULT_SYSTEM_PROMPT,
   init,
@@ -775,4 +1079,14 @@ module.exports = {
   saveSettings,
   loadChats,
   saveChats,
+  saveStructure,
+  deleteSession,
+  appendMessage,
+  updateMessage,
+  appendEvent,
+  listEvents,
+  createRun,
+  updateRun,
+  activeRunForSession,
+  interruptRuns,
 };

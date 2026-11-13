@@ -237,6 +237,69 @@ test('sqlite round-trips sessions, steps and raw requests', () => {
   });
 });
 
+test('structure saves keep messages and run events', () => {
+  withStoreDir(() => {
+    store.saveChats({
+      projects: [{ id: 'p1', name: 'Project 1' }],
+      sessions: [
+        {
+          id: 's1',
+          title: 'Chat 1',
+          system: 'sys',
+          projectId: 'p1',
+          msgs: [{ role: 'User', text: 'hi', request: null, steps: [] }],
+        },
+      ],
+      current: 0,
+      seq: 1,
+    });
+
+    const userSeq = store.appendMessage('s1', 'User', 'hello', null);
+    const agentSeq = store.appendMessage('s1', 'Agent', '', '');
+    assert.equal(userSeq, 1);
+    assert.equal(agentSeq, 2);
+
+    store.updateMessage('s1', agentSeq, {
+      text: 'world',
+      request: '',
+      steps: [{ kind: 'text', text: 'world', round: 0 }],
+      requests: [{ model: 'test' }],
+    });
+    store.appendEvent('s1', 'r1', 'assistant.delta', { text: 'world' });
+    store.createRun('r1', 's1', 'running');
+    assert.equal(store.activeRunForSession('s1').id, 'r1');
+    store.updateRun('r1', 'done');
+    assert.equal(store.activeRunForSession('s1'), null);
+
+    store.saveStructure({
+      projects: [{ id: 'p1', name: 'Project 1' }],
+      sessions: [
+        {
+          id: 's1',
+          title: 'Chat 1',
+          system: 'sys',
+          projectId: 'p1',
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 1,
+    });
+
+    const loaded = store.loadChats();
+    assert.equal(loaded.sessions.length, 1);
+    assert.equal(loaded.sessions[0].msgs.length, 3);
+    assert.equal(loaded.sessions[0].msgs[2].text, 'world');
+    assert.deepEqual(
+      store.listEvents('s1', 0).map((event) => event.type),
+      ['assistant.delta']
+    );
+
+    store.deleteSession('s1');
+    assert.equal(store.loadChats().sessions.length, 0);
+  });
+});
+
 test('legacy chats.json migrates into sqlite and is kept as a backup', () => {
   withStoreDir((dir) => {
     fs.writeFileSync(

@@ -9,6 +9,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "server": "node server/index.js",
     "test": "node --test"
   },
   "devDependencies": {

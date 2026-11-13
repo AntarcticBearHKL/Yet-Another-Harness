@@ -9,22 +9,6 @@ function subscribe(channel, callback) {
 }
 
 contextBridge.exposeInMainWorld('yah', {
-  loadSettings: () => ipcRenderer.invoke('settings:load'),
-  saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
-  loadChats: () => ipcRenderer.invoke('chats:load'),
-  saveChats: (chats) => ipcRenderer.invoke('chats:save', chats),
-  saveChatsSync: (chats) => ipcRenderer.sendSync('chats:save-sync', chats),
-
-  sendChat: (payload) => ipcRenderer.send('chat:send', payload),
-  onChatDelta: (callback) => subscribe('chat:delta', callback),
-  onChatRequest: (callback) => subscribe('chat:request', callback),
-  onChatToolCall: (callback) => subscribe('chat:tool-call', callback),
-  onChatToolResult: (callback) => subscribe('chat:tool-result', callback),
-  onChatDone: (callback) => subscribe('chat:done', callback),
-  onChatError: (callback) => subscribe('chat:error', callback),
-
-  loadCatalog: () => ipcRenderer.invoke('catalog:load'),
-
   openContent: (payload) => ipcRenderer.invoke('content:open', payload),
   updateContent: (payload) => ipcRenderer.send('content:update', payload),
   onContentInit: (callback) => subscribe('content:init', callback),

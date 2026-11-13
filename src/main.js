@@ -2,9 +2,11 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
 const {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   Menu,
   nativeTheme,
@@ -12,14 +14,9 @@ const {
   shell,
 } = require('electron');
 
-const store = require('./store');
-const deepseek = require('./deepseek');
-const tools = require('./tools');
-
 app.setName('YAH - Yet Another Harness');
 
-// 独立的数据目录 %APPDATA%\yah；首次升级时从旧的 Electron 目录
-// %APPDATA%\miniharness-electron 复制 chats.db / settings.json。
+// 独立数据目录 %APPDATA%\yah；首次升级时从旧的 Electron 目录复制。
 const appData = app.getPath('appData');
 const userData = path.join(appData, 'yah');
 const previousUserData = path.join(appData, 'miniharness-electron');
@@ -28,7 +25,6 @@ if (!fs.existsSync(userData) && fs.existsSync(previousUserData)) {
 }
 app.setPath('userData', userData);
 app.setAppUserModelId('com.yah.harness');
-// 系统 acrylic/边框也跟随浅色，避免深色材质透出来
 nativeTheme.themeSource = 'light';
 
 const gotLock = app.requestSingleInstanceLock();
@@ -42,12 +38,36 @@ if (!gotLock) {
   });
 }
 
+const LOCAL_PORT = Number(process.env.YAH_LOCAL_PORT) || 3789;
+const LOCAL_URL = `http://127.0.0.1:${LOCAL_PORT}`;
+const WINDOW_STATE_FILE = path.join(userData, 'window.json');
+
 let mainWindow = null;
-let settings = null;
+let backendProcess = null;
 let saveBoundsTimer = null;
-const activeChats = new Set();
 const contentWindows = new Map();
 let dragState = null;
+
+function loadWindowState() {
+  try {
+    return JSON.parse(fs.readFileSync(WINDOW_STATE_FILE, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function saveWindowState(bounds) {
+  try {
+    fs.mkdirSync(path.dirname(WINDOW_STATE_FILE), { recursive: true });
+    fs.writeFileSync(
+      WINDOW_STATE_FILE,
+      `${JSON.stringify(bounds, null, 2)}\n`,
+      'utf8'
+    );
+  } catch {
+    /* ignore */
+  }
+}
 
 function clampBounds(bounds) {
   const display = bounds
@@ -92,22 +112,8 @@ function scheduleBoundsSave() {
 }
 
 function saveBounds() {
-  if (!mainWindow || mainWindow.isDestroyed() || !settings) return;
-  const bounds = mainWindow.getBounds();
-  settings = {
-    ...settings,
-    window: {
-      x: bounds.x,
-      y: bounds.y,
-      width: bounds.width,
-      height: bounds.height,
-    },
-  };
-  try {
-    store.saveSettings(settings);
-  } catch {
-    /* ignore */
-  }
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  saveWindowState(mainWindow.getBounds());
 }
 
 function openContentWindow(payload) {
@@ -175,9 +181,49 @@ function openContentWindow(payload) {
   return win.id;
 }
 
+async function backendHealthy() {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 800);
+    const response = await fetch(`${LOCAL_URL}/api/health`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureBackend() {
+  if (await backendHealthy()) return;
+
+  const serverPath = path.join(__dirname, '..', 'server', 'index.js');
+  backendProcess = spawn(process.execPath, [serverPath], {
+    cwd: path.join(__dirname, '..'),
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      YAH_DATA_DIR: process.env.YAH_DATA_DIR || userData,
+      YAH_LOCAL_PORT: String(LOCAL_PORT),
+    },
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  backendProcess.on('error', (error) => {
+    console.error('backend spawn failed', error);
+  });
+
+  for (let i = 0; i < 60; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    if (await backendHealthy()) return;
+    if (backendProcess.exitCode !== null) break;
+  }
+  throw new Error('本地后端没有启动成功');
+}
+
 function createWindow() {
-  settings = store.loadSettings();
-  const bounds = clampBounds(settings.window);
+  const bounds = clampBounds(loadWindowState());
 
   mainWindow = new BrowserWindow({
     ...bounds,
@@ -186,7 +232,6 @@ function createWindow() {
     title: 'YAH - Yet Another Harness',
     icon: path.join(__dirname, '..', 'assets', 'yah.ico'),
     frame: false,
-    // 扁平纯色页面 + Windows 11 原生圆角；不使用 acrylic 或 setShape。
     transparent: false,
     backgroundColor: '#f9f1e7',
     roundedCorners: true,
@@ -203,7 +248,7 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  mainWindow.loadURL(`${LOCAL_URL}/?shell=electron`);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -211,7 +256,6 @@ function createWindow() {
 
   mainWindow.on('resize', scheduleBoundsSave);
   mainWindow.on('move', scheduleBoundsSave);
-  // Windows 上 resize/move 会连续触发；resized/moved 是拖拽结束后的最终值
   mainWindow.on('resized', saveBounds);
   mainWindow.on('moved', saveBounds);
   mainWindow.on('close', saveBounds);
@@ -236,72 +280,19 @@ function createWindow() {
   });
 }
 
-async function runChat(sender, payload) {
-  const requestId = payload?.requestId;
-  if (!requestId || sender.isDestroyed()) return;
-  if (activeChats.has(sender.id)) {
-    sender.send('chat:error', { requestId, error: 'another request is still running' });
-    return;
-  }
-
-  activeChats.add(sender.id);
-  const controller = new AbortController();
-  const send = (channel, data) => {
-    if (!sender.isDestroyed()) sender.send(channel, { requestId, ...data });
-  };
-
-  try {
-    const text = await deepseek.runAgent({
-      apiKey: payload.apiKey,
-      system: payload.system,
-      history: payload.history,
-      sessionId: payload.chatId,
-      signal: controller.signal,
-      onDelta: (delta, round, reasoning) =>
-        send('chat:delta', { text: delta, round, reasoning }),
-      onRequest: (body, round) => send('chat:request', { round, body }),
-      onToolCall: (call) => send('chat:tool-call', call),
-      onToolResult: (result) => send('chat:tool-result', result),
-    });
-    send('chat:done', { text });
-  } catch (error) {
-    send('chat:error', {
-      error: controller.signal.aborted
-        ? 'request cancelled'
-        : error?.message || String(error),
-    });
-  } finally {
-    activeChats.delete(sender.id);
-  }
-}
-
 if (gotLock) {
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     Menu.setApplicationMenu(null);
-    store.init(app);
+
+    try {
+      await ensureBackend();
+    } catch (error) {
+      dialog.showErrorBox('YAH', error.message || String(error));
+      app.quit();
+      return;
+    }
+
     createWindow();
-
-    ipcMain.handle('settings:load', () => settings);
-    ipcMain.handle('settings:save', (_event, next) => {
-      // 窗口 bounds 由主进程维护，渲染进程传来的旧 window 不覆盖它
-      settings = store.saveSettings({
-        ...settings,
-        ...next,
-        window: settings.window,
-      });
-      return settings;
-    });
-
-    ipcMain.handle('chats:load', () => store.loadChats());
-    ipcMain.handle('chats:save', (_event, data) => store.saveChats(data));
-    ipcMain.on('chats:save-sync', (event, data) => {
-      try {
-        store.saveChats(data);
-        event.returnValue = true;
-      } catch {
-        event.returnValue = false;
-      }
-    });
 
     ipcMain.on('window:minimize', () => mainWindow?.minimize());
     ipcMain.on('window:maximize', () => {
@@ -353,22 +344,25 @@ if (gotLock) {
     });
     ipcMain.handle('window:is-maximized', () => mainWindow?.isMaximized() ?? false);
     ipcMain.handle('app:version', () => app.getVersion());
-    ipcMain.handle('catalog:load', () => ({
-      tools: tools.definitions(),
-      skills: [],
-      mcp: [],
-    }));
 
-    ipcMain.on('chat:send', (event, payload) => {
-      runChat(event.sender, payload);
-    });
-
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    app.on('activate', async () => {
+      if (BrowserWindow.getAllWindows().length !== 0) return;
+      try {
+        await ensureBackend();
+        createWindow();
+      } catch (error) {
+        console.error('activate failed', error);
+      }
     });
 
     app.on('will-quit', () => {
-      store.close();
+      if (backendProcess && process.env.YAH_STOP_SERVER_ON_QUIT === '1') {
+        try {
+          backendProcess.kill();
+        } catch {
+          /* ignore */
+        }
+      }
     });
   });
 

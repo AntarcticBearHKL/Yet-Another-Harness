@@ -6,7 +6,7 @@ const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
 const NO_KEY_HINT =
   'No OpenCode Go API key yet. Hold Tab and open Settings to paste your key.';
 
-const api = window.yah;
+const shell = window.yah || null;
 const $ = (id) => document.getElementById(id);
 
 const dom = {
@@ -32,6 +32,10 @@ const dom = {
   catalogTitle: $('catalog-title'),
   catalogList: $('catalog-list'),
   catalogClose: $('catalog-close'),
+  webContent: $('web-content'),
+  webContentTitle: $('web-content-title'),
+  webContentBody: $('web-content-body'),
+  webContentClose: $('web-content-close'),
 };
 
 const state = {
@@ -41,6 +45,7 @@ const state = {
   seq: 1,
   settings: {
     apiKey: '',
+    hasApiKey: false,
   },
   switcherOpen: false,
   switcherIndex: 0,
@@ -66,6 +71,211 @@ const state = {
   catalogOpen: false,
   catalogKind: null,
 };
+
+async function requestJson(path, options = {}) {
+  const init = {
+    method: options.method || 'GET',
+    credentials: 'same-origin',
+    headers: { ...(options.headers || {}) },
+  };
+  if (options.body !== undefined) {
+    init.headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(options.body);
+  }
+  const response = await fetch(path, init);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
+  if (!response.ok) {
+    const error = new Error(
+      data?.error || `request failed (${response.status})`
+    );
+    error.status = response.status;
+    error.code = data?.code;
+    throw error;
+  }
+  return data;
+}
+
+const eventHandlers = new Map();
+let chatEvents = null;
+let chatEventsSessionId = null;
+
+function subscribeEvent(type, callback) {
+  if (!eventHandlers.has(type)) eventHandlers.set(type, new Set());
+  eventHandlers.get(type).add(callback);
+  return () => eventHandlers.get(type)?.delete(callback);
+}
+
+function dispatchEvent(type, data) {
+  const handlers = eventHandlers.get(type);
+  if (!handlers) return;
+  for (const callback of [...handlers]) {
+    try {
+      callback(data);
+    } catch (error) {
+      console.error('event handler failed', type, error);
+    }
+  }
+}
+
+function closeChatEvents() {
+  if (chatEvents) {
+    chatEvents.close();
+    chatEvents = null;
+  }
+  chatEventsSessionId = null;
+}
+
+function connectChatEvents(sessionId) {
+  if (!sessionId) {
+    closeChatEvents();
+    return;
+  }
+  if (chatEvents && chatEventsSessionId === sessionId) return;
+  closeChatEvents();
+  chatEventsSessionId = sessionId;
+  const source = new EventSource(
+    `/api/events?sessionId=${encodeURIComponent(sessionId)}`
+  );
+  chatEvents = source;
+  source.onmessage = (event) => {
+    let data = null;
+    try {
+      data = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+    if (data?.type) dispatchEvent(data.type, data);
+  };
+  source.onerror = () => {
+    /* EventSource reconnects automatically */
+  };
+}
+
+let webContentKey = null;
+let webContentKind = 'text';
+
+function renderWebContent(payload) {
+  if (!dom.webContentBody) return;
+  dom.webContentBody.replaceChildren();
+  if (webContentKind === 'tool' || payload?.json != null) {
+    const pre = el('pre', 'tool-text');
+    pre.textContent =
+      payload?.json != null
+        ? JSON.stringify(payload.json, null, 2)
+        : String(payload?.text ?? '');
+    dom.webContentBody.append(pre);
+    return;
+  }
+  renderTextContent(dom.webContentBody, payload?.text);
+}
+
+function openWebContent(payload) {
+  if (!dom.webContent) return Promise.resolve();
+  webContentKey = payload?.key || null;
+  webContentKind = payload?.kind || 'text';
+  dom.webContentTitle.textContent = payload?.title || 'CONTENT';
+  renderWebContent(payload);
+  dom.webContentBody.scrollTop = 0;
+  dom.webContent.classList.remove('hidden');
+  dom.webContent.setAttribute('aria-hidden', 'false');
+  return Promise.resolve();
+}
+
+function updateWebContent(payload) {
+  if (!payload || payload.key !== webContentKey) return;
+  if (typeof payload.text !== 'string') return;
+  if (webContentKind === 'tool') return;
+  const previousTop = dom.webContentBody.scrollTop;
+  const atBottom =
+    dom.webContentBody.scrollHeight -
+      dom.webContentBody.scrollTop -
+      dom.webContentBody.clientHeight <
+    40;
+  renderTextContent(dom.webContentBody, payload.text);
+  if (atBottom) {
+    dom.webContentBody.scrollTop = dom.webContentBody.scrollHeight;
+  } else {
+    dom.webContentBody.scrollTop = previousTop;
+  }
+}
+
+function closeWebContent() {
+  if (!dom.webContent) return;
+  webContentKey = null;
+  dom.webContent.classList.add('hidden');
+  dom.webContent.setAttribute('aria-hidden', 'true');
+}
+
+const api = {
+  isElectron: Boolean(shell),
+  platform: shell?.platform || 'web',
+  version: () => shell?.version?.() ?? Promise.resolve('web'),
+  minimize: () => shell?.minimize?.(),
+  maximize: () => shell?.maximize?.(),
+  close: () => shell?.close?.(),
+  dragStart: (point) => shell?.dragStart?.(point),
+  dragMove: (point) => shell?.dragMove?.(point),
+  dragEnd: () => shell?.dragEnd?.(),
+  isMaximized: () => shell?.isMaximized?.() ?? Promise.resolve(false),
+
+  loadSettings: () => requestJson('/api/settings'),
+  saveSettings: (settings) =>
+    requestJson('/api/settings', { method: 'PUT', body: settings }),
+  loadChats: () => requestJson('/api/chats'),
+  saveChats: (chats) =>
+    requestJson('/api/chats', { method: 'POST', body: chats }),
+  deleteSession: (id) =>
+    requestJson(`/api/sessions/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+  saveChatsSync: (chats) => {
+    const body = JSON.stringify(chats);
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(
+        '/api/chats',
+        new Blob([body], { type: 'application/json' })
+      );
+      return;
+    }
+    fetch('/api/chats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+    }).catch(() => {});
+  },
+  sendChat: (payload) =>
+    requestJson('/api/send', { method: 'POST', body: payload }),
+  loadCatalog: () => requestJson('/api/catalog'),
+
+  openContent: (payload) =>
+    shell ? shell.openContent(payload) : openWebContent(payload),
+  updateContent: (payload) => {
+    if (shell) shell.updateContent(payload);
+    else updateWebContent(payload);
+  },
+  onContentInit: (callback) => shell?.onContentInit?.(callback) ?? (() => {}),
+  onContentUpdate: (callback) =>
+    shell?.onContentUpdate?.(callback) ?? (() => {}),
+
+  onChatDelta: (callback) => subscribeEvent('assistant.delta', callback),
+  onChatRequest: (callback) => subscribeEvent('request.body', callback),
+  onChatToolCall: (callback) => subscribeEvent('tool.call', callback),
+  onChatToolResult: (callback) => subscribeEvent('tool.result', callback),
+  onChatDone: (callback) => subscribeEvent('run.done', callback),
+  onChatError: (callback) => subscribeEvent('run.error', callback),
+  onRunStarted: (callback) => subscribeEvent('run.started', callback),
+};
+
+if (!api.isElectron) {
+  document.body.classList.add('web');
+}
 
 let windowDrag = null;
 let dragPoint = null;
@@ -108,16 +318,26 @@ function el(tag, className, text) {
   return node;
 }
 
+function structurePayload() {
+  return {
+    projects: state.projects,
+    sessions: state.sessions.map((session) => ({
+      id: session.id,
+      title: session.title,
+      system: session.system,
+      projectId: session.projectId,
+      msgs: [],
+    })),
+    current: state.current,
+    seq: state.seq,
+  };
+}
+
 function saveChatsNow() {
   clearTimeout(state.saveTimer);
   state.saveTimer = null;
   api
-    .saveChats({
-      projects: state.projects,
-      sessions: state.sessions,
-      current: state.current,
-      seq: state.seq,
-    })
+    .saveChats(structurePayload())
     .catch((error) => console.error('save chats failed', error));
 }
 
@@ -127,8 +347,8 @@ function saveChatsSoon() {
 }
 
 function settingsPayload() {
-  const { apiKey } = state.settings;
-  return { apiKey };
+  const key = String(state.settings.apiKey || '').trim();
+  return key ? { apiKey: key } : {};
 }
 
 function saveSettingsNow() {
@@ -146,9 +366,11 @@ function saveSettingsSoon() {
 
 function applySettings() {
   const s = state.settings;
-  dom.apiKeyState.textContent = s.apiKey ? 'set' : 'not set';
+  const hasKey = Boolean(s.hasApiKey);
+  dom.apiKeyState.textContent = hasKey ? 'set' : 'not set';
+  dom.apiKey.placeholder = hasKey ? '已设置，输入新 key 可替换' : '';
   if (document.activeElement !== dom.apiKey) {
-    dom.apiKey.value = s.apiKey;
+    dom.apiKey.value = '';
   }
 }
 
@@ -1022,6 +1244,7 @@ function renderAll() {
   if (state.switcherOpen) renderSwitcher();
   renderMessages();
   updateControls();
+  connectChatEvents(currentSession()?.id || null);
 }
 
 function updateSendState() {
@@ -1056,7 +1279,22 @@ function newSession(projectId) {
 
 function deleteSession(index) {
   if (index < 0 || index >= state.sessions.length) return;
+  const removed = state.sessions[index];
+  if (
+    state.streaming &&
+    state.streamMessage &&
+    removed.msgs.includes(state.streamMessage)
+  ) {
+    state.streaming = false;
+    state.requestId = null;
+    state.streamMessage = null;
+  }
   state.sessions.splice(index, 1);
+  if (removed) {
+    api.deleteSession(removed.id).catch((error) => {
+      console.error('delete session failed', error);
+    });
+  }
 
   if (state.sessions.length === 0) {
     // 删光就保持空状态，不自动补一个新对话
@@ -1073,7 +1311,7 @@ function deleteSession(index) {
   renderAll();
 }
 
-function sendMessage() {
+async function sendMessage() {
   if (state.streaming) return;
   const text = dom.input.value.trim();
   if (!text) return;
@@ -1090,10 +1328,12 @@ function sendMessage() {
   dom.input.value = '';
   updateSendState();
 
-  if (!state.settings.apiKey.trim()) {
+  if (!state.settings.hasApiKey) {
     agent.text = NO_KEY_HINT;
-    agent.request = null; // 本地提示不算模型历史
-    agent.steps = [{ kind: 'status', label: 'local note (no API key)', ok: false }];
+    agent.request = null;
+    agent.steps = [
+      { kind: 'status', label: 'local note (no API key)', ok: false },
+    ];
     state.streamMessage = null;
     state.streaming = false;
     saveChatsSoon();
@@ -1101,18 +1341,47 @@ function sendMessage() {
     return;
   }
 
+  const requestId = makeId();
   state.streaming = true;
-  state.requestId = makeId();
+  state.requestId = requestId;
   renderAll();
 
-  const history = session.msgs.slice(0, -1); // 不把空的助手占位发出去
-  api.sendChat({
-    requestId: state.requestId,
-    chatId: session.id,
-    apiKey: state.settings.apiKey,
-    system: session.system || '',
-    history,
-  });
+  try {
+    clearTimeout(state.saveTimer);
+    state.saveTimer = null;
+    await api.saveChats(structurePayload());
+    await api.sendChat({
+      requestId,
+      chatId: session.id,
+      text,
+    });
+  } catch (error) {
+    if (state.requestId !== requestId) return;
+    const note = `[request failed] ${error.message}`;
+    if (agent.text.trim()) agent.text += `\n\n${note}`;
+    else agent.text = note;
+    agent.steps.push({ kind: 'status', label: note, ok: false });
+    agent.request = null;
+    finishStream();
+  }
+}
+
+async function refreshChats() {
+  try {
+    const chats = await api.loadChats();
+    const currentId = currentSession()?.id;
+    state.projects = chats.projects || [];
+    state.sessions = chats.sessions || [];
+    state.seq = chats.seq;
+    const index = currentId
+      ? state.sessions.findIndex((session) => session.id === currentId)
+      : -1;
+    state.current = index >= 0 ? index : chats.current;
+    ensureProjects();
+    renderAll();
+  } catch (error) {
+    console.error('refresh chats failed', error);
+  }
 }
 
 function finishStream() {
@@ -1189,6 +1458,7 @@ function hitsScrollbar(target, event) {
 }
 
 function onWindowDragStart(event) {
+  if (!api.isElectron) return;
   if (event.button !== 0) return;
   const target = event.target;
   if (!(target instanceof Element)) return;
@@ -1549,6 +1819,10 @@ function bindEvents() {
       closeCatalog();
       return;
     }
+    if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
+      closeWebContent();
+      return;
+    }
     if (!dom.rawOverlay.classList.contains('hidden')) {
       closeRawRequest();
       return;
@@ -1590,10 +1864,12 @@ function bindEvents() {
   $('done-settings').addEventListener('click', closeSettings);
   $('close-raw').addEventListener('click', closeRawRequest);
   dom.catalogClose.addEventListener('click', closeCatalog);
+  dom.webContentClose?.addEventListener('click', closeWebContent);
   dom.rawOverlay.addEventListener('click', (event) => {
     if (event.target === dom.rawOverlay) closeRawRequest();
   });
 
+  $('mobile-compose')?.addEventListener('click', openComposer);
   dom.send.addEventListener('click', sendMessage);
   dom.input.addEventListener('input', updateSendState);
   dom.input.addEventListener('keydown', (event) => {
@@ -1610,14 +1886,17 @@ function bindEvents() {
 
   dom.apiKey.addEventListener('input', () => {
     state.settings.apiKey = dom.apiKey.value;
-    dom.apiKeyState.textContent = state.settings.apiKey ? 'set' : 'not set';
+    if (dom.apiKey.value.trim()) state.settings.hasApiKey = true;
+    dom.apiKeyState.textContent = state.settings.hasApiKey ? 'set' : 'not set';
     saveSettingsSoon();
   });
 
   $('reset-settings').addEventListener('click', () => {
-    state.settings = { apiKey: '' };
+    state.settings = { apiKey: '', hasApiKey: false };
     applySettings();
-    saveSettingsSoon();
+    api
+      .saveSettings({ clearApiKey: true })
+      .catch((error) => console.error('clear api key failed', error));
   });
 
   document.addEventListener('keydown', (event) => {
@@ -1633,6 +1912,14 @@ function bindEvents() {
       if (event.key === 'Escape') {
         event.preventDefault();
         closeCatalog();
+      }
+      return;
+    }
+
+    if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeWebContent();
       }
       return;
     }
@@ -1896,8 +2183,17 @@ function bindEvents() {
     renderMessages();
   });
 
+  api.onRunStarted(({ requestId }) => {
+    if (!requestId || requestId === state.requestId) return;
+    if (state.streaming) return;
+    refreshChats();
+  });
+
   api.onChatDone(({ requestId, text }) => {
-    if (requestId !== state.requestId) return;
+    if (requestId !== state.requestId) {
+      refreshChats();
+      return;
+    }
     if (state.streamMessage && typeof text === 'string') {
       state.streamMessage.text = text;
     }
@@ -1905,7 +2201,10 @@ function bindEvents() {
   });
 
   api.onChatError(({ requestId, error }) => {
-    if (requestId !== state.requestId) return;
+    if (requestId !== state.requestId) {
+      refreshChats();
+      return;
+    }
     if (state.streamMessage) {
       const msg = state.streamMessage;
       const note = `[request failed] ${error}`;
@@ -1932,12 +2231,7 @@ function bindEvents() {
     clearTimeout(state.saveTimer);
     clearTimeout(state.settingsTimer);
     try {
-      api.saveChatsSync({
-        projects: state.projects,
-        sessions: state.sessions,
-        current: state.current,
-        seq: state.seq,
-      });
+      api.saveChatsSync(structurePayload());
     } catch (error) {
       console.error('save chats on close failed', error);
     }
