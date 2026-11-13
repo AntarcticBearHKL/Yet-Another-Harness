@@ -16,7 +16,6 @@ const dom = {
   switcherList: $('switcher-list'),
   switcherNew: $('switcher-new'),
   switcherSettings: $('switcher-settings'),
-  switcherClose: $('switcher-close'),
   settingsOverlay: $('settings-overlay'),
   rawOverlay: $('raw-overlay'),
   rawBody: $('raw-body'),
@@ -1123,7 +1122,6 @@ function bindEvents() {
     closeSwitcher();
     openSettings();
   });
-  dom.switcherClose.addEventListener('click', closeSwitcher);
 
   $('close-settings').addEventListener('click', closeSettings);
   $('done-settings').addEventListener('click', closeSettings);
