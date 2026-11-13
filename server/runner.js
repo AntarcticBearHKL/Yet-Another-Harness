@@ -81,7 +81,7 @@ function flushPersist(state) {
   persist(state);
 }
 
-function startRun({ sessionId, text, runId }) {
+function startRun({ sessionId, text, runId, skillsText = '' }) {
   const id = String(runId || '').trim();
   const prompt = String(text || '').trim();
   if (!id) throw Object.assign(new Error('runId is required'), { code: 'bad_request' });
@@ -139,11 +139,18 @@ function startRun({ sessionId, text, runId }) {
     ...session.msgs,
     { role: 'User', text: prompt, request: null, steps: [], requests: [] },
   ];
+  const skillBlock = String(skillsText || '').trim();
+  const system = [
+    session.system || '',
+    skillBlock ? `# Active Skills\n${skillBlock}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 
   deepseek
     .runAgent({
       apiKey,
-      system: session.system || '',
+      system,
       history,
       mcpDisabled: Array.isArray(session.mcpDisabled)
         ? session.mcpDisabled

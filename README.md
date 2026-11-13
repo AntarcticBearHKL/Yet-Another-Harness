@@ -53,8 +53,12 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
 - 输入框（Space）里：空对话上方显示同样的 MCP 摘要按钮；已有对话上方显示排队消息框，生成中仍可继续输入，消息按顺序排队、一行一条，左侧拖动排序，行尾是编辑 / 立即发送 / 删除三个纯图标按钮；当前生成结束后自动按顺序处理队列
 - 新建对话默认继承同项目上一个对话的 MCP 服务器开关配置
+- Skill 是带 frontmatter 的 Markdown 文件（`name` / `description` / `keywords`），放在项目 `skills/`（内置）或 `%APPDATA%\yah\skills`（用户）；内置包含 `skills/test-skill.md` 测试 Skill
+- 输入框上方显示可用 Skill：输入文字时按名称、描述、关键词联想，点击附加；最多同时附加 5 个，可逐个移除；带参数的 MCP Skill 会先弹出参数表单
+- 附加的 Skill 在发送时解析并注入该次请求的 system prompt（`# Active Skills`），不会写进用户输入；排队消息会一起保存自己的 Skill
+- 已连接且当前对话启用的 MCP 服务器会把 prompts 暴露为临时 Skill；切换 MCP 开关后列表实时更新
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
-- 工具和 Skill 面板是无标题的左右分栏：工具页左侧按分类列出内置工具（搜索 / 文件 / 系统 / 代理等），右侧显示名称、说明、参数；MCP 工具只出现在独立的 MCP 工作区，不混进工具目录；MCP 工作区左侧服务器、右侧工具 / 资源 / 提示词 / 日志 / 概览；没有内容时显示空状态
+- 工具和 Skill 面板是无标题的左右分栏：工具页左侧按分类列出内置工具（搜索 / 文件 / 系统 / 代理等），右侧显示名称、说明、参数；Skill 页按内置 / 用户 / MCP 列出可用 Skill 和说明；MCP 工具只出现在独立的 MCP 工作区，不混进工具目录；MCP 工作区左侧服务器、右侧工具 / 资源 / 提示词 / 日志 / 概览；没有内容时显示空状态
 - 聊天里的 MCP 工具调用显示为「MCP 调用」，不会和内置工具的「工具调用」混在一起；调用参数和返回结果仍然合并在同一个卡片里
 - 所有空状态（无对话、无消息、无工具/Skill/MCP、raw 为空、全文为空）统一在可用区域居中，颜色比正文淡一档
 - 工具调用的 JSON 参数和 JSON 输出用带语法着色、可折叠节点的查看器展示
@@ -110,6 +114,8 @@ LIVE_SEARCH=1 npm test   # 额外跑一条真实 DuckDuckGo 搜索
 server/index.js    本地后端：HTTP API、SSE、静态页面、远程 Basic Auth
 server/usage.js    OpenCode Go 额度查询（/api/usage，60 秒缓存）
 server/runner.js   agent 主循环、工具执行、消息/事件持久化
+server/skills.js   Skill 发现（skills/ + %APPDATA%\yah\skills）与 MCP prompts 转 Skill
+skills/            内置 Skill Markdown（含 test-skill.md）
 server/mcp/config.js   MCP 自定义配置存储、JSON 配置解析
 server/mcp/opencode.js OpenCode 配置发现与 MCP 服务器继承
 server/mcp/transport.js STDIO / Streamable HTTP / legacy SSE 传输

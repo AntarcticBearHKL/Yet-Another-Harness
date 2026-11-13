@@ -17,6 +17,14 @@ const dom = {
   input: $('input'),
   send: $('send'),
   composerContext: $('composer-context'),
+  composerSkills: $('composer-skills'),
+  skillArgsOverlay: $('skill-args-overlay'),
+  skillArgsTitle: $('skill-args-title'),
+  skillArgsDesc: $('skill-args-desc'),
+  skillArgsFields: $('skill-args-fields'),
+  skillArgsError: $('skill-args-error'),
+  skillArgsCancel: $('skill-args-cancel'),
+  skillArgsAttach: $('skill-args-attach'),
   switcher: $('switcher'),
   switcherList: $('switcher-list'),
   switcherSettings: $('switcher-settings'),
@@ -104,6 +112,12 @@ const state = {
   mcpServersLoading: false,
   mcpServersFetchedAt: 0,
   mcpConfigSessionId: null,
+  skills: [],
+  skillsLoading: false,
+  skillsSessionId: null,
+  skillsFetchedAt: 0,
+  attachedSkills: [],
+  skillArgsTarget: null,
 };
 
 async function requestJson(path, options = {}) {
@@ -299,6 +313,12 @@ const api = {
   generateTitle: (payload) =>
     requestJson('/api/title', { method: 'POST', body: payload }),
   loadCatalog: () => requestJson('/api/catalog'),
+  loadSkills: (sessionId, mcpDisabled = []) =>
+    requestJson(
+      `/api/skills?sessionId=${encodeURIComponent(
+        sessionId
+      )}&disabled=${encodeURIComponent(JSON.stringify(mcpDisabled))}`
+    ),
 
   openContent: (payload) => openWebContent(payload),
   updateContent: (payload) => updateWebContent(payload),
@@ -393,7 +413,7 @@ function structurePayload() {
 function saveChatsNow() {
   clearTimeout(state.saveTimer);
   state.saveTimer = null;
-  api
+  return api
     .saveChats(structurePayload())
     .catch((error) => console.error('save chats failed', error));
 }
@@ -1592,6 +1612,7 @@ async function loadMcpServers(force = false) {
     if (session) renderMcpSummary(session);
     if (state.composerOpen) renderComposerContext();
     if (state.mcpConfigSessionId) renderMcpConfig();
+    if (state.composerOpen) void loadSkills(true);
   }
 }
 
@@ -1715,7 +1736,7 @@ function renderMcpConfig() {
         if (disabled.has(server.id)) disabled.delete(server.id);
         else disabled.add(server.id);
         session.mcpDisabled = [...disabled];
-        saveChatsSoon();
+        void saveChatsNow().finally(() => void loadSkills(true));
         renderMcpConfig();
         renderMcpSummary(session);
         if (state.composerOpen) renderComposerContext();
@@ -2000,6 +2021,8 @@ function openComposer() {
     ? '输入排队消息…'
     : '输入新对话…';
   renderComposerContext();
+  renderComposerSkills();
+  void loadSkills(true);
   requestAnimationFrame(() => {
     if (!state.composerOpen) return;
     dom.input.focus();
@@ -2163,6 +2186,7 @@ function deleteProject(projectId) {
   state.switcherIndex = 0;
   state.pendingDelete = -1;
   applyFoldState(currentSession());
+  resetComposerSkills();
   saveChatsSoon();
   renderAll();
 }
@@ -2215,6 +2239,7 @@ function selectSession(index) {
   if (index < 0 || index >= state.sessions.length) return;
   state.current = index;
   applyFoldState(state.sessions[index]);
+  resetComposerSkills();
   state.switcherProjectId = state.sessions[index].projectId;
   state.forceScroll = true;
   state.pendingDelete = -1;
@@ -2247,7 +2272,10 @@ function newProject() {
 function renderAll() {
   if (state.switcherOpen) renderSwitcher();
   renderMessages();
-  if (state.composerOpen) renderComposerContext();
+  if (state.composerOpen) {
+    renderComposerContext();
+    renderComposerSkills();
+  }
   updateControls();
   connectChatEvents(currentSession()?.id || null);
 }
@@ -2296,6 +2324,7 @@ function newSession(projectId) {
   state.sessions.push(session);
   state.current = state.sessions.length - 1;
   applyFoldState(session);
+  resetComposerSkills();
   state.forceScroll = true;
   state.switcherProjectId = targetProjectId;
   dom.input.value = '';
@@ -2337,6 +2366,7 @@ function deleteSession(index) {
   state.pendingDelete = -1;
   state.forceScroll = true;
   applyFoldState(currentSession());
+  resetComposerSkills();
   saveChatsSoon();
   renderAll();
 }
@@ -2356,7 +2386,11 @@ async function requestSessionTitle(session, text) {
   }
 }
 
-async function startPrompt(session, text, { clearInput = false } = {}) {
+async function startPrompt(
+  session,
+  text,
+  { clearInput = false, skills = [] } = {}
+) {
   if (!session || !text) return;
   state.viewMode = null;
   state.foldRestored = false;
@@ -2398,6 +2432,7 @@ async function startPrompt(session, text, { clearInput = false } = {}) {
       requestId,
       chatId: session.id,
       text,
+      skills,
     });
   } catch (error) {
     if (state.requestId !== requestId) return;
@@ -2415,14 +2450,20 @@ async function sendMessage() {
   if (!text) return;
   const session = currentSession();
   if (!session) return;
+  const skills = state.attachedSkills.map((skill) => ({
+    id: skill.id,
+    name: skill.name,
+    arguments: { ...(skill.arguments || {}) },
+  }));
 
   if (
     state.streaming ||
     (Array.isArray(session.pendingQueue) && session.pendingQueue.length > 0)
   ) {
     if (!Array.isArray(session.pendingQueue)) session.pendingQueue = [];
-    session.pendingQueue.push(text);
+    session.pendingQueue.push({ text, skills });
     dom.input.value = '';
+    clearAttachedSkills();
     updateSendState();
     saveChatsSoon();
     if (state.composerOpen) renderComposerContext();
@@ -2431,7 +2472,8 @@ async function sendMessage() {
   }
 
   closeComposer();
-  await startPrompt(session, text, { clearInput: true });
+  clearAttachedSkills();
+  await startPrompt(session, text, { clearInput: true, skills });
 }
 
 function queueActionButton(kind, label, svg, onClick) {
@@ -2446,7 +2488,12 @@ function queueActionButton(kind, label, svg, onClick) {
   return button;
 }
 
-function renderQueueRow(session, text, index) {
+function renderQueueRow(session, item, index) {
+  const text = typeof item === 'string' ? item : item?.text || '';
+  const skills =
+    item && typeof item === 'object' && Array.isArray(item.skills)
+      ? item.skills
+      : [];
   const row = el('div', 'queue-row');
   row.draggable = true;
 
@@ -2455,6 +2502,15 @@ function renderQueueRow(session, text, index) {
     '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="4" r="1.2"/><circle cx="11" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="11" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/><circle cx="11" cy="12" r="1.2"/></svg>';
   row.append(handle);
   row.append(el('span', 'queue-text', text));
+  if (skills.length) {
+    row.append(
+      el(
+        'span',
+        'queue-skill-names',
+        skills.map((skill) => skill.name).filter(Boolean).join(' · ')
+      )
+    );
+  }
 
   const actions = el('div', 'queue-actions');
   actions.append(
@@ -2525,8 +2581,8 @@ function renderComposerQueue(session) {
     box.append(el('div', 'composer-queue-empty', '暂无待处理消息'));
     return box;
   }
-  queue.forEach((text, index) => {
-    box.append(renderQueueRow(session, text, index));
+  queue.forEach((item, index) => {
+    box.append(renderQueueRow(session, item, index));
   });
   return box;
 }
@@ -2547,6 +2603,251 @@ function renderComposerContext() {
   dom.composerContext.replaceChildren(renderComposerQueue(session));
 }
 
+function skillSourceLabel(skill) {
+  if (skill?.sourceKind === 'mcp') return skill.serverName || 'MCP';
+  return skill?.source || 'Skill';
+}
+
+function skillScore(skill, tokens) {
+  const name = String(skill?.name || '').toLowerCase();
+  const description = String(skill?.description || '').toLowerCase();
+  const keywords = (Array.isArray(skill?.keywords) ? skill.keywords : [])
+    .join(' ')
+    .toLowerCase();
+  const source =
+    `${skill?.serverName || ''} ${skill?.source || ''}`.toLowerCase();
+  let score = 0;
+  for (const token of tokens) {
+    if (!token) continue;
+    if (name.includes(token)) score += 5;
+    if (keywords.includes(token)) score += 3;
+    if (description.includes(token)) score += 1;
+    if (source.includes(token)) score += 1;
+  }
+  return score;
+}
+
+function filteredSkillSuggestions() {
+  const query = dom.input.value.trim().toLowerCase();
+  const tokens = query.split(/\s+/).filter(Boolean);
+  const available = state.skills.filter(
+    (skill) => !state.attachedSkills.some((item) => item.id === skill.id)
+  );
+  if (tokens.length === 0) return available.slice(0, 6);
+  return available
+    .map((skill) => ({ skill, score: skillScore(skill, tokens) }))
+    .filter((item) => item.score > 0)
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        String(a.skill.name || '').localeCompare(String(b.skill.name || ''))
+    )
+    .slice(0, 6)
+    .map((item) => item.skill);
+}
+
+async function loadSkills(force = false) {
+  const session = currentSession();
+  if (!session) {
+    state.skills = [];
+    state.skillsSessionId = null;
+    renderComposerSkills();
+    return;
+  }
+  if (state.skillsLoading) return;
+  if (
+    !force &&
+    state.skillsSessionId === session.id &&
+    Date.now() - state.skillsFetchedAt < 15_000
+  ) {
+    renderComposerSkills();
+    return;
+  }
+  state.skillsLoading = true;
+  renderComposerSkills();
+  try {
+    const data = await api.loadSkills(
+      session.id,
+      Array.isArray(session.mcpDisabled) ? session.mcpDisabled : []
+    );
+    if (currentSession()?.id !== session.id) return;
+    state.skills = Array.isArray(data?.skills) ? data.skills : [];
+    state.skillsSessionId = session.id;
+    state.skillsFetchedAt = Date.now();
+  } catch (error) {
+    console.error('load skills failed', error);
+    if (currentSession()?.id === session.id) state.skills = [];
+  } finally {
+    state.skillsLoading = false;
+    if (currentSession()?.id === session.id) renderComposerSkills();
+  }
+}
+
+function renderComposerSkills() {
+  if (!dom.composerSkills) return;
+  if (!state.composerOpen) {
+    dom.composerSkills.classList.add('hidden');
+    dom.composerSkills.replaceChildren();
+    return;
+  }
+  const suggestions = filteredSkillSuggestions();
+  const attached = state.attachedSkills;
+  const showLoading = state.skillsLoading && state.skills.length === 0;
+  if (!attached.length && !suggestions.length && !showLoading) {
+    dom.composerSkills.classList.add('hidden');
+    dom.composerSkills.replaceChildren();
+    return;
+  }
+  dom.composerSkills.classList.remove('hidden');
+  const lines = [];
+  if (attached.length) {
+    const line = el('div', 'skill-line');
+    line.append(el('span', 'skill-line-label', '已选'));
+    attached.forEach((skill, index) => {
+      const chip = el('span', 'skill-chip attached');
+      chip.append(el('span', '', skill.name));
+      chip.append(el('span', 'skill-chip-source', skillSourceLabel(skill)));
+      const remove = el('button', 'skill-chip-remove');
+      remove.type = 'button';
+      remove.setAttribute('aria-label', '移除 Skill');
+      remove.innerHTML =
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+      remove.addEventListener('click', (event) => {
+        event.stopPropagation();
+        removeAttachedSkill(index);
+      });
+      chip.append(remove);
+      line.append(chip);
+    });
+    lines.push(line);
+  }
+  if (suggestions.length || showLoading) {
+    const line = el('div', 'skill-line');
+    line.append(
+      el('span', 'skill-line-label', dom.input.value.trim() ? '联想' : 'Skill')
+    );
+    for (const skill of suggestions) {
+      const chip = el('button', 'skill-chip');
+      chip.type = 'button';
+      chip.append(el('span', '', skill.name));
+      chip.append(el('span', 'skill-chip-source', skillSourceLabel(skill)));
+      chip.addEventListener('click', () => selectSkill(skill));
+      line.append(chip);
+    }
+    if (showLoading && suggestions.length === 0) {
+      line.append(el('span', 'skill-empty', '加载 Skill…'));
+    }
+    lines.push(line);
+  }
+  dom.composerSkills.replaceChildren(...lines);
+}
+
+function selectSkill(skill) {
+  if (!skill) return;
+  const args = Array.isArray(skill.arguments) ? skill.arguments : [];
+  if (args.length > 0) {
+    openSkillArgs(skill);
+    return;
+  }
+  attachSkill(skill, {});
+}
+
+function attachSkill(skill, args = {}) {
+  if (!skill?.id) return;
+  if (state.attachedSkills.some((item) => item.id === skill.id)) return;
+  if (state.attachedSkills.length >= 5) return;
+  state.attachedSkills.push({
+    id: skill.id,
+    name: skill.name || skill.id,
+    source: skill.source || '',
+    sourceKind: skill.sourceKind || '',
+    serverName: skill.serverName || '',
+    arguments: { ...args },
+  });
+  renderComposerSkills();
+  if (state.composerOpen) dom.input.focus();
+}
+
+function removeAttachedSkill(index) {
+  if (index < 0 || index >= state.attachedSkills.length) return;
+  state.attachedSkills.splice(index, 1);
+  renderComposerSkills();
+}
+
+function clearAttachedSkills() {
+  if (state.attachedSkills.length === 0) return;
+  state.attachedSkills = [];
+  renderComposerSkills();
+}
+
+function resetComposerSkills() {
+  state.attachedSkills = [];
+  state.skills = [];
+  state.skillsSessionId = null;
+  state.skillsFetchedAt = 0;
+  renderComposerSkills();
+}
+
+function openSkillArgs(skill) {
+  if (!skill || !dom.skillArgsOverlay) return;
+  state.skillArgsTarget = { skill, values: {} };
+  dom.skillArgsTitle.textContent = `SKILL · ${skill.name}`;
+  dom.skillArgsDesc.textContent = skill.description || '';
+  dom.skillArgsFields.replaceChildren();
+  for (const argument of skill.arguments || []) {
+    const field = el('label', 'skill-args-field');
+    const label = el('span', 'skill-args-field-label', argument.name);
+    if (argument.required) label.append(el('span', 'req', '*'));
+    field.append(label);
+    const input = el('input', 'text-input');
+    input.type = 'text';
+    input.spellcheck = false;
+    input.placeholder = argument.description || '';
+    input.addEventListener('input', () => {
+      if (state.skillArgsTarget) {
+        state.skillArgsTarget.values[argument.name] = input.value;
+      }
+    });
+    field.append(input);
+    if (argument.description) {
+      field.append(el('span', 'skill-args-field-desc', argument.description));
+    }
+    dom.skillArgsFields.append(field);
+  }
+  dom.skillArgsError.textContent = '';
+  dom.skillArgsError.classList.add('hidden');
+  dom.skillArgsOverlay.classList.remove('hidden');
+  dom.skillArgsOverlay.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => {
+    if (!state.skillArgsTarget) return;
+    dom.skillArgsFields.querySelector('input')?.focus();
+  });
+}
+
+function closeSkillArgs() {
+  if (!dom.skillArgsOverlay) return;
+  state.skillArgsTarget = null;
+  dom.skillArgsOverlay.classList.add('hidden');
+  dom.skillArgsOverlay.setAttribute('aria-hidden', 'true');
+}
+
+function attachSkillArgs() {
+  const target = state.skillArgsTarget;
+  if (!target) return;
+  const values = {};
+  for (const argument of target.skill.arguments || []) {
+    const value = String(target.values[argument.name] ?? '').trim();
+    if (argument.required && !value) {
+      dom.skillArgsError.textContent = `请填写 ${argument.name}`;
+      dom.skillArgsError.classList.remove('hidden');
+      return;
+    }
+    if (value) values[argument.name] = value;
+  }
+  attachSkill(target.skill, values);
+  closeSkillArgs();
+}
+
 function removeQueuedPrompt(session, index) {
   if (!Array.isArray(session.pendingQueue)) return;
   session.pendingQueue.splice(index, 1);
@@ -2556,13 +2857,24 @@ function removeQueuedPrompt(session, index) {
 
 function editQueuedPrompt(session, index) {
   if (!Array.isArray(session.pendingQueue)) return;
-  const [text] = session.pendingQueue.splice(index, 1);
-  if (text === undefined) return;
+  const [item] = session.pendingQueue.splice(index, 1);
+  if (!item) return;
+  const text = typeof item === 'string' ? item : item.text || '';
+  const skills =
+    item && typeof item === 'object' && Array.isArray(item.skills)
+      ? item.skills
+      : [];
   saveChatsSoon();
   if (!state.composerOpen) openComposer();
+  state.attachedSkills = skills.map((skill) => ({
+    id: skill.id,
+    name: skill.name,
+    arguments: { ...(skill.arguments || {}) },
+  }));
   dom.input.value = text;
   updateSendState();
   if (state.composerOpen) renderComposerContext();
+  renderComposerSkills();
   requestAnimationFrame(() => {
     dom.input.focus();
     const end = dom.input.value.length;
@@ -2572,26 +2884,31 @@ function editQueuedPrompt(session, index) {
 
 function sendQueuedPrompt(session, index) {
   if (!Array.isArray(session.pendingQueue)) return;
-  const [text] = session.pendingQueue.splice(index, 1);
-  if (text === undefined) return;
+  const [item] = session.pendingQueue.splice(index, 1);
+  if (!item) return;
   if (state.streaming) {
-    session.pendingQueue.unshift(text);
+    session.pendingQueue.unshift(item);
     saveChatsSoon();
     if (state.composerOpen) renderComposerContext();
     return;
   }
+  const text = typeof item === 'string' ? item : item.text || '';
+  const skills =
+    item && typeof item === 'object' && Array.isArray(item.skills)
+      ? item.skills
+      : [];
   saveChatsSoon();
   if (state.composerOpen) renderComposerContext();
-  void startPrompt(session, text);
+  void startPrompt(session, text, { skills });
 }
 
 function moveQueuedPrompt(session, from, to) {
   if (!Array.isArray(session.pendingQueue)) return;
   if (from === to || from < 0 || from >= session.pendingQueue.length) return;
-  const [text] = session.pendingQueue.splice(from, 1);
-  if (text === undefined) return;
+  const [item] = session.pendingQueue.splice(from, 1);
+  if (!item) return;
   const target = Math.max(0, Math.min(to, session.pendingQueue.length));
-  session.pendingQueue.splice(target, 0, text);
+  session.pendingQueue.splice(target, 0, item);
   saveChatsSoon();
   if (state.composerOpen) renderComposerContext();
 }
@@ -2605,11 +2922,16 @@ function processNextQueuedPrompt(session) {
     return;
   }
   if (session !== currentSession()) return;
-  const text = session.pendingQueue.shift();
-  if (text === undefined) return;
+  const item = session.pendingQueue.shift();
+  if (!item) return;
+  const text = typeof item === 'string' ? item : item.text || '';
+  const skills =
+    item && typeof item === 'object' && Array.isArray(item.skills)
+      ? item.skills
+      : [];
   saveChatsSoon();
   if (state.composerOpen) renderComposerContext();
-  void startPrompt(session, text);
+  void startPrompt(session, text, { skills });
 }
 
 async function refreshChats() {
@@ -3262,6 +3584,11 @@ function onRightMouseDown(event) {
     state.ringSuppress = true;
     return;
   }
+  if (dom.skillArgsOverlay && !dom.skillArgsOverlay.classList.contains('hidden')) {
+    closeSkillArgs();
+    state.ringSuppress = true;
+    return;
+  }
   if (window.mcpOverlayOpen?.()) {
     window.closeMcp?.();
     state.ringSuppress = true;
@@ -3629,6 +3956,10 @@ function bindEvents() {
       closeConfirm();
       return;
     }
+    if (dom.skillArgsOverlay && !dom.skillArgsOverlay.classList.contains('hidden')) {
+      closeSkillArgs();
+      return;
+    }
     if (window.mcpOverlayOpen?.()) {
       window.closeMcp?.();
       return;
@@ -3710,12 +4041,18 @@ function bindEvents() {
   dom.mcpConfig?.addEventListener('click', (event) => {
     if (event.target === dom.mcpConfig) closeMcpConfig();
   });
+  dom.skillArgsCancel?.addEventListener('click', closeSkillArgs);
+  dom.skillArgsAttach?.addEventListener('click', attachSkillArgs);
+  dom.skillArgsOverlay?.addEventListener('click', (event) => {
+    if (event.target === dom.skillArgsOverlay) closeSkillArgs();
+  });
 
   $('mobile-compose')?.addEventListener('click', openComposer);
   dom.send.addEventListener('click', sendMessage);
   dom.input.addEventListener('input', () => {
     updateSendState();
     syncDraftTitle();
+    renderComposerSkills();
   });
   dom.input.addEventListener('keydown', (event) => {
     if (event.isComposing || event.keyCode === 229) return;
@@ -3765,6 +4102,13 @@ function bindEvents() {
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
         closeConfirm();
+      }
+      return;
+    }
+    if (dom.skillArgsOverlay && !dom.skillArgsOverlay.classList.contains('hidden')) {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        closeSkillArgs();
       }
       return;
     }

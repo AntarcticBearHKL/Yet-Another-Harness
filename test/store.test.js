@@ -323,7 +323,19 @@ test('session MCP switches and step metrics round-trip', () => {
             collapsedProcessKeys: ['p:0'],
             viewMode: null,
           },
-          pendingQueue: ['next question', 'another'],
+          pendingQueue: [
+            'next question',
+            {
+              text: 'another',
+              skills: [
+                {
+                  id: 'builtin:test-skill',
+                  name: '测试 Skill',
+                  arguments: { topic: 'skills' },
+                },
+              ],
+            },
+          ],
           msgs: [
             { role: 'User', text: 'hi', request: null, steps: [], requests: [] },
             {
@@ -372,8 +384,17 @@ test('session MCP switches and step metrics round-trip', () => {
       viewMode: null,
     });
     assert.deepEqual(loaded.sessions[0].pendingQueue, [
-      'next question',
-      'another',
+      { text: 'next question', skills: [] },
+      {
+        text: 'another',
+        skills: [
+          {
+            id: 'builtin:test-skill',
+            name: '测试 Skill',
+            arguments: { topic: 'skills' },
+          },
+        ],
+      },
     ]);
     assert.deepEqual(loaded.sessions[0].msgs[1].usage, {
       hit: 10,
@@ -405,7 +426,14 @@ test('session MCP switches and step metrics round-trip', () => {
             collapsedProcessKeys: ['p:0', 'p:1'],
             viewMode: 'replies',
           },
-          pendingQueue: ['edited question'],
+          pendingQueue: [
+            {
+              text: 'edited question',
+              skills: [
+                { id: 'user:mine', name: 'My Skill', arguments: {} },
+              ],
+            },
+          ],
           msgs: [],
         },
       ],
@@ -420,7 +448,12 @@ test('session MCP switches and step metrics round-trip', () => {
       collapsedProcessKeys: ['p:0', 'p:1'],
       viewMode: 'replies',
     });
-    assert.deepEqual(loaded.sessions[0].pendingQueue, ['edited question']);
+    assert.deepEqual(loaded.sessions[0].pendingQueue, [
+      {
+        text: 'edited question',
+        skills: [{ id: 'user:mine', name: 'My Skill', arguments: {} }],
+      },
+    ]);
     assert.equal(loaded.sessions[0].msgs.length, 2);
   });
 });

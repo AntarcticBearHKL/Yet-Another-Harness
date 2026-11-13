@@ -1,0 +1,113 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const test = require('node:test');
+
+const { createSkillService, parseFrontmatter } = require('../server/skills');
+
+function withSkillDirs(fn) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-skills-root-'));
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-skills-data-'));
+  return Promise.resolve()
+    .then(() => fn(root, data))
+    .finally(() => {
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(data, { recursive: true, force: true });
+    });
+}
+
+test('skill frontmatter is parsed', () => {
+  const parsed = parseFrontmatter(
+    '---\nname: Demo\ndescription: A demo\nkeywords: one, two, 三\n---\n\nDo the thing.\n'
+  );
+  assert.equal(parsed.meta.name, 'Demo');
+  assert.equal(parsed.meta.description, 'A demo');
+  assert.deepEqual(parsed.meta.keywords, ['one', 'two', '三']);
+  assert.equal(parsed.body, 'Do the thing.');
+});
+
+test('file skills are listed and resolved', () => {
+  return withSkillDirs((root, data) => {
+    fs.mkdirSync(path.join(root, 'skills'), { recursive: true });
+    fs.mkdirSync(path.join(data, 'skills'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, 'skills', 'demo.md'),
+      '---\nname: Demo Skill\ndescription: Built in\nkeywords: demo, test\n---\n\nUse the demo skill.\n'
+    );
+    fs.writeFileSync(
+      path.join(data, 'skills', 'mine.md'),
+      '---\nname: My Skill\ndescription: User skill\n---\n\nUse my skill.\n'
+    );
+    const service = createSkillService({
+      root,
+      dataDir: data,
+      mcpManager: { promptList: () => [] },
+    });
+    const skills = service.list({});
+    assert.equal(skills.length, 2);
+    assert.equal(skills.find((skill) => skill.name === 'Demo Skill').source, '内置');
+    assert.equal(skills.find((skill) => skill.name === 'My Skill').source, '用户');
+    return service
+      .resolveMany([{ id: 'builtin:demo' }, { id: 'user:mine' }])
+      .then((result) => {
+        assert.match(result.text, /## Skill: Demo Skill/);
+        assert.match(result.text, /Use the demo skill\./);
+        assert.match(result.text, /## Skill: My Skill/);
+        assert.deepEqual(result.names, ['Demo Skill', 'My Skill']);
+      });
+  });
+});
+
+test('MCP prompts become per-session skills and resolve', async () => {
+  await withSkillDirs(async (root, data) => {
+    const calls = [];
+    const mcpManager = {
+      promptList: () => [
+        {
+          serverId: 's1',
+          serverName: 'Demo Server',
+          prompt: {
+            name: 'summarize',
+            title: 'Summarize',
+            description: 'Summarize a topic.',
+            arguments: [
+              { name: 'topic', description: 'Topic', required: true },
+            ],
+          },
+        },
+      ],
+      getPrompt: async (serverId, name, args) => {
+        calls.push({ serverId, name, args });
+        return { ok: true, text: `summary for ${args.topic}` };
+      },
+    };
+    const service = createSkillService({ root, dataDir: data, mcpManager });
+    const skills = service.list({});
+    assert.equal(skills.length, 1);
+    assert.equal(skills[0].id, 'mcp:s1:summarize');
+    assert.equal(skills[0].source, 'MCP');
+    assert.equal(skills[0].arguments[0].required, true);
+    assert.deepEqual(service.list({ mcpDisabled: ['s1'] }), []);
+
+    const result = await service.resolveMany(
+      [{ id: 'mcp:s1:summarize', arguments: { topic: 'skills' } }],
+      []
+    );
+    assert.match(result.text, /summary for skills/);
+    assert.deepEqual(calls, [
+      { serverId: 's1', name: 'summarize', args: { topic: 'skills' } },
+    ]);
+
+    await assert.rejects(
+      service.resolveMany([{ id: 'mcp:s1:summarize' }], []),
+      /缺少 Skill 参数/
+    );
+    await assert.rejects(
+      service.resolveMany([{ id: 'mcp:s1:summarize', arguments: { topic: 'x' } }], ['s1']),
+      /已在当前对话中关闭/
+    );
+  });
+});

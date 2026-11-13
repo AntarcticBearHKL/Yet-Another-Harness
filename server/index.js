@@ -13,6 +13,7 @@ const deepseek = require('../src/deepseek');
 const runner = require('./runner');
 const usage = require('./usage');
 const { McpManager } = require('./mcp/manager');
+const { createSkillService } = require('./skills');
 
 const ROOT = path.resolve(__dirname, '..');
 const APP_DATA =
@@ -37,6 +38,11 @@ const PID_FILE = path.join(DATA_DIR, 'server.pid');
 const mcpManager = new McpManager({
   dataDir: DATA_DIR,
   version: require('../package.json').version,
+});
+const skillService = createSkillService({
+  root: ROOT,
+  dataDir: DATA_DIR,
+  mcpManager,
 });
 
 let pidWritten = false;
@@ -263,6 +269,14 @@ async function generateChatTitle(text, sessionId) {
   }
 }
 
+function sessionMcpDisabled(sessionId) {
+  const id = String(sessionId || '').trim();
+  if (!id) return [];
+  const chats = store.loadChats();
+  const session = chats.sessions.find((item) => item.id === id);
+  return Array.isArray(session?.mcpDisabled) ? session.mcpDisabled : [];
+}
+
 function handleApi(req, res, url) {
   const { pathname } = url;
 
@@ -340,13 +354,52 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && pathname === '/api/skills') {
+    const sessionId = String(url.searchParams.get('sessionId') || '');
+    let disabled = sessionMcpDisabled(sessionId);
+    const rawDisabled = url.searchParams.get('disabled');
+    if (rawDisabled) {
+      try {
+        const parsed = JSON.parse(rawDisabled);
+        if (Array.isArray(parsed)) disabled = parsed.map(String);
+      } catch {
+        /* ignore malformed disabled list */
+      }
+    }
+    void mcpManager.ensureConnections();
+    sendJson(res, 200, {
+      skills: skillService.list({ mcpDisabled: disabled }),
+    });
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/skills/resolve') {
+    readJson(req)
+      .then(async (body) => {
+        const sessionId = String(body?.sessionId || '');
+        const result = await skillService.resolveMany(
+          body?.skills,
+          sessionMcpDisabled(sessionId)
+        );
+        sendJson(res, 200, { ok: true, ...result });
+      })
+      .catch((error) => sendJson(res, 400, { error: error.message }));
+    return true;
+  }
+
   if (req.method === 'POST' && pathname === '/api/send') {
     readJson(req)
-      .then((body) => {
+      .then(async (body) => {
+        const sessionId = String(body?.chatId || '');
+        const resolved = await skillService.resolveMany(
+          body?.skills,
+          sessionMcpDisabled(sessionId)
+        );
         const result = runner.startRun({
-          sessionId: String(body?.chatId || ''),
+          sessionId,
           text: String(body?.text || ''),
           runId: String(body?.requestId || ''),
+          skillsText: resolved.text,
         });
         sendJson(res, 200, result);
       })
@@ -409,7 +462,7 @@ function handleApi(req, res, url) {
       );
     sendJson(res, 200, {
       tools: catalogTools,
-      skills: [],
+      skills: skillService.list({}),
       mcp: mcpManager.catalogEntries(),
     });
     return true;

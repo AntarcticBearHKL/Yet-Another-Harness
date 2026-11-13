@@ -1931,6 +1931,142 @@ body.ring-open #window-controls {
   margin: 0;
 }
 
+.composer-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
+  padding: 8px 14px 0;
+}
+
+.composer-skills.hidden {
+  display: none;
+}
+
+.skill-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.skill-line-label {
+  flex: none;
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(252, 246, 238, 0.62);
+  color: var(--dim);
+  font-size: 10.5px;
+  line-height: 1;
+}
+
+.skill-chip:hover {
+  background: var(--hover);
+}
+
+.skill-chip.attached {
+  border-color: var(--accent);
+  background: rgba(185, 111, 61, 0.1);
+  color: var(--text-soft);
+}
+
+.skill-chip-source {
+  color: var(--faint);
+  font-size: 8.5px;
+  letter-spacing: 0.04em;
+}
+
+.skill-chip-remove {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: -3px;
+  border-radius: 50%;
+  color: var(--faint);
+}
+
+.skill-chip-remove:hover {
+  background: var(--hover);
+  color: var(--text-soft);
+}
+
+.skill-chip-remove svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.skill-empty {
+  color: var(--faint);
+  font-size: 10px;
+}
+
+.skill-args-panel {
+  width: min(520px, calc(100vw - 40px));
+  max-height: min(70vh, 560px);
+}
+
+.skill-args-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 42vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.skill-args-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.skill-args-field-label {
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.skill-args-field-label .req {
+  margin-left: 2px;
+  color: var(--accent-deep);
+}
+
+.skill-args-field-desc {
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.skill-args-error {
+  color: #b05445;
+  font-size: 11px;
+}
+
+.skill-args-error.hidden {
+  display: none;
+}
+
+#skill-args-overlay {
+  z-index: 36;
+}
+
 .composer-queue {
   display: flex;
   flex-direction: column;
@@ -2009,6 +2145,16 @@ body.ring-open #window-controls {
   color: var(--text-soft);
   font-size: 12px;
   line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-skill-names {
+  flex: none;
+  max-width: 140px;
+  overflow: hidden;
+  color: var(--accent-deep);
+  font-size: 9.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

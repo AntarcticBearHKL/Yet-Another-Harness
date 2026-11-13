@@ -252,6 +252,23 @@ class McpManager extends EventEmitter {
     return out;
   }
 
+  promptList() {
+    const out = [];
+    for (const server of this.allServers()) {
+      if (server.enabled === false) continue;
+      const client = this.clients.get(server.id);
+      if (!client || client.status !== 'connected') continue;
+      for (const prompt of client.prompts) {
+        out.push({
+          serverId: server.id,
+          serverName: server.name,
+          prompt,
+        });
+      }
+    }
+    return out;
+  }
+
   catalogEntries() {
     return this.allServers().map((server) => {
       const summary = this.summary(server);

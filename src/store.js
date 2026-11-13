@@ -145,12 +145,40 @@ function normalizeFoldState(raw) {
   return { openKey, collapsedProcessKeys, viewMode };
 }
 
+function normalizeQueueSkill(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = String(raw.id ?? '').trim();
+  if (!id) return null;
+  const name = String(raw.name ?? id).trim() || id;
+  const args = {};
+  if (raw.arguments && typeof raw.arguments === 'object') {
+    for (const [key, value] of Object.entries(raw.arguments)) {
+      if (value === undefined || value === null) continue;
+      const text = String(value).trim();
+      if (text) args[String(key)] = text;
+    }
+  }
+  return { id, name, arguments: args };
+}
+
 function normalizePendingQueue(raw) {
   if (!Array.isArray(raw)) return [];
-  return raw
-    .map((item) => String(item ?? '').trim())
-    .filter(Boolean)
-    .slice(0, 100);
+  const out = [];
+  for (const item of raw) {
+    if (typeof item === 'string') {
+      const text = item.trim();
+      if (text) out.push({ text, skills: [] });
+      continue;
+    }
+    if (!item || typeof item !== 'object') continue;
+    const text = String(item.text ?? '').trim();
+    if (!text) continue;
+    const skills = Array.isArray(item.skills)
+      ? item.skills.map(normalizeQueueSkill).filter(Boolean).slice(0, 5)
+      : [];
+    out.push({ text, skills });
+  }
+  return out.slice(0, 100);
 }
 
 function normalizeProjects(raw) {
