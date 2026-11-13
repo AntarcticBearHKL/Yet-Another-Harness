@@ -67,6 +67,7 @@ const state = {
   renderedOpenKeys: new Set(),
   renderedSessionId: null,
   collapsedProcessKeys: new Set(),
+  viewMode: null,
   renderVersion: 0,
   lastWheelNav: 0,
   tabHeld: false,
@@ -526,6 +527,24 @@ function applyOpenKey(key, opts) {
   applyOpenKeys(openKeySet(key), opts);
 }
 
+function viewModeOpenKeys(cards) {
+  const keys = new Set();
+  if (state.viewMode !== 'replies' && state.viewMode !== 'processes') {
+    return keys;
+  }
+  for (const card of cards) {
+    if (card.classList.contains('answer-card')) keys.add(card.dataset.cardKey);
+  }
+  return keys;
+}
+
+function setViewMode(mode) {
+  // 再按一次同一个快捷键回到普通模式
+  state.viewMode = state.viewMode === mode ? null : mode;
+  state.openCardKey = null;
+  renderAll();
+}
+
 function anchorCardTitle(element, targetTop, duration = 360) {
   cancelAnimationFrame(cardAnchorFrame);
   cardAnchorFrame = 0;
@@ -553,6 +572,7 @@ function toggleCard(key) {
   const card = cardByKey(key);
   if (!card) return;
   if (card.classList.contains('always-open')) return;
+  state.viewMode = null;
 
   if (!card.classList.contains('collapsed')) {
     state.openCardKey = null;
@@ -1327,22 +1347,29 @@ function renderAgentMessage(msg, msgIndex, container) {
   if (processCount > 0) {
     const processKey = `p:${msgIndex}`;
     const group = el('div', 'process-group');
-    if (state.collapsedProcessKeys.has(processKey)) {
-      group.classList.add('collapsed');
-    }
+    group.dataset.processKey = processKey;
+    const modeCollapsed =
+      state.viewMode === 'questions' || state.viewMode === 'replies'
+        ? true
+        : state.viewMode === 'processes'
+          ? false
+          : null;
+    const collapsed =
+      modeCollapsed === null
+        ? state.collapsedProcessKeys.has(processKey)
+        : modeCollapsed;
+    if (collapsed) group.classList.add('collapsed');
     const head = el('button', 'process-group-head');
     head.type = 'button';
-    head.setAttribute(
-      'aria-expanded',
-      group.classList.contains('collapsed') ? 'false' : 'true'
-    );
+    head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     head.append(el('span', 'process-group-dot'));
     head.append(el('span', 'process-group-label', '过程'));
     head.append(el('span', 'process-group-count', String(processCount)));
     head.addEventListener('click', () => {
-      const collapsed = group.classList.toggle('collapsed');
-      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-      if (collapsed) state.collapsedProcessKeys.add(processKey);
+      state.viewMode = null;
+      const nextCollapsed = group.classList.toggle('collapsed');
+      head.setAttribute('aria-expanded', nextCollapsed ? 'false' : 'true');
+      if (nextCollapsed) state.collapsedProcessKeys.add(processKey);
       else state.collapsedProcessKeys.delete(processKey);
     });
     processBody = el('div', 'process-group-body');
@@ -1630,12 +1657,14 @@ function renderMessages({ animate = true } = {}) {
     renderAgentMessage(msg, index, currentTurn);
   });
 
-  const autoKey = autoCardKey();
+  const autoKey = state.viewMode ? null : autoCardKey();
   state.openCardKey = autoKey;
   const cards = [...dom.messages.querySelectorAll('.message-card')];
   const cardKeys = new Set(cards.map((card) => card.dataset.cardKey));
 
-  const targetKeys = openKeySet(autoKey);
+  const targetKeys = state.viewMode
+    ? viewModeOpenKeys(cards)
+    : openKeySet(autoKey);
   for (const key of [...targetKeys]) {
     if (!cardKeys.has(key)) targetKeys.delete(key);
   }
@@ -1651,7 +1680,9 @@ function renderMessages({ animate = true } = {}) {
     if (!sameOpenKeys(previousKeys, targetKeys)) {
       requestAnimationFrame(() => {
         if (state.renderVersion !== version) return;
-        const latest = openKeySet(state.openCardKey);
+        const latest = state.viewMode
+          ? targetKeys
+          : openKeySet(state.openCardKey);
         const keys = new Set();
         for (const key of latest) {
           if (cardKeys.has(key)) keys.add(key);
@@ -2045,6 +2076,7 @@ function commitSwitcherSelection() {
 function selectSession(index) {
   if (index < 0 || index >= state.sessions.length) return;
   state.current = index;
+  state.viewMode = null;
   state.switcherProjectId = state.sessions[index].projectId;
   state.forceScroll = true;
   state.pendingDelete = -1;
@@ -2114,6 +2146,7 @@ function newSession(projectId) {
     msgs: [],
   });
   state.current = state.sessions.length - 1;
+  state.viewMode = null;
   state.forceScroll = true;
   state.switcherProjectId = targetProjectId;
   dom.input.value = '';
@@ -2180,6 +2213,7 @@ async function sendMessage() {
 
   const session = currentSession();
   if (!session) return;
+  state.viewMode = null;
   const firstMessage = session.msgs.length === 0;
   session.msgs.push({ role: 'User', text, request: null, steps: [] });
   const agent = { role: 'Agent', text: '', request: '', steps: [], requests: [] };
@@ -2261,8 +2295,12 @@ function finishStream() {
     text.scrollTop = 0;
   });
 
-  state.openCardKey = autoCardKey();
-  applyOpenKey(state.openCardKey);
+  if (state.viewMode) {
+    renderMessages();
+  } else {
+    state.openCardKey = autoCardKey();
+    applyOpenKey(state.openCardKey);
+  }
 
   updateSendState();
   saveChatsSoon();
@@ -3452,6 +3490,31 @@ function bindEvents() {
       return;
     }
 
+    if (
+      event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.shiftKey &&
+      (event.key === '1' || event.key === '2' || event.key === '3')
+    ) {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest('input, textarea, [contenteditable="true"]')
+      ) {
+        return;
+      }
+      event.preventDefault();
+      setViewMode(
+        event.key === '1'
+          ? 'questions'
+          : event.key === '2'
+            ? 'replies'
+            : 'processes'
+      );
+      return;
+    }
+
     if (event.code === 'Space' || event.key === ' ') {
       if (
         event.repeat ||
@@ -3496,19 +3559,32 @@ function bindEvents() {
   document.addEventListener(
     'wheel',
     (event) => {
-      if (!event.ctrlKey) return;
+      const blocked = () =>
+        !dom.rawOverlay.classList.contains('hidden') ||
+        !dom.settingsOverlay.classList.contains('hidden') ||
+        state.switcherOpen ||
+        state.composerOpen ||
+        state.catalogOpen ||
+        state.ringOpen ||
+        Boolean(dom.webContent && !dom.webContent.classList.contains('hidden'));
 
-      // Ctrl+wheel 按对话回合导航；Shift+wheel 不再拦截
-      event.preventDefault();
-      if (!dom.rawOverlay.classList.contains('hidden')) return;
-      if (!dom.settingsOverlay.classList.contains('hidden')) return;
-      if (state.switcherOpen) return;
-      if (state.composerOpen) return;
-      if (state.catalogOpen) return;
-      if (state.ringOpen) return;
-      if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
+      if (event.shiftKey && !event.ctrlKey) {
+        if (blocked()) return;
+        const delta = event.deltaY || event.deltaX;
+        if (delta === 0) return;
+        event.preventDefault();
+        dom.messages.scrollTo({
+          top: delta < 0 ? 0 : dom.messages.scrollHeight,
+          behavior: 'smooth',
+        });
         return;
       }
+
+      if (!event.ctrlKey) return;
+
+      // Ctrl+wheel 按对话回合导航
+      event.preventDefault();
+      if (blocked()) return;
 
       const delta = event.deltaY || event.deltaX;
       if (delta === 0) return;
