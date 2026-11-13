@@ -1671,17 +1671,24 @@ function onWindowDragStart(event) {
   const isCardHead = Boolean(
     target.closest('.card-head, .card-preview-wrap')
   );
+  const isComposerScrim = Boolean(
+    state.composerOpen &&
+      target.closest('#composer') &&
+      !target.closest('.composer-box')
+  );
+  const needsThreshold = isCardHead || isComposerScrim;
   suppressNextCardClick = false;
   windowDrag = {
     x: event.screenX,
     y: event.screenY,
-    started: !isCardHead,
+    started: !needsThreshold,
     isCardHead,
+    isComposerScrim,
   };
   dragFromComposer = Boolean(
     state.composerOpen && target.closest('#composer')
   );
-  if (!isCardHead) {
+  if (!needsThreshold) {
     api.dragStart({ x: event.screenX, y: event.screenY });
   }
 }
@@ -1714,8 +1721,10 @@ function onWindowDragMove(event) {
 function onWindowDragEnd() {
   if (!windowDrag) return;
   const wasCardHead = windowDrag.isCardHead;
+  const wasComposerScrim = windowDrag.isComposerScrim;
   const started = windowDrag.started;
-  const refocusComposer = dragFromComposer && state.composerOpen;
+  const refocusComposer =
+    dragFromComposer && state.composerOpen && started;
   dragFromComposer = false;
   windowDrag = null;
   dragPoint = null;
@@ -1726,6 +1735,9 @@ function onWindowDragEnd() {
     setTimeout(() => {
       suppressNextCardClick = false;
     }, 300);
+  }
+  if (wasComposerScrim && !started) {
+    closeComposer();
   }
   if (refocusComposer) {
     requestAnimationFrame(() => {
@@ -2341,6 +2353,17 @@ function bindEvents() {
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
         closeComposer();
+        return;
+      }
+      if (
+        (event.code === 'Space' || event.key === ' ') &&
+        !event.repeat &&
+        !event.isComposing &&
+        !dom.input.value.trim()
+      ) {
+        event.preventDefault();
+        closeComposer();
+        return;
       }
       return;
     }
