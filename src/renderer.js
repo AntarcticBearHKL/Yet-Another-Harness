@@ -137,6 +137,7 @@ function isNearBottom() {
 
 function appendRow(card) {
   const row = el('div', 'msg');
+  if (card.classList.contains('user')) row.classList.add('turn-start');
   row.append(card);
   dom.messages.append(row);
 }

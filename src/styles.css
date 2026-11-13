@@ -468,6 +468,11 @@ button {
   border-top: 1px solid var(--line);
 }
 
+.msg.turn-start:not(:first-child) {
+  margin-top: 24px;
+  border-top-color: rgba(185, 111, 61, 0.34);
+}
+
 /* 滚动内容接近窗口上下边缘时渐进模糊、融进背景 */
 .edge-blur {
   position: absolute;
