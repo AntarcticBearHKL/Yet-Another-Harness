@@ -516,6 +516,7 @@ button {
 
 .message-card:not(.collapsed) {
   background: rgba(185, 111, 61, 0.1);
+  border-radius: 8px;
 }
 
 .message-card.peek-target {
@@ -523,7 +524,6 @@ button {
 }
 
 .message-card.collapsed:hover {
-  border-radius: 8px;
   background: rgba(185, 111, 61, 0.1);
 }
 
