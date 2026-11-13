@@ -885,9 +885,22 @@ body.maximized .web-content {
 }
 
 .message-card.answer-card .card-meta {
+  flex: none;
   color: var(--faint);
   font-size: 10px;
   letter-spacing: 0.04em;
+}
+
+.card-usage {
+  flex: none;
+  color: var(--faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.message-card:not(.collapsed) .card-usage {
+  color: var(--dim);
 }
 
 .message-card.answer-card .card-body {

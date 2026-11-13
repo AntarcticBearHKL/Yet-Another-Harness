@@ -13,7 +13,7 @@ const { DatabaseSync } = require('node:sqlite');
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
 
 let dataDir = null;
@@ -294,6 +294,7 @@ CREATE TABLE IF NOT EXISTS messages (
   role TEXT NOT NULL,
   text TEXT NOT NULL,
   request TEXT,
+  usage TEXT,
   PRIMARY KEY (session_id, seq)
 );
 
@@ -396,6 +397,12 @@ function ensureSchema(database) {
       database.exec('ALTER TABLE sessions ADD COLUMN project_id TEXT');
     }
 
+    // v3 -> v4: token usage attached to agent messages.
+    const messageColumns = database.prepare('PRAGMA table_info(messages)').all();
+    if (!messageColumns.some((column) => column.name === 'usage')) {
+      database.exec('ALTER TABLE messages ADD COLUMN usage TEXT');
+    }
+
     const projectCount =
       Number(database.prepare('SELECT COUNT(*) AS n FROM projects').get().n) || 0;
     if (projectCount === 0) {
@@ -489,7 +496,7 @@ function readChats() {
 
   const messageRows = database
     .prepare(
-      'SELECT session_id, seq, role, text, request FROM messages ORDER BY session_id, seq'
+      'SELECT session_id, seq, role, text, request, usage FROM messages ORDER BY session_id, seq'
     )
     .all();
   const stepRows = database
@@ -531,6 +538,14 @@ function readChats() {
       steps: [],
       requests: [],
     };
+    if (row.usage) {
+      try {
+        const usage = JSON.parse(row.usage);
+        if (usage && typeof usage === 'object') msg.usage = usage;
+      } catch {
+        /* ignore malformed usage */
+      }
+    }
     session.msgs.push(msg);
     messageByKey.set(`${row.session_id}\u0000${row.seq}`, msg);
   }
@@ -644,7 +659,7 @@ function writeChats(chats) {
     'DELETE FROM messages WHERE session_id = ?'
   );
   const insertMessage = database.prepare(
-    'INSERT INTO messages (session_id, seq, role, text, request) VALUES (?, ?, ?, ?, ?)'
+    'INSERT INTO messages (session_id, seq, role, text, request, usage) VALUES (?, ?, ?, ?, ?, ?)'
   );
   const insertStep = database.prepare(
     `INSERT INTO steps
@@ -683,6 +698,8 @@ function writeChats(chats) {
         now
       );
       if (existing.get(session.id) === hash) return;
+      // 结构保存只带标题/项目等信息时，不要清空 runner 写入的消息。
+      if (existing.has(session.id) && session.msgs.length === 0) return;
 
       deleteMessages.run(session.id);
       session.msgs.forEach((msg, messageSeq) => {
@@ -691,7 +708,8 @@ function writeChats(chats) {
           messageSeq,
           msg.role,
           msg.text,
-          msg.request
+          msg.request,
+          msg.usage ? JSON.stringify(msg.usage) : null
         );
         (msg.steps || []).forEach((step, stepSeq) => {
           insertStep.run(
@@ -876,14 +894,15 @@ function appendMessage(sessionId, role, text, request) {
   const seq = Number(row?.seq) || 0;
   database
     .prepare(
-      'INSERT INTO messages (session_id, seq, role, text, request) VALUES (?, ?, ?, ?, ?)'
+      'INSERT INTO messages (session_id, seq, role, text, request, usage) VALUES (?, ?, ?, ?, ?, ?)'
     )
     .run(
       sessionId,
       seq,
       normalizeRole(role),
       String(text ?? ''),
-      request === undefined ? null : request
+      request === undefined ? null : request,
+      null
     );
   database
     .prepare('UPDATE sessions SET updated_at = ? WHERE id = ?')
@@ -897,9 +916,13 @@ function updateMessage(sessionId, seq, msg) {
     ? msg.steps.map(normalizeStep).filter(Boolean)
     : [];
   const requests = Array.isArray(msg?.requests) ? msg.requests : [];
+  const usage =
+    msg?.usage && typeof msg.usage === 'object'
+      ? JSON.stringify(msg.usage)
+      : null;
 
   const update = database.prepare(
-    'UPDATE messages SET text = ?, request = ? WHERE session_id = ? AND seq = ?'
+    'UPDATE messages SET text = ?, request = ?, usage = ? WHERE session_id = ? AND seq = ?'
   );
   const deleteSteps = database.prepare(
     'DELETE FROM steps WHERE session_id = ? AND message_seq = ?'
@@ -924,6 +947,7 @@ function updateMessage(sessionId, seq, msg) {
     update.run(
       String(msg?.text ?? ''),
       msg?.request === undefined ? null : msg.request,
+      usage,
       sessionId,
       seq
     );

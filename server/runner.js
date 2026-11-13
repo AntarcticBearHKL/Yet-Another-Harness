@@ -116,6 +116,7 @@ function startRun({ sessionId, text, runId }) {
     request: '',
     steps: [],
     requests: [],
+    usage: null,
   };
   const state = {
     runId: id,
@@ -166,6 +167,16 @@ function startRun({ sessionId, text, runId }) {
         emit(sessionId, id, 'request.body', { round, body });
         schedulePersist(state);
       },
+      onUsage: (usage, round) => {
+        const previous = agent.usage || { hit: 0, miss: 0, output: 0 };
+        agent.usage = {
+          hit: (previous.hit || 0) + (usage.hit || 0),
+          miss: (previous.miss || 0) + (usage.miss || 0),
+          output: (previous.output || 0) + (usage.output || 0),
+        };
+        emit(sessionId, id, 'usage', { usage: agent.usage, round });
+        schedulePersist(state);
+      },
       onToolCall: (call) => {
         agent.steps.push({
           kind: 'call',
@@ -194,7 +205,7 @@ function startRun({ sessionId, text, runId }) {
       }
       flushPersist(state);
       store.updateRun(id, 'done');
-      emit(sessionId, id, 'run.done', { text: finalText });
+      emit(sessionId, id, 'run.done', { text: finalText, usage: agent.usage });
     })
     .catch((error) => {
       const message = state.controller.signal.aborted

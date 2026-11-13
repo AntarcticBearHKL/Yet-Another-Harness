@@ -174,6 +174,37 @@ test('SSE tool delta is parsed', () => {
   assert.equal(events[0].arguments, '{"query":');
 });
 
+test('SSE usage is parsed', () => {
+  const usage = {
+    prompt_tokens: 100,
+    completion_tokens: 20,
+    prompt_cache_hit_tokens: 80,
+  };
+  const events = deepseek.parseSseLine(
+    `data: ${JSON.stringify({ choices: [], usage })}`
+  );
+  assert.deepEqual(events, [{ type: 'usage', usage }]);
+});
+
+test('token usage normalizes cache hit and miss', () => {
+  assert.deepEqual(
+    deepseek.tokenUsage({
+      prompt_tokens: 100,
+      completion_tokens: 20,
+      prompt_cache_hit_tokens: 80,
+    }),
+    { hit: 80, miss: 20, output: 20 }
+  );
+  assert.deepEqual(
+    deepseek.tokenUsage({
+      prompt_tokens: 100,
+      completion_tokens: 20,
+      prompt_tokens_details: { cached_tokens: 60 },
+    }),
+    { hit: 60, miss: 40, output: 20 }
+  );
+});
+
 test('SSE done and comments are skipped', () => {
   assert.deepEqual(deepseek.parseSseLine('data: [DONE]'), [{ type: 'done' }]);
   assert.deepEqual(deepseek.parseSseLine(': keep-alive'), []);

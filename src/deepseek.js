@@ -105,9 +105,29 @@ function requestBody(messages) {
     model: MODEL,
     messages,
     stream: true,
+    stream_options: { include_usage: true },
     tools: tools.definitions(),
     tool_choice: 'auto',
   };
+}
+
+function tokenUsage(usage) {
+  const prompt =
+    Number(usage?.prompt_tokens ?? usage?.opencode?.tokens?.input) || 0;
+  const output =
+    Number(usage?.completion_tokens ?? usage?.opencode?.tokens?.output) || 0;
+  const hit =
+    Number(
+      usage?.prompt_cache_hit_tokens ??
+        usage?.prompt_tokens_details?.cached_tokens ??
+        usage?.input_tokens_details?.cached_tokens ??
+        usage?.opencode?.tokens?.cache_read
+    ) || 0;
+  const missValue = Number(usage?.prompt_cache_miss_tokens);
+  const miss = Number.isFinite(missValue)
+    ? missValue
+    : Math.max(0, prompt - hit);
+  return { hit, miss, output };
 }
 
 /** 解析一行 SSE，返回 0..N 个事件（一行里可能同时有 content 和 tool_calls）。 */
@@ -151,6 +171,10 @@ function parseSseLine(line) {
         arguments: call.function?.arguments ?? '',
       });
     }
+  }
+
+  if (value.usage) {
+    events.push({ type: 'usage', usage: value.usage });
   }
 
   return events;
@@ -212,6 +236,7 @@ async function streamChat({ apiKey, body, onDelta, signal, sessionId }) {
   let buffer = '';
   let content = '';
   let reasoning = '';
+  let usage = null;
   let done = false;
 
   const handleLine = (line) => {
@@ -224,6 +249,8 @@ async function streamChat({ apiKey, body, onDelta, signal, sessionId }) {
         onDelta?.(event.text, true);
       } else if (event.type === 'tool') {
         builder.push(event);
+      } else if (event.type === 'usage') {
+        usage = event.usage;
       } else if (event.type === 'done') {
         done = true;
       }
@@ -255,7 +282,7 @@ async function streamChat({ apiKey, body, onDelta, signal, sessionId }) {
   if (!content && !reasoning && toolCalls.length === 0) {
     throw new Error('model returned an empty reply');
   }
-  return { content, reasoning, toolCalls };
+  return { content, reasoning, toolCalls, usage };
 }
 
 /**
@@ -286,6 +313,7 @@ async function runAgent({
   history,
   onDelta,
   onRequest,
+  onUsage,
   onToolCall,
   onToolResult,
   signal,
@@ -317,6 +345,8 @@ async function runAgent({
       sessionId,
       onDelta: emitDelta,
     });
+
+    if (result.usage) onUsage?.(tokenUsage(result.usage), round);
 
     if (result.toolCalls.length === 0) {
       return finalText;
@@ -374,6 +404,7 @@ module.exports = {
   sameRoute,
   messagesFromHistory,
   requestBody,
+  tokenUsage,
   parseSseLine,
   ToolCallBuilder,
   streamChat,

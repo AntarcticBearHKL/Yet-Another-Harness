@@ -264,6 +264,7 @@ test('structure saves keep messages and run events', () => {
       request: '',
       steps: [{ kind: 'text', text: 'world', round: 0 }],
       requests: [{ model: 'test' }],
+      usage: { hit: 100, miss: 20, output: 30 },
     });
     store.appendEvent('s1', 'r1', 'assistant.delta', { text: 'world' });
     store.createRun('r1', 's1', 'running');
@@ -276,7 +277,7 @@ test('structure saves keep messages and run events', () => {
       sessions: [
         {
           id: 's1',
-          title: 'Chat 1',
+          title: 'Renamed Chat',
           system: 'sys',
           projectId: 'p1',
           msgs: [],
@@ -288,8 +289,14 @@ test('structure saves keep messages and run events', () => {
 
     const loaded = store.loadChats();
     assert.equal(loaded.sessions.length, 1);
+    assert.equal(loaded.sessions[0].title, 'Renamed Chat');
     assert.equal(loaded.sessions[0].msgs.length, 3);
     assert.equal(loaded.sessions[0].msgs[2].text, 'world');
+    assert.deepEqual(loaded.sessions[0].msgs[2].usage, {
+      hit: 100,
+      miss: 20,
+      output: 30,
+    });
     assert.deepEqual(
       store.listEvents('s1', 0).map((event) => event.type),
       ['assistant.delta']

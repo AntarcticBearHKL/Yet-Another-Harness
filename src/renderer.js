@@ -275,6 +275,7 @@ const api = {
 
   onChatDelta: (callback) => subscribeEvent('assistant.delta', callback),
   onChatRequest: (callback) => subscribeEvent('request.body', callback),
+  onChatUsage: (callback) => subscribeEvent('usage', callback),
   onChatToolCall: (callback) => subscribeEvent('tool.call', callback),
   onChatToolResult: (callback) => subscribeEvent('tool.result', callback),
   onChatDone: (callback) => subscribeEvent('run.done', callback),
@@ -536,6 +537,24 @@ function previewFromRaw(raw, structured) {
   return previewLine(raw);
 }
 
+function compactTokens(value) {
+  const number = Number(value) || 0;
+  if (number >= 1_000_000) {
+    return `${(number / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
+  }
+  if (number >= 1000) {
+    return `${(number / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  }
+  return String(number);
+}
+
+function usageText(usage) {
+  if (!usage) return '';
+  return `${compactTokens(usage.hit)}/${compactTokens(
+    usage.miss
+  )}/${compactTokens(usage.output)}`;
+}
+
 function makeCard(opts) {
   const card = el('div', `message-card ${opts.kind}`);
   card.dataset.cardKey = opts.key;
@@ -553,6 +572,13 @@ function makeCard(opts) {
       head.append(el('span', 'card-title', opts.title || ''));
     }
     head.append(el('span', 'card-meta', opts.meta || ''));
+    if (opts.usage) {
+      const usage = el('span', 'card-usage', usageText(opts.usage));
+      usage.title = `输入命中 ${Number(opts.usage.hit) || 0} · 输入未命中 ${
+        Number(opts.usage.miss) || 0
+      } · 输出 ${Number(opts.usage.output) || 0}`;
+      head.append(usage);
+    }
     if (opts.badge) {
       const badge = el('span', 'card-badge', opts.badge.text);
       if (opts.badge.error) badge.classList.add('error');
@@ -688,6 +714,7 @@ function textCard({
   primary,
   minimalHead,
   process,
+  usage,
 }) {
   const { card, body } = makeCard({
     key,
@@ -695,6 +722,7 @@ function textCard({
     title,
     meta,
     preview: previewLine(text),
+    usage,
     onInspect,
     primary,
     minimalHead,
@@ -977,9 +1005,10 @@ function renderAgentMessage(msg, msgIndex, container) {
     const { card, body } = makeCard({
       key: agentCardKey(msgIndex),
       kind: 'agent',
-      title: '回答',
-      meta: 'response',
+      title: '回复',
+      meta: '回复',
       preview: previewLine(msg.text),
+      usage: msg.usage,
       primary: true,
       minimalHead: true,
       onInspect: () => {
@@ -1025,8 +1054,9 @@ function renderAgentMessage(msg, msgIndex, container) {
           key: stepCardKey(msgIndex, i),
           kind: thinking ? 'thinking' : 'agent',
           title: thinking ? '思考' : primary ? '回答' : '过程',
-          meta: thinking ? 'thinking' : primary ? 'response' : 'text',
+          meta: thinking ? '' : primary ? '回复' : '',
           text: step.text,
+          usage: primary ? msg.usage : null,
           streaming: streaming && i === steps.length - 1,
           onInspect: () => inspectStep(msg, step),
           primary,
@@ -2584,6 +2614,16 @@ function bindEvents() {
     saveChatsSoon();
   });
 
+  api.onChatUsage(({ requestId, usage }) => {
+    if (requestId !== state.requestId || !state.streamMessage) return;
+    if (!usage || typeof usage !== 'object') return;
+    state.streamMessage.usage = usage;
+    const session = currentSession();
+    if (!session || !session.msgs.includes(state.streamMessage)) return;
+    state.openCardKey = autoCardKey();
+    renderMessages();
+  });
+
   api.onChatToolCall(({ requestId, name, arguments: args, round }) => {
     if (requestId !== state.requestId || !state.streamMessage) return;
     if (!Array.isArray(state.streamMessage.steps)) {
@@ -2629,13 +2669,16 @@ function bindEvents() {
     refreshChats();
   });
 
-  api.onChatDone(({ requestId, text }) => {
+  api.onChatDone(({ requestId, text, usage }) => {
     if (requestId !== state.requestId) {
       refreshChats();
       return;
     }
-    if (state.streamMessage && typeof text === 'string') {
-      state.streamMessage.text = text;
+    if (state.streamMessage) {
+      if (typeof text === 'string') state.streamMessage.text = text;
+      if (usage && typeof usage === 'object') {
+        state.streamMessage.usage = usage;
+      }
     }
     finishStream();
   });
