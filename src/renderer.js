@@ -30,6 +30,7 @@ const dom = {
   ringSvg: $('ring-svg'),
   catalog: $('catalog'),
   catalogTitle: $('catalog-title'),
+  catalogCategories: $('catalog-categories'),
   catalogList: $('catalog-list'),
   catalogClose: $('catalog-close'),
   webContent: $('web-content'),
@@ -70,6 +71,8 @@ const state = {
   ringSuppress: false,
   catalogOpen: false,
   catalogKind: null,
+  catalogData: null,
+  catalogRequest: 0,
 };
 
 async function requestJson(path, options = {}) {
@@ -1915,60 +1918,214 @@ function onRightMouseUp(event) {
   requestAnimationFrame(() => action());
 }
 
-const CATALOG_TITLES = { tools: '工具', skills: 'Skill', mcp: 'MCP' };
 const CATALOG_EMPTY = {
+  tools: '还没有可用工具。',
   skills: '还没有安装 Skill。',
   mcp: '还没有连接 MCP。',
 };
+const EXTENSION_KINDS = [
+  { id: 'skills', label: 'Skill' },
+  { id: 'mcp', label: 'MCP' },
+];
+const TOOL_GROUPS = [
+  {
+    id: 'search',
+    label: '搜索',
+    pattern: /search|web|browse|fetch|http|url/i,
+  },
+  {
+    id: 'file',
+    label: '文件',
+    pattern: /file|read|write|edit|list|glob|grep|directory|path/i,
+  },
+  {
+    id: 'system',
+    label: '系统',
+    pattern: /shell|exec|command|process|terminal|system/i,
+  },
+  {
+    id: 'agent',
+    label: '代理',
+    pattern: /agent|task|subagent|skill|mcp/i,
+  },
+];
+
+function catalogTitleFor(kind) {
+  if (kind?.startsWith('tool:')) return '工具';
+  return EXTENSION_KINDS.find((item) => item.id === kind)?.label || '工具';
+}
+
+function toolGroupFor(fn) {
+  const name = String(fn?.name || '');
+  const description = String(fn?.description || '');
+  return (
+    TOOL_GROUPS.find((group) => group.pattern.test(name)) ||
+    TOOL_GROUPS.find((group) => group.pattern.test(description)) || {
+      id: 'other',
+      label: '其他',
+    }
+  );
+}
+
+function toolCountsByGroup(tools) {
+  const counts = new Map();
+  if (!Array.isArray(tools)) return counts;
+  for (const entry of tools) {
+    const fn = entry.function || entry;
+    const group = toolGroupFor(fn);
+    counts.set(group.id, (counts.get(group.id) || 0) + 1);
+  }
+  return counts;
+}
+
+function ensureCatalogSelection(data) {
+  if (!state.catalogKind?.startsWith('tool:')) return;
+  const counts = toolCountsByGroup(data?.tools);
+  const groupId = state.catalogKind.slice(5);
+  if ((counts.get(groupId) || 0) > 0) return;
+  const first = TOOL_GROUPS.find((group) => (counts.get(group.id) || 0) > 0);
+  state.catalogKind = first ? `tool:${first.id}` : 'tool:other';
+}
 
 function closeCatalog() {
   if (!state.catalogOpen) return;
   state.catalogOpen = false;
   state.catalogKind = null;
+  state.catalogData = null;
+  state.catalogRequest += 1;
   dom.catalog.classList.add('hidden');
   dom.catalog.setAttribute('aria-hidden', 'true');
 }
 
-function renderCatalogTools(tools) {
-  if (!Array.isArray(tools) || tools.length === 0) {
-    dom.catalogList.append(el('div', 'catalog-empty', '还没有可用工具。'));
+function renderCatalogCategories(data, selectedKind) {
+  const toolCounts = toolCountsByGroup(data?.tools);
+  const toolItems = TOOL_GROUPS.map((group) => ({
+    id: `tool:${group.id}`,
+    label: group.label,
+    count: toolCounts.get(group.id) || 0,
+  })).filter((item) => item.count > 0);
+  const otherCount = toolCounts.get('other') || 0;
+  if (otherCount > 0) {
+    toolItems.push({ id: 'tool:other', label: '其他', count: otherCount });
+  }
+  if (toolItems.length === 0) {
+    toolItems.push({ id: 'tool:other', label: '其他', count: 0 });
+  }
+
+  const sections = [
+    { label: '工具', items: toolItems },
+    {
+      label: '扩展',
+      items: EXTENSION_KINDS.map((kind) => ({
+        id: kind.id,
+        label: kind.label,
+        count: Array.isArray(data?.[kind.id]) ? data[kind.id].length : 0,
+      })),
+    },
+  ];
+
+  dom.catalogCategories.replaceChildren();
+  for (const section of sections) {
+    if (section.items.length === 0) continue;
+    const wrapper = el('div', 'catalog-section');
+    wrapper.append(el('div', 'catalog-section-label', section.label));
+    for (const item of section.items) {
+      const button = el('button', 'catalog-category');
+      button.type = 'button';
+      button.dataset.kind = item.id;
+      if (item.id === selectedKind) button.classList.add('selected');
+      button.append(el('span', 'catalog-category-name', item.label));
+      button.append(el('span', 'catalog-category-count', String(item.count)));
+      button.addEventListener('click', () => selectCatalogKind(item.id));
+      wrapper.append(button);
+    }
+    dom.catalogCategories.append(wrapper);
+  }
+}
+
+function selectCatalogKind(kind) {
+  if (!state.catalogOpen || state.catalogKind === kind) return;
+  state.catalogKind = kind;
+  dom.catalogTitle.textContent = catalogTitleFor(kind);
+  for (const button of dom.catalogCategories.querySelectorAll(
+    '.catalog-category'
+  )) {
+    button.classList.toggle('selected', button.dataset.kind === kind);
+  }
+  renderCatalogContent(kind);
+  dom.catalogList.scrollTop = 0;
+}
+
+function renderCatalogToolItem(entry) {
+  const fn = entry.function || entry;
+  const item = el('div', 'catalog-item');
+  item.append(el('div', 'catalog-name', fn.name || 'tool'));
+  if (fn.description) {
+    item.append(el('div', 'catalog-desc', fn.description));
+  }
+
+  const properties = fn.parameters?.properties || {};
+  const required = new Set(fn.parameters?.required || []);
+  const names = Object.keys(properties);
+  if (names.length > 0) {
+    const params = el('div', 'catalog-params');
+    for (const paramName of names) {
+      const schema = properties[paramName] || {};
+      const row = el('div', 'catalog-param');
+      const head = el('div', 'catalog-param-head');
+      head.append(el('span', 'catalog-param-name', paramName));
+      if (schema.type) {
+        head.append(el('span', 'catalog-param-type', schema.type));
+      }
+      if (required.has(paramName)) {
+        head.append(el('span', 'catalog-param-required', 'required'));
+      }
+      row.append(head);
+      if (schema.description) {
+        row.append(el('div', 'catalog-param-desc', schema.description));
+      }
+      params.append(row);
+    }
+    item.append(params);
+  }
+  return item;
+}
+
+function appendCatalogGroup(label, entries, renderItem) {
+  const section = el('div', 'catalog-group');
+  const head = el('div', 'catalog-group-head');
+  head.append(el('span', 'catalog-group-name', label));
+  head.append(el('span', 'catalog-group-count', String(entries.length)));
+  section.append(head);
+  for (const entry of entries) section.append(renderItem(entry));
+  dom.catalogList.append(section);
+}
+
+function renderCatalogToolGroup(groupId) {
+  const tools = (state.catalogData?.tools || []).filter((entry) => {
+    const fn = entry.function || entry;
+    return toolGroupFor(fn).id === groupId;
+  });
+  if (tools.length === 0) {
+    dom.catalogList.append(el('div', 'catalog-empty', CATALOG_EMPTY.tools));
     return;
   }
-
   for (const entry of tools) {
-    const fn = entry.function || entry;
-    const item = el('div', 'catalog-item');
-    item.append(el('div', 'catalog-name', fn.name || 'tool'));
-    if (fn.description) {
-      item.append(el('div', 'catalog-desc', fn.description));
-    }
-
-    const properties = fn.parameters?.properties || {};
-    const required = new Set(fn.parameters?.required || []);
-    const names = Object.keys(properties);
-    if (names.length > 0) {
-      const params = el('div', 'catalog-params');
-      for (const paramName of names) {
-        const schema = properties[paramName] || {};
-        const row = el('div', 'catalog-param');
-        const head = el('div', 'catalog-param-head');
-        head.append(el('span', 'catalog-param-name', paramName));
-        if (schema.type) {
-          head.append(el('span', 'catalog-param-type', schema.type));
-        }
-        if (required.has(paramName)) {
-          head.append(el('span', 'catalog-param-required', 'required'));
-        }
-        row.append(head);
-        if (schema.description) {
-          row.append(el('div', 'catalog-param-desc', schema.description));
-        }
-        params.append(row);
-      }
-      item.append(params);
-    }
-    dom.catalogList.append(item);
+    dom.catalogList.append(renderCatalogToolItem(entry));
   }
+}
+
+function renderCatalogEntryItem(kind, entry) {
+  const item = el('div', 'catalog-item');
+  item.append(el('div', 'catalog-name', entry.name || kind));
+  if (entry.description) {
+    item.append(el('div', 'catalog-desc', entry.description));
+  }
+  const meta = [entry.source, entry.transport, entry.status]
+    .filter(Boolean)
+    .join(' · ');
+  if (meta) item.append(el('div', 'catalog-meta', meta));
+  return item;
 }
 
 function renderCatalogList(kind, entries) {
@@ -1979,25 +2136,51 @@ function renderCatalogList(kind, entries) {
     return;
   }
 
+  const groups = new Map();
   for (const entry of entries) {
-    const item = el('div', 'catalog-item');
-    item.append(el('div', 'catalog-name', entry.name || kind));
-    if (entry.description) {
-      item.append(el('div', 'catalog-desc', entry.description));
+    const label =
+      kind === 'skills'
+        ? entry.source || '全部'
+        : entry.transport || entry.status || '全部';
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(entry);
+  }
+  const showHeadings = groups.size > 1 || !groups.has('全部');
+  for (const [label, groupEntries] of groups) {
+    if (!showHeadings) {
+      for (const entry of groupEntries) {
+        dom.catalogList.append(renderCatalogEntryItem(kind, entry));
+      }
+      continue;
     }
-    const meta = [entry.source, entry.transport, entry.status]
-      .filter(Boolean)
-      .join(' · ');
-    if (meta) item.append(el('div', 'catalog-meta', meta));
-    dom.catalogList.append(item);
+    appendCatalogGroup(label, groupEntries, (entry) =>
+      renderCatalogEntryItem(kind, entry)
+    );
+  }
+}
+
+function renderCatalogContent(kind) {
+  dom.catalogList.replaceChildren();
+  if (kind?.startsWith('tool:')) {
+    renderCatalogToolGroup(kind.slice(5));
+  } else {
+    renderCatalogList(
+      kind,
+      kind === 'skills' ? state.catalogData?.skills : state.catalogData?.mcp
+    );
   }
 }
 
 async function openCatalog(kind) {
   closeRingMenu();
+  const initialKind =
+    kind === 'skills' || kind === 'mcp' ? kind : 'tool:search';
   state.catalogOpen = true;
-  state.catalogKind = kind;
-  dom.catalogTitle.textContent = CATALOG_TITLES[kind] || kind;
+  state.catalogKind = initialKind;
+  state.catalogData = null;
+  const request = ++state.catalogRequest;
+  dom.catalogTitle.textContent = catalogTitleFor(initialKind);
+  dom.catalogCategories.replaceChildren();
   dom.catalogList.replaceChildren(
     el('div', 'catalog-empty', '加载中…')
   );
@@ -2006,16 +2189,16 @@ async function openCatalog(kind) {
 
   try {
     const data = await api.loadCatalog();
-    if (!state.catalogOpen || state.catalogKind !== kind) return;
-    dom.catalogList.replaceChildren();
-    if (kind === 'tools') {
-      renderCatalogTools(data?.tools);
-    } else {
-      renderCatalogList(kind, kind === 'skills' ? data?.skills : data?.mcp);
-    }
+    if (!state.catalogOpen || request !== state.catalogRequest) return;
+    state.catalogData = data;
+    ensureCatalogSelection(data);
+    dom.catalogTitle.textContent = catalogTitleFor(state.catalogKind);
+    renderCatalogCategories(data, state.catalogKind);
+    renderCatalogContent(state.catalogKind);
   } catch (error) {
     console.error('load catalog failed', error);
-    if (!state.catalogOpen || state.catalogKind !== kind) return;
+    if (!state.catalogOpen || request !== state.catalogRequest) return;
+    dom.catalogCategories.replaceChildren();
     dom.catalogList.replaceChildren(
       el('div', 'catalog-empty', '加载失败。')
     );
