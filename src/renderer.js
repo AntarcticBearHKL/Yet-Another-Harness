@@ -61,6 +61,7 @@ const state = {
 let windowDrag = null;
 let dragPoint = null;
 let dragFrame = 0;
+let dragFromComposer = false;
 
 function currentSession() {
   return state.sessions[state.current];
@@ -1113,7 +1114,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-overlay';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -1137,6 +1138,9 @@ function onWindowDragStart(event) {
   if (target instanceof HTMLElement && hitsScrollbar(target, event)) return;
 
   windowDrag = { x: event.screenX, y: event.screenY };
+  dragFromComposer = Boolean(
+    state.composerOpen && target.closest('#composer')
+  );
   api.dragStart({ x: event.screenX, y: event.screenY });
 }
 
@@ -1153,11 +1157,21 @@ function onWindowDragMove(event) {
 
 function onWindowDragEnd() {
   if (!windowDrag) return;
+  const refocusComposer = dragFromComposer && state.composerOpen;
+  dragFromComposer = false;
   windowDrag = null;
   dragPoint = null;
   cancelAnimationFrame(dragFrame);
   dragFrame = 0;
   api.dragEnd();
+  if (refocusComposer) {
+    requestAnimationFrame(() => {
+      if (!state.composerOpen || !document.hasFocus()) return;
+      dom.input.focus();
+      const end = dom.input.value.length;
+      dom.input.setSelectionRange(end, end);
+    });
+  }
 }
 
 function bindEvents() {
@@ -1208,9 +1222,6 @@ function bindEvents() {
       event.preventDefault();
       sendMessage();
     }
-  });
-  dom.composer.addEventListener('click', (event) => {
-    if (event.target === dom.composer) closeComposer();
   });
 
   $('win-min').addEventListener('click', () => api.minimize());
