@@ -100,6 +100,8 @@ const state = {
   ringOpen: false,
   ringIndex: -1,
   ringSuppress: false,
+  ringPersistent: false,
+  ringMoved: false,
   catalogOpen: false,
   catalogKind: null,
   catalogData: null,
@@ -3300,11 +3302,13 @@ const RING_ICONS = {
 };
 
 let ringCenterPoint = { x: 0, y: 0 };
+let ringOpenPoint = { x: 0, y: 0 };
 let ringSegments = [];
 let ringLabels = [];
 let ringUsagePanel = null;
 let ringUsageRows = [];
 let ringItems = RING_ITEMS;
+let ringCatcher = null;
 
 function ringPolar(radius, angleDeg) {
   const rad = (angleDeg * Math.PI) / 180;
@@ -3538,22 +3542,61 @@ function openRingMenu(x, y, items = RING_ITEMS, options = {}) {
   );
 
   ringCenterPoint = { x: cx, y: cy };
+  ringOpenPoint = { x, y };
   dom.ringMenu.style.left = `${cx}px`;
   dom.ringMenu.style.top = `${cy}px`;
   state.ringOpen = true;
+  state.ringPersistent = options.persistent === true;
+  state.ringMoved = false;
   state.ringSuppress = true;
   updateRingSelection(-1);
+  ensureRingCatcher();
   document.body.classList.add('ring-open');
   dom.ringMenu.setAttribute('aria-hidden', 'false');
   dom.ringMenu.classList.add('open');
   if (options.usage !== false) void loadUsage();
 }
 
+function ensureRingCatcher() {
+  if (ringCatcher) return;
+  ringCatcher = el('div', 'ring-catcher');
+  ringCatcher.addEventListener('mousedown', (event) => {
+    if (event.button === 2) return;
+    event.stopPropagation();
+  });
+  ringCatcher.addEventListener('mouseup', (event) => {
+    if (event.button === 2) return;
+    event.stopPropagation();
+  });
+  ringCatcher.addEventListener('click', (event) => {
+    if (event.button !== 0 || !state.ringOpen) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const index = ringIndexForPoint(event.clientX, event.clientY);
+    if (index < 0) {
+      closeRingMenu();
+      return;
+    }
+    const item = ringItems[index];
+    closeRingMenu();
+    if (item && typeof item.action === 'function') item.action();
+  });
+  document.body.append(ringCatcher);
+}
+
+function removeRingCatcher() {
+  if (!ringCatcher) return;
+  ringCatcher.remove();
+  ringCatcher = null;
+}
+
 function closeRingMenu() {
   if (!state.ringOpen) return;
   state.ringOpen = false;
+  state.ringPersistent = false;
   ringItems = RING_ITEMS;
   updateRingSelection(-1);
+  removeRingCatcher();
   document.body.classList.remove('ring-open');
   dom.ringMenu.classList.remove('open');
   dom.ringMenu.setAttribute('aria-hidden', 'true');
@@ -3561,6 +3604,15 @@ function closeRingMenu() {
 
 function updateRingFromPointer(event) {
   if (!state.ringOpen) return;
+  if (
+    !state.ringMoved &&
+    Math.hypot(
+      event.clientX - ringOpenPoint.x,
+      event.clientY - ringOpenPoint.y
+    ) > 6
+  ) {
+    state.ringMoved = true;
+  }
   updateRingSelection(ringIndexForPoint(event.clientX, event.clientY));
 }
 
@@ -3585,7 +3637,7 @@ function openSwitcherRingMenu(event) {
           action: () => confirmDeleteProject(projectId),
         },
       ],
-      { usage: false }
+      { usage: false, persistent: true }
     );
     return;
   }
@@ -3609,7 +3661,7 @@ function openSwitcherRingMenu(event) {
           action: () => openMcpConfigForSession(sessionId),
         },
       ],
-      { usage: false }
+      { usage: false, persistent: true }
     );
     return;
   }
@@ -3635,7 +3687,7 @@ function openSwitcherRingMenu(event) {
         action: () => api.close(),
       },
     ],
-    { usage: false }
+    { usage: false, persistent: true }
   );
 }
 
@@ -3715,6 +3767,10 @@ function onRightMouseDown(event) {
 
 function onRightMouseUp(event) {
   if (event.button !== 2 || !state.ringOpen) return;
+  if (state.ringPersistent && !state.ringMoved) {
+    // A plain right-click keeps the switcher menu open so items can be clicked.
+    return;
+  }
   const index = ringIndexForPoint(event.clientX, event.clientY);
   const item = index >= 0 ? ringItems[index] : null;
   closeRingMenu();
@@ -4423,6 +4479,7 @@ function bindEvents() {
         return;
       }
       if (event.key !== 'Tab') return;
+      if (event.repeat) return;
       closeRingMenu();
     }
 
@@ -4594,6 +4651,7 @@ function bindEvents() {
       cancelTabHold();
       if (!dom.settingsOverlay.classList.contains('hidden')) return;
       event.preventDefault();
+      if (state.ringOpen && state.ringPersistent) return;
       if (state.switcherOpen) commitSwitcherSelection();
     }
   });

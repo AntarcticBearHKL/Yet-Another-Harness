@@ -2644,6 +2644,13 @@ body.ring-open #window-controls {
 }
 
 /* ---------------------------------------------------------------- ring menu */
+.ring-catcher {
+  position: fixed;
+  inset: 0;
+  z-index: 59;
+  background: transparent;
+}
+
 .ring-menu {
   position: fixed;
   left: 0;
