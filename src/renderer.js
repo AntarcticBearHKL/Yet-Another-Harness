@@ -599,7 +599,7 @@ function renderMessages({ animate = true } = {}) {
     state.openCardKey = null;
     state.renderedOpenKeys = new Set();
     state.renderedSessionId = sessionId;
-    dom.messages.append(el('div', 'empty', 'No messages yet. Press Alt to type.'));
+    dom.messages.append(el('div', 'empty', 'No messages yet. Press Space to type.'));
     return;
   }
 
@@ -838,11 +838,6 @@ function closeComposer() {
   dom.composer.inert = true;
   dom.composer.setAttribute('aria-hidden', 'true');
   dom.input.blur();
-}
-
-function toggleComposer() {
-  if (state.composerOpen) closeComposer();
-  else openComposer();
 }
 
 function openSwitcher() {
@@ -1177,14 +1172,6 @@ function bindEvents() {
       return;
     }
 
-    if (event.key === 'Alt' && !event.getModifierState?.('AltGraph')) {
-      if (!dom.settingsOverlay.classList.contains('hidden')) return;
-      if (state.switcherOpen) return;
-      event.preventDefault();
-      if (!event.repeat) toggleComposer();
-      return;
-    }
-
     if (state.composerOpen) {
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
@@ -1243,6 +1230,15 @@ function bindEvents() {
     }
 
     if (event.code === 'Space' || event.key === ' ') {
+      if (
+        event.repeat ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
       const target = event.target;
       const active = document.activeElement;
       const inEditable =
@@ -1253,7 +1249,9 @@ function bindEvents() {
       const onControl =
         (target instanceof Element && target.closest('button, a, select')) ||
         (active instanceof Element && active.closest('button, a, select'));
-      if (!inEditable && !onControl) event.preventDefault();
+      if (inEditable || onControl) return;
+      event.preventDefault();
+      openComposer();
     }
   });
 
