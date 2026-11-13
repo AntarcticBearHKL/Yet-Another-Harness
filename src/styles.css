@@ -806,7 +806,7 @@ body.maximized #app {
 
 .message-card.answer-card .card-body {
   color: var(--text-soft);
-  font-size: 15.5px;
+  font-size: 13.5px;
   line-height: 1.8;
 }
 
