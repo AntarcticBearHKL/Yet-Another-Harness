@@ -107,6 +107,26 @@ body.maximized #app {
   border-radius: 0;
 }
 
+/* 全屏页面和主界面使用同样的圆角窗口 */
+#switcher,
+#catalog,
+.overlay,
+.web-content {
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+body.web #switcher,
+body.web #catalog,
+body.web .overlay,
+body.web .web-content,
+body.maximized #switcher,
+body.maximized #catalog,
+body.maximized .overlay,
+body.maximized .web-content {
+  border-radius: 0;
+}
+
 /* ---------------------------------------------------------------- window chrome */
 #window-controls {
   position: absolute;
