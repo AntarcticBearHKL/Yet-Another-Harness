@@ -7245,8 +7245,20 @@ body:has(#action-menu:not(.hidden)) #window-controls {
 .catalog-param-required,
 .mcp-badge,
 .mcp-transport,
+.mcp-label,
+.mcp-required,
 .catalog-instruction summary {
   font-size: 10.5px;
+}
+
+.mcp-label {
+  color: var(--faint);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.mcp-label-code {
+  font-size: 10px;
 }
 
 .mcp-details-head {
