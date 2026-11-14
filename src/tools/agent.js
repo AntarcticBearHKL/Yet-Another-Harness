@@ -107,12 +107,37 @@ function normalizeQuestions(args) {
   return questions;
 }
 
+function normalizeQuestionMode(value) {
+  return String(value || '').trim().toLowerCase() === 'timed'
+    ? 'timed'
+    : 'blocking';
+}
+
+function normalizeQuestionTimeout(value) {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) return 60;
+  return Math.max(5, Math.min(600, Math.round(seconds)));
+}
+
 async function questionTool(args, context = null) {
   const questions = normalizeQuestions(args);
   if (typeof context?.askQuestions !== 'function') {
     return 'tool error: interactive questions are not available in this client';
   }
-  const result = await context.askQuestions(questions);
+  const requestedTimeout = Number(
+    args?.timeout_seconds ?? args?.timeoutSeconds
+  );
+  const mode = normalizeQuestionMode(
+    args?.mode || (requestedTimeout > 0 ? 'timed' : 'blocking')
+  );
+  const timeoutSeconds =
+    mode === 'timed'
+      ? normalizeQuestionTimeout(args?.timeout_seconds ?? args?.timeoutSeconds)
+      : 0;
+  const result = await context.askQuestions(questions, {
+    mode,
+    timeoutSeconds,
+  });
   if (result?.cancelled === true) {
     throw new Error('The user dismissed this question');
   }
@@ -127,6 +152,20 @@ async function questionTool(args, context = null) {
       }"`;
     })
     .join(', ');
+  if (result?.timedOut === true) {
+    const timeout = Number(result?.timeoutSeconds) || timeoutSeconds;
+    const answered = questions.some((question, index) =>
+      Array.isArray(answers?.[index]) && answers[index].length > 0
+    );
+    if (!answered) {
+      return timeout > 0
+        ? `The user did not answer within ${timeout} seconds. No answer was provided. Continue with your best judgment.`
+        : 'The question timer expired with no answer. Continue with your best judgment.';
+    }
+    return timeout > 0
+      ? `The ${timeout}-second question timer expired. Answers entered so far: ${formatted}. Continue with your best judgment for unanswered questions.`
+      : `The question timer expired. Answers entered so far: ${formatted}. Continue with your best judgment for unanswered questions.`;
+  }
   return `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`;
 }
 

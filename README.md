@@ -253,7 +253,7 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 （默认 2000 行），自动拒绝目录和二进制文件。相对路径按后端进程工作目录解析，跨项目读取建议用绝对路径。
 `write` 写文件并自动创建父目录；`edit` 支持 LINE#ID 锚点和 `oldString`/`newString` 两种模式。
 
-`question` 让模型在任务中途停下来提问：一次调用最多 5 个问题，每个问题可带选项（`multiple: true` 支持多选），前端会自动追加「其他（自己输入）」。答案通过 `POST /api/questions/:id` 回传，工具返回 `User has answered your questions: ...`；关闭面板会返回 `tool error: The user dismissed this question`。
+`question` 让模型在任务中途提问：一次调用最多 5 个问题，每个问题可带选项（`multiple: true` 支持多选），前端会自动追加「其他（自己输入）」。支持两种模式：`blocking`（默认）会一直暂停，直到用户回答或关闭；`timed` 需要同时提供 `timeout_seconds`（5-600，默认 60），问题面板右上角显示倒计时环和剩余秒数，用户操作面板内任何控件都会重置倒计时，倒计时结束会自动提交当前已选 / 已填的内容（可能为空），工具返回「计时结束 / 未回答」并让模型按自己的判断继续。答案通过 `POST /api/questions/:id` 回传，倒计时重置通过 `POST /api/questions/:id/heartbeat` 延长服务端兜底计时；关闭面板会返回 `tool error: The user dismissed this question`。
 
 `SystemInfo` 快速返回精简的本地系统快照（纯文本）：日期、时间（含 UTC 偏移）、近似地理位置（时区城市）、操作系统、shell、项目工作目录及其读写边界警告（只允许读写工作目录内的文件，越界需要用户手动批准）和系统语言。全部本地读取，不联网；对话顶部的 `SYSTEMINFO` block 会自动调用它并展示结果。
 

@@ -581,6 +581,19 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (
+    req.method === 'POST' &&
+    pathname.startsWith('/api/questions/') &&
+    pathname.endsWith('/heartbeat')
+  ) {
+    const questionId = decodeURIComponent(
+      pathname.slice('/api/questions/'.length, -'/heartbeat'.length)
+    );
+    const ok = runner.heartbeatQuestion(questionId);
+    sendJson(res, ok ? 200 : 404, { ok });
+    return true;
+  }
+
   if (req.method === 'POST' && pathname.startsWith('/api/questions/')) {
     const questionId = decodeURIComponent(
       pathname.slice('/api/questions/'.length)

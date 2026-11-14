@@ -106,15 +106,67 @@ function denyRunApprovals(runId) {
   }
 }
 
-function requestQuestions(sessionId, runId, questions) {
+function questionTimeoutMs(timeoutSeconds) {
+  const seconds = Math.max(
+    5,
+    Math.min(600, Math.round(Number(timeoutSeconds) || 60))
+  );
+  return seconds * 1000 + 2000;
+}
+
+function armQuestionTimer(questionId, entry) {
+  if (entry.timer) clearTimeout(entry.timer);
+  entry.timer = setTimeout(() => {
+    if (!pendingQuestions.has(questionId)) return;
+    pendingQuestions.delete(questionId);
+    entry.timer = null;
+    entry.resolve({
+      answers: [],
+      timedOut: true,
+      timeoutSeconds: entry.timeoutSeconds,
+    });
+  }, questionTimeoutMs(entry.timeoutSeconds));
+}
+
+function requestQuestions(sessionId, runId, questions, options = {}) {
   return new Promise((resolve) => {
     const questionId = crypto.randomUUID();
-    pendingQuestions.set(questionId, { resolve, runId, sessionId });
+    const mode = options?.mode === 'timed' ? 'timed' : 'blocking';
+    const timeoutSeconds =
+      mode === 'timed'
+        ? Math.max(
+            5,
+            Math.min(
+              600,
+              Math.round(Number(options?.timeoutSeconds) || 60)
+            )
+          )
+        : 0;
+    const entry = {
+      resolve,
+      runId,
+      sessionId,
+      mode,
+      timeoutSeconds,
+      timer: null,
+    };
+    pendingQuestions.set(questionId, entry);
+    if (mode === 'timed') armQuestionTimer(questionId, entry);
     emit(sessionId, runId, 'tool.question', {
       id: questionId,
       questions: Array.isArray(questions) ? questions : [],
+      mode,
+      timeoutSeconds,
     });
   });
+}
+
+function heartbeatQuestion(questionId) {
+  const id = String(questionId || '');
+  const entry = pendingQuestions.get(id);
+  if (!entry || entry.mode !== 'timed' || !entry.timer) return false;
+  armQuestionTimer(id, entry);
+  return true;
 }
 
 function resolveQuestions(questionId, body) {
@@ -122,9 +174,15 @@ function resolveQuestions(questionId, body) {
   const entry = pendingQuestions.get(id);
   if (!entry) return false;
   pendingQuestions.delete(id);
+  if (entry.timer) {
+    clearTimeout(entry.timer);
+    entry.timer = null;
+  }
   entry.resolve({
     answers: Array.isArray(body?.answers) ? body.answers : [],
     cancelled: body?.cancelled === true,
+    timedOut: body?.timedOut === true,
+    timeoutSeconds: entry.timeoutSeconds,
   });
   return true;
 }
@@ -133,7 +191,11 @@ function denyRunQuestions(runId) {
   for (const [questionId, entry] of pendingQuestions) {
     if (entry.runId !== runId) continue;
     pendingQuestions.delete(questionId);
-    entry.resolve({ answers: [], cancelled: true });
+    if (entry.timer) {
+      clearTimeout(entry.timer);
+      entry.timer = null;
+    }
+    entry.resolve({ answers: [], cancelled: true, timedOut: false });
   }
 }
 
@@ -575,7 +637,8 @@ function startRun({
     projectId: session.projectId,
     allowedDirs,
     approve: (request) => requestToolApproval(sessionId, id, request),
-    askQuestions: (questions) => requestQuestions(sessionId, id, questions),
+    askQuestions: (questions, options) =>
+      requestQuestions(sessionId, id, questions, options),
   };
 
   let goalAction = null;
@@ -811,5 +874,6 @@ module.exports = {
   isApprovalPending,
   resolveApproval,
   resolveQuestions,
+  heartbeatQuestion,
   activeRunForSession: (sessionId) => sessionRuns.get(sessionId) || null,
 };

@@ -7126,6 +7126,60 @@ body:has(#action-menu:not(.hidden)) #window-controls {
   min-width: 0;
 }
 
+.question-dock-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 24px;
+  padding: 0 9px 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(252, 246, 238, 0.38);
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.question-timer-ring {
+  width: 16px;
+  height: 16px;
+  transform: rotate(-90deg);
+}
+
+.question-timer-track,
+.question-timer-progress {
+  fill: none;
+  stroke-width: 2;
+}
+
+.question-timer-track {
+  stroke: var(--line);
+}
+
+.question-timer-progress {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 200ms linear;
+}
+
+.question-timer-value {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.question-dock-timer.urgent {
+  border-color: rgba(176, 74, 60, 0.32);
+  background: rgba(176, 74, 60, 0.07);
+  color: #b04a3c;
+}
+
+.question-dock-timer.urgent .question-timer-progress {
+  stroke: #b04a3c;
+}
+
 .question-progress-dot {
   width: 6px;
   height: 6px;

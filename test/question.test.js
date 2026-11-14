@@ -15,6 +15,20 @@ test('question definition allows one to five questions', () => {
   assert.equal(questions.maxItems, 5);
   assert.match(definition.function.description, /up to 5 questions/i);
   assert.match(definition.function.description, /write your own answer/i);
+  assert.match(definition.function.description, /blocking/i);
+  assert.match(definition.function.description, /timed/i);
+  assert.deepEqual(definition.function.parameters.properties.mode.enum, [
+    'blocking',
+    'timed',
+  ]);
+  assert.equal(
+    definition.function.parameters.properties.timeout_seconds.minimum,
+    5
+  );
+  assert.equal(
+    definition.function.parameters.properties.timeout_seconds.maximum,
+    600
+  );
 });
 
 test('normalizeQuestions keeps at most five and trims fields', () => {
@@ -95,6 +109,52 @@ test('questionTool accepts a bare answers array and marks unanswered questions',
   );
   assert.match(result, /"Name\?"="Yah"/);
   assert.match(result, /"Color\?"="Unanswered"/);
+});
+
+test('questionTool passes timed mode and formats partial auto-submit', async () => {
+  let receivedOptions = null;
+  const result = await questionTool(
+    {
+      questions: [
+        { question: 'Which database?', header: 'Database' },
+        { question: 'Which features?', header: 'Features' },
+      ],
+      mode: 'timed',
+      timeout_seconds: 30,
+    },
+    {
+      askQuestions: async (questions, options) => {
+        receivedOptions = options;
+        return {
+          answers: [['SQLite'], []],
+          timedOut: true,
+          timeoutSeconds: 30,
+        };
+      },
+    }
+  );
+  assert.deepEqual(receivedOptions, { mode: 'timed', timeoutSeconds: 30 });
+  assert.match(result, /30-second question timer expired/);
+  assert.match(result, /"Which database\?"="SQLite"/);
+  assert.match(result, /"Which features\?"="Unanswered"/);
+  assert.match(result, /best judgment/);
+});
+
+test('questionTool defaults to blocking and reports an empty timeout', async () => {
+  let receivedOptions = null;
+  const result = await questionTool(
+    { questions: [{ question: 'Continue?' }] },
+    {
+      askQuestions: async (questions, options) => {
+        receivedOptions = options;
+        return { answers: [[]], timedOut: true, timeoutSeconds: 15 };
+      },
+    }
+  );
+  assert.deepEqual(receivedOptions, { mode: 'blocking', timeoutSeconds: 0 });
+  assert.match(result, /did not answer within 15 seconds/);
+  assert.match(result, /No answer was provided/);
+  assert.match(result, /best judgment/);
 });
 
 test('questionTool reports dismissal and missing clients as tool errors', async () => {

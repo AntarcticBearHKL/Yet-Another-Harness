@@ -126,6 +126,34 @@
     >
       <div class="question-dock-head">
         <span id="question-dock-progress" class="question-dock-progress"></span>
+        <div
+          id="question-dock-timer"
+          class="question-dock-timer hidden"
+          aria-live="off"
+        >
+          <svg
+            class="question-timer-ring"
+            viewBox="0 0 20 20"
+            aria-hidden="true"
+          >
+            <circle
+              class="question-timer-track"
+              cx="10"
+              cy="10"
+              r="8"
+              pathLength="100"
+            ></circle>
+            <circle
+              id="question-dock-timer-progress"
+              class="question-timer-progress"
+              cx="10"
+              cy="10"
+              r="8"
+              pathLength="100"
+            ></circle>
+          </svg>
+          <span id="question-dock-timer-value" class="question-timer-value"></span>
+        </div>
         <button
           id="question-dock-close"
           class="question-dock-close"

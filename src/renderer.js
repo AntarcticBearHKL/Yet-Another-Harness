@@ -25,6 +25,9 @@ const dom = {
   actionMenu: $('action-menu'),
   questionDock: $('question-dock'),
   questionProgress: $('question-dock-progress'),
+  questionTimer: $('question-dock-timer'),
+  questionTimerValue: $('question-dock-timer-value'),
+  questionTimerProgress: $('question-dock-timer-progress'),
   questionBody: $('question-dock-body'),
   questionClose: $('question-dock-close'),
   questionBack: $('question-dock-back'),
@@ -189,6 +192,8 @@ const state = {
   goalSaving: false,
   questionQueue: [],
   activeQuestion: null,
+  questionTimer: null,
+  questionHeartbeatAt: 0,
 };
 
 async function requestJson(path, options = {}) {
@@ -383,6 +388,10 @@ const api = {
     requestJson(`/api/questions/${encodeURIComponent(id)}`, {
       method: 'POST',
       body: payload,
+    }),
+  heartbeatQuestion: (id) =>
+    requestJson(`/api/questions/${encodeURIComponent(id)}/heartbeat`, {
+      method: 'POST',
     }),
   compactChat: (sessionId, queue = []) =>
     requestJson('/api/compact', {
@@ -3275,7 +3284,86 @@ function questionHasAnswer(draft) {
   );
 }
 
+function clearQuestionTimer() {
+  if (state.questionTimer) {
+    clearInterval(state.questionTimer);
+    state.questionTimer = null;
+  }
+}
+
+function questionRemainingMs(active) {
+  if (!active || active.mode !== 'timed' || !active.deadline) return 0;
+  return Math.max(0, active.deadline - Date.now());
+}
+
+function renderQuestionTimer() {
+  const active = state.activeQuestion;
+  const timed =
+    active?.mode === 'timed' && Number(active.timeoutSeconds) > 0;
+  if (dom.questionTimer) {
+    dom.questionTimer.classList.toggle('hidden', !timed);
+    dom.questionTimer.classList.toggle(
+      'urgent',
+      timed && questionRemainingMs(active) <= 10_000
+    );
+  }
+  if (!timed) {
+    if (dom.questionTimerValue) dom.questionTimerValue.textContent = '';
+    if (dom.questionTimerProgress) {
+      dom.questionTimerProgress.style.strokeDashoffset = '100';
+    }
+    return;
+  }
+  const total = active.timeoutSeconds * 1000;
+  const remaining = questionRemainingMs(active);
+  const ratio = Math.max(0, Math.min(1, remaining / total));
+  if (dom.questionTimerValue) {
+    dom.questionTimerValue.textContent = `${Math.ceil(remaining / 1000)}s`;
+  }
+  if (dom.questionTimerProgress) {
+    dom.questionTimerProgress.style.strokeDashoffset = String(
+      100 * (1 - ratio)
+    );
+  }
+}
+
+function startQuestionTimer() {
+  clearQuestionTimer();
+  const active = state.activeQuestion;
+  if (!active || active.mode !== 'timed' || !active.timeoutSeconds) {
+    renderQuestionTimer();
+    return;
+  }
+  active.deadline = Date.now() + active.timeoutSeconds * 1000;
+  renderQuestionTimer();
+  state.questionTimer = setInterval(() => {
+    const current = state.activeQuestion;
+    if (!current || current !== active) {
+      clearQuestionTimer();
+      return;
+    }
+    renderQuestionTimer();
+    if (Date.now() >= current.deadline) {
+      clearQuestionTimer();
+      void submitQuestion({ auto: true });
+    }
+  }, 200);
+}
+
+function resetQuestionCountdown() {
+  const active = state.activeQuestion;
+  if (!active || active.responding || active.mode !== 'timed') return;
+  if (!active.timeoutSeconds) return;
+  active.deadline = Date.now() + active.timeoutSeconds * 1000;
+  renderQuestionTimer();
+  const now = Date.now();
+  if (now - state.questionHeartbeatAt < 400) return;
+  state.questionHeartbeatAt = now;
+  api.heartbeatQuestion(active.id).catch(() => {});
+}
+
 function hideQuestionDock() {
+  clearQuestionTimer();
   if (!dom.questionDock) return;
   dom.questionDock.classList.add('hidden');
   dom.questionDock.setAttribute('aria-hidden', 'true');
@@ -3316,12 +3404,18 @@ function showNextQuestion() {
     drafts: (Array.isArray(next.questions) ? next.questions : []).map(
       questionDraft
     ),
+    mode: next.mode === 'timed' ? 'timed' : 'blocking',
+    timeoutSeconds:
+      next.mode === 'timed' ? Number(next.timeoutSeconds) || 0 : 0,
+    deadline: 0,
     responding: false,
     error: '',
   };
+  state.questionHeartbeatAt = 0;
   dom.questionDock.classList.remove('hidden');
   dom.questionDock.setAttribute('aria-hidden', 'false');
   renderQuestionDock();
+  startQuestionTimer();
 }
 
 function enqueueQuestion(payload) {
@@ -3482,7 +3576,7 @@ function renderQuestionDock() {
   updateQuestionFooter();
 }
 
-async function submitQuestion() {
+async function submitQuestion({ auto = false } = {}) {
   const active = state.activeQuestion;
   if (!active || active.responding) return;
   const answers = active.questions.map((question, index) => {
@@ -3492,23 +3586,31 @@ async function submitQuestion() {
     if (custom) values.push(custom);
     return values;
   });
-  if (answers.some((values) => values.length === 0)) {
+  if (!auto && answers.some((values) => values.length === 0)) {
     active.error = '还有问题未回答';
     renderQuestionDock();
     return;
   }
   active.responding = true;
   active.error = '';
+  clearQuestionTimer();
   updateQuestionFooter();
   try {
-    await api.answerQuestion(active.id, { answers });
+    await api.answerQuestion(active.id, { answers, timedOut: auto });
     state.activeQuestion = null;
     hideQuestionDock();
     showNextQuestion();
   } catch (error) {
+    if (auto) {
+      state.activeQuestion = null;
+      hideQuestionDock();
+      showNextQuestion();
+      return;
+    }
     active.responding = false;
     active.error = `提交失败：${error.message}`;
     renderQuestionDock();
+    startQuestionTimer();
   }
 }
 
@@ -7751,6 +7853,20 @@ function bindEvents() {
     active.error = '';
     renderQuestionDock();
   });
+  if (dom.questionDock) {
+    const resetQuestionInteraction = () => resetQuestionCountdown();
+    dom.questionDock.addEventListener(
+      'pointerdown',
+      resetQuestionInteraction
+    );
+    dom.questionDock.addEventListener('keydown', resetQuestionInteraction);
+    dom.questionDock.addEventListener('input', resetQuestionInteraction);
+    dom.questionDock.addEventListener('change', resetQuestionInteraction);
+    dom.questionDock.addEventListener('focusin', resetQuestionInteraction);
+    dom.questionDock.addEventListener('wheel', resetQuestionInteraction, {
+      passive: true,
+    });
+  }
 
   dom.rawOverlay.addEventListener('click', (event) => {
     if (event.target === dom.rawOverlay) closeRawRequest();
@@ -8616,9 +8732,9 @@ function bindEvents() {
     enqueueToolApproval({ id, tool, path, allowedDirs });
   });
 
-  api.onToolQuestion(({ requestId, id, questions }) => {
+  api.onToolQuestion(({ requestId, id, questions, mode, timeoutSeconds }) => {
     if (requestId !== state.requestId) return;
-    enqueueQuestion({ id, questions });
+    enqueueQuestion({ id, questions, mode, timeoutSeconds });
   });
 
   api.onChatDone(({ requestId, text, usage }) => {

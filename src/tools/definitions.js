@@ -343,7 +343,11 @@ const READ_MCP_RESOURCE = fn(
 
 const QUESTION = fn(
   'question',
-  `Ask the user up to 5 questions when you need a decision, preference, or clarification. The run pauses and a question sheet rises from the bottom of the chat; the user can pick an option, select several options, or type their own answer. Use this instead of guessing or asking in prose when the answer changes what you do next.
+  `Ask the user up to 5 questions when you need a decision, preference, or clarification. A question sheet rises from the bottom of the chat; the user can pick an option, select several options, or type their own answer. Use this instead of guessing or asking in prose when the answer changes what you do next.
+
+Modes:
+- "blocking" (default): the run waits until the user answers or dismisses the question.
+- "timed": set "timeout_seconds" (5-600, default 60). The sheet shows a countdown; any user interaction resets it. When it expires, the answers entered so far (possibly none) are submitted automatically, and you should continue with your best judgment for anything unanswered.
 
 Usage notes:
 - Ask at most 5 questions per call. Ask several independent questions together instead of making several calls.
@@ -351,7 +355,8 @@ Usage notes:
 - Set "multiple": true to allow selecting more than one option.
 - If you recommend an option, put it first and end its label with "(Recommended)".
 - Keep "header" to a very short label (max 30 characters).
-- Omit "options" or use an empty array when the answer should be free-form text.`,
+- Omit "options" or use an empty array when the answer should be free-form text.
+- Use "timed" when you can proceed without the user; use "blocking" when the answer is required before any further work.`,
   {
     questions: arr('Questions to ask (1-5)', {
       type: 'object',
@@ -370,11 +375,20 @@ Usage notes:
       },
       required: ['question', 'header'],
     }),
+    mode: str(
+      '"blocking" waits for the user; "timed" auto-submits after timeout_seconds'
+    ),
+    timeout_seconds: num(
+      'Timed mode only: seconds before auto-submit (5-600, default 60)'
+    ),
   },
   ['questions']
 );
 QUESTION.function.parameters.properties.questions.minItems = 1;
 QUESTION.function.parameters.properties.questions.maxItems = 5;
+QUESTION.function.parameters.properties.mode.enum = ['blocking', 'timed'];
+QUESTION.function.parameters.properties.timeout_seconds.minimum = 5;
+QUESTION.function.parameters.properties.timeout_seconds.maximum = 600;
 
 const LOOK_AT = fn(
   'look_at',
