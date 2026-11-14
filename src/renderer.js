@@ -3395,11 +3395,6 @@ function renderSlashPopup() {
   }
   dom.skillPopup.classList.remove('hidden');
   dom.skillPopup.replaceChildren();
-  const head = el('div', 'skill-popup-head');
-  head.innerHTML =
-    '<svg class="skill-popup-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/></svg><span>Skill</span>';
-  head.append(el('span', 'skill-popup-count', String(skills.length)));
-  dom.skillPopup.append(head);
   if (skills.length === 0) {
     dom.skillPopup.append(
       el(
