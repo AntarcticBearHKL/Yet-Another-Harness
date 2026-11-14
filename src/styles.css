@@ -6545,6 +6545,17 @@ textarea::placeholder {
   transition: color 120ms ease;
 }
 
+.context-meta {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+.context-block:not(.collapsed) .context-meta {
+  display: none;
+}
+
 .context-head:hover .context-title {
   color: var(--text);
 }

@@ -424,6 +424,7 @@ test('session MCP switches and step metrics round-trip', () => {
       collapsedProcessKeys: ['p:0'],
       contextCollapsed: ['system'],
       viewMode: null,
+      contextFoldVersion: 1,
     });
     assert.deepEqual(loaded.sessions[0].pendingQueue, [
       { text: 'next question', skills: [], agentId: '' },
@@ -492,6 +493,7 @@ test('session MCP switches and step metrics round-trip', () => {
       collapsedProcessKeys: ['p:0', 'p:1'],
       contextCollapsed: [],
       viewMode: 'replies',
+      contextFoldVersion: 1,
     });
     assert.deepEqual(loaded.sessions[0].pendingQueue, [
       {

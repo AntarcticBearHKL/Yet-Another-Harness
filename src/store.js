@@ -169,7 +169,15 @@ function normalizeFoldState(raw) {
   const contextCollapsed = Array.isArray(raw.contextCollapsed)
     ? [...new Set(raw.contextCollapsed.map(String).filter(Boolean))]
     : [];
-  return { openKey, collapsedProcessKeys, contextCollapsed, viewMode };
+  const contextFoldVersion =
+    Number(raw.contextFoldVersion) === 2 ? 2 : 1;
+  return {
+    openKey,
+    collapsedProcessKeys,
+    contextCollapsed,
+    viewMode,
+    contextFoldVersion,
+  };
 }
 
 function normalizeQueueSkill(raw) {

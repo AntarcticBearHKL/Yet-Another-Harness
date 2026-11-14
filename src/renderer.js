@@ -109,7 +109,7 @@ const state = {
   renderedOpenKeys: new Set(),
   renderedSessionId: null,
   collapsedProcessKeys: new Set(),
-  contextCollapsed: new Set(),
+  contextCollapsed: new Set(['system', 'agents']),
   viewMode: null,
   foldRestored: false,
   foldSessionId: null,
@@ -678,7 +678,11 @@ function applyFoldState(session) {
   state.foldSessionId = session?.id || null;
   state.viewMode = fold?.viewMode || null;
   state.collapsedProcessKeys = new Set(fold?.collapsedProcessKeys || []);
-  state.contextCollapsed = new Set(fold?.contextCollapsed || []);
+  state.contextCollapsed = new Set(
+    fold?.contextFoldVersion === 2 && Array.isArray(fold.contextCollapsed)
+      ? fold.contextCollapsed
+      : ['system', 'agents']
+  );
   state.openCardKey = fold?.openKey || null;
   state.foldRestored = Boolean(fold);
 }
@@ -688,6 +692,7 @@ function captureFoldState() {
     openKey: state.viewMode ? null : state.openCardKey || null,
     collapsedProcessKeys: [...state.collapsedProcessKeys],
     contextCollapsed: [...state.contextCollapsed],
+    contextFoldVersion: 2,
     viewMode: state.viewMode || null,
   };
 }
@@ -2298,16 +2303,32 @@ function renderMcpConfig() {
   }
 }
 
+function agentForSession(session) {
+  const agentId = String(session?.agentId || DEFAULT_AGENT_ID);
+  return (
+    state.agents.find((agent) => agent.id === agentId) ||
+    state.agents.find((agent) => agent.id === DEFAULT_AGENT_ID) ||
+    null
+  );
+}
+
+function systemPromptText(session) {
+  const prompt = String(agentForSession(session)?.prompt || '').trim();
+  return prompt || String(session?.system || '').trim();
+}
+
 function contextBlock(title, text, key) {
   const collapsed = state.contextCollapsed.has(key);
   const block = el('div', 'context-block');
   if (collapsed) block.classList.add('collapsed');
   const value = String(text || '').trim();
+  const empty = key === 'agents' && !value;
   const head = el('button', 'context-head');
   head.type = 'button';
   head.setAttribute('aria-expanded', String(!collapsed));
   head.append(el('span', 'context-dot'));
   head.append(el('span', 'context-title', title));
+  if (empty) head.append(el('span', 'context-meta', 'EMPTY'));
   block.append(head);
   const body = el('div', 'context-body');
   body.setAttribute('aria-hidden', String(collapsed));
@@ -2316,7 +2337,7 @@ function contextBlock(title, text, key) {
   if (value) {
     inner.append(el('pre', 'context-text', value));
   } else if (key === 'agents') {
-    inner.append(el('div', 'context-empty', '没有'));
+    inner.append(el('div', 'context-empty', 'EMPTY'));
   } else {
     inner.classList.add('empty');
   }
@@ -2334,12 +2355,26 @@ function contextBlock(title, text, key) {
   return block;
 }
 
-function renderContextBlocks(session, container) {
+function buildContextStack(session) {
   const stack = el('div', 'context-stack');
   renderMcpSummary(session, stack);
-  stack.append(contextBlock('SYSTEM PROMPT', session.system, 'system'));
+  stack.append(
+    contextBlock('SYSTEM PROMPT', systemPromptText(session), 'system')
+  );
   stack.append(contextBlock('AGENTS.MD', session.agentsMd, 'agents'));
-  container.append(stack);
+  return stack;
+}
+
+function renderContextBlocks(session, container) {
+  container.append(buildContextStack(session));
+}
+
+function refreshContextBlocks() {
+  const session = currentSession();
+  if (!session) return;
+  const existing = dom.messages.querySelector('.context-stack');
+  if (!existing) return;
+  existing.replaceWith(buildContextStack(session));
 }
 
 function renderMessages({ animate = true } = {}) {
@@ -3833,6 +3868,7 @@ function selectAgent(agentId) {
   session.agentId = String(agentId || DEFAULT_AGENT_ID);
   saveChatsSoon();
   renderAgentPicker();
+  refreshContextBlocks();
   closeAgentMenu();
   if (state.composerOpen) dom.input.focus();
 }
@@ -3899,6 +3935,7 @@ async function loadAgents(force = false) {
     const data = await api.loadAgents();
     state.agents = Array.isArray(data?.agents) ? data.agents : [];
     state.agentsFetchedAt = Date.now();
+    refreshContextBlocks();
   } catch (error) {
     console.error('load agents failed', error);
   } finally {
@@ -6500,6 +6537,7 @@ async function saveAgentsNow() {
     }
     state.agentsFetchedAt = Date.now();
     renderAgentPicker();
+    refreshContextBlocks();
     if (state.catalogOpen && state.catalogKind?.startsWith('agent:')) {
       renderCatalogCategories(state.catalogData, state.catalogKind, 'agents');
     }
@@ -6545,6 +6583,7 @@ function deleteAgent(agentId) {
     ? `agent:${state.agents[0].id}`
     : 'agent:none';
   renderAgentPicker();
+  refreshContextBlocks();
   renderCatalogCategories(state.catalogData, state.catalogKind, 'agents');
   renderCatalogContent(state.catalogKind);
 }
@@ -7765,12 +7804,12 @@ async function boot() {
 
   bindEvents();
   applySettings();
+  await loadAgents();
   renderAll();
   persistFoldState();
   updateSendState();
   void loadUsage();
   void loadMcpServers();
-  void loadAgents();
 }
 
 boot();
