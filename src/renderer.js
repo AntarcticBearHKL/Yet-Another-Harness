@@ -16,7 +16,10 @@ const dom = {
   composer: $('composer'),
   input: $('input'),
   send: $('send'),
-  agentSelect: $('agent-select'),
+  agentPicker: $('agent-picker'),
+  agentPickerButton: $('agent-picker-button'),
+  agentPickerValue: $('agent-picker-value'),
+  agentMenu: $('agent-menu'),
   composerContext: $('composer-context'),
   composerBox: $('composer-box'),
   composerTokens: $('composer-tokens'),
@@ -150,6 +153,8 @@ const state = {
   agentSaveTimer: null,
   agentDeleteArmed: null,
   agentDeleteTimer: null,
+  agentMenuOpen: false,
+  agentMenuIndex: -1,
   attachedSkills: [],
   skillArgsTarget: null,
   slashOpen: false,
@@ -2208,6 +2213,7 @@ function openComposer() {
 }
 
 function closeComposer() {
+  closeAgentMenu();
   if (!state.composerOpen) return;
   state.composerOpen = false;
   dom.composer.classList.remove('open');
@@ -2601,6 +2607,7 @@ function commitSwitcherSelection() {
 
 function selectSession(index) {
   if (index < 0 || index >= state.sessions.length) return;
+  closeAgentMenu();
   state.current = index;
   applyFoldState(state.sessions[index]);
   resetComposerSkills();
@@ -2655,6 +2662,7 @@ function syncDraftTitle() {
 }
 
 function newSession(projectId) {
+  closeAgentMenu();
   ensureProjects();
   if (state.sessions.length === 0) state.seq = 0;
   state.seq += 1;
@@ -2995,37 +3003,169 @@ function renderComposerContext() {
   dom.composerContext.replaceChildren(...children);
 }
 
-function renderAgentPicker() {
-  const select = dom.agentSelect;
-  if (!select) return;
+function agentMenuEntries() {
+  return [
+    { id: '', name: '默认' },
+    ...state.agents.map((agent) => ({
+      id: agent.id,
+      name: agent.name || 'Agent',
+    })),
+  ];
+}
+
+function updateAgentMenuActive() {
+  if (!dom.agentMenu) return;
+  const items = [...dom.agentMenu.querySelectorAll('.agent-menu-item')];
+  items.forEach((item, index) => {
+    item.classList.toggle('active', index === state.agentMenuIndex);
+  });
+}
+
+function renderAgentMenu() {
+  if (!dom.agentMenu) return;
   const session = currentSession();
   const current = String(session?.agentId || '');
-  select.replaceChildren();
-  const none = document.createElement('option');
-  none.value = '';
-  none.textContent = '默认';
-  select.append(none);
-  for (const agent of state.agents) {
-    const option = document.createElement('option');
-    option.value = agent.id;
-    option.textContent = agent.name;
-    select.append(option);
+  const entries = agentMenuEntries();
+  if (state.agentMenuIndex < 0 || state.agentMenuIndex >= entries.length) {
+    state.agentMenuIndex = Math.max(
+      0,
+      entries.findIndex((entry) => entry.id === current)
+    );
   }
-  if (current && state.agents.some((agent) => agent.id === current)) {
-    select.value = current;
-  } else {
-    select.value = '';
-    if (
-      session &&
-      current &&
-      state.agentsFetchedAt &&
-      !state.agentsLoading
-    ) {
-      session.agentId = '';
-      saveChatsSoon();
+  dom.agentMenu.replaceChildren();
+  entries.forEach((entry, index) => {
+    const item = el('button', 'agent-menu-item');
+    item.type = 'button';
+    item.dataset.agentId = entry.id;
+    item.setAttribute('role', 'option');
+    if (entry.id === current) {
+      item.classList.add('selected');
+      item.setAttribute('aria-selected', 'true');
     }
+    if (index === state.agentMenuIndex) item.classList.add('active');
+    item.append(el('span', 'agent-menu-item-dot'));
+    item.append(el('span', 'agent-menu-item-name', entry.name));
+    if (entry.id === current) {
+      item.append(el('span', 'agent-menu-item-check', '✓'));
+    }
+    item.addEventListener('mousedown', (event) => event.preventDefault());
+    item.addEventListener('mouseenter', () => {
+      state.agentMenuIndex = index;
+      updateAgentMenuActive();
+    });
+    item.addEventListener('click', () => selectAgent(entry.id));
+    dom.agentMenu.append(item);
+  });
+  if (state.agents.length === 0) {
+    dom.agentMenu.append(
+      el('div', 'agent-menu-hint', '还没有自定义 Agent')
+    );
   }
-  select.disabled = !session;
+}
+
+function positionAgentMenu() {
+  if (!dom.agentMenu || !dom.agentPickerButton) return;
+  const rect = dom.agentPickerButton.getBoundingClientRect();
+  const margin = 12;
+  const gap = 8;
+  dom.agentMenu.style.left = '0px';
+  dom.agentMenu.style.top = '0px';
+  dom.agentMenu.style.bottom = 'auto';
+  const width = dom.agentMenu.offsetWidth;
+  const height = dom.agentMenu.offsetHeight;
+  const left = Math.max(
+    margin,
+    Math.min(rect.left, window.innerWidth - width - margin)
+  );
+  const above = rect.top - height - gap;
+  dom.agentMenu.style.left = `${Math.round(left)}px`;
+  if (above >= margin) {
+    dom.agentMenu.style.top = `${Math.round(above)}px`;
+    return;
+  }
+  const below = Math.min(
+    rect.bottom + gap,
+    window.innerHeight - height - margin
+  );
+  dom.agentMenu.style.top = `${Math.round(Math.max(margin, below))}px`;
+}
+
+function closeAgentMenu() {
+  if (!state.agentMenuOpen) return;
+  state.agentMenuOpen = false;
+  state.agentMenuIndex = -1;
+  dom.agentMenu?.classList.add('hidden');
+  dom.agentPickerButton?.setAttribute('aria-expanded', 'false');
+  dom.agentPicker?.classList.remove('open');
+}
+
+function openAgentMenu() {
+  if (!dom.agentMenu || !dom.agentPickerButton) return;
+  const session = currentSession();
+  if (!session) return;
+  if (state.agentMenuOpen) {
+    closeAgentMenu();
+    return;
+  }
+  const current = String(session.agentId || '');
+  const entries = agentMenuEntries();
+  state.agentMenuOpen = true;
+  state.agentMenuIndex = Math.max(
+    0,
+    entries.findIndex((entry) => entry.id === current)
+  );
+  dom.agentMenu.classList.remove('hidden');
+  dom.agentPickerButton.setAttribute('aria-expanded', 'true');
+  dom.agentPicker?.classList.add('open');
+  renderAgentMenu();
+  positionAgentMenu();
+}
+
+function selectAgent(agentId) {
+  const session = currentSession();
+  if (!session) return;
+  session.agentId = String(agentId || '');
+  saveChatsSoon();
+  renderAgentPicker();
+  closeAgentMenu();
+  if (state.composerOpen) dom.input.focus();
+}
+
+function moveAgentMenu(delta) {
+  if (!state.agentMenuOpen) {
+    openAgentMenu();
+    return;
+  }
+  const entries = agentMenuEntries();
+  if (entries.length === 0) return;
+  state.agentMenuIndex =
+    (state.agentMenuIndex + delta + entries.length) % entries.length;
+  updateAgentMenuActive();
+}
+
+function renderAgentPicker() {
+  const session = currentSession();
+  const current = String(session?.agentId || '');
+  const known = state.agents.find((agent) => agent.id === current);
+  if (dom.agentPickerValue) {
+    dom.agentPickerValue.textContent = known?.name || '默认';
+  }
+  if (dom.agentPickerButton) dom.agentPickerButton.disabled = !session;
+  if (
+    session &&
+    current &&
+    state.agentsFetchedAt &&
+    !state.agentsLoading &&
+    !known
+  ) {
+    session.agentId = '';
+    saveChatsSoon();
+    if (dom.agentPickerValue) dom.agentPickerValue.textContent = '默认';
+  }
+  if (state.agentMenuOpen) {
+    renderAgentMenu();
+    positionAgentMenu();
+  }
 }
 
 async function loadAgents(force = false) {
@@ -4018,7 +4158,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -4611,6 +4751,7 @@ function openSwitcherRingMenu(event) {
 
 function onRightMouseDown(event) {
   if (event.button !== 2) return;
+  closeAgentMenu();
   if (dom.approvalOverlay && !dom.approvalOverlay.classList.contains('hidden')) {
     resolveToolApproval(false);
     state.ringSuppress = true;
@@ -5413,6 +5554,7 @@ function renderAgentEditor(agentId) {
 }
 
 async function openCatalog(kind) {
+  closeAgentMenu();
   closeRingMenu();
   const page =
     kind === 'skills' || kind === 'mcp' || kind === 'agents' ? kind : 'tools';
@@ -5581,6 +5723,7 @@ function bindEvents() {
   document.addEventListener('mousemove', updateRingFromPointer);
   document.addEventListener('mouseup', onRightMouseUp, true);
   window.addEventListener('blur', closeRingMenu);
+  window.addEventListener('blur', closeAgentMenu);
 
   dom.switcherSettings.addEventListener('click', () => {
     closeSwitcher();
@@ -5750,12 +5893,61 @@ function bindEvents() {
   dom.input.addEventListener('scroll', repositionSlashPopup);
   window.addEventListener('resize', repositionSlashPopup);
 
-  dom.agentSelect?.addEventListener('change', () => {
-    const session = currentSession();
-    if (!session) return;
-    session.agentId = dom.agentSelect.value || '';
-    saveChatsSoon();
+  dom.agentPickerButton?.addEventListener('click', () => {
+    if (state.agentMenuOpen) closeAgentMenu();
+    else openAgentMenu();
   });
+  const agentPickerKeydown = (event) => {
+    if (event.isComposing) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!state.agentMenuOpen) openAgentMenu();
+      else moveAgentMenu(event.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (!state.agentMenuOpen) {
+        openAgentMenu();
+        return;
+      }
+      const entry = agentMenuEntries()[state.agentMenuIndex];
+      if (entry) selectAgent(entry.id);
+      return;
+    }
+    if (event.key === 'Escape' && state.agentMenuOpen) {
+      event.preventDefault();
+      closeAgentMenu();
+    }
+  };
+  dom.agentPickerButton?.addEventListener('keydown', agentPickerKeydown);
+  dom.agentMenu?.addEventListener('keydown', agentPickerKeydown);
+  document.addEventListener(
+    'mousedown',
+    (event) => {
+      if (!state.agentMenuOpen) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest('#agent-picker, #agent-menu')
+      ) {
+        return;
+      }
+      closeAgentMenu();
+    },
+    true
+  );
+  window.addEventListener('resize', closeAgentMenu);
+  document.addEventListener(
+    'scroll',
+    (event) => {
+      if (!state.agentMenuOpen) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest('#agent-menu')) return;
+      closeAgentMenu();
+    },
+    true
+  );
 
   $('win-min')?.addEventListener('click', () => api.minimize());
   $('win-max')?.addEventListener('click', () => api.maximize());
@@ -5786,6 +5978,11 @@ function bindEvents() {
   );
 
   document.addEventListener('keydown', (event) => {
+    if (state.agentMenuOpen && event.key === 'Escape' && !event.isComposing) {
+      event.preventDefault();
+      closeAgentMenu();
+      return;
+    }
     if (
       dom.approvalOverlay &&
       !dom.approvalOverlay.classList.contains('hidden')

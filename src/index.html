@@ -28,10 +28,22 @@
                 <textarea id="input" rows="4" spellcheck="false" placeholder="输入新对话…" aria-label="New message"></textarea>
                 <div id="skill-popup" class="skill-popup hidden" role="listbox" aria-label="Skills"></div>
                 <div class="composer-foot">
-                  <label class="agent-picker">
-                    <span class="agent-picker-label">Agent</span>
-                    <select id="agent-select" class="agent-select" aria-label="Agent"></select>
-                  </label>
+                  <div id="agent-picker" class="agent-picker">
+                    <button
+                      id="agent-picker-button"
+                      class="agent-picker-button"
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded="false"
+                      aria-controls="agent-menu"
+                    >
+                      <span class="agent-picker-label">Agent</span>
+                      <span id="agent-picker-value" class="agent-picker-value">默认</span>
+                      <svg class="agent-picker-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <button id="send" class="send-btn" aria-label="Send">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -53,6 +65,13 @@
         aria-hidden="true"
       ></svg>
     </div>
+
+    <div
+      id="agent-menu"
+      class="agent-menu hidden"
+      role="listbox"
+      aria-label="Agent"
+    ></div>
 
     <div
       id="catalog"
