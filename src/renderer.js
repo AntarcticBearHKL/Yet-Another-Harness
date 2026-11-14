@@ -1856,17 +1856,19 @@ function mcpSummaryText(session) {
 }
 
 function buildMcpSummary(session, onClick) {
-  const button = el('button', 'mcp-summary');
-  button.type = 'button';
-  button.setAttribute(
+  const block = el('div', 'context-block mcp-summary');
+  const head = el('button', 'context-head');
+  head.type = 'button';
+  head.setAttribute(
     'aria-label',
     `MCP ${mcpSummaryText(session)}，点击配置`
   );
-  button.append(el('span', 'mcp-summary-dot'));
-  button.append(el('span', 'mcp-summary-label', 'MCP'));
-  button.append(el('span', 'mcp-summary-count', mcpSummaryText(session)));
-  button.addEventListener('click', onClick);
-  return button;
+  head.append(el('span', 'context-dot'));
+  head.append(el('span', 'context-title', 'MCP'));
+  head.append(el('span', 'mcp-summary-count', mcpSummaryText(session)));
+  head.addEventListener('click', onClick);
+  block.append(head);
+  return block;
 }
 
 function renderMcpSummary(session, container = dom.messages) {
@@ -1982,8 +1984,6 @@ function contextBlock(title, text, key) {
   head.setAttribute('aria-expanded', String(!collapsed));
   head.append(el('span', 'context-dot'));
   head.append(el('span', 'context-title', title));
-  head.append(el('span', 'context-meta', '只读'));
-  head.append(el('span', 'context-fold', collapsed ? '展开' : '收起'));
   block.append(head);
   const body = el('div', 'context-body');
   const value = String(text || '');
@@ -1996,8 +1996,6 @@ function contextBlock(title, text, key) {
   head.addEventListener('click', () => {
     const nextCollapsed = block.classList.toggle('collapsed');
     head.setAttribute('aria-expanded', String(!nextCollapsed));
-    const fold = head.querySelector('.context-fold');
-    if (fold) fold.textContent = nextCollapsed ? '展开' : '收起';
     if (nextCollapsed) state.contextCollapsed.add(key);
     else state.contextCollapsed.delete(key);
     persistFoldState();
