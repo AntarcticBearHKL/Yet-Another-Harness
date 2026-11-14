@@ -4494,7 +4494,8 @@ function matchSlashSkill(value) {
   const lower = body.toLowerCase();
   let best = null;
   for (const skill of state.skills) {
-    for (const key of [skill.name, skill.id]) {
+    const idSuffix = String(skill.id || '').split(':').pop();
+    for (const key of [skill.name, skill.id, idSuffix]) {
       const normalized = String(key || '').toLowerCase();
       if (!normalized) continue;
       if (lower === normalized || lower.startsWith(`${normalized} `)) {
