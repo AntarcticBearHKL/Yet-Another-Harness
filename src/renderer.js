@@ -2307,23 +2307,14 @@ function contextBlock(title, text, key) {
   const block = el('div', 'context-block');
   if (collapsed) block.classList.add('collapsed');
   const value = String(text || '').trim();
-  const previewText = value ? previewLine(value) : key === 'agents' ? '没有' : '';
   const head = el('button', 'context-head');
   head.type = 'button';
   head.setAttribute('aria-expanded', String(!collapsed));
   head.append(el('span', 'context-dot'));
   head.append(el('span', 'context-title', title));
-  const chevron = el('span', 'context-chevron');
-  chevron.innerHTML =
-    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
-  head.append(chevron);
   block.append(head);
-  const preview = el('div', 'context-preview');
-  const previewClip = el('div', 'context-preview-clip');
-  previewClip.append(el('div', 'context-preview-inner', previewText));
-  preview.append(previewClip);
-  block.append(preview);
   const body = el('div', 'context-body');
+  body.setAttribute('aria-hidden', String(collapsed));
   const clip = el('div', 'context-body-clip');
   const inner = el('div', 'context-body-inner');
   if (value) {
@@ -2339,6 +2330,7 @@ function contextBlock(title, text, key) {
   head.addEventListener('click', () => {
     const nextCollapsed = block.classList.toggle('collapsed');
     head.setAttribute('aria-expanded', String(!nextCollapsed));
+    body.setAttribute('aria-hidden', String(nextCollapsed));
     if (nextCollapsed) state.contextCollapsed.add(key);
     else state.contextCollapsed.delete(key);
     persistFoldState();
