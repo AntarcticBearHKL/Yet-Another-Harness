@@ -65,6 +65,8 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 对话面板里按 Space 总是打开输入框（焦点在按钮 / 消息块上时也一样，不会触发折叠或按钮点击）；输入框为空或只有空格、且没有挂 Skill 时，再按 Space 关闭输入框；有文字或已挂 Skill 时 Space 才作为空格
 - 所有带确认按钮的弹窗按 Space 等于点击确认按钮：删除确认的 `Delete`、重命名的 `Save`、项目的 `Create / Save`、Goal 的 `Start Goal`、Skill 参数的 `Attach`、工具授权的 `允许一次`、设置的 `Done`、MCP 服务器表单的 `Save`；焦点在输入框 / 文本域 / 下拉框里时 Space 仍然是空格，项目目录拖放区这类自己处理 Space 的控件保持原行为
 - 后台任务：LLM 用 `background_start` 启动长任务并附 `note` 备注，工具立即返回 id、备注、命令和启动信息；对话右上角显示当前对话运行中的后台任务数量，点击打开面板查看每个任务的备注、命令、状态、耗时、输出并停止任务；`background_list` / `background_output` / `background_stop` 用于列出、读取和停止任务。任务自然结束后，输出会打包成一条后台完成提示排入当前对话队列，当前回合结束后自动作为提问运行，再继续下一轮 loop；工具面板里新增「后台」分类
+- Agile 工作区：从 Tab 工作区空白处的右键菜单打开，是一个独立的全屏看板页面。固定五列 Backlog / Human In The Loop / In Progress / Blocked / Finished；左侧分组和迭代，支持折叠、改名、新建、删除；卡片可以打开任务表单，Human In The Loop 可编辑标题和描述，其他列只读，备注在 In Progress 期间锁定；Finished 任务被加备注会自动回到 Backlog 并标记返工。支持任务搜索、WIP 上限、迭代日期/目标、显示更新时间和默认 OpenAgile Skill。看板数据存在 `%APPDATA%\yah\agile.json`；人只写备注，卡片移动由 Agent 工具完成
+- Agile 原生工具：工具面板新增「Agile」分类，`agile_*` 工具替代原 OpenAgile MCP 的看板、分组、迭代、任务、批量移动、备注消化、认领/释放、阻塞、WIP 设置、事件等待和技能接口；工具遵循固定五列、未消化备注不能开工、Finished 不能删除、只有每组最后一个迭代可以删除等规则
 - 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
 - 输入框（Space）里：新对话（还没有任何消息）上方只显示 MCP 摘要按钮；已有消息的对话上方只显示排队消息框。生成中仍可继续输入，消息按顺序排队、一行一条，左侧拖动排序，行尾是编辑 / 立即发送 / 删除三个纯图标按钮；当前生成结束后自动按顺序处理队列；这两块都是和输入框同宽的圆角矩形
 - 新建对话默认关闭所有 MCP 服务器：MCP 摘要显示 `0/总数`，需要时在对话顶部的 MCP 配置页里手动打开；开关按会话持久化
@@ -152,7 +154,7 @@ src/main.js        Electron 壳：窗口、拖动/缩放、全文窗口、拉起
 src/preload.js     只暴露窗口拖动/缩放和全文窗口能力
 src/deepseek.js    OpenCode Go SSE + tool_calls 累积 + agent loop（后端）
 src/tools.js       工具注册表：OpenCode + OMO 合并、MCP 路由、兼容别名
-src/tools/         hashline、文件/搜索、shell/后台、会话/任务/目标、子模型、web 工具模块
+src/tools/         hashline、文件/搜索、shell/后台、会话/任务/目标、子模型、web、agile 工具模块
 src/tools/guard.js 项目目录路径守卫：越界时暂停工具并等待人工审批
 src/compaction.js  上下文压缩：OpenCode 阈值、checkpoint 模板、最近消息切分
 src/goal.js        Goal 模式：目标归一化、审计问题、continue/complete/blocked 判定
@@ -161,6 +163,9 @@ src/mcp-registry.js MCP 工具到 OpenAI function 的映射（后端）
 src/store.js       chats.db（SQLite/WAL）+ settings.json 原子写 + 旧版迁移
 src/renderer.js    网页客户端：聊天、项目工作区、设置、右键菜单、HTTP/SSE
 src/mcp-ui.js      MCP 工作区：服务器、工具、资源、提示词、日志、概览
+src/agile-store.js Agile 看板存储（agile.json）
+src/agile-ui.js    Agile 看板页面：分组/迭代、五列、任务表单、设置
+src/agile.css      Agile 看板样式
 src/index.html     页面骨架
 src/styles.css     主题、布局、浮层、输入区
 src/resize.js      无边框窗口的边缘缩放手柄（桌面端）
@@ -199,6 +204,7 @@ agent 循环、工具、SQLite、API key 都在本地后端。`contextIsolation:
 - `%APPDATA%\yah\settings.json`：API key（后端读取，网页端拿不到）
 - `%APPDATA%\yah\mcp.json`：YAH 自己添加的 MCP 服务器配置（STDIO 命令/参数/环境变量，或远程 URL/Headers）
 - `%APPDATA%\yah\agents.json`：自定义 Agent 和内置 `Build` 的修改；内置 `Build` 始终可用、不可删除
+- `%APPDATA%\yah\agile.json`：Agile 看板数据（分组、迭代、任务、备注、WIP、技能、事件日志），由原生 `agile_*` 工具和 Agile 页面共用
 - OpenCode 的 `opencode.json(c)`：MCP 服务器会自动继承，不在 YAH 的 `mcp.json` 里复制
 - `%APPDATA%\yah\window.json`：桌面窗口位置和尺寸
 - `%APPDATA%\yah\server.pid`：本地后端进程号，`stop-server.cmd` 用它停止服务

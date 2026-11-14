@@ -10,6 +10,8 @@ const QRCode = require('qrcode');
 const store = require('../src/store');
 const tools = require('../src/tools');
 const processTools = require('../src/tools/process');
+const agileTools = require('../src/tools/agile');
+const { createAgileStore } = require('../src/agile-store');
 const deepseek = require('../src/deepseek');
 const runner = require('./runner');
 const usage = require('./usage');
@@ -29,6 +31,8 @@ const DATA_DIR = path.resolve(
 const STATIC_DIR = path.resolve(process.env.YAH_STATIC_DIR || path.join(ROOT, 'src'));
 const ASSETS_DIR = path.join(ROOT, 'assets');
 const AGENTS_FILE = path.join(DATA_DIR, 'agents.json');
+const agileStore = createAgileStore(path.join(DATA_DIR, 'agile.json'));
+agileTools.configure(agileStore);
 const HOST = '127.0.0.1';
 const LOCAL_PORT = Number(process.env.YAH_LOCAL_PORT) || 3789;
 const REMOTE_PORT = Number(process.env.YAH_REMOTE_PORT) || 3790;
@@ -58,10 +62,12 @@ const STATIC_FILES = new Map([
   ['/', 'index.html'],
   ['/index.html', 'index.html'],
   ['/styles.css', 'styles.css'],
+  ['/agile.css', 'agile.css'],
   ['/resize.css', 'resize.css'],
   ['/resize.js', 'resize.js'],
   ['/renderer.js', 'renderer.js'],
   ['/mcp-ui.js', 'mcp-ui.js'],
+  ['/agile-ui.js', 'agile-ui.js'],
   ['/content.html', 'content.html'],
   ['/content.css', 'content.css'],
   ['/content.js', 'content.js'],
@@ -795,6 +801,110 @@ function handleApi(req, res, url) {
     }
 
     sendJson(res, 404, { error: 'not found' });
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/agile') {
+    const boardId = String(url.searchParams.get('boardId') || '');
+    try {
+      sendJson(res, 200, agileStore.state(boardId || null));
+    } catch (error) {
+      sendJson(res, 400, { error: error.message });
+    }
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/agile') {
+    readJson(req)
+      .then((body) => {
+        const action = String(body?.action || '');
+        let result = null;
+        switch (action) {
+          case 'create_group':
+            result = agileStore.createGroup(body.name);
+            break;
+          case 'rename_group':
+            result = agileStore.renameGroup(body.groupId, body.name);
+            break;
+          case 'update_group':
+            result = agileStore.updateGroup(body.groupId, body);
+            break;
+          case 'delete_group':
+            result = agileStore.deleteGroup(body.groupId);
+            break;
+          case 'create_board':
+            result = agileStore.createBoard(body.groupId);
+            break;
+          case 'update_board':
+            result = agileStore.updateBoard(body.boardId, body);
+            break;
+          case 'delete_board':
+            result = agileStore.deleteBoard(body.boardId);
+            break;
+          case 'select_board':
+            result = agileStore.selectBoard(body.boardId);
+            break;
+          case 'create_task':
+            result = agileStore.createTask({
+              boardId: body.boardId,
+              column: 'human',
+              title: body.title,
+              description: body.description,
+              actor: { type: 'human', id: null },
+            });
+            break;
+          case 'update_task': {
+            const task = agileStore.getTask(body.taskId);
+            if (task.column !== 'human') {
+              throw new Error(
+                'Only tasks in Human In The Loop can be edited by the human'
+              );
+            }
+            result = agileStore.updateTask(body.taskId, {
+              title: body.title,
+              description: body.description,
+              actor: { type: 'human', id: null },
+            });
+            break;
+          }
+          case 'delete_task':
+            result = agileStore.deleteTask(body.taskId, {
+              actor: { type: 'human', id: null },
+            });
+            break;
+          case 'add_note':
+            result = agileStore.addNote(body.taskId, body.text);
+            break;
+          case 'delete_note':
+            result = agileStore.deleteNote(body.taskId, body.noteId);
+            break;
+          case 'digest_notes':
+            result = agileStore.digestNotes(
+              body.taskId,
+              body.pointIds,
+              { type: 'human', id: null }
+            );
+            break;
+          case 'update_settings':
+            result = agileStore.updateSettings(
+              body.boardId,
+              body.fields || {}
+            );
+            break;
+          default:
+            throw new Error(`Unknown agile action: ${action}`);
+        }
+        sendJson(res, 200, {
+          ok: true,
+          result,
+          state: agileStore.state(
+            action === 'delete_board' ? null : body.boardId || null
+          ),
+        });
+      })
+      .catch((error) =>
+        sendJson(res, error.status || 400, { error: error.message })
+      );
     return true;
   }
 

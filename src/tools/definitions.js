@@ -282,6 +282,296 @@ const MONITOR_OUTPUT = fn(
   { id: str('Monitor id') },
   ['id']
 );
+
+const AGILE_LIST_GROUPS = fn(
+  'agile_list_groups',
+  'List agile groups and their iterations. The five columns are fixed: backlog, human, progress, blocked, finished.',
+  {}
+);
+const AGILE_CREATE_GROUP = fn(
+  'agile_create_group',
+  'Create a named group that can hold agile iterations.',
+  { name: str('Group name') },
+  ['name']
+);
+const AGILE_RENAME_GROUP = fn(
+  'agile_rename_group',
+  'Rename an agile group.',
+  { groupId: str('Group id'), name: str('New group name') },
+  ['groupId', 'name']
+);
+const AGILE_DELETE_GROUP = fn(
+  'agile_delete_group',
+  'Delete a group and all iterations and tasks inside it.',
+  { groupId: str('Group id') },
+  ['groupId']
+);
+const AGILE_LIST_BOARDS = fn(
+  'agile_list_boards',
+  'List all agile iterations with task counts and dates.',
+  {}
+);
+const AGILE_GET_BOARD = fn(
+  'agile_get_board',
+  'Get an agile iteration with columns, tasks and settings.',
+  { boardId: str('Iteration id (defaults to the active iteration)') }
+);
+const AGILE_CREATE_BOARD = fn(
+  'agile_create_board',
+  'Create a new blank iteration inside a group. The iteration is numbered automatically.',
+  { groupId: str('Group id (defaults to the last group)') }
+);
+const AGILE_UPDATE_BOARD = fn(
+  'agile_update_board',
+  'Set an iteration start date, end date and goal.',
+  {
+    boardId: str('Iteration id'),
+    startDate: str('Start date (YYYY-MM-DD)'),
+    endDate: str('End date (YYYY-MM-DD)'),
+    goal: str('Iteration goal'),
+  },
+  ['boardId']
+);
+const AGILE_DELETE_BOARD = fn(
+  'agile_delete_board',
+  'Delete an iteration and its tasks.',
+  { boardId: str('Iteration id') },
+  ['boardId']
+);
+const AGILE_ASSIGN_BOARD_TO_GROUP = fn(
+  'agile_assign_board_to_group',
+  'Move an iteration into another group. It becomes the last iteration of that group.',
+  { boardId: str('Iteration id'), groupId: str('Target group id') },
+  ['boardId', 'groupId']
+);
+const AGILE_LIST_TASKS = fn(
+  'agile_list_tasks',
+  'List tasks in an iteration, optionally filtered by column, search, claimedBy, needsDigest or ready.',
+  {
+    boardId: str('Iteration id (defaults to the active iteration)'),
+    column: str('Column id or name'),
+    search: str('Text to search in title and description'),
+    claimedBy: str('Exact agent id; empty string selects unclaimed tasks'),
+    needsDigest: bool('Only tasks with (or without) undigested notes'),
+    ready: bool('Only ready tasks (Backlog/Human, notes digested, unclaimed)'),
+  }
+);
+const AGILE_GET_TASK = fn(
+  'agile_get_task',
+  'Get one task with description, notes, claim state, blocked reason and column history.',
+  { taskId: str('Task id') },
+  ['taskId']
+);
+const AGILE_CREATE_TASK = fn(
+  'agile_create_task',
+  'Create a task in Backlog. The human owns notes (keyPoints); this tool cannot add notes. Call agile_digest_notes after folding notes into the description before claiming or moving into In Progress.',
+  {
+    title: str('Task title'),
+    description: str('Task description'),
+    assignee: str('Optional assignee'),
+    boardId: str('Iteration id (defaults to the active iteration)'),
+    agent: str('Calling agent identity'),
+  },
+  ['title']
+);
+const AGILE_CREATE_TASKS = fn(
+  'agile_create_tasks',
+  'Create several Backlog tasks in one call. Every item lands in Backlog.',
+  {
+    boardId: str('Iteration id (defaults to the active iteration)'),
+    tasks: arr('Tasks to create', {
+      type: 'object',
+      properties: {
+        title: str('Task title'),
+        description: str('Task description'),
+        assignee: str('Optional assignee'),
+      },
+      required: ['title'],
+    }),
+    agent: str('Calling agent identity'),
+  },
+  ['tasks']
+);
+const AGILE_UPDATE_TASK = fn(
+  'agile_update_task',
+  'Update a task title, description, assignee or blocked reason. This cannot change notes or clear needsDigest.',
+  {
+    taskId: str('Task id'),
+    title: str('New title'),
+    description: str('New description'),
+    assignee: str('New assignee'),
+    blockedReason: str('Blocked reason; empty string clears it'),
+    agent: str('Calling agent identity'),
+  },
+  ['taskId']
+);
+const AGILE_MOVE_TASK = fn(
+  'agile_move_task',
+  'Move a task to one of the five fixed columns. Moving into In Progress is refused while the task has undigested notes; an unclaimed task moved there is claimed by the caller.',
+  {
+    taskId: str('Task id'),
+    column: str('Column id or name: backlog, human, progress, blocked, finished'),
+    position: num('0-based position in the target column (default appends)'),
+    agent: str('Calling agent identity'),
+  },
+  ['taskId', 'column']
+);
+const AGILE_MOVE_TASKS = fn(
+  'agile_move_tasks',
+  'Move several tasks into one of the five fixed columns. Refused per task while it has undigested notes (In Progress), and unclaimed tasks moved there are claimed by the caller.',
+  {
+    taskIds: arr('Task ids to move', { type: 'string' }),
+    column: str('Column id or name: backlog, human, progress, blocked, finished'),
+    position: num('0-based position in the target column (default appends)'),
+    agent: str('Calling agent identity'),
+  },
+  ['taskIds', 'column']
+);
+const AGILE_DELETE_TASK = fn(
+  'agile_delete_task',
+  'Delete a task. Finished tasks cannot be deleted.',
+  { taskId: str('Task id'), agent: str('Calling agent identity') },
+  ['taskId']
+);
+const AGILE_SET_BLOCKED_REASON = fn(
+  'agile_set_blocked_reason',
+  'Record why a task is blocked, or clear the reason with an empty string.',
+  {
+    taskId: str('Task id'),
+    reason: str('Blocked reason; empty string clears it'),
+    agent: str('Calling agent identity'),
+  },
+  ['taskId']
+);
+const AGILE_CLAIM_TASK = fn(
+  'agile_claim_task',
+  'Claim a task for an agent. Refused while it has undigested human notes or another live claim.',
+  { taskId: str('Task id'), agent: str('Agent identity') },
+  ['taskId']
+);
+const AGILE_RELEASE_TASK = fn(
+  'agile_release_task',
+  'Release a claimed task.',
+  { taskId: str('Task id'), agent: str('Agent identity') },
+  ['taskId']
+);
+const AGILE_HEARTBEAT_TASK = fn(
+  'agile_heartbeat_task',
+  'Keep a claimed In Progress task alive without changing its content.',
+  { taskId: str('Task id'), agent: str('Agent identity') },
+  ['taskId']
+);
+const AGILE_CLAIM_NEXT = fn(
+  'agile_claim_next',
+  'Claim the next ready task (Backlog before Human In The Loop, notes digested, unclaimed or expired).',
+  { boardId: str('Iteration id'), agent: str('Agent identity') }
+);
+const AGILE_DIGEST_NOTES = fn(
+  'agile_digest_notes',
+  'Fold the human notes into the description by stamping digestedAt and clearing needsDigest. This is the only way to clear it.',
+  {
+    taskId: str('Task id'),
+    pointIds: arr('Specific note ids; omit to digest all undigested notes', {
+      type: 'string',
+    }),
+    agent: str('Calling agent identity'),
+  },
+  ['taskId']
+);
+const AGILE_UNDIGEST_NOTES = fn(
+  'agile_undigest_notes',
+  'Reverse digesting by removing digestedAt stamps and setting needsDigest again.',
+  {
+    taskId: str('Task id'),
+    pointIds: arr('Specific note ids; omit to undigest every digested note', {
+      type: 'string',
+    }),
+    agent: str('Calling agent identity'),
+  },
+  ['taskId']
+);
+const AGILE_LIST_COLUMNS = fn(
+  'agile_list_columns',
+  'List the five fixed agile columns and their WIP limits.',
+  {}
+);
+const AGILE_GET_BOARD_SNAPSHOT = fn(
+  'agile_get_board_snapshot',
+  'Get the full projected board snapshot (board, columns, tasks, settings, seq).',
+  { boardId: str('Iteration id') }
+);
+const AGILE_GET_SETTINGS = fn(
+  'agile_get_settings',
+  'Get per-iteration settings.',
+  { boardId: str('Iteration id') }
+);
+const AGILE_UPDATE_SETTINGS = fn(
+  'agile_update_settings',
+  'Merge fields into per-iteration settings (showChangeDate, locale, wipLimits).',
+  {
+    boardId: str('Iteration id'),
+    fields: obj('Fields to merge'),
+  },
+  ['fields']
+);
+const AGILE_LIST_EVENTS = fn(
+  'agile_list_events',
+  'List recent agile domain events (audit trail), oldest first.',
+  { limit: num('Maximum events (1-1000)') }
+);
+const AGILE_WAIT_FOR_EVENT = fn(
+  'agile_wait_for_event',
+  'Wait for the next agile event after a sequence number (max 30s). Returns timedOut when nothing arrives.',
+  {
+    since: num('Return the first event with seq greater than this value'),
+    timeoutMs: num('Maximum wait in milliseconds (1-30000, default 15000)'),
+    type: str('Only this event type'),
+    boardId: str('Only this iteration id'),
+  }
+);
+const AGILE_LIST_ROADMAP = fn(
+  'agile_list_roadmap',
+  'List groups and iterations with dates, goals and unfinished task counts.',
+  {}
+);
+const AGILE_LIST_SKILLS = fn(
+  'agile_list_skills',
+  'List the agile collaboration skills / usage guides.',
+  {}
+);
+const AGILE_GET_SKILL = fn(
+  'agile_get_skill',
+  'Get one agile skill by id or name.',
+  { skill: str('Skill id or name') },
+  ['skill']
+);
+const AGILE_CREATE_SKILL = fn(
+  'agile_create_skill',
+  'Create an agile collaboration skill.',
+  {
+    name: str('Skill name'),
+    description: str('Short description'),
+    content: str('Usage guide text'),
+  },
+  ['name']
+);
+const AGILE_UPDATE_SKILL = fn(
+  'agile_update_skill',
+  'Update an agile skill.',
+  {
+    skillId: str('Skill id'),
+    name: str('New name'),
+    description: str('New description'),
+    content: str('New content'),
+  },
+  ['skillId']
+);
+const AGILE_DELETE_SKILL = fn(
+  'agile_delete_skill',
+  'Delete an agile skill.',
+  { skillId: str('Skill id') },
+  ['skillId']
+);
 const INTERACTIVE_BASH = fn(
   'interactive_bash',
   'Run a shell command (interactive tmux sessions are not available on Windows; this runs a normal shell command).',
@@ -556,6 +846,43 @@ const OMO = [
   BACKGROUND_STOP,
   BACKGROUND_OUTPUT,
   BACKGROUND_CANCEL,
+  AGILE_LIST_GROUPS,
+  AGILE_CREATE_GROUP,
+  AGILE_RENAME_GROUP,
+  AGILE_DELETE_GROUP,
+  AGILE_LIST_BOARDS,
+  AGILE_GET_BOARD,
+  AGILE_CREATE_BOARD,
+  AGILE_UPDATE_BOARD,
+  AGILE_DELETE_BOARD,
+  AGILE_ASSIGN_BOARD_TO_GROUP,
+  AGILE_LIST_TASKS,
+  AGILE_GET_TASK,
+  AGILE_CREATE_TASK,
+  AGILE_CREATE_TASKS,
+  AGILE_UPDATE_TASK,
+  AGILE_MOVE_TASK,
+  AGILE_MOVE_TASKS,
+  AGILE_DELETE_TASK,
+  AGILE_SET_BLOCKED_REASON,
+  AGILE_CLAIM_TASK,
+  AGILE_RELEASE_TASK,
+  AGILE_HEARTBEAT_TASK,
+  AGILE_CLAIM_NEXT,
+  AGILE_DIGEST_NOTES,
+  AGILE_UNDIGEST_NOTES,
+  AGILE_LIST_COLUMNS,
+  AGILE_GET_BOARD_SNAPSHOT,
+  AGILE_GET_SETTINGS,
+  AGILE_UPDATE_SETTINGS,
+  AGILE_LIST_EVENTS,
+  AGILE_WAIT_FOR_EVENT,
+  AGILE_LIST_ROADMAP,
+  AGILE_LIST_SKILLS,
+  AGILE_GET_SKILL,
+  AGILE_CREATE_SKILL,
+  AGILE_UPDATE_SKILL,
+  AGILE_DELETE_SKILL,
   MONITOR_START,
   MONITOR_STOP,
   MONITOR_LIST,

@@ -6151,6 +6151,8 @@ const RING_ICONS = {
   folder:
     '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>',
   settings: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  agile:
+    '<path d="M4 4h4v16H4zM10 4h4v10h-4zM16 4h4v6h-4z"/>',
   minimize: '<path d="M4 12h16"/>',
   maximize: '<path d="M5 5h14v14H5z"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
@@ -6491,6 +6493,14 @@ function openSwitcherActionMenu(target, x, y) {
   }
 
   const items = [
+    {
+      label: 'Agile',
+      icon: RING_ICONS.agile,
+      action: () => {
+        closeSwitcher();
+        window.openAgile?.();
+      },
+    },
     {
       label: '设置',
       icon: RING_ICONS.settings,
@@ -6917,6 +6927,14 @@ function openSwitcherRingMenu(event) {
 
   const items = [
     {
+      label: 'Agile',
+      icon: RING_ICONS.agile,
+      action: () => {
+        closeSwitcher();
+        window.openAgile?.();
+      },
+    },
+    {
       label: '设置',
       icon: RING_ICONS.settings,
       action: () => {
@@ -7036,6 +7054,11 @@ function onRightMouseDown(event) {
     state.ringSuppress = true;
     return;
   }
+  if (window.agileOverlayOpen?.()) {
+    window.handleAgileEscape?.();
+    state.ringSuppress = true;
+    return;
+  }
   if (switcherOpen) {
     openSwitcherRingMenu(event);
     state.ringSuppress = true;
@@ -7066,6 +7089,11 @@ const CATALOG_EMPTY = {
   mcp: '还没有 MCP',
 };
 const TOOL_GROUPS = [
+  {
+    id: 'agile',
+    label: 'Agile',
+    pattern: /^agile_/i,
+  },
   {
     id: 'search',
     label: '搜索',
@@ -8578,6 +8606,13 @@ function bindEvents() {
       }
       return;
     }
+    if (window.agileOverlayOpen?.()) {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        window.handleAgileEscape?.();
+      }
+      return;
+    }
     if (window.mcpOverlayOpen?.()) {
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
@@ -8809,6 +8844,7 @@ function bindEvents() {
           dom.backgroundOverlay &&
             !dom.backgroundOverlay.classList.contains('hidden')
         ) ||
+        Boolean(window.agileOverlayOpen?.()) ||
         state.switcherOpen ||
         state.composerOpen ||
         state.catalogOpen ||

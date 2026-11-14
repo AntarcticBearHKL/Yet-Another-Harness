@@ -9,6 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>YAH - Yet Another Harness</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="agile.css" />
     <link rel="stylesheet" href="resize.css" />
   </head>
   <body>
@@ -691,6 +692,208 @@
       </div>
     </div>
 
+    <div
+      id="agile"
+      class="agile hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Agile"
+      aria-hidden="true"
+    >
+      <div class="agile-shell">
+        <aside class="agile-sidebar">
+          <div class="agile-sidebar-head">
+            <span class="agile-brand">AGILE</span>
+            <button
+              id="agile-add-group"
+              class="agile-icon-btn"
+              type="button"
+              aria-label="新建分组"
+              title="新建分组"
+            >
+              +
+            </button>
+          </div>
+          <div id="agile-groups" class="agile-groups"></div>
+          <div class="agile-sidebar-foot">
+            <button id="agile-settings-btn" class="agile-foot-btn" type="button">
+              设置
+            </button>
+            <button id="agile-close" class="agile-foot-btn" type="button">
+              关闭
+            </button>
+          </div>
+        </aside>
+        <section class="agile-main">
+          <header class="agile-head">
+            <div class="agile-head-copy">
+              <span id="agile-iteration" class="agile-iteration">Iteration 1</span>
+              <span id="agile-board-meta" class="agile-board-meta"></span>
+            </div>
+            <div class="agile-head-actions">
+              <input
+                id="agile-search"
+                class="agile-search"
+                type="search"
+                placeholder="搜索任务…"
+              />
+              <button
+                id="agile-board-details"
+                class="pill compact"
+                type="button"
+              >
+                迭代
+              </button>
+            </div>
+          </header>
+          <div id="agile-board" class="agile-board"></div>
+          <div id="agile-toast" class="agile-toast hidden"></div>
+        </section>
+      </div>
+    </div>
+
+    <div id="agile-task-modal" class="overlay hidden" aria-hidden="true">
+      <div class="overlay-panel agile-task-panel">
+        <header class="agile-modal-head">
+          <div class="agile-modal-title-wrap">
+            <span id="agile-task-kicker" class="agile-kicker">TASK</span>
+            <h3 id="agile-task-modal-title">任务</h3>
+          </div>
+          <button
+            id="agile-task-close"
+            class="agile-icon-btn"
+            type="button"
+            aria-label="关闭"
+            title="关闭"
+          >
+            ×
+          </button>
+        </header>
+        <div class="agile-task-scroll">
+          <label class="agile-field">
+            <span>标题</span>
+            <input id="agile-task-title" class="text-input" type="text" />
+          </label>
+          <label class="agile-field">
+            <span>描述</span>
+            <textarea
+              id="agile-task-description"
+              class="text-input agile-textarea"
+              rows="4"
+            ></textarea>
+          </label>
+          <div id="agile-task-readonly-note" class="agile-readonly-note hidden"></div>
+          <section class="agile-notes">
+            <div class="agile-notes-head">
+              <span>给 Agent 的备注</span>
+              <span id="agile-notes-state"></span>
+            </div>
+            <div id="agile-task-notes" class="agile-note-list"></div>
+            <div id="agile-note-add" class="agile-note-add">
+              <input
+                id="agile-note-input"
+                class="text-input"
+                type="text"
+                maxlength="300"
+                placeholder="写一条备注，Enter 添加…"
+              />
+              <button id="agile-note-submit" class="pill compact" type="button">
+                添加
+              </button>
+            </div>
+            <div id="agile-note-lock" class="agile-readonly-note hidden"></div>
+          </section>
+          <div id="agile-task-info" class="agile-task-info"></div>
+        </div>
+        <footer class="agile-modal-foot">
+          <button id="agile-task-delete" class="pill danger" type="button">
+            删除
+          </button>
+          <div class="agile-foot-spacer"></div>
+          <button id="agile-task-cancel" class="pill" type="button">关闭</button>
+          <button id="agile-task-save" class="pill primary" type="button">
+            保存
+          </button>
+        </footer>
+      </div>
+    </div>
+
+    <div id="agile-board-modal" class="overlay hidden" aria-hidden="true">
+      <div class="overlay-panel agile-board-panel">
+        <header class="agile-modal-head">
+          <div class="agile-modal-title-wrap">
+            <span class="agile-kicker">ITERATION</span>
+            <h3>迭代设置</h3>
+          </div>
+          <button
+            id="agile-board-close"
+            class="agile-icon-btn"
+            type="button"
+            aria-label="关闭"
+            title="关闭"
+          >
+            ×
+          </button>
+        </header>
+        <div class="agile-form-grid">
+          <label class="agile-field">
+            <span>开始日期</span>
+            <input id="agile-board-start" class="text-input" type="date" />
+          </label>
+          <label class="agile-field">
+            <span>结束日期</span>
+            <input id="agile-board-end" class="text-input" type="date" />
+          </label>
+        </div>
+        <label class="agile-field">
+          <span>迭代目标</span>
+          <input id="agile-board-goal" class="text-input" type="text" />
+        </label>
+        <footer class="agile-modal-foot">
+          <div class="agile-foot-spacer"></div>
+          <button id="agile-board-cancel" class="pill" type="button">取消</button>
+          <button id="agile-board-save" class="pill primary" type="button">
+            保存
+          </button>
+        </footer>
+      </div>
+    </div>
+
+    <div id="agile-settings-modal" class="overlay hidden" aria-hidden="true">
+      <div class="overlay-panel agile-settings-panel">
+        <header class="agile-modal-head">
+          <div class="agile-modal-title-wrap">
+            <span class="agile-kicker">BOARD</span>
+            <h3>Agile 设置</h3>
+          </div>
+          <button
+            id="agile-settings-close"
+            class="agile-icon-btn"
+            type="button"
+            aria-label="关闭"
+            title="关闭"
+          >
+            ×
+          </button>
+        </header>
+        <label class="agile-check">
+          <input id="agile-show-change-date" type="checkbox" />
+          <span>显示更新时间</span>
+        </label>
+        <div class="agile-settings-label">WIP 上限（0 表示不限）</div>
+        <div id="agile-wip-fields" class="agile-wip-fields"></div>
+        <footer class="agile-modal-foot">
+          <div class="agile-foot-spacer"></div>
+          <button id="agile-settings-cancel" class="pill" type="button">
+            取消
+          </button>
+          <button id="agile-settings-save" class="pill primary" type="button">
+            保存
+          </button>
+        </footer>
+      </div>
+    </div>
+
     <div id="settings-overlay" class="overlay hidden">
       <div class="overlay-panel settings-panel">
         <div class="setting-col">
@@ -746,5 +949,6 @@
     <script src="resize.js" defer></script>
     <script src="renderer.js" defer></script>
     <script src="mcp-ui.js" defer></script>
+    <script src="agile-ui.js" defer></script>
   </body>
 </html>
