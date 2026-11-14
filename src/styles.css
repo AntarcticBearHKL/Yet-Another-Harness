@@ -2580,6 +2580,19 @@ body.ring-open #window-controls {
   cursor: default;
 }
 
+.agent-picker.locked .agent-picker-button,
+.agent-picker.locked .agent-picker-button:disabled {
+  opacity: 0.72;
+  color: var(--accent-deep);
+  cursor: default;
+  text-decoration-color: transparent;
+}
+
+.agent-picker.locked .agent-picker-button:hover {
+  color: var(--accent-deep);
+  text-decoration-color: transparent;
+}
+
 .agent-picker-value {
   max-width: 190px;
   overflow: hidden;

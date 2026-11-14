@@ -3733,6 +3733,7 @@ function renderAll() {
     renderComposerSkills();
   }
   updateControls();
+  renderAgentPicker();
   connectChatEvents(currentSession()?.id || null);
 }
 
@@ -3873,6 +3874,10 @@ async function startPrompt(
   { clearInput = false, skills = [], agentId = '' } = {}
 ) {
   if (!session || session.frozen || !text) return;
+  const effectiveAgentId = agentLocked(session)
+    ? session.agentId || DEFAULT_AGENT_ID
+    : agentId || session.agentId || DEFAULT_AGENT_ID;
+  session.agentId = effectiveAgentId;
   state.foldRestored = false;
   state.foldSessionId = session.id;
   const firstMessage = session.msgs.length === 0;
@@ -3915,7 +3920,7 @@ async function startPrompt(
       chatId: session.id,
       text,
       skills,
-      agentId: agentId || session.agentId || DEFAULT_AGENT_ID,
+      agentId: effectiveAgentId,
       reasoningEffort: currentEffort(),
     });
   } catch (error) {
@@ -4330,7 +4335,7 @@ function toggleModelMenu() {
 function openAgentMenu() {
   if (!dom.agentMenu || !dom.agentPickerButton) return;
   const session = currentSession();
-  if (!session) return;
+  if (!session || agentLocked(session)) return;
   closeModelMenu();
   if (state.agentMenuOpen) {
     closeAgentMenu();
@@ -4352,7 +4357,7 @@ function openAgentMenu() {
 
 function selectAgent(agentId) {
   const session = currentSession();
-  if (!session) return;
+  if (!session || agentLocked(session)) return;
   session.agentId = String(agentId || DEFAULT_AGENT_ID);
   saveChatsSoon();
   renderAgentPicker();
@@ -4373,6 +4378,12 @@ function moveAgentMenu(delta) {
   updateAgentMenuActive();
 }
 
+function agentLocked(session) {
+  return Boolean(
+    session && Array.isArray(session.msgs) && session.msgs.length > 0
+  );
+}
+
 function renderAgentPicker() {
   const session = currentSession();
   if (session && !session.agentId) {
@@ -4384,11 +4395,23 @@ function renderAgentPicker() {
   const fallback = state.agents.find(
     (agent) => agent.id === DEFAULT_AGENT_ID
   );
+  const name = (known || fallback)?.name || DEFAULT_AGENT_NAME;
+  const locked = agentLocked(session);
   if (dom.agentPickerValue) {
-    dom.agentPickerValue.textContent =
-      (known || fallback)?.name || DEFAULT_AGENT_NAME;
+    dom.agentPickerValue.textContent = name;
   }
-  if (dom.agentPickerButton) dom.agentPickerButton.disabled = !session;
+  if (dom.agentPickerButton) {
+    dom.agentPickerButton.disabled = !session || locked;
+    dom.agentPickerButton.title = locked
+      ? '对话开始后不能更换 Agent'
+      : '';
+    dom.agentPickerButton.setAttribute(
+      'aria-label',
+      locked ? `Agent locked: ${name}` : 'Select agent'
+    );
+  }
+  dom.agentPicker?.classList.toggle('locked', Boolean(session && locked));
+  if (locked && state.agentMenuOpen) closeAgentMenu();
   if (
     session &&
     current &&
@@ -5217,8 +5240,11 @@ function editQueuedPrompt(session, index) {
   const [item] = session.pendingQueue.splice(index, 1);
   if (!item) return;
   clearPendingQueueDelete(item);
-  session.agentId =
-    (item && typeof item === 'object' && item.agentId) || DEFAULT_AGENT_ID;
+  if (!agentLocked(session)) {
+    session.agentId =
+      (item && typeof item === 'object' && item.agentId) ||
+      DEFAULT_AGENT_ID;
+  }
   saveChatsSoon();
   if (!state.composerOpen) openComposer();
   if (item && typeof item === 'object' && item.kind === 'compact') {
@@ -7880,6 +7906,7 @@ function bindEvents() {
   window.addEventListener('resize', closeModelMenu);
   const agentPickerKeydown = (event) => {
     if (event.isComposing) return;
+    if (agentLocked(currentSession())) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       if (!state.agentMenuOpen) openAgentMenu();
