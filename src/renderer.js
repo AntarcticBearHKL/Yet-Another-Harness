@@ -1571,15 +1571,14 @@ function promptCard({ key, text, onInspect }) {
   const { card, body } = makeCard({
     key,
     kind: 'user',
-    title: '',
+    title: '提问',
     meta: '',
+    preview: previewLine(text),
     onInspect,
-    headless: true,
-    alwaysOpen: true,
     onFullContent: () =>
       openFullContent({
         key,
-        title: 'prompt',
+        title: '提问',
         kind: 'text',
         text: textFromCard(card),
       }),
