@@ -66,7 +66,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 所有带确认按钮的弹窗按 Space 等于点击确认按钮：删除确认的 `Delete`、重命名的 `Save`、项目的 `Create / Save`、Goal 的 `Start Goal`、Skill 参数的 `Attach`、工具授权的 `允许一次`、设置的 `Done`、MCP 服务器表单的 `Save`；焦点在输入框 / 文本域 / 下拉框里时 Space 仍然是空格，项目目录拖放区这类自己处理 Space 的控件保持原行为
 - 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
 - 输入框（Space）里：新对话（还没有任何消息）上方只显示 MCP 摘要按钮；已有消息的对话上方只显示排队消息框。生成中仍可继续输入，消息按顺序排队、一行一条，左侧拖动排序，行尾是编辑 / 立即发送 / 删除三个纯图标按钮；当前生成结束后自动按顺序处理队列；这两块都是和输入框同宽的圆角矩形
-- 新建对话默认继承同项目上一个对话的 MCP 服务器开关配置
+- 新建对话默认关闭所有 MCP 服务器：MCP 摘要显示 `0/总数`，需要时在对话顶部的 MCP 配置页里手动打开；开关按会话持久化
 - Skill 是带 frontmatter 的 Markdown 文件（`name` / `description` / `keywords` / `category`），放在项目 `skills/`（内置）或 `%APPDATA%\yah\skills`（用户）；内置包含 `skills/test-skill.md` 测试 Skill
 - Skill 页新增「系统」分组：`compact` / `goal` 是内置系统 Skill，不是可编辑的 Markdown，而是固定指令；只读，不能修改，输入 `/` 可以像其他 Skill 一样搜索和调用
 - 上下文压缩按 OpenCode 的方式工作：每次请求前用「已测量的 prompt + 之后新增内容的估算」判断，达到模型窗口减去 10%（至少 16k）时自动压缩；保留最近约 15k tokens，旧历史写成结构化 checkpoint。手动 `/compact` 或在 Skill 里选 `compact` 不会立刻执行，而是先作为 `/ compact` 标记放进输入框，可以和其他消息一起排队；发送后压缩结果显示为一条独立的 `CONTEXT COMPACTED` 消息（manual、压缩前后 token 数、可展开摘要），完成后旧对话被冻结、不能再发消息，并自动新建一个 `#1 原标题` 的对话，把同一条压缩摘要放在开头，接着在新对话里继续聊。自动压缩仍在过程组里显示 `CONTEXT COMPACTED` block

@@ -2296,10 +2296,11 @@ function renderAgentMessage(msg, msgIndex, container) {
 
 function mcpBlockServerEnabled(session, server) {
   if (server.enabled === false) return false;
-  return !(Array.isArray(session.mcpDisabled)
+  const disabled = Array.isArray(session.mcpDisabled)
     ? session.mcpDisabled
-    : []
-  ).includes(server.id);
+    : [];
+  if (disabled.includes('*')) return false;
+  return !disabled.includes(server.id);
 }
 
 async function loadMcpServers(force = false) {
@@ -2445,11 +2446,16 @@ function renderMcpConfig() {
     if (server.enabled !== false) {
       button.addEventListener('click', () => {
         const disabled = new Set(
-          Array.isArray(session.mcpDisabled) ? session.mcpDisabled : []
+          Array.isArray(session.mcpDisabled) &&
+            session.mcpDisabled.includes('*')
+            ? state.mcpServers.map((item) => item.id)
+            : Array.isArray(session.mcpDisabled)
+              ? session.mcpDisabled
+              : []
         );
         if (disabled.has(server.id)) disabled.delete(server.id);
         else disabled.add(server.id);
-        session.mcpDisabled = [...disabled];
+        session.mcpDisabled = [...disabled].filter((id) => id !== '*');
         void saveChatsNow().finally(() => void loadSkills(true));
         renderMcpConfig();
         renderMcpSummary(session);
@@ -3729,9 +3735,7 @@ function newSession(projectId) {
     agentsMd: null,
     agentId: previous?.agentId || DEFAULT_AGENT_ID,
     projectId: targetProjectId,
-    mcpDisabled: Array.isArray(previous?.mcpDisabled)
-      ? [...previous.mcpDisabled]
-      : [],
+    mcpDisabled: ['*'],
     foldState: null,
     pendingQueue: [],
     msgs: [],

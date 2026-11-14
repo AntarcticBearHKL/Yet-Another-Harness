@@ -140,12 +140,13 @@ function createSkillService({ root, dataDir, mcpManager }) {
     const disabled = new Set(
       Array.isArray(mcpDisabled) ? mcpDisabled.map(String) : []
     );
+    const allDisabled = disabled.has('*');
     const prompts =
       typeof mcpManager?.promptList === 'function'
         ? mcpManager.promptList()
         : [];
     return prompts
-      .filter((entry) => !disabled.has(entry.serverId))
+      .filter((entry) => !allDisabled && !disabled.has(entry.serverId))
       .map(({ serverId, serverName, prompt }) => {
         const promptName = String(prompt?.name || '');
         if (!promptName) return null;
@@ -210,7 +211,7 @@ function createSkillService({ root, dataDir, mcpManager }) {
       const disabled = new Set(
         Array.isArray(mcpDisabled) ? mcpDisabled.map(String) : []
       );
-      if (disabled.has(entry.serverId)) {
+      if (disabled.has('*') || disabled.has(entry.serverId)) {
         throw new Error('该 MCP 服务器已在当前对话中关闭');
       }
       const inputArgs =

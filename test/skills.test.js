@@ -154,6 +154,10 @@ test('MCP prompts become per-session skills and resolve', async () => {
       service.list({ mcpDisabled: ['s1'] }).some((skill) => skill.sourceKind === 'mcp'),
       false
     );
+    assert.equal(
+      service.list({ mcpDisabled: ['*'] }).some((skill) => skill.sourceKind === 'mcp'),
+      false
+    );
 
     const result = await service.resolveMany(
       [{ id: 'mcp:s1:summarize', arguments: { topic: 'skills' } }],
@@ -170,6 +174,10 @@ test('MCP prompts become per-session skills and resolve', async () => {
     );
     await assert.rejects(
       service.resolveMany([{ id: 'mcp:s1:summarize', arguments: { topic: 'x' } }], ['s1']),
+      /已在当前对话中关闭/
+    );
+    await assert.rejects(
+      service.resolveMany([{ id: 'mcp:s1:summarize', arguments: { topic: 'x' } }], ['*']),
       /已在当前对话中关闭/
     );
   });

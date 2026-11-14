@@ -284,7 +284,12 @@ function sessionMcpDisabled(sessionId) {
   if (!id) return [];
   const chats = store.loadChats();
   const session = chats.sessions.find((item) => item.id === id);
-  return Array.isArray(session?.mcpDisabled) ? session.mcpDisabled : [];
+  const disabled = Array.isArray(session?.mcpDisabled)
+    ? session.mcpDisabled
+    : [];
+  if (!disabled.includes('*')) return disabled;
+  const all = mcpManager.getState().servers.map((server) => server.id);
+  return all.length > 0 ? all : ['*'];
 }
 
 function handleApi(req, res, url) {

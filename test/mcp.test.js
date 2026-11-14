@@ -211,6 +211,12 @@ test('registry exposes MCP tools and routes calls', async () => {
       false
     );
 
+    const allFiltered = tools.definitions({ mcpDisabled: ['*'] });
+    assert.equal(
+      allFiltered.some((def) => def.function.name.startsWith('mcp__')),
+      false
+    );
+
     const agentFiltered = tools.definitions({ allowedTools: ['read'] });
     assert.ok(
       agentFiltered.some((def) => def.function.name.startsWith('mcp__')),

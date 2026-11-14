@@ -99,8 +99,11 @@ function definitions(options = {}) {
       ? options.disabledServerIds.map(String)
       : []
   );
+  const allDisabled = disabled.has('*');
   return buildEntries()
-    .filter((entry) => !disabled.has(String(entry.serverId)))
+    .filter(
+      (entry) => !allDisabled && !disabled.has(String(entry.serverId))
+    )
     .map((entry) => {
       const label = entry.title
         ? `${entry.title} (${entry.toolName})`
