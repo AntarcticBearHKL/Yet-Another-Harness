@@ -6623,21 +6623,7 @@ function renderAgentEditor(agentId) {
     }
   });
   toolsField.append(list);
-  toolsField.append(
-    el(
-      'div',
-      'agent-field-hint',
-      '不选工具则不能调用工具'
-    )
-  );
   editor.append(toolsField);
-  editor.append(
-    el(
-      'div',
-      'agent-editor-status',
-      builtin ? '内置，可修改，不可删除' : '自动保存'
-    )
-  );
   dom.catalogList.append(editor);
   updateCount();
   setEnabled(agent.tools !== null);

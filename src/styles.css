@@ -3749,12 +3749,6 @@ body.ring-open #messages {
   letter-spacing: 0.08em;
 }
 
-.agent-field-hint {
-  color: var(--faint);
-  font-size: 10.5px;
-  line-height: 1.6;
-}
-
 .agent-prompt {
   width: 100%;
   min-height: 140px;
@@ -3879,12 +3873,6 @@ body.ring-open #messages {
   line-height: 1.4;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-}
-
-.agent-editor-status {
-  color: var(--faint);
-  font-size: 10px;
-  letter-spacing: 0.02em;
 }
 
 @media (max-width: 720px) {
