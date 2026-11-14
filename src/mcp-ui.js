@@ -23,8 +23,6 @@ const mcpDom = {
   remove: document.getElementById('mcp-delete'),
   toast: document.getElementById('mcp-toast'),
   formOverlay: document.getElementById('mcp-form-overlay'),
-  formTitle: document.getElementById('mcp-form-title'),
-  formSubtitle: document.getElementById('mcp-form-subtitle'),
   formClose: document.getElementById('mcp-form-close'),
   formCancel: document.getElementById('mcp-form-cancel'),
   formSave: document.getElementById('mcp-form-save'),
@@ -2247,10 +2245,6 @@ function mcpOpenForm(editId) {
   mcpState.formOpen = true;
   mcpState.formEditId = editId || null;
   mcpState.formSaving = false;
-  mcpDom.formTitle.textContent = server ? 'EDIT MCP SERVER' : 'ADD MCP SERVER';
-  mcpDom.formSubtitle.textContent = server
-    ? server.name
-    : '保存在 mcp.json';
   mcpDom.formModeJson.disabled = Boolean(server);
   mcpDom.formModeJson.style.opacity = server ? '0.45' : '';
   if (server) {

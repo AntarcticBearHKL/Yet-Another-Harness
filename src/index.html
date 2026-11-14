@@ -87,7 +87,6 @@
       aria-hidden="true"
     >
       <div class="question-dock-head">
-        <span class="question-dock-kicker">QUESTION</span>
         <span id="question-dock-progress" class="question-dock-progress"></span>
         <button
           id="question-dock-close"
@@ -155,8 +154,8 @@
             <header class="mcp-head">
               <div class="mcp-identity">
                 <div class="mcp-title-wrap">
-                  <h2 id="mcp-title">MCP</h2>
                   <div class="mcp-subline">
+                    <span id="mcp-title" class="mcp-name">MCP</span>
                     <span id="mcp-status" class="mcp-status idle">未连接</span>
                     <span id="mcp-transport" class="mcp-transport">STDIO</span>
                   </div>
@@ -213,11 +212,6 @@
 
     <div id="mcp-form-overlay" class="overlay hidden" aria-hidden="true">
       <div class="overlay-panel mcp-form-panel">
-        <div class="overlay-head">
-          <h2 id="mcp-form-title">ADD MCP SERVER</h2>
-          <span id="mcp-form-subtitle" class="muted small"></span>
-        </div>
-        <div class="divider"></div>
         <div class="mcp-form-scroll">
           <div class="segmented mcp-form-mode">
             <button
@@ -381,7 +375,6 @@
     <div id="mcp-config" class="mcp-config hidden" role="dialog" aria-modal="true" aria-label="MCP" aria-hidden="true">
       <div class="mcp-config-panel">
         <div class="mcp-config-head">
-          <span class="mcp-config-title">MCP</span>
           <span id="mcp-config-summary" class="mcp-config-summary"></span>
         </div>
         <div id="mcp-config-grid" class="mcp-config-grid"></div>
@@ -389,9 +382,6 @@
     </div>
 
     <div id="web-content" class="web-content hidden" aria-hidden="true">
-      <div class="web-content-head">
-        <span id="web-content-title">CONTENT</span>
-      </div>
       <div id="web-content-body" class="web-content-body"></div>
       <div class="edge-blur edge-blur-top" aria-hidden="true"></div>
       <div class="edge-blur edge-blur-bottom" aria-hidden="true"></div>
@@ -445,10 +435,6 @@
 
     <div id="rename-overlay" class="overlay hidden" aria-hidden="true">
       <div class="overlay-panel rename-panel">
-        <div class="overlay-head">
-          <h2 id="rename-title">RENAME</h2>
-        </div>
-        <div class="divider"></div>
         <input
           id="rename-input"
           class="text-input"
@@ -475,10 +461,6 @@
 
     <div id="confirm-overlay" class="overlay hidden" aria-hidden="true">
       <div class="overlay-panel confirm-panel">
-        <div class="overlay-head">
-          <h2 id="confirm-title">DELETE</h2>
-        </div>
-        <div class="divider"></div>
         <p id="confirm-text" class="confirm-text"></p>
         <div class="overlay-actions">
           <button id="confirm-cancel" class="pill" type="button">
@@ -501,10 +483,6 @@
 
     <div id="skill-args-overlay" class="overlay hidden" aria-hidden="true">
       <div class="overlay-panel skill-args-panel">
-        <div class="overlay-head">
-          <h2 id="skill-args-title">SKILL</h2>
-        </div>
-        <div class="divider"></div>
         <p id="skill-args-desc" class="muted small"></p>
         <div id="skill-args-fields" class="skill-args-fields"></div>
         <div id="skill-args-error" class="skill-args-error hidden"></div>
@@ -529,10 +507,6 @@
 
     <div id="project-overlay" class="overlay hidden" aria-hidden="true">
       <div class="overlay-panel project-panel">
-        <div class="overlay-head">
-          <h2 id="project-title">NEW PROJECT</h2>
-        </div>
-        <div class="divider"></div>
         <label class="project-field">
           <span class="project-field-label">项目名称</span>
           <input
@@ -568,10 +542,6 @@
 
     <div id="approval-overlay" class="overlay hidden" aria-hidden="true">
       <div class="overlay-panel approval-panel">
-        <div class="overlay-head">
-          <h2>TOOL ACCESS</h2>
-        </div>
-        <div class="divider"></div>
         <p class="approval-text">
           访问项目目录之外的路径
         </p>
@@ -595,10 +565,6 @@
 
     <div id="goal-overlay" class="overlay hidden" aria-hidden="true">
       <div class="overlay-panel goal-panel">
-        <div class="overlay-head">
-          <h2 id="goal-title">GOAL</h2>
-        </div>
-        <div class="divider"></div>
         <label class="goal-field">
           <span class="goal-field-label">目标</span>
           <textarea
@@ -635,11 +601,6 @@
 
     <div id="settings-overlay" class="overlay hidden">
       <div class="overlay-panel settings-panel">
-        <div class="overlay-head">
-          <h2>SETTINGS</h2>
-        </div>
-        <div class="divider"></div>
-
         <div class="setting-col">
           <div class="setting-row">
             <span>OpenCode Go API key</span>
@@ -683,11 +644,7 @@
 
     <div id="raw-overlay" class="overlay hidden">
       <div class="overlay-panel raw-panel">
-        <div class="overlay-head">
-          <h2>RAW REQUEST BODY</h2>
-          <span id="raw-meta" class="muted small"></span>
-        </div>
-        <div class="divider"></div>
+        <span id="raw-meta" class="muted small raw-meta"></span>
         <div id="raw-body" class="raw-body"></div>
         <div class="edge-blur edge-blur-short edge-blur-top" aria-hidden="true"></div>
         <div class="edge-blur edge-blur-short edge-blur-bottom" aria-hidden="true"></div>

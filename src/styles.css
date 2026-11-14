@@ -2591,6 +2591,18 @@ body.ring-open #window-controls {
   width: min(440px, calc(100vw - 40px));
 }
 
+.confirm-panel {
+  gap: 16px;
+  padding: 24px 24px 18px;
+}
+
+.confirm-text {
+  margin: 0;
+  color: var(--dim);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
 #project-overlay {
   z-index: 74;
 }
@@ -2801,13 +2813,6 @@ body.ring-open #window-controls {
   width: 100%;
 }
 
-.confirm-text {
-  margin: 0;
-  color: var(--dim);
-  font-size: 12.5px;
-  line-height: 1.7;
-}
-
 .settings-panel {
   width: min(520px, calc(100vw - 40px));
   max-height: min(492px, calc(100vh - 40px));
@@ -2946,6 +2951,13 @@ body.ring-open #window-controls {
 .raw-panel {
   width: min(1180px, calc(100vw - 48px));
   height: min(820px, calc(100vh - 48px));
+}
+
+.raw-meta {
+  flex: none;
+  color: var(--faint);
+  font-size: 10.5px;
+  line-height: 1.4;
 }
 
 .raw-body {
@@ -4220,7 +4232,17 @@ body.maximized .mcp {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 0;
+}
+
+.mcp-name {
+  max-width: 320px;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mcp-status {

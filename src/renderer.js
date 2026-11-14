@@ -33,7 +33,6 @@ const dom = {
   composerTokens: $('composer-tokens'),
   skillPopup: $('skill-popup'),
   skillArgsOverlay: $('skill-args-overlay'),
-  skillArgsTitle: $('skill-args-title'),
   skillArgsDesc: $('skill-args-desc'),
   skillArgsFields: $('skill-args-fields'),
   skillArgsError: $('skill-args-error'),
@@ -46,17 +45,14 @@ const dom = {
   settingsOverlay: $('settings-overlay'),
   rawOverlay: $('raw-overlay'),
   renameOverlay: $('rename-overlay'),
-  renameTitle: $('rename-title'),
   renameInput: $('rename-input'),
   renameCancel: $('rename-cancel'),
   renameSave: $('rename-save'),
   confirmOverlay: $('confirm-overlay'),
-  confirmTitle: $('confirm-title'),
   confirmText: $('confirm-text'),
   confirmCancel: $('confirm-cancel'),
   confirmOk: $('confirm-ok'),
   projectOverlay: $('project-overlay'),
-  projectTitle: $('project-title'),
   projectName: $('project-name'),
   projectDrop: $('project-drop'),
   projectDirs: $('project-dirs'),
@@ -70,7 +66,6 @@ const dom = {
   approvalDeny: $('approval-deny'),
   approvalAllow: $('approval-allow'),
   goalOverlay: $('goal-overlay'),
-  goalTitle: $('goal-title'),
   goalObjective: $('goal-objective'),
   goalBudget: $('goal-budget'),
   goalError: $('goal-error'),
@@ -91,7 +86,6 @@ const dom = {
   catalogList: $('catalog-list'),
   catalogClose: $('catalog-close'),
   webContent: $('web-content'),
-  webContentTitle: $('web-content-title'),
   webContentBody: $('web-content-body'),
   webContentClose: $('web-content-close'),
   mcpConfig: $('mcp-config'),
@@ -293,7 +287,6 @@ function openWebContent(payload) {
   state.ringSuppress = false;
   webContentKey = payload?.key || null;
   webContentKind = payload?.kind || 'text';
-  dom.webContentTitle.textContent = payload?.title || 'CONTENT';
   renderWebContent(payload);
   dom.webContentBody.scrollTop = 0;
   dom.webContent.classList.remove('hidden');
@@ -2325,12 +2318,10 @@ function openRename(kind, id) {
     const project = state.projects.find((item) => item.id === id);
     if (!project) return;
     current = project.name;
-    dom.renameTitle.textContent = 'RENAME PROJECT';
   } else {
     const session = state.sessions.find((item) => item.id === id);
     if (!session) return;
     current = session.title;
-    dom.renameTitle.textContent = 'RENAME CHAT';
   }
   renameTarget = { kind, id };
   dom.renameInput.value = current;
@@ -2426,7 +2417,6 @@ function openProjectDialog(mode = 'new', projectId = null) {
     name: editing ? project.name : `Project ${state.projects.length + 1}`,
     directories: editing ? [...projectDirectories(project)] : [],
   };
-  dom.projectTitle.textContent = editing ? 'PROJECT DIRECTORIES' : 'NEW PROJECT';
   dom.projectName.value = projectDialog.name;
   dom.projectSave.textContent = editing ? 'Save' : 'Create';
   showProjectError('');
@@ -2838,8 +2828,7 @@ async function dismissQuestion() {
   showNextQuestion();
 }
 
-function openConfirm({ title, text, action }) {
-  dom.confirmTitle.textContent = title;
+function openConfirm({ text, action }) {
   dom.confirmText.textContent = text;
   confirmAction = action;
   dom.confirmOverlay.classList.remove('hidden');
@@ -4177,7 +4166,6 @@ function executeSystemSkill(skill, args = '') {
 function openSkillArgs(skill) {
   if (!skill || !dom.skillArgsOverlay) return;
   state.skillArgsTarget = { skill, values: {} };
-  dom.skillArgsTitle.textContent = `SKILL · ${skill.name}`;
   dom.skillArgsDesc.textContent = skill.description || '';
   dom.skillArgsFields.replaceChildren();
   for (const argument of skill.arguments || []) {
@@ -4690,7 +4678,6 @@ const ACTION_MENU_HOLD_MS = 150;
 
 function buildActionMenuUsageCard() {
   const panel = el('div', 'ring-usage-panel usage-card');
-  panel.append(el('div', 'ring-usage-title', 'usage'));
   const usageItems = [
     { key: 'rolling', label: '5 小时' },
     { key: 'weekly', label: '本周' },
@@ -4823,7 +4810,6 @@ function runActionMenuItem(item) {
   if (!item) return;
   if (item.confirm) {
     openConfirm({
-      title: item.confirmTitle || 'DELETE',
       text: item.confirmText || `删除「${item.label}」？`,
       action: () => {
         if (typeof item.action === 'function') item.action();
@@ -5193,7 +5179,6 @@ function buildRingMenu(items = RING_ITEMS, options = {}) {
   const panelPoint = ringPolar(RING_USAGE_RADIUS, -90);
   panel.style.left = `${panelPoint.x}px`;
   panel.style.top = `${panelPoint.y}px`;
-  panel.append(el('div', 'ring-usage-title', 'usage'));
   const usageItems = [
     { key: 'rolling', label: '5 小时' },
     { key: 'weekly', label: '本周' },

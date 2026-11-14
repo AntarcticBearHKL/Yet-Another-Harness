@@ -2,7 +2,6 @@
 
 const api = window.yah;
 const content = document.getElementById('content');
-const titleEl = document.getElementById('content-title');
 const closeButton = document.getElementById('content-close');
 
 let currentKey = null;
@@ -100,7 +99,6 @@ function render(payload) {
   currentKind = payload?.kind || 'text';
   const title = String(payload?.title || 'CONTENT');
   document.title = `YAH - ${title}`;
-  titleEl.textContent = title;
 
   const inner = document.createElement('div');
   inner.className = 'content-inner';
