@@ -3640,6 +3640,17 @@ function isCompacting(session) {
   );
 }
 
+async function sessionBusy(session) {
+  if (!session) return true;
+  if (state.streaming || isCompacting(session)) return true;
+  try {
+    const active = await api.activeRun(session.id);
+    return Boolean(active?.runId);
+  } catch {
+    return false;
+  }
+}
+
 function compactQueueItem(agentId) {
   return {
     kind: 'compact',
@@ -3665,18 +3676,15 @@ function compactSkillDescriptor() {
 
 async function queueOrRunCompact(session, agentId) {
   const item = compactQueueItem(agentId);
-  const busy =
-    state.streaming ||
-    isCompacting(session) ||
-    (Array.isArray(session.pendingQueue) && session.pendingQueue.length > 0);
-  if (busy) {
-    if (!Array.isArray(session.pendingQueue)) session.pendingQueue = [];
-    session.pendingQueue.push(item);
+  const queue = Array.isArray(session.pendingQueue)
+    ? session.pendingQueue
+    : (session.pendingQueue = []);
+  const busy = await sessionBusy(session);
+  if (busy || queue.length > 0) {
+    queue.push(item);
     saveChatsSoon();
     if (state.composerOpen) renderComposerContext();
-    if (!state.streaming && !isCompacting(session)) {
-      processNextQueuedPrompt(session);
-    }
+    if (!busy) processNextQueuedPrompt(session);
     return;
   }
   await runCompactFlow(session);
@@ -3750,20 +3758,19 @@ async function sendMessage() {
     inputText || (skills.length ? `/${skills[0].name}` : '');
   if (!text) return;
 
-  if (
-    state.streaming ||
-    isCompacting(session) ||
-    (Array.isArray(session.pendingQueue) && session.pendingQueue.length > 0)
-  ) {
-    if (!Array.isArray(session.pendingQueue)) session.pendingQueue = [];
-    session.pendingQueue.push({ text, skills, agentId });
+  const busy = await sessionBusy(session);
+  const queue = Array.isArray(session.pendingQueue)
+    ? session.pendingQueue
+    : (session.pendingQueue = []);
+  if (busy || queue.length > 0) {
+    queue.push({ text, skills, agentId });
     dom.input.value = '';
     state.slashDismissed = false;
     clearAttachedSkills();
     updateSendState();
     saveChatsSoon();
     if (state.composerOpen) renderComposerContext();
-    if (!state.streaming) processNextQueuedPrompt(session);
+    if (!busy) processNextQueuedPrompt(session);
     return;
   }
 
@@ -3902,7 +3909,12 @@ function renderComposerContext() {
   if (session.msgs.length === 0) {
     children.push(buildMcpSummary(session, () => openMcpConfig(session.id)));
   } else {
-    children.push(renderComposerQueue(session));
+    const queue = Array.isArray(session.pendingQueue)
+      ? session.pendingQueue
+      : [];
+    if (state.streaming || isCompacting(session) || queue.length > 0) {
+      children.push(renderComposerQueue(session));
+    }
   }
   dom.composerContext.replaceChildren(...children);
 }
@@ -4947,12 +4959,13 @@ function editQueuedPrompt(session, index) {
   });
 }
 
-function sendQueuedPrompt(session, index) {
+async function sendQueuedPrompt(session, index) {
   if (!Array.isArray(session.pendingQueue)) return;
   const [item] = session.pendingQueue.splice(index, 1);
   if (!item) return;
   clearPendingQueueDelete(item);
-  if (state.streaming || session.frozen || isCompacting(session)) {
+  const busy = session.frozen ? true : await sessionBusy(session);
+  if (busy) {
     session.pendingQueue.unshift(item);
     saveChatsSoon();
     if (state.composerOpen) renderComposerContext();
@@ -5102,7 +5115,8 @@ function finishStream() {
   }
   persistFoldState();
 
-  updateSendState();
+  updateControls();
+  if (state.composerOpen) renderComposerContext();
   saveChatsSoon();
   if (state.switcherOpen) renderSwitcher();
 
