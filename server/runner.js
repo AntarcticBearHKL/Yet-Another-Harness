@@ -13,6 +13,8 @@ const {
   usageTokens,
 } = require('../src/goal');
 
+const APPROVAL_TIMEOUT_MS = 10 * 60 * 1000;
+
 const activeRuns = new Map();
 const sessionRuns = new Map();
 const subscribers = new Map();
@@ -57,7 +59,19 @@ function emit(sessionId, runId, type, payload = {}) {
 function requestToolApproval(sessionId, runId, request) {
   return new Promise((resolve) => {
     const approvalId = crypto.randomUUID();
-    pendingApprovals.set(approvalId, { resolve, runId, sessionId });
+    const timer = setTimeout(() => {
+      const entry = pendingApprovals.get(approvalId);
+      if (!entry) return;
+      pendingApprovals.delete(approvalId);
+      entry.resolve(false);
+    }, APPROVAL_TIMEOUT_MS);
+    timer.unref?.();
+    pendingApprovals.set(approvalId, {
+      resolve,
+      runId,
+      sessionId,
+      timer,
+    });
     emit(sessionId, runId, 'tool.approval', {
       id: approvalId,
       tool: String(request?.tool || 'file'),
@@ -73,6 +87,7 @@ function resolveApproval(approvalId, approved) {
   const entry = pendingApprovals.get(String(approvalId || ''));
   if (!entry) return false;
   pendingApprovals.delete(String(approvalId));
+  clearTimeout(entry.timer);
   entry.resolve(Boolean(approved));
   return true;
 }
@@ -81,6 +96,7 @@ function denyRunApprovals(runId) {
   for (const [approvalId, entry] of pendingApprovals) {
     if (entry.runId !== runId) continue;
     pendingApprovals.delete(approvalId);
+    clearTimeout(entry.timer);
     entry.resolve(false);
   }
 }

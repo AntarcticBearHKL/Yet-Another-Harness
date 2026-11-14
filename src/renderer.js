@@ -166,6 +166,7 @@ const state = {
   slashDismissed: false,
   approvalQueue: [],
   activeApproval: null,
+  handledApprovals: new Set(),
   goalDialog: null,
   goalSaving: false,
   questionQueue: [],
@@ -2952,6 +2953,7 @@ function saveProjectDialog() {
 
 function showNextToolApproval() {
   if (!dom.approvalOverlay) return;
+  if (state.activeApproval) return;
   const next = state.approvalQueue.shift();
   if (!next) {
     state.activeApproval = null;
@@ -2979,8 +2981,18 @@ function showNextToolApproval() {
 
 function enqueueToolApproval(payload) {
   if (!payload?.id) return;
+  if (state.handledApprovals.has(payload.id)) return;
+  if (state.activeApproval?.id === payload.id) return;
+  if (state.approvalQueue.some((item) => item.id === payload.id)) return;
   state.approvalQueue.push(payload);
   if (!state.activeApproval) showNextToolApproval();
+}
+
+function markApprovalHandled(approvalId) {
+  state.handledApprovals.add(approvalId);
+  if (state.handledApprovals.size <= 500) return;
+  const oldest = state.handledApprovals.values().next().value;
+  state.handledApprovals.delete(oldest);
 }
 
 async function resolveToolApproval(approved) {
@@ -2989,15 +3001,28 @@ async function resolveToolApproval(approved) {
   state.activeApproval = null;
   dom.approvalOverlay.classList.add('hidden');
   dom.approvalOverlay.setAttribute('aria-hidden', 'true');
+  let settled = false;
   try {
     await api.resolveApproval(current.id, approved);
+    settled = true;
   } catch (error) {
     console.error('resolve approval failed', error);
+    // 404 means the run already moved past this approval.
+    settled = error?.status === 404;
   }
-  showNextToolApproval();
+  if (settled) {
+    markApprovalHandled(current.id);
+  } else {
+    // Keep the dialog available so the user can retry instead of
+    // leaving the run waiting on an approval nobody can answer.
+    enqueueToolApproval(current);
+  }
+  if (!state.activeApproval) showNextToolApproval();
 }
 
 function clearToolApprovals() {
+  for (const item of state.approvalQueue) markApprovalHandled(item.id);
+  if (state.activeApproval) markApprovalHandled(state.activeApproval.id);
   state.approvalQueue = [];
   state.activeApproval = null;
   if (!dom.approvalOverlay) return;
@@ -8092,6 +8117,9 @@ function bindEvents() {
   api.onRunStarted(({ requestId }) => {
     if (!requestId || requestId === state.requestId) return;
     if (state.streaming) return;
+    // Replayed events arrive right after run.started; accept their
+    // approvals before the async adoption below finishes.
+    state.requestId = requestId;
     void adoptExternalRun(requestId);
   });
 
