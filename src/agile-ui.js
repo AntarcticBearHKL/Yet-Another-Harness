@@ -72,7 +72,7 @@ function agileDate(value, withTime = false) {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  const locale = agileState.data?.settings?.locale || 'en-US';
+  const locale = agileState.data?.settings?.locale || 'zh-CN';
   const options = withTime
     ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
     : { month: 'short', day: 'numeric' };

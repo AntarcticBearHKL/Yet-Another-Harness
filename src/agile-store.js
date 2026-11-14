@@ -113,7 +113,7 @@ function normalizeWipLimits(raw) {
 function defaultSettings() {
   return {
     showChangeDate: true,
-    locale: 'en-US',
+    locale: 'zh-CN',
     wipLimits: {},
   };
 }
@@ -122,7 +122,7 @@ function normalizeSettings(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
   return {
     showChangeDate: source.showChangeDate !== false,
-    locale: normalizeText(source.locale, 20) || 'en-US',
+    locale: normalizeText(source.locale, 20) || 'zh-CN',
     wipLimits: normalizeWipLimits(source.wipLimits),
   };
 }
