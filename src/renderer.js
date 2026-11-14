@@ -5864,36 +5864,73 @@ function selectCatalogKind(kind) {
 
 function renderCatalogToolItem(entry) {
   const fn = entry.function || entry;
-  const item = el('div', 'catalog-item');
-  item.append(el('div', 'catalog-name', fn.name || 'tool'));
-  if (fn.description) {
-    item.append(el('div', 'catalog-desc', fn.description));
-  }
-
+  const item = el('div', 'catalog-item catalog-tool-item');
   const properties = fn.parameters?.properties || {};
   const required = new Set(fn.parameters?.required || []);
   const names = Object.keys(properties);
+  const hasDetails = Boolean(fn.description) || names.length > 0;
+  const meta = names.length
+    ? `${names.length} 参数${required.size ? ` · ${required.size} 必填` : ''}`
+    : '无参数';
+  const head = el('button', 'catalog-tool-head');
+  head.type = 'button';
+  head.setAttribute('aria-expanded', 'false');
+  head.append(el('span', 'catalog-tool-dot'));
+  head.append(el('span', 'catalog-tool-name', fn.name || 'tool'));
+  head.append(el('span', 'catalog-tool-meta', meta));
+  if (hasDetails) {
+    const chevron = el('span', 'catalog-tool-chevron');
+    chevron.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+    head.append(chevron);
+  }
+  item.append(head);
+  if (!hasDetails) return item;
+
+  const body = el('div', 'catalog-tool-body');
+  const clip = el('div', 'catalog-tool-clip');
+  const inner = el('div', 'catalog-tool-inner');
+  if (fn.description) {
+    inner.append(el('div', 'catalog-desc', fn.description));
+  }
   if (names.length > 0) {
     const params = el('div', 'catalog-params');
     for (const paramName of names) {
       const schema = properties[paramName] || {};
       const row = el('div', 'catalog-param');
-      const head = el('div', 'catalog-param-head');
-      head.append(el('span', 'catalog-param-name', paramName));
+      const paramHead = el('div', 'catalog-param-head');
+      paramHead.append(el('span', 'catalog-param-name', paramName));
       if (schema.type) {
-        head.append(el('span', 'catalog-param-type', schema.type));
+        paramHead.append(el('span', 'catalog-param-type', schema.type));
       }
       if (required.has(paramName)) {
-        head.append(el('span', 'catalog-param-required', 'required'));
+        paramHead.append(el('span', 'catalog-param-required', 'required'));
       }
-      row.append(head);
+      row.append(paramHead);
       if (schema.description) {
         row.append(el('div', 'catalog-param-desc', schema.description));
       }
       params.append(row);
     }
-    item.append(params);
+    inner.append(params);
   }
+  clip.append(inner);
+  body.append(clip);
+  item.append(body);
+  head.addEventListener('click', () => {
+    const wasOpen = item.classList.contains('open');
+    for (const other of dom.catalogList.querySelectorAll(
+      '.catalog-tool-item.open'
+    )) {
+      other.classList.remove('open');
+      other
+        .querySelector('.catalog-tool-head')
+        ?.setAttribute('aria-expanded', 'false');
+    }
+    if (wasOpen) return;
+    item.classList.add('open');
+    head.setAttribute('aria-expanded', 'true');
+  });
   return item;
 }
 
