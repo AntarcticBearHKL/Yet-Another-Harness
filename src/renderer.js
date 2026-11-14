@@ -5944,7 +5944,6 @@ const TOOL_GROUP_BY_NAME = new Map([
   ['grep', 'file'],
   ['patch', 'file'],
   ['websearch', 'search'],
-  ['web_search', 'search'],
   ['webfetch', 'search'],
   ['shell', 'system'],
   ['interactive_bash', 'system'],

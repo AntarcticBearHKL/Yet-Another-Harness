@@ -543,12 +543,6 @@ const OMO = [
 
 const LEGACY = [
   fn(
-    'web_search',
-    'Alias of websearch: search the public web with DuckDuckGo.',
-    { query: str('Search query'), max_results: num('How many results (1-8)') },
-    ['query']
-  ),
-  fn(
     'read_file',
     'Alias of read: read a UTF-8 text file with numbered lines.',
     {

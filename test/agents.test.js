@@ -35,6 +35,18 @@ test('agents normalize names, prompts and tool limits', () => {
   assert.equal(agents[1].tools, null);
 });
 
+test('legacy web_search permissions migrate to websearch', () => {
+  const agents = normalizeAgents([
+    {
+      id: 'a1',
+      name: 'A',
+      prompt: 'p',
+      tools: ['web_search', 'web_search', 'read'],
+    },
+  ]);
+  assert.deepEqual(agents[0].tools, ['websearch', 'read']);
+});
+
 test('agents round-trip through the JSON file', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-agents-'));
   const file = path.join(dir, 'agents.json');

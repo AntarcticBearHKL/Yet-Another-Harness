@@ -33,11 +33,17 @@ test('ddg redirect urls are unwrapped', () => {
   assert.equal(tools._test.decodeDdgUrl(href), 'https://slint.dev/');
 });
 
-test('definitions expose web_search and read_file', () => {
+test('definitions expose one websearch and the read_file alias', () => {
   const defs = tools.definitions();
+  const names = defs.map((def) => def.function.name);
   assert.equal(defs[0].type, 'function');
-  assert.equal(defs[0].function.name, 'web_search');
-  assert.equal(defs[1].function.name, 'read_file');
+  assert.ok(names.includes('websearch'));
+  assert.ok(names.includes('read_file'));
+  assert.ok(!names.includes('web_search'), 'web_search alias is not exposed');
+  assert.equal(
+    names.filter((name) => name === 'websearch' || name === 'web_search').length,
+    1
+  );
 });
 
 test('read_file returns numbered lines and supports paging', async () => {
@@ -85,6 +91,14 @@ test('read_file returns numbered lines and supports paging', async () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('allowedTools maps the legacy web_search alias to websearch', () => {
+  const defs = tools.definitions({ allowedTools: ['web_search'] });
+  assert.deepEqual(
+    defs.map((def) => def.function.name),
+    ['websearch']
+  );
 });
 
 test('merged catalog includes OMO-priority and OpenCode tools', () => {

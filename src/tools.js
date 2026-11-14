@@ -17,7 +17,7 @@ function configure(next = {}) {
   agentTools.configure(next);
 }
 
-// 免费 web_search：DuckDuckGo 公开 HTML 端点，不需要 API key。
+// 免费 websearch：DuckDuckGo 公开 HTML 端点，不需要 API key。
 // 解析 result__a / result__snippet，把 uddg= 重定向解成真实 URL。
 
 const SEARCH_URL = 'https://html.duckduckgo.com/html/';
@@ -32,6 +32,7 @@ function definitions(options = {}) {
   ];
   if (!Array.isArray(options.allowedTools)) return all;
   const allowed = new Set(options.allowedTools.map(String));
+  if (allowed.has('web_search')) allowed.add('websearch');
   return all.filter((definition) => allowed.has(definition.function?.name));
 }
 

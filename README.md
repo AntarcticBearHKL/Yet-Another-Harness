@@ -5,7 +5,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 无边框、扁平暖色桌面窗口，单一浅色主题（奶油底 + 琥珀/陶土强调），没有深浅切换
 - DeepSeek V4.1 Flash 流式对话（通过 OpenCode Go 的 OpenAI 兼容端点）
 - tool calling loop（模型 → 工具 → 模型）
-- 免费 `web_search`（DuckDuckGo HTML，不需要 API key）
+- 免费 `websearch`（DuckDuckGo HTML，不需要 API key）
 - 所有对话条目同宽，占满窗口宽度，只留很窄的左右边距
 - 没有标题栏：按住任意非交互区域都能拖动窗口，拖动窗口边缘可缩放
 - 禁用 Chromium 默认的中键拖拽/自动滚动，中键不会进入滚动模式
@@ -224,7 +224,7 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 - OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`SystemInfo`、`list_mcp_resources`、`read_mcp_resource`、`session_rename`、`models`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）、`skill`
 - OMO 常驻 / 条件工具：`session_list/read/search/info`、`task_create/get/list/update`、`background_output/cancel`、`monitor_start/stop/list/output`、`interactive_bash`、`task/subagent/call_omo_agent/delegate_task`、`create_goal/update_goal/get_goal`、`skill_mcp`、`look_at`、`team_*`
-- 兼容别名：`read_file`、`web_search`、`hashline_edit`
+- 兼容别名：`read_file`、`hashline_edit`；旧调用名 `web_search` 仍可执行，但不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
 - OMO 的 `team_*`、`background_*`、`monitor_*` 在 YAH 里是本地记录 / 进程管理版本；`task`/`subagent` 是单次子模型调用；`interactive_bash` 在 Windows 上退化为普通 shell
 
@@ -238,7 +238,7 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 - 工具执行期间，调用参数和返回结果合并到同一个「工具调用」卡片里：展开后先显示「调用参数」，再显示「返回结果」；返回前显示「等待工具返回…」，不会拆成两个气泡。正文继续流式输出。
 - 工具调用和结果作为步骤持久化；每次模型请求的原始 body 也存 SQLite，可在卡片上双击查看。
 
-`web_search` / `websearch` 抓 `https://html.duckduckgo.com/html/?q=...`，解析 `result__a` /
+`websearch` 抓 `https://html.duckduckgo.com/html/?q=...`，解析 `result__a` /
 `result__snippet`，把 `uddg=` 重定向解成真实 URL，去标签、解 HTML 实体。免费、无 key，
 但 DuckDuckGo 可能限流/弹 CAPTCHA；这时返回 `tool error`，模型可以换个说法再搜。
 

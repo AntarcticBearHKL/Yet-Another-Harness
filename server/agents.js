@@ -14,12 +14,17 @@ const MAX_NAME = 80;
 const MAX_PROMPT = 20_000;
 const MAX_TOOLS = 200;
 
+const TOOL_ALIASES = {
+  web_search: 'websearch',
+};
+
 function normalizeTools(raw) {
   if (!Array.isArray(raw)) return null;
   const seen = new Set();
   const tools = [];
   for (const item of raw) {
-    const name = String(item || '').trim();
+    const rawName = String(item || '').trim();
+    const name = TOOL_ALIASES[rawName] || rawName;
     if (!name || seen.has(name)) continue;
     seen.add(name);
     tools.push(name);

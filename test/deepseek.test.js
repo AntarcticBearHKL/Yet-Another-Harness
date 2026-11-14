@@ -44,7 +44,9 @@ test('request body includes tools and streaming', () => {
   const body = deepseek.requestBody([{ role: 'user', content: 'hi' }]);
   assert.equal(body.stream, true);
   assert.equal(body.tool_choice, 'auto');
-  assert.equal(body.tools[0].function.name, 'web_search');
+  const names = body.tools.map((item) => item.function.name);
+  assert.ok(names.includes('websearch'));
+  assert.ok(!names.includes('web_search'));
 });
 
 test('request body can omit tools for the final summary', () => {
