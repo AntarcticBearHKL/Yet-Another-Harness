@@ -5804,6 +5804,12 @@ body.maximized .mcp {
   border-radius: var(--radius-control);
 }
 
+.project-row::before,
+.catalog-category::before,
+.mcp-server-row::before {
+  display: none;
+}
+
 .project-row:hover,
 .catalog-category:hover,
 .mcp-server-row:hover,
