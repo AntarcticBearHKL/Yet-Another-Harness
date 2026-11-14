@@ -22,10 +22,9 @@ function withStoreDir(run) {
   }
 }
 
-test('default chats can be empty', () => {
+test('default chats can be completely empty', () => {
   const chats = store.defaultChats();
-  assert.equal(chats.projects.length, 1);
-  assert.equal(chats.projects[0].name, 'Project 1');
+  assert.equal(chats.projects.length, 0);
   assert.equal(chats.sessions.length, 0);
   assert.equal(chats.current, 0);
   assert.equal(chats.seq, 0);
@@ -33,21 +32,60 @@ test('default chats can be empty', () => {
 
 test('normalizing an empty chat list keeps it empty', () => {
   const chats = store.normalizeChats({ sessions: [], current: 0, seq: 3 });
-  assert.equal(chats.projects.length, 1);
+  assert.equal(chats.projects.length, 0);
   assert.equal(chats.sessions.length, 0);
   assert.equal(chats.seq, 0);
 });
 
 test('normalizing existing chats keeps them', () => {
   const chats = store.normalizeChats({
+    projects: [{ id: 'p1', name: 'Project 1', directories: ['C:\\work'] }],
     sessions: [{ title: 'Chat 3', system: 'sys', msgs: [] }],
     current: 0,
     seq: 3,
   });
   assert.equal(chats.sessions.length, 1);
   assert.equal(chats.sessions[0].title, 'Chat 3');
-  assert.equal(chats.sessions[0].projectId, chats.projects[0].id);
+  assert.equal(chats.sessions[0].projectId, 'p1');
   assert.equal(chats.seq, 3);
+});
+
+test('saveStructure rejects a new project without directories', () => {
+  withStoreDir(() => {
+    assert.throws(
+      () =>
+        store.saveStructure({
+          projects: [{ id: 'p-empty', name: 'Empty', directories: [] }],
+          sessions: [],
+          current: 0,
+          seq: 0,
+        }),
+      /至少需要一个工作目录/
+    );
+    assert.equal(store.loadChats().projects.length, 0);
+  });
+});
+
+test('saveStructure allows deleting every project', () => {
+  withStoreDir(() => {
+    store.saveStructure({
+      projects: [
+        { id: 'p1', name: 'Project 1', directories: ['C:\\work'] },
+      ],
+      sessions: [],
+      current: 0,
+      seq: 0,
+    });
+    store.saveStructure({
+      projects: [],
+      sessions: [],
+      current: 0,
+      seq: 0,
+    });
+    const loaded = store.loadChats();
+    assert.equal(loaded.projects.length, 0);
+    assert.equal(loaded.sessions.length, 0);
+  });
 });
 
 test('tool trace survives normalization', () => {
@@ -557,12 +595,17 @@ test('legacy chats.json migrates into sqlite and is kept as a backup', () => {
 test('goal and compaction state round-trip through sqlite', () => {
   withStoreDir(() => {
     const chats = store.defaultChats();
+    chats.projects.push({
+      id: 'p1',
+      name: 'Project 1',
+      directories: ['C:\\work'],
+    });
     chats.sessions.push({
       id: 's-goal',
       title: 'Goal Chat',
       system: 'sys',
       agentId: '',
-      projectId: chats.projects[0].id,
+      projectId: 'p1',
       mcpDisabled: [],
       pendingQueue: [],
       goal: {
@@ -611,11 +654,16 @@ test('goal and compaction state round-trip through sqlite', () => {
 test('sessions always default to the built-in agent', () => {
   withStoreDir(() => {
     const chats = store.defaultChats();
+    chats.projects.push({
+      id: 'p1',
+      name: 'Project 1',
+      directories: ['C:\\work'],
+    });
     chats.sessions.push({
       id: 's-agent',
       title: 'Agent Chat',
       system: 'sys',
-      projectId: chats.projects[0].id,
+      projectId: 'p1',
       mcpDisabled: [],
       pendingQueue: [],
       msgs: [],

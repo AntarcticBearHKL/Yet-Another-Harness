@@ -25,14 +25,19 @@ function withStoreDir(run) {
 
 function projectChats(projectDir, sessionId = 's1') {
   const chats = store.defaultChats();
-  chats.projects[0].directories = [projectDir];
+  const project = {
+    id: 'project-context',
+    name: 'Project 1',
+    directories: [projectDir],
+  };
+  chats.projects.push(project);
   chats.sessions.push({
     id: sessionId,
     title: 'Context Chat',
     system: 'base system',
     agentsMd: null,
     agentId: '',
-    projectId: chats.projects[0].id,
+    projectId: project.id,
     mcpDisabled: [],
     pendingQueue: [],
     msgs: [],

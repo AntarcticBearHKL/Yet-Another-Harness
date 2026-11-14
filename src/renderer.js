@@ -4,7 +4,6 @@ const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const DEFAULT_AGENT_ID = 'basic';
 const DEFAULT_AGENT_NAME = 'Build';
-const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
 const NO_KEY_HINT = 'No API key. Open Settings to add one.';
 // DeepSeek V4.1 Flash (OpenCode Go) context window.
 const CONTEXT_WINDOW_TOKENS = 1_000_000;
@@ -448,18 +447,15 @@ function currentSession() {
 
 function ensureProjects() {
   if (!Array.isArray(state.projects)) state.projects = [];
-  if (state.projects.length === 0) {
-    state.projects = [{ ...DEFAULT_PROJECT }];
-  }
   const ids = new Set(state.projects.map((project) => project.id));
   for (const session of state.sessions) {
     if (!ids.has(session.projectId)) {
-      session.projectId = state.projects[0].id;
+      session.projectId = state.projects[0]?.id || null;
     }
   }
   if (!state.switcherProjectId || !ids.has(state.switcherProjectId)) {
     state.switcherProjectId =
-      currentSession()?.projectId || state.projects[0].id;
+      currentSession()?.projectId || state.projects[0]?.id || null;
   }
 }
 
@@ -2366,7 +2362,13 @@ function renderMessages({ animate = true } = {}) {
     state.openCardKey = null;
     state.renderedOpenKeys = new Set();
     state.renderedSessionId = null;
-    dom.messages.append(el('div', 'empty', '还没有对话'));
+    dom.messages.append(
+      el(
+        'div',
+        'empty',
+        state.projects.length === 0 ? '还没有项目' : '还没有对话'
+      )
+    );
     return;
   }
   if (session.msgs.length === 0) {
@@ -2470,9 +2472,10 @@ function renderSwitcher() {
   ensureProjects();
   const project =
     state.projects.find((item) => item.id === state.switcherProjectId) ||
-    state.projects[0];
-  state.switcherProjectId = project.id;
-  const sessions = sessionsInProject(project.id);
+    state.projects[0] ||
+    null;
+  state.switcherProjectId = project?.id || null;
+  const sessions = project ? sessionsInProject(project.id) : [];
 
   const selectProject = (projectId) => {
     if (state.switcherProjectId === projectId) return;
@@ -2496,6 +2499,9 @@ function renderSwitcher() {
     row.addEventListener('mouseenter', () => selectProject(item.id));
     dom.projectList.append(row);
   });
+  if (!project) {
+    dom.projectList.append(el('div', 'project-empty', '还没有项目'));
+  }
 
   const addProject = el('button', 'project-add', '+');
   addProject.type = 'button';
@@ -2504,6 +2510,13 @@ function renderSwitcher() {
   dom.projectList.append(addProject);
 
   dom.switcherList.replaceChildren();
+  if (!project) {
+    state.switcherIndex = 0;
+    dom.switcherList.append(
+      el('div', 'switcher-empty', '先创建一个项目')
+    );
+    return;
+  }
   if (sessions.length === 0) {
     state.switcherIndex = 0;
     dom.switcherList.append(
@@ -2629,7 +2642,7 @@ function openSwitcher() {
   const session = currentSession();
   state.switcherOpen = true;
   state.switcherProjectId =
-    session?.projectId || state.projects[0].id;
+    session?.projectId || state.projects[0]?.id || null;
   state.switcherIndex = Math.max(
     0,
     sessionsInProject(state.switcherProjectId).findIndex(
@@ -3300,6 +3313,10 @@ function selectSession(index) {
 function createChatFromSwitcher() {
   const projectId = state.switcherProjectId;
   closeSwitcher();
+  if (!projectId) {
+    newProject();
+    return;
+  }
   newSession(projectId);
 }
 
@@ -3345,8 +3362,15 @@ function newSession(projectId) {
   state.seq += 1;
   const targetProjectId =
     state.projects.find((project) => project.id === projectId)?.id ||
-    currentSession()?.projectId ||
-    state.projects[0].id;
+    state.projects.find(
+      (project) => project.id === currentSession()?.projectId
+    )?.id ||
+    state.projects[0]?.id ||
+    null;
+  if (!targetProjectId) {
+    newProject();
+    return;
+  }
   const siblings = state.sessions.filter(
     (item) => item.projectId === targetProjectId
   );
@@ -7723,22 +7747,10 @@ async function boot() {
     state.seq = chats.seq;
   } catch (error) {
     console.error('load failed', error);
-    state.projects = [{ ...DEFAULT_PROJECT }];
-    state.sessions = [
-      {
-        id: makeId(),
-        title: 'Chat 1',
-        system: DEFAULT_SYSTEM_PROMPT,
-        agentId: DEFAULT_AGENT_ID,
-        projectId: DEFAULT_PROJECT.id,
-        mcpDisabled: [],
-        foldState: null,
-        pendingQueue: [],
-        msgs: [],
-      },
-    ];
+    state.projects = [];
+    state.sessions = [];
     state.current = 0;
-    state.seq = 1;
+    state.seq = 0;
   }
 
   // 兜底：旧文件缺 system 字段时补默认值

@@ -17,7 +17,6 @@ const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
 const SCHEMA_VERSION = 12;
-const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1', directories: [] };
 
 let dataDir = null;
 let legacyDir = null;
@@ -47,9 +46,9 @@ function defaultSettings() {
 }
 
 function defaultChats() {
-  // 允许没有会话：删光后保持空状态，不自动补一个空对话
+  // 允许没有项目和会话：删光后保持空状态，不自动补默认项目
   return {
-    projects: [{ ...DEFAULT_PROJECT }],
+    projects: [],
     sessions: [],
     current: 0,
     seq: 0,
@@ -245,9 +244,6 @@ function normalizeProjects(raw) {
       });
     }
   }
-  if (projects.length === 0) {
-    projects.push({ ...DEFAULT_PROJECT, directories: [] });
-  }
   return projects;
 }
 
@@ -258,7 +254,7 @@ function normalizeChats(raw) {
 
   const projects = normalizeProjects(raw.projects);
   const projectIds = new Set(projects.map((project) => project.id));
-  const fallbackProjectId = projects[0].id;
+  const fallbackProjectId = projects[0]?.id || null;
 
   const sessions = raw.sessions
     .filter((session) => session && typeof session === 'object')
@@ -588,21 +584,16 @@ function ensureSchema(database) {
       database.exec('ALTER TABLE sessions ADD COLUMN agents_md TEXT');
     }
 
-    const projectCount =
-      Number(database.prepare('SELECT COUNT(*) AS n FROM projects').get().n) || 0;
-    if (projectCount === 0) {
-      database
-        .prepare('INSERT INTO projects (id, name, sort_order) VALUES (?, ?, 0)')
-        .run(DEFAULT_PROJECT.id, DEFAULT_PROJECT.name);
-    }
     const fallbackProject = database
       .prepare('SELECT id FROM projects ORDER BY sort_order ASC LIMIT 1')
       .get();
-    database
-      .prepare(
-        "UPDATE sessions SET project_id = ? WHERE project_id IS NULL OR project_id = ''"
-      )
-      .run(fallbackProject.id);
+    if (fallbackProject) {
+      database
+        .prepare(
+          "UPDATE sessions SET project_id = ? WHERE project_id IS NULL OR project_id = ''"
+        )
+        .run(fallbackProject.id);
+    }
 
     database.exec('COMMIT');
   } catch (error) {
@@ -662,17 +653,15 @@ function readChats() {
   const projectRows = database
     .prepare('SELECT id, name, directories FROM projects ORDER BY sort_order ASC')
     .all();
-  const projects = projectRows.length
-    ? projectRows.map((row) => {
-        let directories = [];
-        try {
-          directories = normalizeDirectories(JSON.parse(row.directories || '[]'));
-        } catch {
-          directories = [];
-        }
-        return { id: row.id, name: row.name, directories };
-      })
-    : [{ ...DEFAULT_PROJECT, directories: [] }];
+  const projects = projectRows.map((row) => {
+    let directories = [];
+    try {
+      directories = normalizeDirectories(JSON.parse(row.directories || '[]'));
+    } catch {
+      directories = [];
+    }
+    return { id: row.id, name: row.name, directories };
+  });
   const projectIds = new Set(projects.map((project) => project.id));
 
   const sessionRows = database
@@ -765,7 +754,7 @@ function readChats() {
           agentId: row.agent_id || DEFAULT_AGENT_ID,
           projectId: projectIds.has(row.project_id)
             ? row.project_id
-            : projects[0].id,
+            : projects[0]?.id || null,
           mcpDisabled,
           foldState,
           pendingQueue,
@@ -1096,6 +1085,15 @@ function importLegacyChats() {
     }
 
     if (data.sessions.length === 0) continue;
+    if (data.projects.length === 0) {
+      const project = {
+        id: 'project-legacy',
+        name: 'Project 1',
+        directories: [],
+      };
+      data.projects.push(project);
+      for (const session of data.sessions) session.projectId = project.id;
+    }
     writeChats(data);
     if (candidate.rename) {
       fs.renameSync(candidate.path, `${candidate.path}.pre-sqlite`);
@@ -1177,6 +1175,26 @@ function saveStructure(chats) {
       .all()
       .map((row) => row.id)
   );
+  const existingProjectDirectories = new Map(
+    database
+      .prepare('SELECT id, directories FROM projects')
+      .all()
+      .map((row) => [row.id, row.directories])
+  );
+
+  for (const project of normalized.projects) {
+    if (project.directories.length > 0) continue;
+    const error = new Error('项目至少需要一个工作目录');
+    error.status = 400;
+    if (!existingProjectDirectories.has(project.id)) throw error;
+    let previous = [];
+    try {
+      previous = JSON.parse(existingProjectDirectories.get(project.id) || '[]');
+    } catch {
+      previous = [];
+    }
+    if (Array.isArray(previous) && previous.length > 0) throw error;
+  }
 
   const now = Date.now();
   const incomingSessions = new Set();
