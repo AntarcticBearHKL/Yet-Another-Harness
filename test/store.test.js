@@ -111,6 +111,14 @@ test('compact messages, frozen sessions and compact queue items round-trip', () 
           skills: [],
           agentId: 'basic',
         },
+        {
+          text: 'Background task completed: test',
+          skills: [],
+          agentId: 'basic',
+          background: true,
+          jobId: 'bg-1',
+          note: 'test note',
+        },
       ],
       msgs: [
         {
@@ -129,6 +137,9 @@ test('compact messages, frozen sessions and compact queue items round-trip', () 
     assert.equal(loaded.sessions[0].msgs[0].role, 'Compact');
     assert.equal(loaded.sessions[0].msgs[0].usage.beforeTokens, 10);
     assert.equal(loaded.sessions[0].pendingQueue[0].kind, 'compact');
+    assert.equal(loaded.sessions[0].pendingQueue[1].background, true);
+    assert.equal(loaded.sessions[0].pendingQueue[1].jobId, 'bg-1');
+    assert.equal(loaded.sessions[0].pendingQueue[1].note, 'test note');
   });
 });
 

@@ -185,6 +185,7 @@ body:has(#mcp-form-overlay:not(.hidden)) #window-controls,
 body:has(#settings-overlay:not(.hidden)) #window-controls,
 body:has(#raw-overlay:not(.hidden)) #window-controls,
 body:has(#web-content:not(.hidden)) #window-controls,
+body:has(#background-overlay:not(.hidden)) #window-controls,
 body:has(#composer.open) #window-controls,
 body.ring-open #window-controls {
   display: none;
@@ -3062,6 +3063,252 @@ body.ring-open #window-controls {
   gap: 8px;
   flex: none;
   padding-top: 10px;
+}
+
+.background-badge {
+  position: fixed;
+  top: 42px;
+  right: 18px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--glass-menu);
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 600;
+  -webkit-backdrop-filter: blur(18px) saturate(1.04);
+  backdrop-filter: blur(18px) saturate(1.04);
+  box-shadow: var(--shadow-float);
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.background-badge:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.background-badge.hidden {
+  display: none;
+}
+
+.background-badge-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.background-badge.running .background-badge-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(185, 111, 61, 0.14);
+  animation: background-pulse 1.6s ease-in-out infinite;
+}
+
+.background-badge-count {
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.background-badge.running .background-badge-count {
+  color: var(--accent-deep);
+}
+
+.background-badge-label {
+  color: var(--faint);
+  font-weight: 500;
+}
+
+@keyframes background-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+body:has(#switcher.open) #background-badge,
+body:has(#catalog:not(.hidden)) #background-badge,
+body:has(#mcp-overlay:not(.hidden)) #background-badge,
+body:has(#mcp-form-overlay:not(.hidden)) #background-badge,
+body:has(#settings-overlay:not(.hidden)) #background-badge,
+body:has(#raw-overlay:not(.hidden)) #background-badge,
+body:has(#web-content:not(.hidden)) #background-badge,
+body:has(#background-overlay:not(.hidden)) #background-badge,
+body:has(#composer.open) #background-badge,
+body.ring-open #background-badge {
+  display: none;
+}
+
+.background-panel {
+  width: min(640px, calc(100vw - 40px));
+  max-height: min(70vh, 640px);
+}
+
+.background-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: none;
+  padding-bottom: 10px;
+}
+
+.background-summary {
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.background-close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--faint);
+  font-size: 18px;
+  line-height: 1;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.background-close:hover {
+  border-color: var(--line);
+  background: var(--hover);
+  color: var(--text);
+}
+
+.background-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px;
+  scrollbar-width: thin;
+}
+
+.background-empty {
+  padding: 28px 16px;
+  color: var(--faint);
+  font-size: 12px;
+  text-align: center;
+}
+
+.background-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-card);
+}
+
+.background-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.background-note {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.background-status {
+  flex: none;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--faint);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+.background-status.running {
+  border-color: rgba(185, 111, 61, 0.3);
+  background: rgba(185, 111, 61, 0.08);
+  color: var(--accent-deep);
+}
+
+.background-status.done {
+  border-color: rgba(92, 125, 80, 0.3);
+  background: rgba(92, 125, 80, 0.07);
+  color: #5c7d50;
+}
+
+.background-status.error {
+  border-color: rgba(176, 74, 60, 0.3);
+  background: rgba(176, 74, 60, 0.07);
+  color: #b04a3c;
+}
+
+.background-status.timeout {
+  border-color: rgba(185, 111, 61, 0.3);
+  color: var(--accent-deep);
+}
+
+.background-command {
+  color: var(--dim);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.background-meta {
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.background-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.background-output {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+
+.background-output summary {
+  color: var(--faint);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.background-output pre {
+  max-height: 180px;
+  margin: 6px 0 0;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(252, 246, 238, 0.5);
+  color: var(--dim);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .rename-panel .text-input {

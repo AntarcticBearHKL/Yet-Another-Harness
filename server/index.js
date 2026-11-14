@@ -9,6 +9,7 @@ const QRCode = require('qrcode');
 
 const store = require('../src/store');
 const tools = require('../src/tools');
+const processTools = require('../src/tools/process');
 const deepseek = require('../src/deepseek');
 const runner = require('./runner');
 const usage = require('./usage');
@@ -797,6 +798,33 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && pathname === '/api/background/events') {
+    openBackgroundEventStream(req, res);
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/background') {
+    const sessionId = String(url.searchParams.get('sessionId') || '');
+    sendJson(res, 200, { jobs: processTools.listJobs(sessionId) });
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/background/stop') {
+    readJson(req)
+      .then((body) => {
+        const job = processTools.cancelJob(body?.id, body?.sessionId);
+        if (!job) {
+          sendJson(res, 404, { error: 'background task not found' });
+          return;
+        }
+        sendJson(res, 200, { ok: true, job: processTools.jobSummary(job) });
+      })
+      .catch((error) =>
+        sendJson(res, error.status || 400, { error: error.message })
+      );
+    return true;
+  }
+
   if (req.method === 'GET' && pathname === '/api/runs/active') {
     const sessionId = String(url.searchParams.get('sessionId') || '');
     if (!sessionId) {
@@ -851,7 +879,8 @@ function openEventStream(req, res, sessionId, after) {
   const buffered = [];
 
   const sendEvent = (event) => {
-    if (closed || event.seq <= lastSeq) return;
+    if (closed) return;
+    if (!event.live && event.seq <= lastSeq) return;
     // 重放历史事件时，已经处理过或随进程重启丢失的审批不再弹出。
     if (
       event.type === 'tool.approval' &&
@@ -860,11 +889,15 @@ function openEventStream(req, res, sessionId, after) {
       return;
     }
     const data = {
-      seq: event.seq,
+      ...(event.live ? {} : { seq: event.seq }),
       type: event.type,
       requestId: event.runId,
       ...event.payload,
     };
+    if (event.live) {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+      return;
+    }
     res.write(`id: ${event.seq}\n`);
     res.write(`data: ${JSON.stringify(data)}\n\n`);
     lastSeq = event.seq;
@@ -888,6 +921,38 @@ function openEventStream(req, res, sessionId, after) {
   replaying = false;
   for (const event of buffered) sendEvent(event);
 
+  const heartbeat = setInterval(() => {
+    if (!closed) res.write(': ping\n\n');
+  }, 15000);
+
+  req.on('close', () => {
+    closed = true;
+    clearInterval(heartbeat);
+    unsubscribe();
+    res.end();
+  });
+}
+
+function openBackgroundEventStream(req, res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write(': connected\n\n');
+
+  let closed = false;
+  const send = (event) => {
+    if (closed) return;
+    res.write(
+      `data: ${JSON.stringify({
+        type: event.type,
+        ...event.payload,
+      })}\n\n`
+    );
+  };
+  const unsubscribe = runner.subscribeBackground(send);
   const heartbeat = setInterval(() => {
     if (!closed) res.write(': ping\n\n');
   }, 15000);

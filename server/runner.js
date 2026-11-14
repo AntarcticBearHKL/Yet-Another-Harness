@@ -17,6 +17,7 @@ const {
 const activeRuns = new Map();
 const sessionRuns = new Map();
 const subscribers = new Map();
+const backgroundSubscribers = new Set();
 const pendingApprovals = new Map();
 const pendingQuestions = new Map();
 const sessionAgentConfigs = new Map();
@@ -44,6 +45,21 @@ function publish(event) {
   }
 }
 
+function subscribeBackground(fn) {
+  backgroundSubscribers.add(fn);
+  return () => backgroundSubscribers.delete(fn);
+}
+
+function publishBackground(event) {
+  for (const fn of [...backgroundSubscribers]) {
+    try {
+      fn(event);
+    } catch (error) {
+      console.error('background subscriber failed', error);
+    }
+  }
+}
+
 function emit(sessionId, runId, type, payload = {}) {
   try {
     const event = store.appendEvent(sessionId, runId, type, payload);
@@ -52,6 +68,108 @@ function emit(sessionId, runId, type, payload = {}) {
   } catch (error) {
     console.error('append event failed', type, error);
     return null;
+  }
+}
+
+function publishLive(sessionId, type, payload = {}) {
+  const event = {
+    sessionId,
+    type,
+    runId: null,
+    payload,
+    live: true,
+  };
+  if (String(type).startsWith('background.')) {
+    publishBackground(event);
+    return;
+  }
+  publish(event);
+}
+
+function backgroundPrompt(job) {
+  const maxOutput = 20_000;
+  const output = String(job.output || '');
+  const stderr = String(job.stderr || '');
+  const lines = [
+    '[Background task completed]',
+    `Task: ${job.note || job.id}`,
+    `ID: ${job.id}`,
+    `Command: ${job.command}`,
+    `Working directory: ${job.cwd}`,
+    `Status: ${job.status}${
+      job.exitCode === null || job.exitCode === undefined
+        ? ''
+        : ` (exit ${job.exitCode})`
+    }`,
+  ];
+  const duration = Math.max(0, (job.endedAt || Date.now()) - job.startedAt);
+  lines.push(`Duration: ${Math.round(duration / 1000)}s`);
+  if (output.trim()) {
+    const shown =
+      output.length > maxOutput ? output.slice(-maxOutput) : output;
+    lines.push(`--- stdout ---\n${shown.trimEnd()}`);
+    if (output.length > maxOutput) {
+      lines.push(
+        `(stdout truncated to the last ${maxOutput} characters; use background_output for the full output)`
+      );
+    }
+  }
+  if (stderr.trim()) {
+    const shown =
+      stderr.length > maxOutput ? stderr.slice(-maxOutput) : stderr;
+    lines.push(`--- stderr ---\n${shown.trimEnd()}`);
+    if (stderr.length > maxOutput) {
+      lines.push(
+        `(stderr truncated to the last ${maxOutput} characters; use background_output for the full output)`
+      );
+    }
+  }
+  if (job.truncated) lines.push('(job output was truncated at the server limit)');
+  lines.push(
+    'Continue the task using this result. If it failed, diagnose the cause and decide the next step.'
+  );
+  return lines.join('\n');
+}
+
+function backgroundJobEventPayload(sessionId, job) {
+  return {
+    id: job.id,
+    sessionId,
+    note: job.note,
+    command: job.command,
+    cwd: job.cwd,
+    status: job.status,
+    exitCode: job.exitCode,
+    startedAt: job.startedAt,
+    endedAt: job.endedAt,
+    truncated: job.truncated,
+    outputPreview: String(job.output || '').slice(-2000),
+    stderrPreview: String(job.stderr || '').slice(-2000),
+  };
+}
+
+function handleBackgroundStart(sessionId, job) {
+  if (!sessionId || !job) return;
+  publishLive(
+    sessionId,
+    'background.update',
+    backgroundJobEventPayload(sessionId, job)
+  );
+}
+
+function handleBackgroundComplete(sessionId, job) {
+  if (!sessionId || !job) return;
+  const payload = backgroundJobEventPayload(sessionId, job);
+  publishLive(sessionId, 'background.update', payload);
+  if (
+    job.status === 'done' ||
+    job.status === 'error' ||
+    job.status === 'timeout'
+  ) {
+    publishLive(sessionId, 'background.complete', {
+      ...payload,
+      prompt: backgroundPrompt(job),
+    });
   }
 }
 
@@ -631,6 +749,9 @@ function startRun({
     approve: (request) => requestToolApproval(sessionId, id, request),
     askQuestions: (questions, options) =>
       requestQuestions(sessionId, id, questions, options),
+    onBackgroundStart: (job) => handleBackgroundStart(sessionId, job),
+    onBackgroundComplete: (job) =>
+      handleBackgroundComplete(sessionId, job),
   };
 
   let goalAction = null;
@@ -858,6 +979,7 @@ function cancelSessionRuns(sessionIds) {
 
 module.exports = {
   subscribe,
+  subscribeBackground,
   startRun,
   cancelRun,
   cancelSessionRuns,

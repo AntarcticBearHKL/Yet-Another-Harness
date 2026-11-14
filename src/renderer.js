@@ -98,6 +98,12 @@ const dom = {
   mcpConfig: $('mcp-config'),
   mcpConfigSummary: $('mcp-config-summary'),
   mcpConfigGrid: $('mcp-config-grid'),
+  backgroundBadge: $('background-badge'),
+  backgroundBadgeCount: $('background-badge-count'),
+  backgroundOverlay: $('background-overlay'),
+  backgroundSummary: $('background-summary'),
+  backgroundList: $('background-list'),
+  backgroundClose: $('background-close'),
 };
 
 const state = {
@@ -159,6 +165,14 @@ const state = {
   mcpServersLoading: false,
   mcpServersFetchedAt: 0,
   mcpConfigSessionId: null,
+  background: {
+    sessionId: null,
+    jobs: [],
+    loading: false,
+    fetchedAt: 0,
+  },
+  backgroundPollTimer: null,
+  backgroundHandled: new Set(),
   systemInfo: {
     key: '',
     loading: false,
@@ -228,6 +242,7 @@ async function requestJson(path, options = {}) {
 const eventHandlers = new Map();
 let chatEvents = null;
 let chatEventsSessionId = null;
+let backgroundEvents = null;
 
 function subscribeEvent(type, callback) {
   if (!eventHandlers.has(type)) eventHandlers.set(type, new Set());
@@ -267,6 +282,24 @@ function connectChatEvents(sessionId) {
     `/api/events?sessionId=${encodeURIComponent(sessionId)}`
   );
   chatEvents = source;
+  source.onmessage = (event) => {
+    let data = null;
+    try {
+      data = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+    if (data?.type) dispatchEvent(data.type, data);
+  };
+  source.onerror = () => {
+    /* EventSource reconnects automatically */
+  };
+}
+
+function connectBackgroundEvents() {
+  if (backgroundEvents) return;
+  const source = new EventSource('/api/background/events');
+  backgroundEvents = source;
   source.onmessage = (event) => {
     let data = null;
     try {
@@ -432,6 +465,15 @@ const api = {
   generateTitle: (payload) =>
     requestJson('/api/title', { method: 'POST', body: payload }),
   loadCatalog: () => requestJson('/api/catalog'),
+  loadBackground: (sessionId) =>
+    requestJson(
+      `/api/background?sessionId=${encodeURIComponent(sessionId)}`
+    ),
+  stopBackground: (sessionId, id) =>
+    requestJson('/api/background/stop', {
+      method: 'POST',
+      body: { sessionId, id },
+    }),
   loadSkills: (sessionId, mcpDisabled = []) =>
     requestJson(
       `/api/skills?sessionId=${encodeURIComponent(
@@ -453,6 +495,10 @@ const api = {
   onChatToolResult: (callback) => subscribeEvent('tool.result', callback),
   onToolApproval: (callback) => subscribeEvent('tool.approval', callback),
   onToolQuestion: (callback) => subscribeEvent('tool.question', callback),
+  onBackgroundUpdate: (callback) =>
+    subscribeEvent('background.update', callback),
+  onBackgroundComplete: (callback) =>
+    subscribeEvent('background.complete', callback),
   onGoalCheck: (callback) => subscribeEvent('goal.check', callback),
   onGoalUpdated: (callback) => subscribeEvent('goal.updated', callback),
   onCompaction: (callback) => subscribeEvent('compaction.done', callback),
@@ -2399,6 +2445,300 @@ function mcpSummaryText(session) {
   return `${mcpEnabledCount(session)}/${total}`;
 }
 
+function backgroundStatusLabel(status) {
+  if (status === 'running') return '运行中';
+  if (status === 'done') return '完成';
+  if (status === 'error') return '失败';
+  if (status === 'timeout') return '超时';
+  if (status === 'cancelled') return '已停止';
+  return status || '未知';
+}
+
+function backgroundElapsed(job) {
+  const start = Number(job?.startedAt) || 0;
+  const end =
+    Number(job?.endedAt) ||
+    (job?.status === 'running' ? Date.now() : start);
+  return formatDuration(Math.max(0, end - start));
+}
+
+function renderBackgroundBadge() {
+  if (!dom.backgroundBadge) return;
+  const session = currentSession();
+  if (!session || state.background.sessionId !== session.id) {
+    dom.backgroundBadge.classList.add('hidden');
+    return;
+  }
+  const jobs = state.background.jobs;
+  const running = jobs.filter((job) => job.status === 'running').length;
+  dom.backgroundBadge.classList.toggle('hidden', jobs.length === 0);
+  dom.backgroundBadge.classList.toggle('running', running > 0);
+  if (dom.backgroundBadgeCount) {
+    dom.backgroundBadgeCount.textContent = String(running);
+  }
+  dom.backgroundBadge.setAttribute(
+    'aria-label',
+    `后台任务：${running} 个运行中，共 ${jobs.length} 个`
+  );
+  dom.backgroundBadge.setAttribute(
+    'aria-expanded',
+    dom.backgroundOverlay &&
+      !dom.backgroundOverlay.classList.contains('hidden')
+      ? 'true'
+      : 'false'
+  );
+}
+
+function backgroundOutputPreview(job) {
+  const output = String(job?.outputPreview || '').trimEnd();
+  const stderr = String(job?.stderrPreview || '').trimEnd();
+  if (output && stderr) {
+    return `--- stdout ---\n${output}\n\n--- stderr ---\n${stderr}`;
+  }
+  if (output) return output;
+  if (stderr) return stderr;
+  return '';
+}
+
+function renderBackgroundJob(job) {
+  const card = el('div', 'background-card');
+  const head = el('div', 'background-card-head');
+  head.append(
+    el('div', 'background-note', job.note || '未命名后台任务')
+  );
+  head.append(
+    el(
+      'span',
+      `background-status ${job.status || 'running'}`,
+      backgroundStatusLabel(job.status)
+    )
+  );
+  card.append(head);
+  card.append(el('div', 'background-command', job.command || ''));
+  const meta = [
+    backgroundElapsed(job),
+    job.exitCode !== null && job.exitCode !== undefined
+      ? `exit ${job.exitCode}`
+      : '',
+    job.cwd || '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  if (meta) card.append(el('div', 'background-meta', meta));
+  if (job.status === 'running') {
+    const actions = el('div', 'background-actions');
+    const stop = el('button', 'pill compact', '停止');
+    stop.type = 'button';
+    stop.addEventListener('click', () => void stopBackgroundJob(job));
+    actions.append(stop);
+    card.append(actions);
+  }
+  const preview = backgroundOutputPreview(job);
+  if (preview) {
+    const details = el('details', 'background-output');
+    details.append(el('summary', '', '输出'));
+    details.append(el('pre', '', preview));
+    card.append(details);
+  }
+  return card;
+}
+
+function renderBackgroundPanel() {
+  if (
+    !dom.backgroundOverlay ||
+    dom.backgroundOverlay.classList.contains('hidden')
+  ) {
+    return;
+  }
+  const jobs = state.background.jobs;
+  const running = jobs.filter((job) => job.status === 'running').length;
+  if (dom.backgroundSummary) {
+    dom.backgroundSummary.textContent = jobs.length
+      ? `${running} 个运行中 · 共 ${jobs.length} 个`
+      : '还没有后台任务';
+  }
+  if (!dom.backgroundList) return;
+  dom.backgroundList.replaceChildren();
+  if (jobs.length === 0) {
+    dom.backgroundList.append(
+      el('div', 'background-empty', '还没有后台任务')
+    );
+    return;
+  }
+  for (const job of jobs) {
+    dom.backgroundList.append(renderBackgroundJob(job));
+  }
+}
+
+function openBackgroundPanel() {
+  if (!dom.backgroundOverlay) return;
+  dom.backgroundOverlay.classList.remove('hidden');
+  dom.backgroundOverlay.setAttribute('aria-hidden', 'false');
+  dom.backgroundBadge?.setAttribute('aria-expanded', 'true');
+  renderBackgroundPanel();
+  void loadBackgroundJobs(currentSession()?.id, true);
+}
+
+function closeBackgroundPanel() {
+  if (!dom.backgroundOverlay) return;
+  dom.backgroundOverlay.classList.add('hidden');
+  dom.backgroundOverlay.setAttribute('aria-hidden', 'true');
+  dom.backgroundBadge?.setAttribute('aria-expanded', 'false');
+}
+
+function scheduleBackgroundPoll() {
+  clearTimeout(state.backgroundPollTimer);
+  state.backgroundPollTimer = null;
+  if (!state.background.jobs.some((job) => job.status === 'running')) return;
+  state.backgroundPollTimer = setTimeout(() => {
+    void loadBackgroundJobs(currentSession()?.id, true);
+  }, 3000);
+}
+
+async function loadBackgroundJobs(sessionId = currentSession()?.id, force = false) {
+  const id = String(sessionId || '');
+  if (!id) {
+    state.background = {
+      sessionId: null,
+      jobs: [],
+      loading: false,
+      fetchedAt: 0,
+    };
+    renderBackgroundBadge();
+    return;
+  }
+  if (
+    !force &&
+    state.background.sessionId === id &&
+    Date.now() - state.background.fetchedAt < 4000
+  ) {
+    return;
+  }
+  state.background.loading = true;
+  try {
+    const data = await api.loadBackground(id);
+    if (currentSession()?.id !== id) return;
+    state.background = {
+      sessionId: id,
+      jobs: Array.isArray(data?.jobs) ? data.jobs : [],
+      loading: false,
+      fetchedAt: Date.now(),
+    };
+    renderBackgroundBadge();
+    renderBackgroundPanel();
+    scheduleBackgroundPoll();
+  } catch (error) {
+    console.error('load background jobs failed', error);
+    state.background.loading = false;
+  }
+}
+
+function mergeBackgroundJob(job) {
+  if (!job?.id) return;
+  const sessionId = String(job.sessionId || '');
+  if (!sessionId || sessionId !== currentSession()?.id) return;
+  if (state.background.sessionId !== sessionId) {
+    state.background = {
+      sessionId,
+      jobs: [],
+      loading: false,
+      fetchedAt: Date.now(),
+    };
+  }
+  const index = state.background.jobs.findIndex((item) => item.id === job.id);
+  if (index >= 0) {
+    state.background.jobs[index] = {
+      ...state.background.jobs[index],
+      ...job,
+    };
+  } else {
+    state.background.jobs.push(job);
+  }
+  renderBackgroundBadge();
+  renderBackgroundPanel();
+  scheduleBackgroundPoll();
+}
+
+async function stopBackgroundJob(job) {
+  const session = currentSession();
+  if (!session || !job?.id) return;
+  try {
+    const data = await api.stopBackground(session.id, job.id);
+    if (data?.job) mergeBackgroundJob(data.job);
+    else void loadBackgroundJobs(session.id, true);
+  } catch (error) {
+    console.error('stop background job failed', error);
+  }
+}
+
+function enqueueBackgroundPrompt(payload) {
+  if (!payload?.id || !payload?.prompt) return;
+  const session = state.sessions.find(
+    (item) => item.id === payload.sessionId
+  );
+  if (!session || session.frozen) return;
+  if (state.backgroundHandled.has(payload.id)) return;
+  state.backgroundHandled.add(payload.id);
+  const queue = Array.isArray(session.pendingQueue)
+    ? session.pendingQueue
+    : (session.pendingQueue = []);
+  if (
+    queue.some(
+      (item) =>
+        item &&
+        typeof item === 'object' &&
+        item.jobId === payload.id
+    )
+  ) {
+    return;
+  }
+  queue.push({
+    text: payload.prompt,
+    skills: [],
+    agentId: session.agentId || DEFAULT_AGENT_ID,
+    background: true,
+    jobId: payload.id,
+    note: payload.note || '',
+  });
+  saveChatsSoon();
+  if (state.composerOpen) renderComposerContext();
+  if (
+    session === currentSession() &&
+    !state.streaming &&
+    !isCompacting(session)
+  ) {
+    processNextQueuedPrompt(session);
+  }
+}
+
+function handleBackgroundUpdate(payload) {
+  if (!payload?.id) return;
+  mergeBackgroundJob(payload);
+}
+
+function handleBackgroundComplete(payload) {
+  if (!payload?.id) return;
+  mergeBackgroundJob(payload);
+  enqueueBackgroundPrompt(payload);
+}
+
+function resumeBackgroundQueue(session) {
+  if (!session || state.streaming || session.frozen) return;
+  if (isCompacting(session)) return;
+  const queue = Array.isArray(session.pendingQueue)
+    ? session.pendingQueue
+    : [];
+  const first = queue[0];
+  if (
+    first &&
+    typeof first === 'object' &&
+    first.background === true &&
+    session === currentSession()
+  ) {
+    processNextQueuedPrompt(session);
+  }
+}
+
 function buildMcpSummary(session, onClick) {
   const block = el('div', 'context-block mcp-summary');
   const head = el('button', 'context-head');
@@ -3809,6 +4149,10 @@ function selectSession(index) {
   saveChatsSoon();
   closeSwitcher();
   renderAll();
+  const session = currentSession();
+  if (session) {
+    resumeBackgroundQueue(session);
+  }
   persistFoldState();
 }
 
@@ -3836,6 +4180,11 @@ function renderAll() {
   }
   updateControls();
   renderAgentPicker();
+  renderBackgroundBadge();
+  const session = currentSession();
+  if (session && state.background.sessionId !== session.id) {
+    void loadBackgroundJobs(session.id, true);
+  }
   connectChatEvents(currentSession()?.id || null);
 }
 
@@ -6611,6 +6960,14 @@ function onRightMouseDown(event) {
     state.ringSuppress = true;
     return;
   }
+  if (
+    dom.backgroundOverlay &&
+    !dom.backgroundOverlay.classList.contains('hidden')
+  ) {
+    closeBackgroundPanel();
+    state.ringSuppress = true;
+    return;
+  }
 
   const switcherOpen =
     state.switcherOpen || dom.switcher.classList.contains('open');
@@ -6722,7 +7079,12 @@ const TOOL_GROUPS = [
   {
     id: 'system',
     label: '系统',
-    pattern: /shell|exec|command|process|terminal|system|bash|background|monitor/i,
+    pattern: /shell|exec|command|process|terminal|system|bash/i,
+  },
+  {
+    id: 'background',
+    label: '后台',
+    pattern: /background|monitor/i,
   },
   {
     id: 'agent',
@@ -6751,12 +7113,15 @@ const TOOL_GROUP_BY_NAME = new Map([
   ['webfetch', 'search'],
   ['shell', 'system'],
   ['interactive_bash', 'system'],
-  ['background_output', 'system'],
-  ['background_cancel', 'system'],
-  ['monitor_start', 'system'],
-  ['monitor_stop', 'system'],
-  ['monitor_list', 'system'],
-  ['monitor_output', 'system'],
+  ['background_start', 'background'],
+  ['background_list', 'background'],
+  ['background_stop', 'background'],
+  ['background_output', 'background'],
+  ['background_cancel', 'background'],
+  ['monitor_start', 'background'],
+  ['monitor_stop', 'background'],
+  ['monitor_list', 'background'],
+  ['monitor_output', 'background'],
   ['skill', 'agent'],
   ['skill_mcp', 'agent'],
   ['task', 'agent'],
@@ -7863,6 +8228,17 @@ function bindEvents() {
       passive: true,
     });
   }
+  dom.backgroundBadge?.addEventListener('click', () => {
+    if (dom.backgroundOverlay.classList.contains('hidden')) {
+      openBackgroundPanel();
+    } else {
+      closeBackgroundPanel();
+    }
+  });
+  dom.backgroundClose?.addEventListener('click', closeBackgroundPanel);
+  dom.backgroundOverlay?.addEventListener('click', (event) => {
+    if (event.target === dom.backgroundOverlay) closeBackgroundPanel();
+  });
 
   dom.rawOverlay.addEventListener('click', (event) => {
     if (event.target === dom.rawOverlay) closeRawRequest();
@@ -8185,6 +8561,16 @@ function bindEvents() {
     if (visibleDialog(document.getElementById('mcp-form-overlay'))) {
       return;
     }
+    if (
+      dom.backgroundOverlay &&
+      !dom.backgroundOverlay.classList.contains('hidden')
+    ) {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        closeBackgroundPanel();
+      }
+      return;
+    }
     if (dom.mcpConfig && !dom.mcpConfig.classList.contains('hidden')) {
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
@@ -8418,6 +8804,10 @@ function bindEvents() {
         ) ||
         Boolean(
           dom.goalOverlay && !dom.goalOverlay.classList.contains('hidden')
+        ) ||
+        Boolean(
+          dom.backgroundOverlay &&
+            !dom.backgroundOverlay.classList.contains('hidden')
         ) ||
         state.switcherOpen ||
         state.composerOpen ||
@@ -8733,6 +9123,9 @@ function bindEvents() {
     enqueueQuestion({ id, questions, mode, timeoutSeconds });
   });
 
+  api.onBackgroundUpdate((payload) => handleBackgroundUpdate(payload));
+  api.onBackgroundComplete((payload) => handleBackgroundComplete(payload));
+
   api.onChatDone(({ requestId, text, usage }) => {
     if (requestId !== state.requestId) {
       refreshChats();
@@ -8816,9 +9209,14 @@ async function boot() {
   applyFoldState(currentSession());
 
   bindEvents();
+  connectBackgroundEvents();
   applySettings();
   await loadAgents();
   renderAll();
+  const bootSession = currentSession();
+  if (bootSession) {
+    resumeBackgroundQueue(bootSession);
+  }
   persistFoldState();
   updateSendState();
   void loadUsage();

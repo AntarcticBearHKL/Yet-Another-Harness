@@ -88,6 +88,9 @@ async function execute(name, args, context = null) {
       create_goal: stateTools.createGoal,
       update_goal: stateTools.updateGoal,
       get_goal: stateTools.getGoal,
+      background_start: processTools.backgroundStart,
+      background_list: processTools.backgroundList,
+      background_stop: processTools.backgroundStop,
       background_output: processTools.backgroundOutput,
       background_cancel: processTools.backgroundCancel,
       monitor_start: processTools.monitorStart,
@@ -157,6 +160,14 @@ function statusLabel(name, args) {
   if (name === 'shell' || name === 'interactive_bash') {
     const command = String(value.command ?? '').replace(/\s+/g, ' ').slice(0, 60);
     return command ? `${name}: ${command}` : name;
+  }
+  if (name === 'background_start') {
+    const note = String(
+      value.note || value.description || value.command || ''
+    )
+      .replace(/\s+/g, ' ')
+      .slice(0, 60);
+    return note ? `background_start: ${note}` : 'background_start';
   }
   if (name === 'webfetch') {
     try {

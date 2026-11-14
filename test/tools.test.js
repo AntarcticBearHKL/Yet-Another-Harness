@@ -117,6 +117,9 @@ test('merged catalog includes OMO-priority and OpenCode tools', () => {
     'task_create',
     'create_goal',
     'monitor_start',
+    'background_start',
+    'background_list',
+    'background_stop',
   ]) {
     assert.ok(names.has(name), `${name} is exposed`);
   }

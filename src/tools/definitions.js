@@ -223,6 +223,30 @@ const TASK_UPDATE = fn(
   ['id']
 );
 
+const BACKGROUND_START = fn(
+  'background_start',
+  'Start a long-running background process and return immediately with its id, note and startup info. The process keeps running after the tool call. When it finishes, its output is queued as a follow-up prompt in this conversation. Use background_list, background_output and background_stop to manage it.',
+  {
+    command: str('Shell command to run'),
+    note: str('Short note describing what this background task is doing'),
+    workdir: str('Working directory (defaults to the project directory)'),
+    timeout_seconds: num(
+      'Optional timeout in seconds; omit or use 0 for no timeout'
+    ),
+  },
+  ['command', 'note']
+);
+const BACKGROUND_LIST = fn(
+  'background_list',
+  'List all background tasks in the current conversation with id, status, elapsed time, note and command.',
+  {}
+);
+const BACKGROUND_STOP = fn(
+  'background_stop',
+  'Stop a running background task by id.',
+  { id: str('Background task id') },
+  ['id']
+);
 const BACKGROUND_OUTPUT = fn(
   'background_output',
   'Read output and status of a background job.',
@@ -527,6 +551,9 @@ const OMO = [
   TASK_GET,
   TASK_LIST,
   TASK_UPDATE,
+  BACKGROUND_START,
+  BACKGROUND_LIST,
+  BACKGROUND_STOP,
   BACKGROUND_OUTPUT,
   BACKGROUND_CANCEL,
   MONITOR_START,

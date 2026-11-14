@@ -17,6 +17,19 @@
         <main id="main">
           <section id="messages" class="messages" aria-live="polite"></section>
 
+          <button
+            id="background-badge"
+            class="background-badge hidden"
+            type="button"
+            aria-label="Background tasks"
+            aria-haspopup="dialog"
+            aria-expanded="false"
+          >
+            <span class="background-badge-dot" aria-hidden="true"></span>
+            <span id="background-badge-count" class="background-badge-count">0</span>
+            <span class="background-badge-label">后台</span>
+          </button>
+
           <div class="edge-blur edge-blur-top" aria-hidden="true"></div>
           <div class="edge-blur edge-blur-bottom" aria-hidden="true"></div>
 
@@ -622,6 +635,23 @@
         <button id="approval-allow" class="pill primary" type="button">
           允许一次
         </button>
+      </div>
+    </div>
+
+    <div id="background-overlay" class="overlay hidden" aria-hidden="true">
+      <div class="overlay-panel background-panel">
+        <div class="background-head">
+          <span id="background-summary" class="background-summary"></span>
+          <button
+            id="background-close"
+            class="background-close"
+            type="button"
+            aria-label="Close background tasks"
+          >
+            ×
+          </button>
+        </div>
+        <div id="background-list" class="background-list"></div>
       </div>
     </div>
 

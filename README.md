@@ -64,6 +64,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 删除项目会一次性删除项目本身以及里面的所有对话记录；删除最后一个项目后保持无项目状态，不会自动创建默认项目，需要重新点 `+` 新建；删除对话、排队消息、MCP 服务器也都遵循同样的两步确认
 - 对话面板里按 Space 总是打开输入框（焦点在按钮 / 消息块上时也一样，不会触发折叠或按钮点击）；输入框为空或只有空格、且没有挂 Skill 时，再按 Space 关闭输入框；有文字或已挂 Skill 时 Space 才作为空格
 - 所有带确认按钮的弹窗按 Space 等于点击确认按钮：删除确认的 `Delete`、重命名的 `Save`、项目的 `Create / Save`、Goal 的 `Start Goal`、Skill 参数的 `Attach`、工具授权的 `允许一次`、设置的 `Done`、MCP 服务器表单的 `Save`；焦点在输入框 / 文本域 / 下拉框里时 Space 仍然是空格，项目目录拖放区这类自己处理 Space 的控件保持原行为
+- 后台任务：LLM 用 `background_start` 启动长任务并附 `note` 备注，工具立即返回 id、备注、命令和启动信息；对话右上角显示当前对话运行中的后台任务数量，点击打开面板查看每个任务的备注、命令、状态、耗时、输出并停止任务；`background_list` / `background_output` / `background_stop` 用于列出、读取和停止任务。任务自然结束后，输出会打包成一条后台完成提示排入当前对话队列，当前回合结束后自动作为提问运行，再继续下一轮 loop；工具面板里新增「后台」分类
 - 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
 - 输入框（Space）里：新对话（还没有任何消息）上方只显示 MCP 摘要按钮；已有消息的对话上方只显示排队消息框。生成中仍可继续输入，消息按顺序排队、一行一条，左侧拖动排序，行尾是编辑 / 立即发送 / 删除三个纯图标按钮；当前生成结束后自动按顺序处理队列；这两块都是和输入框同宽的圆角矩形
 - 新建对话默认关闭所有 MCP 服务器：MCP 摘要显示 `0/总数`，需要时在对话顶部的 MCP 配置页里手动打开；开关按会话持久化
@@ -230,7 +231,7 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 
 - OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`SystemInfo`、`list_mcp_resources`、`read_mcp_resource`、`session_rename`、`models`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）、`skill`
-- OMO 常驻 / 条件工具：`session_list/read/search/info`、`task_create/get/list/update`、`background_output/cancel`、`monitor_start/stop/list/output`、`interactive_bash`、`task/subagent/call_omo_agent/delegate_task`、`create_goal/update_goal/get_goal`、`skill_mcp`、`look_at`、`team_*`
+- OMO 常驻 / 条件工具：`session_list/read/search/info`、`task_create/get/list/update`、`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`interactive_bash`、`task/subagent/call_omo_agent/delegate_task`、`create_goal/update_goal/get_goal`、`skill_mcp`、`look_at`、`team_*`
 - 兼容别名：`read_file`、`hashline_edit`；旧调用名 `web_search` 仍可执行，但不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
 - OMO 的 `team_*`、`background_*`、`monitor_*` 在 YAH 里是本地记录 / 进程管理版本；`task`/`subagent` 是单次子模型调用；`interactive_bash` 在 Windows 上退化为普通 shell

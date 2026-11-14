@@ -225,6 +225,9 @@ function normalizePendingQueue(raw) {
       agentId: String(item.agentId || '').trim(),
     };
     if (item.kind === 'compact') entry.kind = 'compact';
+    if (item.background === true) entry.background = true;
+    if (item.jobId) entry.jobId = String(item.jobId);
+    if (item.note) entry.note = String(item.note).slice(0, 300);
     out.push(entry);
   }
   return out.slice(0, 100);
