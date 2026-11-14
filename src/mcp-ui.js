@@ -476,8 +476,8 @@ function mcpRenderHeader() {
     mcpDom.empty.classList.remove('hidden');
     mcpDom.empty.textContent =
       mcpState.servers.length === 0
-        ? '还没有 MCP 服务器。点击左下角添加。'
-        : '选择一个 MCP 服务器。';
+        ? '还没有 MCP 服务器'
+        : '选择一个服务器';
     return;
   }
   mcpDom.empty.classList.add('hidden');
@@ -492,7 +492,7 @@ function mcpRenderHeader() {
   const disabled = server.enabled === false;
   if (disabled) {
     mcpShowError(
-      '这个服务器在 OpenCode 配置中已禁用。启用后 YAH 会自动连接。',
+      '已在 OpenCode 中禁用',
       true
     );
   } else {
@@ -626,7 +626,7 @@ function mcpRenderToolList() {
         'mcp-list-empty',
         (mcpState.detail?.tools || []).length
           ? '没有匹配的工具'
-          : '这个服务器没有暴露工具'
+          : '没有工具'
       )
     );
     return;
@@ -661,8 +661,8 @@ function mcpRenderToolDetail() {
     pane.append(
       mcpConnectGate(
         server.enabled === false
-          ? '这个服务器在 OpenCode 配置中已禁用。'
-          : '连接后可以查看并调用工具',
+          ? '已在 OpenCode 中禁用'
+          : '连接后可查看工具',
         server.enabled === false ? null : '重连'
       )
     );
@@ -670,7 +670,7 @@ function mcpRenderToolDetail() {
   }
   const tool = mcpSelectedTool();
   if (!tool) {
-    pane.append(mcpEl('div', 'mcp-pane-empty', '选择左侧的工具'));
+    pane.append(mcpEl('div', 'mcp-pane-empty', '选择一个工具'));
     return;
   }
 
@@ -748,8 +748,8 @@ function mcpRenderToolDetail() {
         'div',
         'mcp-warning',
         mcpState.toolConfirm
-          ? '这个工具被标记为破坏性操作，再点一次「确认运行」才会执行。'
-          : '这个工具被标记为破坏性操作。'
+          ? '破坏性操作，再点一次确认'
+          : '破坏性操作'
       )
     );
   }
@@ -811,7 +811,7 @@ function mcpSwitchToolMode(mode) {
   try {
     const parsed = JSON.parse(mcpState.toolJson || '{}');
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('参数必须是 JSON 对象');
+      throw new Error('需要 JSON 对象');
     }
     mcpState.toolValues = mcpJsonToValues(tool.inputSchema, parsed);
     mcpState.toolError = '';
@@ -970,7 +970,7 @@ function mcpBuildArguments(schema, values) {
     const effective = mcpEffectiveSchema(property);
     const raw = values[name];
     if (raw === undefined) {
-      if (required.has(name)) throw new Error(`"${name}" 是必填参数`);
+      if (required.has(name)) throw new Error(`"${name}" 必填`);
       continue;
     }
     if (effective.type === 'boolean') {
@@ -979,22 +979,22 @@ function mcpBuildArguments(schema, values) {
       continue;
     }
     if (typeof raw === 'string' ? raw.trim() === '' : raw == null) {
-      if (required.has(name)) throw new Error(`"${name}" 是必填参数`);
+      if (required.has(name)) throw new Error(`"${name}" 必填`);
       continue;
     }
     if (Array.isArray(effective.enum)) {
       const text = String(raw);
       const match = effective.enum.find((item) => String(item) === text);
-      if (match === undefined) throw new Error(`"${name}" 不在允许的取值内`);
+      if (match === undefined) throw new Error(`"${name}" 取值无效`);
       args[name] = match;
       continue;
     }
     const text = String(raw);
     if (effective.type === 'integer' || effective.type === 'number') {
       const number = Number(text);
-      if (!Number.isFinite(number)) throw new Error(`"${name}" 必须是数字`);
+      if (!Number.isFinite(number)) throw new Error(`"${name}" 需要数字`);
       if (effective.type === 'integer' && !Number.isInteger(number)) {
-        throw new Error(`"${name}" 必须是整数`);
+        throw new Error(`"${name}" 需要整数`);
       }
       args[name] = number;
       continue;
@@ -1004,7 +1004,7 @@ function mcpBuildArguments(schema, values) {
       try {
         parsed = JSON.parse(text);
       } catch (error) {
-        throw new Error(`"${name}" 不是合法 JSON：${error.message}`);
+        throw new Error(`"${name}" JSON 无效`);
       }
       args[name] = parsed;
       continue;
@@ -1071,7 +1071,7 @@ function mcpSchemaForm(schema) {
   const form = mcpEl('div', 'mcp-form-grid');
   const properties = mcpSchemaProperties(schema);
   if (properties.length === 0) {
-    form.append(mcpEl('div', 'mcp-no-args', '这个工具没有参数。'));
+    form.append(mcpEl('div', 'mcp-no-args', '没有参数'));
     return form;
   }
   const required = new Set(Array.isArray(schema?.required) ? schema.required : []);
@@ -1191,7 +1191,7 @@ async function mcpRunTool() {
     if (mcpState.toolMode === 'json') {
       const parsed = JSON.parse(mcpState.toolJson || '{}');
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw new Error('参数必须是 JSON 对象');
+        throw new Error('需要 JSON 对象');
       }
       args = parsed;
     } else {
@@ -1278,7 +1278,7 @@ function mcpRenderResourceList() {
         (mcpState.detail?.resources || []).length ||
           (mcpState.detail?.resourceTemplates || []).length
           ? '没有匹配的资源'
-          : '这个服务器没有暴露资源'
+          : '没有资源'
       )
     );
     return;
@@ -1342,8 +1342,8 @@ function mcpRenderResourceDetail() {
     pane.append(
       mcpConnectGate(
         server.enabled === false
-          ? '这个服务器在 OpenCode 配置中已禁用。'
-          : '连接后可以读取资源',
+          ? '已在 OpenCode 中禁用'
+          : '连接后可读取资源',
         server.enabled === false ? null : '重连'
       )
     );
@@ -1406,7 +1406,7 @@ function mcpRenderResourceDetail() {
     (item) => item.uri === mcpState.resourceUri
   );
   if (!resource && !mcpState.resourceResult) {
-    pane.append(mcpEl('div', 'mcp-pane-empty', '选择左侧的资源'));
+    pane.append(mcpEl('div', 'mcp-pane-empty', '选择一个资源'));
     return;
   }
 
@@ -1541,7 +1541,7 @@ function mcpRenderPromptList() {
         'mcp-list-empty',
         (mcpState.detail?.prompts || []).length
           ? '没有匹配的提示词'
-          : '这个服务器没有暴露提示词'
+          : '没有提示词'
       )
     );
     return;
@@ -1586,8 +1586,8 @@ function mcpRenderPromptDetail() {
     pane.append(
       mcpConnectGate(
         server.enabled === false
-          ? '这个服务器在 OpenCode 配置中已禁用。'
-          : '连接后可以获取提示词',
+          ? '已在 OpenCode 中禁用'
+          : '连接后可获取提示词',
         server.enabled === false ? null : '重连'
       )
     );
@@ -1595,7 +1595,7 @@ function mcpRenderPromptDetail() {
   }
   const prompt = mcpSelectedPrompt();
   if (!prompt) {
-    pane.append(mcpEl('div', 'mcp-pane-empty', '选择左侧的提示词'));
+    pane.append(mcpEl('div', 'mcp-pane-empty', '选择一个提示词'));
     return;
   }
 
@@ -1613,7 +1613,7 @@ function mcpRenderPromptDetail() {
   card.append(mcpEl('span', 'mcp-section-kicker', '参数'));
   const args = Array.isArray(prompt.arguments) ? prompt.arguments : [];
   if (args.length === 0) {
-    card.append(mcpEl('div', 'mcp-no-args', '这个提示词没有参数。'));
+    card.append(mcpEl('div', 'mcp-no-args', '没有参数'));
   } else {
     const grid = mcpEl('div', 'mcp-form-grid');
     for (const argument of args) {
@@ -1674,7 +1674,7 @@ async function mcpGetPrompt() {
   }
   for (const argument of prompt.arguments || []) {
     if (argument.required && !args[argument.name]) {
-      mcpState.promptError = `"${argument.name}" 是必填参数`;
+      mcpState.promptError = `"${argument.name}" 必填`;
       mcpRenderPromptDetail();
       return;
     }
@@ -1788,7 +1788,7 @@ function mcpRenderLogList() {
       mcpEl(
         'div',
         'mcp-list-empty',
-        mcpState.logs.length ? '没有匹配的日志' : '还没有日志。连接服务器后会出现协议与进程输出。'
+        mcpState.logs.length ? '没有匹配的日志' : '还没有日志'
       )
     );
     return;
@@ -1849,7 +1849,7 @@ function mcpRenderOverviewTab() {
   const capCard = mcpEl('div', 'mcp-panel');
   capCard.append(mcpEl('span', 'mcp-section-kicker', 'Capabilities'));
   if (Object.keys(capabilities).length === 0) {
-    capCard.append(mcpEl('div', 'mcp-muted', '服务器没有报告能力。'));
+    capCard.append(mcpEl('div', 'mcp-muted', '没有能力信息'));
   } else {
     const list = mcpEl('div', 'mcp-cap-list');
     for (const [name, value] of Object.entries(capabilities)) {
@@ -1969,7 +1969,7 @@ function mcpResultCard({ response, method, label, onInsert, kind }) {
   }
   if (response?.result?.isError) {
     card.append(
-      mcpEl('div', 'mcp-inline-error', '服务器把这次结果标记为错误（isError: true）。')
+      mcpEl('div', 'mcp-inline-error', '工具返回错误')
     );
   }
 
@@ -2077,7 +2077,7 @@ function mcpRenderContent(blocks) {
     wrap.append(mcpEl('pre', 'mcp-output', JSON.stringify(block, null, 2)));
   }
   if (wrap.childNodes.length === 0) {
-    wrap.append(mcpEl('div', 'mcp-muted', '没有内容。'));
+    wrap.append(mcpEl('div', 'mcp-muted', '没有内容'));
   }
   return wrap;
 }
@@ -2240,7 +2240,7 @@ function mcpOpenForm(editId) {
     ? mcpState.servers.find((item) => item.id === editId)
     : null;
   if (server?.source === 'opencode') {
-    mcpToast('来自 OpenCode 的服务器请在 OpenCode 配置中修改');
+    mcpToast('请在 OpenCode 中修改');
     return;
   }
   mcpResetForm();
@@ -2250,7 +2250,7 @@ function mcpOpenForm(editId) {
   mcpDom.formTitle.textContent = server ? 'EDIT MCP SERVER' : 'ADD MCP SERVER';
   mcpDom.formSubtitle.textContent = server
     ? server.name
-    : '配置会保存在本机的 mcp.json';
+    : '保存在 mcp.json';
   mcpDom.formModeJson.disabled = Boolean(server);
   mcpDom.formModeJson.style.opacity = server ? '0.45' : '';
   if (server) {
@@ -2322,12 +2322,12 @@ async function mcpSaveForm() {
       return;
     }
     const payload = mcpFormPayload();
-    if (!payload.name) throw new Error('请填写服务器名称');
+    if (!payload.name) throw new Error('填写名称');
     if (payload.transport === 'stdio' && !payload.command) {
-      throw new Error('STDIO 服务器需要命令');
+      throw new Error('需要命令');
     }
     if (payload.transport !== 'stdio' && !payload.url) {
-      throw new Error('远程服务器需要 URL');
+      throw new Error('需要 URL');
     }
     if (editId) {
       response = await requestJson(
@@ -2359,7 +2359,7 @@ async function mcpReconnect() {
   const server = mcpSelectedServer();
   if (!server) return;
   if (server.enabled === false) {
-    mcpToast('这个服务器在 OpenCode 配置中已禁用');
+    mcpToast('已在 OpenCode 中禁用');
     return;
   }
   mcpToast('正在重连…');
@@ -2379,7 +2379,7 @@ async function mcpRefreshCapabilities() {
   const server = mcpSelectedServer();
   if (!server) return;
   if (server.enabled === false) {
-    mcpToast('这个服务器在 OpenCode 配置中已禁用');
+    mcpToast('已在 OpenCode 中禁用');
     return;
   }
   try {
@@ -2398,7 +2398,7 @@ async function mcpRemoveServer() {
   const server = mcpSelectedServer();
   if (!server) return;
   if (server.source === 'opencode') {
-    mcpToast('来自 OpenCode 的服务器不能在这里删除');
+    mcpToast('请在 OpenCode 中删除');
     return;
   }
   if (!mcpState.deleteArmed) {

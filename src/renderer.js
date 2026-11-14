@@ -5,8 +5,7 @@ const DEFAULT_SYSTEM_PROMPT =
 const DEFAULT_AGENT_ID = 'basic';
 const DEFAULT_AGENT_NAME = '基础 Agent';
 const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
-const NO_KEY_HINT =
-  'No OpenCode Go API key yet. Hold Tab and open Settings to paste your key.';
+const NO_KEY_HINT = 'No API key. Open Settings to add one.';
 // DeepSeek V4.1 Flash (OpenCode Go) context window.
 const CONTEXT_WINDOW_TOKENS = 1_000_000;
 
@@ -544,7 +543,7 @@ function applySettings() {
   const s = state.settings;
   const hasKey = Boolean(s.hasApiKey);
   dom.apiKeyState.textContent = hasKey ? 'set' : 'not set';
-  dom.apiKey.placeholder = hasKey ? '已设置，输入新 key 可替换' : '';
+  dom.apiKey.placeholder = hasKey ? '输入新 key' : '';
   if (document.activeElement !== dom.apiKey) {
     dom.apiKey.value = '';
   }
@@ -1916,7 +1915,7 @@ function renderMcpConfig() {
       el(
         'div',
         'mcp-config-empty',
-        state.mcpServersLoading ? '正在加载 MCP 服务器…' : '还没有 MCP 服务器'
+        state.mcpServersLoading ? '加载中…' : '还没有 MCP 服务器'
       )
     );
     return;
@@ -2034,14 +2033,14 @@ function renderMessages({ animate = true } = {}) {
     state.openCardKey = null;
     state.renderedOpenKeys = new Set();
     state.renderedSessionId = null;
-    dom.messages.append(el('div', 'empty', '还没有对话，按住 Tab 新建'));
+    dom.messages.append(el('div', 'empty', '还没有对话'));
     return;
   }
   if (session.msgs.length === 0) {
     state.openCardKey = null;
     state.renderedOpenKeys = new Set();
     state.renderedSessionId = sessionId;
-    dom.messages.append(el('div', 'empty', '还没有消息，按 Space 输入'));
+    dom.messages.append(el('div', 'empty', '还没有消息'));
     return;
   }
 
@@ -2175,7 +2174,7 @@ function renderSwitcher() {
   if (sessions.length === 0) {
     state.switcherIndex = 0;
     dom.switcherList.append(
-      el('div', 'switcher-empty', '还没有对话，按空格新建')
+      el('div', 'switcher-empty', '还没有对话')
     );
     return;
   }
@@ -2390,7 +2389,7 @@ function renderProjectDialogDirs() {
   const dirs = projectDialog?.directories || [];
   if (dirs.length === 0) {
     dom.projectDirs.append(
-      el('div', 'project-dirs-empty', '还没有选择开发目录')
+      el('div', 'project-dirs-empty', '还没有开发目录')
     );
   } else {
     dirs.forEach((dir, index) => {
@@ -2473,11 +2472,11 @@ function saveProjectDialog() {
   if (!projectDialog) return;
   const name = String(projectDialog.name || '').trim();
   if (!name) {
-    showProjectError('请填写项目名称');
+    showProjectError('填写项目名称');
     return;
   }
   if (projectDialog.directories.length === 0) {
-    showProjectError('至少需要选择一个开发目录');
+    showProjectError('至少选择一个目录');
     return;
   }
   if (projectDialog.mode === 'edit') {
@@ -2521,7 +2520,7 @@ function showNextToolApproval() {
   const dirs = Array.isArray(next.allowedDirs) ? next.allowedDirs : [];
   if (dirs.length === 0) {
     dom.approvalDirs.append(
-      el('div', 'approval-dir', '当前项目还没有配置开发目录')
+      el('div', 'approval-dir', '还没有开发目录')
     );
   } else {
     for (const dir of dirs) {
@@ -2809,7 +2808,7 @@ async function submitQuestion() {
     return values;
   });
   if (answers.some((values) => values.length === 0)) {
-    active.error = '请回答所有问题';
+    active.error = '还有问题未回答';
     renderQuestionDock();
     return;
   }
@@ -2870,8 +2869,8 @@ function confirmDeleteProject(projectId) {
   openConfirm({
     title: 'DELETE PROJECT',
     text: `删除「${project.name}」${
-      count ? `及其中 ${count} 个对话` : ''
-    }？删除后不可恢复。`,
+      count ? `和 ${count} 个对话` : ''
+    }？不可恢复。`,
     action: () => deleteProject(projectId),
   });
 }
@@ -3330,7 +3329,7 @@ function renderComposerQueue(session) {
     ? session.pendingQueue
     : [];
   if (queue.length === 0) {
-    box.append(el('div', 'composer-queue-empty', '暂无待处理消息'));
+    box.append(el('div', 'composer-queue-empty', '队列为空'));
     return box;
   }
   queue.forEach((item, index) => {
@@ -3413,7 +3412,7 @@ function renderAgentMenu() {
     dom.agentMenu.append(item);
   });
   dom.agentMenu.append(
-    el('div', 'agent-menu-hint', '所有对话都必须使用一个 Agent')
+    el('div', 'agent-menu-hint', '每个对话必须有 Agent')
   );
 }
 
@@ -3965,11 +3964,11 @@ function closeGoalDialog() {
 async function startGoalFromObjective(session, objective, tokenBudget = 0) {
   if (!session) return false;
   if (state.streaming) {
-    showGoalError('正在生成，等当前回复结束后再开始目标');
+    showGoalError('生成中，稍后再试');
     const message = ensureLastAgentMessage(session);
     appendStepOnce(message, {
       kind: 'status',
-      label: '正在生成，等当前回复结束后再开始目标',
+      label: '生成中，稍后再试',
       ok: false,
     });
     renderAll();
@@ -3977,12 +3976,12 @@ async function startGoalFromObjective(session, objective, tokenBudget = 0) {
   }
   const text = String(objective || '').trim();
   if (!text) {
-    showGoalError('请填写目标');
+    showGoalError('填写目标');
     return false;
   }
   const budget = Number(tokenBudget) || 0;
   if (budget > 0 && budget < 1000) {
-    showGoalError('Token 预算至少 1000，或留空表示不限制');
+    showGoalError('至少 1000，留空不限');
     return false;
   }
   const now = Date.now();
@@ -4012,7 +4011,7 @@ async function startGoalFromObjective(session, objective, tokenBudget = 0) {
     }
     return true;
   } catch (error) {
-    showGoalError(`启动目标失败：${error.message}`);
+    showGoalError(`启动失败：${error.message}`);
     state.goalSaving = false;
     if (dom.goalStart) dom.goalStart.disabled = false;
     return false;
@@ -4108,7 +4107,7 @@ function renderGoalStrip(session) {
   clear.addEventListener('click', () => {
     openConfirm({
       title: 'CLEAR GOAL',
-      text: '清除当前目标？已生成的对话会保留。',
+      text: '清除当前目标？',
       action: () => void clearGoal(session),
     });
   });
@@ -4123,7 +4122,7 @@ async function manualCompact(session) {
     const message = ensureLastAgentMessage(session);
     appendStepOnce(message, {
       kind: 'status',
-      label: '正在生成，暂时不能压缩上下文',
+      label: '生成中，不能压缩',
       ok: false,
     });
     renderAll();
@@ -4133,7 +4132,7 @@ async function manualCompact(session) {
   const temp = {
     kind: 'compact',
     label: 'running',
-    text: '正在压缩上下文…',
+    text: '压缩中…',
     name: 'manual',
     ok: true,
     metrics: { at: Date.now() },
@@ -4227,7 +4226,7 @@ function attachSkillArgs() {
   for (const argument of target.skill.arguments || []) {
     const value = String(target.values[argument.name] ?? '').trim();
     if (argument.required && !value) {
-      dom.skillArgsError.textContent = `请填写 ${argument.name}`;
+      dom.skillArgsError.textContent = `填写 ${argument.name}`;
       dom.skillArgsError.classList.remove('hidden');
       return;
     }
@@ -4466,7 +4465,7 @@ function openRawRequest(body, label) {
       el(
         'div',
         'raw-empty',
-        '没有可显示的原始请求'
+        '没有原始请求'
       )
     );
   }
@@ -4490,7 +4489,7 @@ async function loadPairing() {
       dom.pairingState.textContent = '未开启';
       dom.pairingAddress.textContent = data?.host
         ? `${data.host}:${data.port}`
-        : '没有可用的局域网地址';
+        : '没有可用地址';
       dom.pairingPassword.textContent = '设置 YAH_LAN=1 并重启后端';
       return;
     }
@@ -4501,7 +4500,7 @@ async function loadPairing() {
   } catch (error) {
     dom.pairingState.textContent = '加载失败';
     dom.pairingAddress.textContent = error.message || String(error);
-    dom.pairingPassword.textContent = '确认后端已启动';
+    dom.pairingPassword.textContent = '后端未启动';
   }
 }
 
@@ -5547,9 +5546,9 @@ function onRightMouseUp(event) {
 }
 
 const CATALOG_EMPTY = {
-  tools: '还没有可用工具。',
-  skills: '还没有安装 Skill。',
-  mcp: '还没有连接 MCP。',
+  tools: '还没有工具',
+  skills: '还没有 Skill',
+  mcp: '还没有 MCP',
 };
 const TOOL_GROUPS = [
   {
@@ -5937,7 +5936,7 @@ function renderCatalogEntryItem(kind, entry) {
 function renderCatalogList(kind, entries) {
   if (!Array.isArray(entries) || entries.length === 0) {
     dom.catalogList.append(
-      el('div', 'catalog-empty', CATALOG_EMPTY[kind] || '还没有内容。')
+      el('div', 'catalog-empty', CATALOG_EMPTY[kind] || '还没有内容')
     );
     return;
   }
@@ -6087,7 +6086,7 @@ function renderAgentEditor(agentId) {
       el(
         'div',
         'catalog-empty',
-        '还没有 Agent。未选择 Agent 时使用对话默认系统提示词；点击左侧「+ 新建 Agent」可以创建。'
+        '还没有 Agent'
       )
     );
     return;
@@ -6145,7 +6144,7 @@ function renderAgentEditor(agentId) {
   const prompt = el('textarea', 'agent-prompt');
   prompt.rows = 8;
   prompt.placeholder =
-    '这段提示词会作为 Agent Context 插入到所有对话的上下文之前。';
+    '会注入 system prompt';
   prompt.value = agent.prompt || '';
   prompt.readOnly = readonly;
   prompt.addEventListener('input', () => {
@@ -6154,13 +6153,6 @@ function renderAgentEditor(agentId) {
     saveAgentsSoon();
   });
   promptField.append(prompt);
-  promptField.append(
-    el(
-      'div',
-      'agent-field-hint',
-      '发送时会以 # Agent Context 的形式放在 system prompt 中。'
-    )
-  );
   editor.append(promptField);
 
   const toolsField = el('div', 'agent-field');
@@ -6253,7 +6245,7 @@ function renderAgentEditor(agentId) {
     el(
       'div',
       'agent-field-hint',
-      '不勾选任何工具时，Agent 将无法调用工具。'
+      '不选工具则不能调用工具'
     )
   );
   editor.append(toolsField);
@@ -6261,7 +6253,7 @@ function renderAgentEditor(agentId) {
     el(
       'div',
       'agent-editor-status',
-      readonly ? '内置 Agent · 不能修改或删除' : '修改会自动保存'
+      readonly ? '内置，只读' : '自动保存'
     )
   );
   dom.catalogList.append(editor);
@@ -6322,7 +6314,7 @@ async function openCatalog(kind) {
     if (!state.catalogOpen || request !== state.catalogRequest) return;
     dom.catalogCategories.replaceChildren();
     dom.catalogList.replaceChildren(
-      el('div', 'catalog-empty', '加载失败。')
+      el('div', 'catalog-empty', '加载失败')
     );
   }
 }

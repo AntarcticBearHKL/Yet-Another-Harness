@@ -149,7 +149,7 @@
         </aside>
         <section class="mcp-main">
           <div id="mcp-empty" class="mcp-empty">
-            还没有 MCP 服务器。点击左下角添加。
+            还没有 MCP 服务器
           </div>
           <div id="mcp-detail" class="mcp-detail hidden">
             <header class="mcp-head">
@@ -288,7 +288,7 @@
                   placeholder="npx"
                 />
                 <span class="mcp-field-desc">
-                  例如 npx、uv、node，或可执行文件的绝对路径。
+                  例如 npx、node
                 </span>
               </div>
               <div class="mcp-field full">
@@ -354,7 +354,7 @@
               placeholder='{"mcpServers":{"filesystem":{"command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","D:\\Dev"]}}}'
             ></textarea>
             <div class="mcp-field-desc">
-              支持 mcpServers、mcp.servers、servers 或单个服务器对象；一次可以添加多个。
+              支持 mcpServers / mcp.servers / servers
             </div>
           </div>
           <div id="mcp-form-error" class="mcp-inline-error hidden"></div>
@@ -550,7 +550,7 @@
           </svg>
           <div class="project-drop-title">拖入文件夹</div>
           <div class="project-drop-hint">
-            可以拖入任意多个目录；也可以点击这里选择文件夹
+            拖入文件夹，或点击选择
           </div>
         </div>
         <div id="project-dirs" class="project-dirs"></div>
@@ -573,7 +573,7 @@
         </div>
         <div class="divider"></div>
         <p class="approval-text">
-          工具请求访问项目开发目录之外的路径，需要人工审核。
+          访问项目目录之外的路径
         </p>
         <div class="approval-row">
           <span>工具</span>
@@ -606,7 +606,7 @@
             class="text-input goal-objective-input"
             rows="5"
             spellcheck="false"
-            placeholder="描述要达成的最终状态，以及如何验证它…"
+            placeholder="描述最终状态和验证方式…"
           ></textarea>
         </label>
         <label class="goal-field">
@@ -617,11 +617,11 @@
             type="number"
             min="1000"
             step="1000"
-            placeholder="留空表示不限制"
+            placeholder="留空不限"
           />
         </label>
         <p class="goal-hint">
-          目标会持久保存在当前对话；每轮结束后会单独验证一次，未完成就继续推进。
+          目标保存在当前对话，每轮自动检查
         </p>
         <div id="goal-error" class="goal-error hidden"></div>
         <div class="overlay-actions">
@@ -666,7 +666,7 @@
             <div class="pairing-info">
               <div id="pairing-address" class="pairing-address">—</div>
               <div id="pairing-password" class="pairing-password">—</div>
-              <div class="pairing-hint">手机与电脑连同一 Wi-Fi，用 YAH 手机端扫码</div>
+              <div class="pairing-hint">同一 Wi-Fi 下扫码连接</div>
             </div>
           </div>
         </div>
