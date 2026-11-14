@@ -1979,12 +1979,16 @@ function contextBlock(title, text, key) {
   head.setAttribute('aria-expanded', String(!collapsed));
   head.append(el('span', 'context-dot'));
   head.append(el('span', 'context-title', title));
-  head.append(el('span', 'context-preview', previewText));
   const chevron = el('span', 'context-chevron');
   chevron.innerHTML =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
   head.append(chevron);
   block.append(head);
+  const preview = el('div', 'context-preview');
+  const previewClip = el('div', 'context-preview-clip');
+  previewClip.append(el('div', 'context-preview-inner', previewText));
+  preview.append(previewClip);
+  block.append(preview);
   const body = el('div', 'context-body');
   const clip = el('div', 'context-body-clip');
   const inner = el('div', 'context-body-inner');

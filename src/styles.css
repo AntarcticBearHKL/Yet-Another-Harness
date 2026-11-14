@@ -843,7 +843,7 @@ body.ring-open #window-controls {
 
 .mcp-summary-count {
   margin-left: auto;
-  color: var(--faint);
+  color: var(--dim);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
@@ -6108,19 +6108,31 @@ textarea::placeholder {
 }
 
 .context-preview {
-  flex: 1;
-  min-width: 0;
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 180ms ease,
+    opacity 140ms ease;
+}
+
+.context-preview-clip {
+  min-height: 0;
   overflow: hidden;
-  color: var(--faint);
+}
+
+.context-preview-inner {
+  padding: 0 14px 10px;
+  color: var(--dim);
   font-size: 10.5px;
-  line-height: 1.4;
+  line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
-  opacity: 1;
-  transition: opacity 120ms ease;
+  overflow: hidden;
 }
 
 .context-block:not(.collapsed) .context-preview {
+  grid-template-rows: 0fr;
   opacity: 0;
 }
 
@@ -6129,7 +6141,7 @@ textarea::placeholder {
 }
 
 .context-empty {
-  color: var(--faint);
+  color: var(--dim);
   font-size: 10.5px;
   line-height: 1.6;
 }
