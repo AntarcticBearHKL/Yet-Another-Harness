@@ -126,6 +126,9 @@ const state = {
   saveTimer: null,
   settingsTimer: null,
   forceScroll: true,
+  followBottom: true,
+  autoScrolling: false,
+  autoScrollTimer: null,
   ringOpen: false,
   ringIndex: -1,
   ringSuppress: false,
@@ -560,11 +563,25 @@ function updateControls() {
   updateSendState();
 }
 
-function isNearBottom() {
+function isAtBottom() {
   return (
     dom.messages.scrollHeight - dom.messages.scrollTop - dom.messages.clientHeight <
-    80
+    2
   );
+}
+
+function scrollMessagesTo(top, { smooth = false } = {}) {
+  if (!dom.messages) return;
+  state.autoScrolling = true;
+  clearTimeout(state.autoScrollTimer);
+  if (smooth) {
+    dom.messages.scrollTo({ top, behavior: 'smooth' });
+  } else {
+    dom.messages.scrollTop = top;
+  }
+  state.autoScrollTimer = setTimeout(() => {
+    state.autoScrolling = false;
+  }, smooth ? 1200 : 80);
 }
 
 function appendRow(card, options = {}, container = dom.messages) {
@@ -2433,7 +2450,7 @@ function renderMessages({ animate = true } = {}) {
     ? new Set()
     : new Set(state.renderedOpenKeys);
   const prevTop = dom.messages.scrollTop;
-  const stick = state.forceScroll || isNearBottom();
+  const stick = state.forceScroll || state.followBottom;
   state.forceScroll = false;
 
   dom.messages.replaceChildren();
@@ -2563,7 +2580,7 @@ function renderMessages({ animate = true } = {}) {
     stickStreamingText(
       dom.messages.querySelector('.message-card.streaming')
     );
-    if (stick) dom.messages.scrollTop = dom.messages.scrollHeight;
+    if (stick) scrollMessagesTo(dom.messages.scrollHeight);
     else dom.messages.scrollTop = prevTop;
   });
 }
@@ -3421,6 +3438,7 @@ function selectSession(index) {
   resetComposerSkills();
   state.switcherProjectId = state.sessions[index].projectId;
   state.forceScroll = true;
+  state.followBottom = true;
   state.pendingDelete = -1;
   clearTimeout(state.deleteTimer);
   saveChatsSoon();
@@ -3515,6 +3533,7 @@ function newSession(projectId) {
   applyFoldState(session);
   resetComposerSkills();
   state.forceScroll = true;
+  state.followBottom = true;
   state.switcherProjectId = targetProjectId;
   dom.input.value = '';
   updateSendState();
@@ -3565,6 +3584,7 @@ function deleteSession(index) {
 
   state.pendingDelete = -1;
   state.forceScroll = true;
+  state.followBottom = true;
   applyFoldState(currentSession());
   resetComposerSkills();
   saveChatsNow();
@@ -3601,6 +3621,7 @@ async function startPrompt(
 
   state.streamMessage = agent;
   state.forceScroll = true;
+  state.followBottom = true;
   if (clearInput) dom.input.value = '';
   updateSendState();
   if (firstMessage) requestSessionTitle(session, text);
@@ -5092,6 +5113,7 @@ async function adoptExternalRun(requestId) {
   state.streaming = true;
   state.requestId = requestId;
   state.forceScroll = true;
+  state.followBottom = true;
   state.openCardKey = autoCardKey();
   renderAll();
 }
@@ -5104,7 +5126,7 @@ function finishStream() {
         session.msgs.includes(state.streamMessage)
       )
     : currentSession();
-  const stick = isNearBottom();
+  const stick = state.followBottom;
   state.streaming = false;
   state.requestId = null;
   state.streamMessage = null;
@@ -5134,7 +5156,7 @@ function finishStream() {
 
   if (stick) {
     requestAnimationFrame(() => {
-      dom.messages.scrollTop = dom.messages.scrollHeight;
+      scrollMessagesTo(dom.messages.scrollHeight);
     });
   }
   processNextQueuedPrompt(finishedSession);
@@ -7890,10 +7912,13 @@ function bindEvents() {
         const delta = event.deltaY || event.deltaX;
         if (delta === 0) return;
         event.preventDefault();
-        dom.messages.scrollTo({
-          top: delta < 0 ? 0 : dom.messages.scrollHeight,
-          behavior: 'smooth',
-        });
+        if (delta < 0) {
+          state.followBottom = false;
+          scrollMessagesTo(0, { smooth: true });
+        } else {
+          state.followBottom = true;
+          scrollMessagesTo(dom.messages.scrollHeight, { smooth: true });
+        }
         return;
       }
 
@@ -7914,6 +7939,40 @@ function bindEvents() {
     },
     { passive: false }
   );
+
+  dom.messages.addEventListener(
+    'wheel',
+    (event) => {
+      if (event.ctrlKey || event.shiftKey) return;
+      const delta = event.deltaY || event.deltaX;
+      if (delta === 0) return;
+      if (delta < 0) {
+        state.followBottom = false;
+        state.autoScrolling = false;
+        clearTimeout(state.autoScrollTimer);
+        dom.messages.scrollTo({
+          top: dom.messages.scrollTop,
+          behavior: 'auto',
+        });
+        return;
+      }
+      if (isAtBottom()) state.followBottom = true;
+    },
+    { passive: true }
+  );
+
+  dom.messages.addEventListener(
+    'scroll',
+    () => {
+      if (state.autoScrolling) return;
+      state.followBottom = isAtBottom();
+    },
+    { passive: true }
+  );
+
+  dom.messages.addEventListener('scrollend', () => {
+    state.autoScrolling = false;
+  });
 
   // 点击遮罩空白处关闭；面板本身阻止冒泡
   dom.settingsOverlay.addEventListener('click', (event) => {
@@ -7971,7 +8030,7 @@ function bindEvents() {
     updateCardClip(card);
     stickStreamingText(card);
 
-    const stick = isNearBottom();
+    const stick = state.followBottom;
     state.forceScroll = false;
     state.openCardKey = key;
     if (
@@ -7982,7 +8041,7 @@ function bindEvents() {
     }
     if (stick) {
       requestAnimationFrame(() => {
-        dom.messages.scrollTop = dom.messages.scrollHeight;
+        scrollMessagesTo(dom.messages.scrollHeight);
       });
     }
   });
