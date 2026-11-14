@@ -117,7 +117,7 @@ const state = {
   renderedOpenKeys: new Set(),
   renderedSessionId: null,
   collapsedProcessKeys: new Set(),
-  contextCollapsed: new Set(['system', 'agents']),
+  contextCollapsed: new Set(['system', 'safety', 'agents']),
   viewMode: null,
   foldRestored: false,
   foldSessionId: null,
@@ -157,6 +157,13 @@ const state = {
   mcpServersLoading: false,
   mcpServersFetchedAt: 0,
   mcpConfigSessionId: null,
+  systemInfo: {
+    key: '',
+    loading: false,
+    text: '',
+    error: '',
+    request: 0,
+  },
   skills: [],
   skillsLoading: false,
   skillsSessionId: null,
@@ -361,6 +368,10 @@ const api = {
   loadProjectAgentsMd: (projectId) =>
     requestJson(
       `/api/agents-md?projectId=${encodeURIComponent(projectId)}`
+    ),
+  loadSystemInfo: (sessionId) =>
+    requestJson(
+      `/api/system-info?sessionId=${encodeURIComponent(sessionId)}`
     ),
   saveAgents: (agents) =>
     requestJson('/api/agents', { method: 'POST', body: { agents } }),
@@ -773,7 +784,7 @@ function applyFoldState(session) {
   state.contextCollapsed = new Set(
     fold?.contextFoldVersion === 2 && Array.isArray(fold.contextCollapsed)
       ? fold.contextCollapsed
-      : ['system', 'agents']
+      : ['system', 'safety', 'agents']
   );
   state.openCardKey = fold?.openKey || null;
   state.foldRestored = Boolean(fold);
@@ -2463,30 +2474,74 @@ function systemPromptText(session) {
   return prompt || String(session?.system || '').trim();
 }
 
+function systemInfoKey(session) {
+  const project = state.projects.find((item) => item.id === session?.projectId);
+  return `${session?.id || ''}|${projectDirectories(project).join('\u0000')}`;
+}
+
+function systemInfoText(session) {
+  const cache = state.systemInfo;
+  if (cache.key !== systemInfoKey(session)) return 'LOADING…';
+  if (cache.text) return cache.text;
+  if (cache.error) return `SYSTEMINFO unavailable: ${cache.error}`;
+  return 'LOADING…';
+}
+
+function ensureSystemInfo(session) {
+  if (!session) return;
+  const key = systemInfoKey(session);
+  const cache = state.systemInfo;
+  if (cache.key === key && (cache.loading || cache.text || cache.error)) return;
+  const request = cache.request + 1;
+  state.systemInfo = { key, loading: true, text: '', error: '', request };
+  api
+    .loadSystemInfo(session.id)
+    .then((data) => {
+      if (state.systemInfo.request !== request) return;
+      const text = String(data?.text || '').trim();
+      state.systemInfo = {
+        key,
+        loading: false,
+        text,
+        error: text ? '' : 'no data',
+        request,
+      };
+      refreshContextBlocks();
+    })
+    .catch((error) => {
+      if (state.systemInfo.request !== request) return;
+      state.systemInfo = {
+        key,
+        loading: false,
+        text: '',
+        error: error instanceof Error ? error.message : String(error),
+        request,
+      };
+      refreshContextBlocks();
+    });
+}
+
 function contextBlock(title, text, key) {
-  const collapsed = state.contextCollapsed.has(key);
-  const block = el('div', 'context-block');
-  if (collapsed) block.classList.add('collapsed');
   const value = String(text || '').trim();
-  const empty = key === 'agents' && !value;
-  const head = el('button', 'context-head');
-  head.type = 'button';
-  head.setAttribute('aria-expanded', String(!collapsed));
+  const empty = !value;
+  const collapsed = !empty && state.contextCollapsed.has(key);
+  const block = el('div', 'context-block');
+  if (empty) block.classList.add('empty');
+  if (collapsed) block.classList.add('collapsed');
+  const head = el(empty ? 'div' : 'button', 'context-head');
+  if (!empty) head.type = 'button';
+  head.setAttribute('aria-expanded', String(!empty && !collapsed));
+  if (empty) head.setAttribute('aria-disabled', 'true');
   head.append(el('span', 'context-dot'));
   head.append(el('span', 'context-title', title));
   if (empty) head.append(el('span', 'context-meta', 'EMPTY'));
   block.append(head);
+  if (empty) return block;
   const body = el('div', 'context-body');
   body.setAttribute('aria-hidden', String(collapsed));
   const clip = el('div', 'context-body-clip');
   const inner = el('div', 'context-body-inner');
-  if (value) {
-    inner.append(el('pre', 'context-text', value));
-  } else if (key === 'agents') {
-    inner.append(el('div', 'context-empty', 'EMPTY'));
-  } else {
-    inner.classList.add('empty');
-  }
+  inner.append(el('pre', 'context-text', value));
   clip.append(inner);
   body.append(clip);
   block.append(body);
@@ -2507,11 +2562,16 @@ function buildContextStack(session) {
   stack.append(
     contextBlock('SYSTEM PROMPT', systemPromptText(session), 'system')
   );
+  stack.append(contextBlock('SYSTEMINFO', systemInfoText(session), 'systeminfo'));
+  stack.append(
+    contextBlock('SAFETY PROMPT', session?.safetyPrompt, 'safety')
+  );
   stack.append(contextBlock('AGENTS.MD', session.agentsMd, 'agents'));
   return stack;
 }
 
 function renderContextBlocks(session, container) {
+  ensureSystemInfo(session);
   container.append(buildContextStack(session));
 }
 

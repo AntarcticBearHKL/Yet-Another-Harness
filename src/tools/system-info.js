@@ -1,6 +1,7 @@
 'use strict';
 
 const os = require('node:os');
+const path = require('node:path');
 
 function pad(value) {
   return String(value).padStart(2, '0');
@@ -25,6 +26,14 @@ function formatOffset(date) {
   return `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
 }
 
+function timezoneName() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 function localeInfo() {
   let locale = '';
   try {
@@ -40,111 +49,94 @@ function localeInfo() {
       /* ignore */
     }
   }
-  const language =
-    process.env.LC_ALL ||
-    process.env.LC_MESSAGES ||
-    process.env.LANG ||
-    locale ||
-    'unknown';
-  return { locale: locale || 'unknown', region, language };
+  return {
+    locale: locale || 'unknown',
+    region,
+    system:
+      process.env.LC_ALL ||
+      process.env.LC_MESSAGES ||
+      process.env.LANG ||
+      locale ||
+      'unknown',
+  };
 }
 
-function safeUser() {
+function displayName(type, code) {
+  if (!code) return '';
   try {
-    return os.userInfo();
+    return new Intl.DisplayNames(['en'], { type }).of(code) || '';
   } catch {
-    return { username: 'unknown' };
+    return '';
   }
-}
-
-function gb(bytes) {
-  return Math.round((Number(bytes) / 1024 / 1024 / 1024) * 10) / 10;
 }
 
 function timezoneLocation(timezone) {
   const parts = String(timezone || '')
     .split('/')
     .filter(Boolean);
-  return {
-    area: parts.length > 1 ? parts[0].replace(/_/g, ' ') : '',
-    city:
-      parts.length > 1
-        ? parts[parts.length - 1].replace(/_/g, ' ')
-        : '',
-  };
+  if (parts.length < 2) return '';
+  return parts[parts.length - 1].replace(/_/g, ' ');
 }
 
-function systemInfoTool() {
+function locationText(locale) {
+  const timezone = timezoneName();
+  const city = timezoneLocation(timezone);
+  const place = city || displayName('region', locale.region);
+  if (!place) {
+    return timezone === 'unknown'
+      ? 'unavailable'
+      : `approximate timezone ${timezone}`;
+  }
+  return `${place} (approximate, from timezone ${timezone})`;
+}
+
+function osText() {
+  const platform = os.platform();
+  const release = os.release();
+  const version = typeof os.version === 'function' ? os.version() : '';
+  let name = '';
+  if (platform === 'win32') name = version || `Windows ${release}`;
+  else if (platform === 'darwin') name = `macOS ${release}`;
+  else if (platform === 'linux') name = `Linux ${release}`;
+  else name = `${os.type()} ${release}`;
+  return `${name} (${platform}, ${os.arch()})`;
+}
+
+function shellText() {
+  const raw = String(
+    process.env.ComSpec || process.env.SHELL || process.env.SHELL_PATH || ''
+  ).trim();
+  if (!raw) return 'unknown';
+  const base = path.basename(raw);
+  return base && base !== raw ? `${base} (${raw})` : raw;
+}
+
+function languageText(locale) {
+  const name = displayName('language', locale.locale);
+  return name ? `${locale.locale} (${name})` : locale.locale;
+}
+
+function workingDirectory(args, context) {
+  const fromContext =
+    context?.cwd || (Array.isArray(context?.allowedDirs) ? context.allowedDirs[0] : '');
+  const value = String(fromContext || args?.cwd || process.cwd()).trim();
+  return value || process.cwd();
+}
+
+function systemInfoTool(args = {}, context = {}) {
   const now = new Date();
   const locale = localeInfo();
-  const cpus = os.cpus();
-  const user = safeUser();
-  const totalMemory = os.totalmem();
-  const freeMemory = os.freemem();
-  const shell =
-    process.env.ComSpec || process.env.SHELL || process.env.SHELL_PATH || '';
-  const timezone =
-    (() => {
-      try {
-        return Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
-      } catch {
-        return 'unknown';
-      }
-    })();
-  const tzLocation = timezoneLocation(timezone);
-  const info = {
-    now: {
-      iso: now.toISOString(),
-      date: formatDate(now),
-      time: formatTime(now),
-      local: `${formatDate(now)} ${formatTime(now)}`,
-      timezone,
-      offset: formatOffset(now),
-      utc: now.toISOString(),
-    },
-    location: {
-      cwd: process.cwd(),
-      home: os.homedir(),
-      hostname: os.hostname(),
-      timezone,
-      area: tzLocation.area || null,
-      city: tzLocation.city || null,
-      localeRegion: locale.region || null,
-    },
-    os: {
-      platform: os.platform(),
-      type: os.type(),
-      release: os.release(),
-      version: typeof os.version === 'function' ? os.version() : '',
-      arch: os.arch(),
-    },
-    language: {
-      locale: locale.locale,
-      region: locale.region || null,
-      system: locale.language,
-    },
-    user: {
-      name: user.username || 'unknown',
-      shell,
-    },
-    cpu: {
-      model: cpus[0]?.model?.trim() || 'unknown',
-      cores: cpus.length,
-    },
-    memory: {
-      totalBytes: totalMemory,
-      freeBytes: freeMemory,
-      totalGb: gb(totalMemory),
-      freeGb: gb(freeMemory),
-    },
-    runtime: {
-      node: process.version,
-      pid: process.pid,
-      uptimeSeconds: Math.round(process.uptime()),
-      systemUptimeSeconds: Math.round(os.uptime()),
-    },
-  };
-  return JSON.stringify(info, null, 2);
+  const cwd = workingDirectory(args, context);
+  return [
+    `Date: ${formatDate(now)}`,
+    `Time: ${formatTime(now)} (UTC${formatOffset(now)})`,
+    `Location: ${locationText(locale)}`,
+    `OS: ${osText()}`,
+    `Shell: ${shellText()}`,
+    `Working directory: ${cwd}`,
+    `Working directory rule: only files inside ${cwd} may be read or written; accessing anything outside it requires manual user approval.`,
+    `System language: ${languageText(locale)}`,
+  ].join('\n');
 }
 
 module.exports = { systemInfoTool };

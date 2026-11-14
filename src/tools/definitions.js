@@ -396,7 +396,7 @@ const MODELS = fn(
 );
 const SYSTEM_INFO = fn(
   'SystemInfo',
-  'Get a quick local system snapshot: date, time, timezone, location (cwd/home/hostname/timezone city and area), OS, architecture, user, system language/locale, CPU, memory and runtime. No network.',
+  'Get a compact local system snapshot as plain text: date, time, approximate location, OS, shell, project working directory with its access rule, and system language. No network.',
   {}
 );
 const WORKTREE_LIST = fn('worktree_list', "List the current git repository's worktrees.", {});

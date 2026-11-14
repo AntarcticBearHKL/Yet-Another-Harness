@@ -12,40 +12,41 @@ test('SystemInfo is exposed as a no-argument tool', () => {
   assert.equal(definition.function.parameters.type, 'object');
   assert.deepEqual(definition.function.parameters.properties, {});
   assert.equal(definition.function.parameters.required, undefined);
-  assert.match(definition.function.description, /date, time, timezone/i);
+  assert.match(definition.function.description, /date, time, approximate location/i);
+  assert.match(definition.function.description, /working directory/i);
   assert.equal(tools.statusLabel('SystemInfo', '{}'), 'SystemInfo');
 });
 
-test('SystemInfo returns date, time, location, OS and language', async () => {
+test('SystemInfo returns date, time, location, OS, shell, working directory and language', async () => {
   const raw = await tools.execute('SystemInfo', '{}');
   assert.doesNotMatch(raw, /tool error/);
-  const info = JSON.parse(raw);
-  assert.match(info.now.date, /^\d{4}-\d{2}-\d{2}$/);
-  assert.match(info.now.time, /^\d{2}:\d{2}:\d{2}$/);
-  assert.match(info.now.offset, /^[+-]\d{2}:\d{2}$/);
-  assert.equal(typeof info.now.timezone, 'string');
-  assert.equal(typeof info.location.cwd, 'string');
-  assert.equal(typeof info.location.home, 'string');
-  assert.equal(typeof info.location.hostname, 'string');
-  assert.equal(typeof info.location.timezone, 'string');
-  assert.ok(info.location.city === null || typeof info.location.city === 'string');
-  assert.ok(info.location.area === null || typeof info.location.area === 'string');
-  assert.ok(
-    info.location.localeRegion === null ||
-      typeof info.location.localeRegion === 'string'
+  assert.match(raw, /^Date: \d{4}-\d{2}-\d{2}$/m);
+  assert.match(raw, /^Time: \d{2}:\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/m);
+  assert.match(raw, /^Location: .+$/m);
+  assert.match(raw, /^OS: .+$/m);
+  assert.match(raw, /^Shell: .+$/m);
+  assert.match(raw, /^Working directory: .+$/m);
+  assert.match(
+    raw,
+    /^Working directory rule: only files inside .+ may be read or written; accessing anything outside it requires manual user approval\.$/m
   );
-  assert.equal(typeof info.os.platform, 'string');
-  assert.equal(typeof info.os.arch, 'string');
-  assert.equal(typeof info.language.locale, 'string');
-  assert.equal(typeof info.language.system, 'string');
-  assert.equal(typeof info.user.name, 'string');
-  assert.equal(typeof info.cpu.cores, 'number');
-  assert.equal(typeof info.memory.totalGb, 'number');
-  assert.equal(typeof info.runtime.node, 'string');
+  assert.match(raw, /^System language: .+$/m);
 });
 
-test('system_info alias returns the same snapshot', async () => {
-  const info = JSON.parse(await tools.execute('system_info', '{}'));
-  assert.equal(typeof info.now.local, 'string');
-  assert.equal(typeof info.location.timezone, 'string');
+test('SystemInfo uses the project working directory from tool context', async () => {
+  const raw = await tools.execute('SystemInfo', '{}', {
+    cwd: 'D:\\Dev\\Project',
+  });
+  assert.match(raw, /^Working directory: D:\\Dev\\Project$/m);
+  assert.match(
+    raw,
+    /^Working directory rule: only files inside D:\\Dev\\Project may be read or written;/m
+  );
+});
+
+test('system_info alias returns the same text snapshot', async () => {
+  const raw = await tools.execute('system_info', '{}');
+  assert.match(raw, /^Date: /m);
+  assert.match(raw, /^OS: /m);
+  assert.match(raw, /^System language: /m);
 });

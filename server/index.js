@@ -362,6 +362,27 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && pathname === '/api/system-info') {
+    const sessionId = String(url.searchParams.get('sessionId') || '');
+    const chats = store.loadChats();
+    const session = chats.sessions.find((item) => item.id === sessionId);
+    const project = chats.projects.find(
+      (item) => item.id === session?.projectId
+    );
+    const directories = Array.isArray(project?.directories)
+      ? project.directories
+      : [];
+    tools
+      .execute('SystemInfo', '{}', { cwd: directories[0] || '' })
+      .then((text) => sendJson(res, 200, { text }))
+      .catch((error) =>
+        sendJson(res, 500, {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      );
+    return true;
+  }
+
   if (req.method === 'POST' && pathname === '/api/chats') {
     readJson(req)
       .then((body) => {

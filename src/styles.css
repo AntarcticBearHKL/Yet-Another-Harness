@@ -6886,7 +6886,7 @@ textarea::placeholder {
   opacity: 0.75;
 }
 
-/* Conversation context blocks: MCP, base system prompt and AGENTS.md snapshot. */
+/* Conversation context blocks: MCP, system prompt, system info, safety prompt and AGENTS.md. */
 .context-stack {
   display: flex;
   flex-direction: column;
@@ -6935,6 +6935,20 @@ textarea::placeholder {
   color: var(--text);
 }
 
+.context-block.empty .context-head {
+  cursor: default;
+}
+
+.context-block.empty .context-head:hover,
+.context-block.empty .context-head:focus-visible {
+  background: transparent;
+  color: var(--faint);
+}
+
+.context-block.empty .context-head:hover .context-title {
+  color: var(--dim);
+}
+
 .context-dot {
   width: 7px;
   height: 7px;
@@ -6948,6 +6962,11 @@ textarea::placeholder {
 }
 
 .context-block.collapsed .context-dot {
+  border-color: var(--faint);
+  background: transparent;
+}
+
+.context-block.empty .context-dot {
   border-color: var(--faint);
   background: transparent;
 }
@@ -6971,14 +6990,18 @@ textarea::placeholder {
   display: none;
 }
 
-.context-head:hover .context-title {
-  color: var(--text);
+.context-block.empty .context-meta {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
 }
 
-.context-empty {
-  color: var(--dim);
-  font-size: 10.5px;
-  line-height: 1.6;
+.context-head:hover .context-title {
+  color: var(--text);
 }
 
 .context-body {
