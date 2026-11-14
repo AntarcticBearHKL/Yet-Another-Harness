@@ -3005,7 +3005,7 @@ function renderComposerContext() {
 
 function agentMenuEntries() {
   return [
-    { id: '', name: '默认' },
+    { id: '', name: '不指定' },
     ...state.agents.map((agent) => ({
       id: agent.id,
       name: agent.name || 'Agent',
@@ -3056,11 +3056,9 @@ function renderAgentMenu() {
     item.addEventListener('click', () => selectAgent(entry.id));
     dom.agentMenu.append(item);
   });
-  if (state.agents.length === 0) {
-    dom.agentMenu.append(
-      el('div', 'agent-menu-hint', '还没有自定义 Agent')
-    );
-  }
+  dom.agentMenu.append(
+    el('div', 'agent-menu-hint', '不指定时使用对话默认提示词')
+  );
 }
 
 function positionAgentMenu() {
@@ -3148,7 +3146,7 @@ function renderAgentPicker() {
   const current = String(session?.agentId || '');
   const known = state.agents.find((agent) => agent.id === current);
   if (dom.agentPickerValue) {
-    dom.agentPickerValue.textContent = known?.name || '默认';
+    dom.agentPickerValue.textContent = known?.name || '不指定';
   }
   if (dom.agentPickerButton) dom.agentPickerButton.disabled = !session;
   if (
@@ -3160,7 +3158,7 @@ function renderAgentPicker() {
   ) {
     session.agentId = '';
     saveChatsSoon();
-    if (dom.agentPickerValue) dom.agentPickerValue.textContent = '默认';
+    if (dom.agentPickerValue) dom.agentPickerValue.textContent = '不指定';
   }
   if (state.agentMenuOpen) {
     renderAgentMenu();
@@ -5384,7 +5382,7 @@ function renderAgentEditor(agentId) {
       el(
         'div',
         'catalog-empty',
-        '还没有 Agent。点击左侧「+ 新建 Agent」开始。'
+        '还没有 Agent。未选择 Agent 时使用对话默认系统提示词；点击左侧「+ 新建 Agent」可以创建。'
       )
     );
     return;
