@@ -3688,18 +3688,44 @@ async function sendMessage() {
   const command = parseSlashCommand(dom.input.value);
   const agentId = session.agentId || DEFAULT_AGENT_ID;
   if (command) {
-    dom.input.value = '';
-    state.slashDismissed = false;
-    updateSendState();
     if (command.command === 'compact') {
+      dom.input.value = '';
+      state.slashDismissed = false;
+      updateSendState();
+      renderSlashPopup();
       clearAttachedSkills();
       await queueOrRunCompact(session, agentId);
       return;
     }
     if (command.command === 'goal') {
+      dom.input.value = '';
+      state.slashDismissed = false;
+      updateSendState();
+      renderSlashPopup();
       if (command.args) await startGoalFromObjective(session, command.args);
       else openGoalDialog();
       return;
+    }
+    if (command.skill) {
+      if (
+        Array.isArray(command.skill.arguments) &&
+        command.skill.arguments.length > 0 &&
+        !command.args
+      ) {
+        dom.input.value = '';
+        state.slashDismissed = false;
+        updateSendState();
+        renderSlashPopup();
+        openSkillArgs(command.skill);
+        return;
+      }
+      if (!state.attachedSkills.some((item) => item.id === command.skill.id)) {
+        attachSkill(command.skill, {});
+      }
+      dom.input.value = command.args || `/${command.skill.name}`;
+      state.slashDismissed = false;
+      updateSendState();
+      renderSlashPopup();
     }
   }
   const skills = state.attachedSkills.map((skill) => ({
@@ -4267,6 +4293,15 @@ function positionSlashPopup() {
 
 function renderSlashPopup() {
   if (!dom.skillPopup) return;
+  const exact = state.composerOpen ? exactSlashSkill() : null;
+  if (exact) {
+    state.slashOpen = false;
+    state.slashSkills = [];
+    state.slashIndex = 0;
+    dom.skillPopup.classList.add('hidden');
+    dom.skillPopup.replaceChildren();
+    return;
+  }
   const query = state.composerOpen ? slashQuery() : null;
   if (query === null || state.slashDismissed) {
     state.slashOpen = false;
@@ -4452,17 +4487,60 @@ function appendStepOnce(message, step) {
   message.steps.push(step);
 }
 
+function matchSlashSkill(value) {
+  const text = String(value || '').trim();
+  if (!text.startsWith('/')) return null;
+  const body = text.slice(1);
+  const lower = body.toLowerCase();
+  let best = null;
+  for (const skill of state.skills) {
+    for (const key of [skill.name, skill.id]) {
+      const normalized = String(key || '').toLowerCase();
+      if (!normalized) continue;
+      if (lower === normalized || lower.startsWith(`${normalized} `)) {
+        if (!best || normalized.length > best.length) {
+          best = { skill, length: normalized.length };
+        }
+      }
+    }
+  }
+  if (!best) return null;
+  return {
+    skill: best.skill,
+    args: body.slice(best.length).trim(),
+  };
+}
+
+function exactSlashSkill() {
+  return matchSlashSkill(dom.input.value)?.skill || null;
+}
+
 function parseSlashCommand(value) {
   const text = String(value || '').trim();
-  if (/^\/compact\b/i.test(text)) {
+  const compact = text.match(/^\/compact\b([\s\S]*)$/i);
+  if (compact) {
     return {
       command: 'compact',
-      args: text.replace(/^\/compact\b/i, '').trim(),
+      skill:
+        state.skills.find((skill) => skill.command === 'compact') || null,
+      args: compact[1].trim(),
     };
   }
   const goal = text.match(/^\/goal\b([\s\S]*)$/i);
-  if (goal) return { command: 'goal', args: goal[1].trim() };
-  return null;
+  if (goal) {
+    return {
+      command: 'goal',
+      skill: state.skills.find((skill) => skill.command === 'goal') || null,
+      args: goal[1].trim(),
+    };
+  }
+  const match = matchSlashSkill(text);
+  if (!match) return null;
+  return {
+    command: match.skill.command || '',
+    skill: match.skill,
+    args: match.args,
+  };
 }
 
 function showGoalError(message) {
