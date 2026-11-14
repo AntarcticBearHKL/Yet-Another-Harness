@@ -3470,6 +3470,72 @@ async function dismissQuestion() {
   showNextQuestion();
 }
 
+function isTextEntryTarget(target) {
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        'input, textarea, select, [contenteditable="true"]'
+      )
+    )
+  );
+}
+
+function visibleDialog(node) {
+  return Boolean(node) && !node.classList.contains('hidden');
+}
+
+function dialogConfirmButton() {
+  if (visibleDialog(dom.confirmOverlay)) return dom.confirmOk;
+  if (visibleDialog(dom.renameOverlay)) return dom.renameSave;
+  if (visibleDialog(dom.approvalOverlay)) return dom.approvalAllow;
+  if (visibleDialog(dom.projectOverlay)) return dom.projectSave;
+  if (visibleDialog(dom.goalOverlay)) return dom.goalStart;
+  if (visibleDialog(dom.skillArgsOverlay)) return dom.skillArgsAttach;
+  if (visibleDialog(document.getElementById('mcp-form-overlay'))) {
+    return document.getElementById('mcp-form-save');
+  }
+  if (visibleDialog(dom.settingsOverlay)) {
+    return document.getElementById('done-settings');
+  }
+  return null;
+}
+
+// Space confirms the active dialog instead of requiring a click. Text fields
+// keep their normal Space behavior, and controls that already handled Space
+// (such as the project directory drop zone) keep priority.
+function handleDialogConfirmSpace(event) {
+  if (event.code !== 'Space' && event.key !== ' ') return false;
+  if (
+    event.repeat ||
+    event.isComposing ||
+    event.defaultPrevented ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.altKey ||
+    event.shiftKey
+  ) {
+    return false;
+  }
+  if (
+    isTextEntryTarget(event.target) ||
+    isTextEntryTarget(document.activeElement)
+  ) {
+    return false;
+  }
+  const button = dialogConfirmButton();
+  if (
+    !button ||
+    button.disabled ||
+    button.getAttribute('aria-disabled') === 'true'
+  ) {
+    return false;
+  }
+  event.preventDefault();
+  button.click();
+  return true;
+}
+
 function openConfirm({ text, action }) {
   dom.confirmText.textContent = text;
   confirmAction = action;
@@ -7833,6 +7899,7 @@ function bindEvents() {
   );
 
   document.addEventListener('keydown', (event) => {
+    if (handleDialogConfirmSpace(event)) return;
     if (state.agentMenuOpen && event.key === 'Escape' && !event.isComposing) {
       event.preventDefault();
       closeAgentMenu();
@@ -7910,6 +7977,9 @@ function bindEvents() {
         event.preventDefault();
         closeSkillArgs();
       }
+      return;
+    }
+    if (visibleDialog(document.getElementById('mcp-form-overlay'))) {
       return;
     }
     if (dom.mcpConfig && !dom.mcpConfig.classList.contains('hidden')) {
