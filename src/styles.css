@@ -375,15 +375,6 @@ body.ring-open #window-controls {
   margin-bottom: 8px;
 }
 
-.pane-foot {
-  position: relative;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  flex: none;
-  padding-top: 10px;
-}
-
 .icon-btn {
   display: grid;
   place-items: center;

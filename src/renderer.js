@@ -39,7 +39,6 @@ const dom = {
   skillArgsAttach: $('skill-args-attach'),
   switcher: $('switcher'),
   switcherList: $('switcher-list'),
-  switcherSettings: $('switcher-settings'),
   projectList: $('project-list'),
   settingsOverlay: $('settings-overlay'),
   rawOverlay: $('raw-overlay'),
@@ -5335,6 +5334,7 @@ const RING_ICONS = {
     '<path d="M4 6h16M9 6V4h6v2M6 6l1 14h10l1-14M10 10v7M14 10v7"/>',
   folder:
     '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>',
+  settings: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   minimize: '<path d="M4 12h16"/>',
   maximize: '<path d="M5 5h14v14H5z"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
@@ -5528,7 +5528,7 @@ function openActionMenu({ x, y, items, usage = false }) {
     button.type = 'button';
     button.setAttribute('role', 'menuitem');
     button.dataset.actionIndex = String(index);
-    if (item.confirm) button.classList.add('danger');
+    if (item.confirm || item.danger) button.classList.add('danger');
     if (item.icon) {
       const icon = el('span', 'action-menu-icon');
       icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg>`;
@@ -5674,18 +5674,25 @@ function openSwitcherActionMenu(target, x, y) {
     return;
   }
 
-  if (!api.isElectron) return;
-  openActionMenu({
-    x,
-    y,
-    items: [
+  const items = [
+    {
+      label: '设置',
+      icon: RING_ICONS.settings,
+      action: () => {
+        closeSwitcher();
+        openSettings();
+      },
+    },
+  ];
+  if (api.isElectron) {
+    items.push(
       {
         label: '最小化',
         icon: RING_ICONS.minimize,
         action: () => api.minimize(),
       },
       {
-        label: '最大化',
+        label: '放大',
         icon: RING_ICONS.maximize,
         action: () => api.maximize(),
       },
@@ -5693,9 +5700,11 @@ function openSwitcherActionMenu(target, x, y) {
         label: '关闭',
         icon: RING_ICONS.close,
         action: () => api.close(),
-      },
-    ],
-  });
+        danger: true,
+      }
+    );
+  }
+  openActionMenu({ x, y, items });
 }
 
 function handleContextMenu(event) {
@@ -5840,6 +5849,10 @@ function buildRingMenu(items = RING_ITEMS, options = {}) {
     const point = ringPolar(RING_LABEL_RADIUS, midAngle);
     label.style.left = `${point.x}px`;
     label.style.top = `${point.y}px`;
+    if (item.confirm || item.danger) {
+      path.classList.add('danger');
+      label.classList.add('danger');
+    }
     dom.ringMenu.append(label);
     ringLabels.push(label);
   });
@@ -6086,18 +6099,25 @@ function openSwitcherRingMenu(event) {
     return;
   }
 
-  if (!api.isElectron) return;
-  openRingMenu(
-    event.clientX,
-    event.clientY,
-    [
+  const items = [
+    {
+      label: '设置',
+      icon: RING_ICONS.settings,
+      action: () => {
+        closeSwitcher();
+        openSettings();
+      },
+    },
+  ];
+  if (api.isElectron) {
+    items.push(
       {
         label: '最小化',
         icon: RING_ICONS.minimize,
         action: () => api.minimize(),
       },
       {
-        label: '最大化',
+        label: '放大',
         icon: RING_ICONS.maximize,
         action: () => api.maximize(),
       },
@@ -6105,10 +6125,11 @@ function openSwitcherRingMenu(event) {
         label: '关闭',
         icon: RING_ICONS.close,
         action: () => api.close(),
-      },
-    ],
-    { usage: false }
-  );
+        danger: true,
+      }
+    );
+  }
+  openRingMenu(event.clientX, event.clientY, items, { usage: false });
 }
 
 function onRightMouseDown(event) {
@@ -7148,11 +7169,6 @@ function bindEvents() {
     },
     true
   );
-
-  dom.switcherSettings.addEventListener('click', () => {
-    closeSwitcher();
-    openSettings();
-  });
 
   $('close-settings')?.addEventListener('click', closeSettings);
   $('done-settings').addEventListener('click', closeSettings);
