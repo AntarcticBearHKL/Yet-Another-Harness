@@ -5923,11 +5923,13 @@ const TOOL_GROUPS = [
   {
     id: 'agent',
     label: '代理',
+    hidden: true,
     pattern: /agent|task|subagent|skill|mcp|team|goal|question|model|worktree|look_at/i,
   },
   {
     id: 'session',
     label: '会话',
+    hidden: true,
     pattern: /session/i,
   },
 ];
@@ -6066,7 +6068,9 @@ function ensureCatalogSelection(data, page) {
   const counts = toolCountsByGroup(data?.tools);
   const groupId = state.catalogKind.slice(5);
   if ((counts.get(groupId) || 0) > 0) return;
-  const first = TOOL_GROUPS.find((group) => (counts.get(group.id) || 0) > 0);
+  const first = TOOL_GROUPS.find(
+    (group) => !group.hidden && (counts.get(group.id) || 0) > 0
+  );
   state.catalogKind = first ? `tool:${first.id}` : 'tool:other';
 }
 
@@ -6155,11 +6159,13 @@ function renderCatalogCategories(data, selectedKind, page) {
   let items;
   if (page === 'tools') {
     const toolCounts = toolCountsByGroup(data?.tools);
-    items = TOOL_GROUPS.map((group) => ({
-      id: `tool:${group.id}`,
-      label: group.label,
-      count: toolCounts.get(group.id) || 0,
-    })).filter((item) => item.count > 0);
+    items = TOOL_GROUPS.filter((group) => !group.hidden)
+      .map((group) => ({
+        id: `tool:${group.id}`,
+        label: group.label,
+        count: toolCounts.get(group.id) || 0,
+      }))
+      .filter((item) => item.count > 0);
     const otherCount = toolCounts.get('other') || 0;
     if (otherCount > 0) {
       items.push({ id: 'tool:other', label: '其他', count: otherCount });
@@ -6279,6 +6285,11 @@ function appendCatalogGroup(label, entries, renderItem) {
 }
 
 function renderCatalogToolGroup(groupId) {
+  const group = TOOL_GROUPS.find((item) => item.id === groupId);
+  if (group?.hidden) {
+    dom.catalogList.append(el('div', 'catalog-empty', CATALOG_EMPTY.tools));
+    return;
+  }
   const tools = (state.catalogData?.tools || []).filter((entry) => {
     const fn = entry.function || entry;
     return toolGroupFor(fn).id === groupId;
