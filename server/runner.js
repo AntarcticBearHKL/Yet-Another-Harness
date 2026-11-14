@@ -16,6 +16,7 @@ const activeRuns = new Map();
 const sessionRuns = new Map();
 const subscribers = new Map();
 const pendingApprovals = new Map();
+const pendingQuestions = new Map();
 
 function subscribe(sessionId, fn) {
   if (!subscribers.has(sessionId)) subscribers.set(sessionId, new Set());
@@ -79,6 +80,37 @@ function denyRunApprovals(runId) {
     if (entry.runId !== runId) continue;
     pendingApprovals.delete(approvalId);
     entry.resolve(false);
+  }
+}
+
+function requestQuestions(sessionId, runId, questions) {
+  return new Promise((resolve) => {
+    const questionId = crypto.randomUUID();
+    pendingQuestions.set(questionId, { resolve, runId, sessionId });
+    emit(sessionId, runId, 'tool.question', {
+      id: questionId,
+      questions: Array.isArray(questions) ? questions : [],
+    });
+  });
+}
+
+function resolveQuestions(questionId, body) {
+  const id = String(questionId || '');
+  const entry = pendingQuestions.get(id);
+  if (!entry) return false;
+  pendingQuestions.delete(id);
+  entry.resolve({
+    answers: Array.isArray(body?.answers) ? body.answers : [],
+    cancelled: body?.cancelled === true,
+  });
+  return true;
+}
+
+function denyRunQuestions(runId) {
+  for (const [questionId, entry] of pendingQuestions) {
+    if (entry.runId !== runId) continue;
+    pendingQuestions.delete(questionId);
+    entry.resolve({ answers: [], cancelled: true });
   }
 }
 
@@ -465,6 +497,7 @@ function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null 
     projectId: session.projectId,
     allowedDirs,
     approve: (request) => requestToolApproval(sessionId, id, request),
+    askQuestions: (questions) => requestQuestions(sessionId, id, questions),
   };
 
   let goalAction = null;
@@ -642,6 +675,7 @@ function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null 
     })
     .finally(() => {
       denyRunApprovals(id);
+      denyRunQuestions(id);
       activeRuns.delete(id);
       if (sessionRuns.get(sessionId) === id) sessionRuns.delete(sessionId);
       if (
@@ -664,6 +698,7 @@ function cancelRun(runId) {
   const state = activeRuns.get(String(runId || ''));
   if (!state) return false;
   denyRunApprovals(state.runId);
+  denyRunQuestions(state.runId);
   pauseGoal(state.sessionId, state.runId);
   state.controller.abort();
   return true;
@@ -674,6 +709,7 @@ function cancelSessionRuns(sessionIds) {
   for (const [runId, state] of activeRuns) {
     if (wanted.has(state.sessionId)) {
       denyRunApprovals(runId);
+      denyRunQuestions(runId);
       pauseGoal(state.sessionId, runId);
       state.controller.abort();
       activeRuns.delete(runId);
@@ -691,5 +727,6 @@ module.exports = {
   cancelSessionRuns,
   compactSession,
   resolveApproval,
+  resolveQuestions,
   activeRunForSession: (sessionId) => sessionRuns.get(sessionId) || null,
 };

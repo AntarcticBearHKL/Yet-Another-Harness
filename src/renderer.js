@@ -21,6 +21,12 @@ const dom = {
   agentPickerValue: $('agent-picker-value'),
   agentMenu: $('agent-menu'),
   actionMenu: $('action-menu'),
+  questionDock: $('question-dock'),
+  questionProgress: $('question-dock-progress'),
+  questionBody: $('question-dock-body'),
+  questionClose: $('question-dock-close'),
+  questionBack: $('question-dock-back'),
+  questionNext: $('question-dock-next'),
   composerContext: $('composer-context'),
   composerBox: $('composer-box'),
   composerTokens: $('composer-tokens'),
@@ -166,6 +172,8 @@ const state = {
   activeApproval: null,
   goalDialog: null,
   goalSaving: false,
+  questionQueue: [],
+  activeQuestion: null,
 };
 
 async function requestJson(path, options = {}) {
@@ -353,6 +361,11 @@ const api = {
       method: 'POST',
       body: { approved },
     }),
+  answerQuestion: (id, payload) =>
+    requestJson(`/api/questions/${encodeURIComponent(id)}`, {
+      method: 'POST',
+      body: payload,
+    }),
   compactChat: (sessionId) =>
     requestJson('/api/compact', { method: 'POST', body: { sessionId } }),
   activeRun: (sessionId) =>
@@ -409,6 +422,7 @@ const api = {
   onChatToolCall: (callback) => subscribeEvent('tool.call', callback),
   onChatToolResult: (callback) => subscribeEvent('tool.result', callback),
   onToolApproval: (callback) => subscribeEvent('tool.approval', callback),
+  onToolQuestion: (callback) => subscribeEvent('tool.question', callback),
   onGoalCheck: (callback) => subscribeEvent('goal.check', callback),
   onGoalUpdated: (callback) => subscribeEvent('goal.updated', callback),
   onCompaction: (callback) => subscribeEvent('compaction.done', callback),
@@ -2525,6 +2539,287 @@ function clearToolApprovals() {
   dom.approvalOverlay.setAttribute('aria-hidden', 'true');
 }
 
+function stripRecommended(label) {
+  return String(label || '').replace(
+    /\s*(?:\(\s*recommended\s*\)|（\s*推荐\s*）)\s*$/i,
+    ''
+  );
+}
+
+function isRecommended(label) {
+  return /(?:\(\s*recommended\s*\)|（\s*推荐\s*）)\s*$/i.test(
+    String(label || '')
+  );
+}
+
+function questionDraft(question) {
+  return {
+    selected: [],
+    custom: '',
+    customActive: Array.isArray(question.options)
+      ? question.options.length === 0
+      : true,
+  };
+}
+
+function questionHasAnswer(draft) {
+  if (!draft) return false;
+  return (
+    (Array.isArray(draft.selected) && draft.selected.length > 0) ||
+    String(draft.custom || '').trim().length > 0
+  );
+}
+
+function hideQuestionDock() {
+  if (!dom.questionDock) return;
+  dom.questionDock.classList.add('hidden');
+  dom.questionDock.setAttribute('aria-hidden', 'true');
+}
+
+function clearQuestionDock() {
+  state.questionQueue = [];
+  state.activeQuestion = null;
+  hideQuestionDock();
+}
+
+function cancelQuestionDock() {
+  const active = state.activeQuestion;
+  const queued = [...state.questionQueue];
+  state.questionQueue = [];
+  state.activeQuestion = null;
+  hideQuestionDock();
+  if (active) {
+    api.answerQuestion(active.id, { cancelled: true }).catch(() => {});
+  }
+  for (const item of queued) {
+    api.answerQuestion(item.id, { cancelled: true }).catch(() => {});
+  }
+}
+
+function showNextQuestion() {
+  if (state.activeQuestion) return;
+  const next = state.questionQueue.shift();
+  if (!next) {
+    state.activeQuestion = null;
+    hideQuestionDock();
+    return;
+  }
+  state.activeQuestion = {
+    id: next.id,
+    questions: Array.isArray(next.questions) ? next.questions : [],
+    index: 0,
+    drafts: (Array.isArray(next.questions) ? next.questions : []).map(
+      questionDraft
+    ),
+    responding: false,
+    error: '',
+  };
+  dom.questionDock.classList.remove('hidden');
+  dom.questionDock.setAttribute('aria-hidden', 'false');
+  renderQuestionDock();
+}
+
+function enqueueQuestion(payload) {
+  if (!payload?.id || !Array.isArray(payload.questions)) return;
+  if (payload.questions.length === 0) return;
+  if (state.activeQuestion?.id === payload.id) return;
+  if (state.questionQueue.some((item) => item.id === payload.id)) return;
+  state.questionQueue.push(payload);
+  if (!state.activeQuestion) showNextQuestion();
+}
+
+function renderQuestionProgress(active) {
+  if (!dom.questionProgress) return;
+  dom.questionProgress.replaceChildren();
+  active.questions.forEach((question, index) => {
+    const dot = el('span', 'question-progress-dot');
+    if (index === active.index) dot.classList.add('current');
+    if (questionHasAnswer(active.drafts[index])) dot.classList.add('answered');
+    dom.questionProgress.append(dot);
+  });
+}
+
+function toggleQuestionOption(index, label, multiple) {
+  const active = state.activeQuestion;
+  if (!active) return;
+  const draft = active.drafts[index];
+  if (!draft) return;
+  if (multiple) {
+    const at = draft.selected.indexOf(label);
+    if (at >= 0) draft.selected.splice(at, 1);
+    else draft.selected.push(label);
+  } else {
+    draft.selected = [label];
+    draft.customActive = false;
+    draft.custom = '';
+  }
+  renderQuestionDock();
+}
+
+function updateQuestionFooter() {
+  const active = state.activeQuestion;
+  if (!active) return;
+  const question = active.questions[active.index];
+  const draft = active.drafts[active.index];
+  const last = active.index === active.questions.length - 1;
+  if (dom.questionBack) {
+    dom.questionBack.classList.toggle('hidden', active.index === 0);
+    dom.questionBack.disabled = active.responding;
+  }
+  if (dom.questionNext) {
+    dom.questionNext.textContent = active.responding
+      ? '提交中…'
+      : last
+        ? '提交'
+        : '下一步';
+    dom.questionNext.disabled =
+      active.responding || !questionHasAnswer(draft);
+  }
+  renderQuestionProgress(active);
+}
+
+function renderQuestionDock() {
+  const active = state.activeQuestion;
+  if (!active || !dom.questionBody) return;
+  const question = active.questions[active.index];
+  const draft = active.drafts[active.index];
+  if (!question || !draft) return;
+  dom.questionBody.replaceChildren();
+
+  const head = el('div', 'question-head');
+  if (question.header) {
+    head.append(el('div', 'question-header', question.header));
+  }
+  head.append(el('div', 'question-text', question.question));
+  dom.questionBody.append(head);
+
+  const options = Array.isArray(question.options) ? question.options : [];
+  if (options.length > 0) {
+    const list = el('div', 'question-options');
+    for (const option of options) {
+      const selected = draft.selected.includes(option.label);
+      const button = el('button', 'question-option');
+      button.type = 'button';
+      if (selected) button.classList.add('selected');
+      const control = el(
+        'span',
+        `question-control ${question.multiple ? 'checkbox' : 'radio'}`
+      );
+      if (selected) control.classList.add('checked');
+      control.append(el('span', 'question-control-dot'));
+      const body = el('div', 'question-option-text');
+      const labelRow = el('div', 'question-option-label-row');
+      labelRow.append(
+        el('span', 'question-option-label', stripRecommended(option.label))
+      );
+      if (isRecommended(option.label)) {
+        labelRow.append(el('span', 'question-recommended', '推荐'));
+      }
+      body.append(labelRow);
+      if (option.description) {
+        body.append(el('div', 'question-option-desc', option.description));
+      }
+      button.append(control, body);
+      button.addEventListener('click', () =>
+        toggleQuestionOption(
+          active.index,
+          option.label,
+          question.multiple === true
+        )
+      );
+      list.append(button);
+    }
+
+    const customButton = el('button', 'question-option question-custom-row');
+    customButton.type = 'button';
+    if (draft.customActive) customButton.classList.add('selected');
+    const customControl = el(
+      'span',
+      `question-control ${question.multiple ? 'checkbox' : 'radio'}`
+    );
+    if (draft.customActive) customControl.classList.add('checked');
+    customControl.append(el('span', 'question-control-dot'));
+    const customText = el('div', 'question-option-text');
+    customText.append(el('div', 'question-option-label', '其他（自己输入）'));
+    customButton.append(customControl, customText);
+    customButton.addEventListener('click', () => {
+      draft.customActive = !draft.customActive;
+      if (!draft.customActive) draft.custom = '';
+      else if (question.multiple !== true) draft.selected = [];
+      renderQuestionDock();
+    });
+    list.append(customButton);
+    dom.questionBody.append(list);
+  }
+
+  if (draft.customActive || options.length === 0) {
+    const input = el('textarea', 'question-custom-input');
+    input.rows = 2;
+    input.placeholder = '输入你的答案…';
+    input.value = draft.custom;
+    input.addEventListener('input', () => {
+      draft.custom = input.value;
+      updateQuestionFooter();
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        void submitQuestion();
+      }
+    });
+    dom.questionBody.append(input);
+    requestAnimationFrame(() => input.focus());
+  }
+
+  if (active.error) {
+    dom.questionBody.append(el('div', 'question-error', active.error));
+  }
+  updateQuestionFooter();
+}
+
+async function submitQuestion() {
+  const active = state.activeQuestion;
+  if (!active || active.responding) return;
+  const answers = active.questions.map((question, index) => {
+    const draft = active.drafts[index];
+    const values = [...(draft?.selected || [])];
+    const custom = String(draft?.custom || '').trim();
+    if (custom) values.push(custom);
+    return values;
+  });
+  if (answers.some((values) => values.length === 0)) {
+    active.error = '请回答所有问题';
+    renderQuestionDock();
+    return;
+  }
+  active.responding = true;
+  active.error = '';
+  updateQuestionFooter();
+  try {
+    await api.answerQuestion(active.id, { answers });
+    state.activeQuestion = null;
+    hideQuestionDock();
+    showNextQuestion();
+  } catch (error) {
+    active.responding = false;
+    active.error = `提交失败：${error.message}`;
+    renderQuestionDock();
+  }
+}
+
+async function dismissQuestion() {
+  const active = state.activeQuestion;
+  if (!active) return;
+  state.activeQuestion = null;
+  hideQuestionDock();
+  try {
+    await api.answerQuestion(active.id, { cancelled: true });
+  } catch {
+    /* the run may already be gone */
+  }
+  showNextQuestion();
+}
+
 function openConfirm({ title, text, action }) {
   dom.confirmTitle.textContent = title;
   dom.confirmText.textContent = text;
@@ -2638,6 +2933,7 @@ function commitSwitcherSelection() {
 
 function selectSession(index) {
   if (index < 0 || index >= state.sessions.length) return;
+  if (state.activeQuestion || state.questionQueue.length) cancelQuestionDock();
   closeAgentMenu();
   state.current = index;
   applyFoldState(state.sessions[index]);
@@ -2693,6 +2989,7 @@ function syncDraftTitle() {
 }
 
 function newSession(projectId) {
+  if (state.activeQuestion || state.questionQueue.length) cancelQuestionDock();
   closeAgentMenu();
   ensureProjects();
   if (state.sessions.length === 0) state.seq = 0;
@@ -4085,6 +4382,7 @@ async function adoptExternalRun(requestId) {
 
 function finishStream() {
   clearToolApprovals();
+  clearQuestionDock();
   const finishedSession = state.streamMessage
     ? state.sessions.find((session) =>
         session.msgs.includes(state.streamMessage)
@@ -4188,7 +4486,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -4622,6 +4920,12 @@ function handleContextMenu(event) {
   if (
     event.target instanceof Element &&
     event.target.closest('#action-menu')
+  ) {
+    return;
+  }
+  if (
+    dom.questionDock &&
+    !dom.questionDock.classList.contains('hidden')
   ) {
     return;
   }
@@ -6130,6 +6434,25 @@ function bindEvents() {
   dom.approvalOverlay?.addEventListener('click', (event) => {
     if (event.target === dom.approvalOverlay) resolveToolApproval(false);
   });
+  dom.questionClose?.addEventListener('click', () => void dismissQuestion());
+  dom.questionBack?.addEventListener('click', () => {
+    const active = state.activeQuestion;
+    if (!active || active.index === 0) return;
+    active.index -= 1;
+    active.error = '';
+    renderQuestionDock();
+  });
+  dom.questionNext?.addEventListener('click', () => {
+    const active = state.activeQuestion;
+    if (!active) return;
+    if (active.index >= active.questions.length - 1) {
+      void submitQuestion();
+      return;
+    }
+    active.index += 1;
+    active.error = '';
+    renderQuestionDock();
+  });
 
   dom.rawOverlay.addEventListener('click', (event) => {
     if (event.target === dom.rawOverlay) closeRawRequest();
@@ -6291,6 +6614,35 @@ function bindEvents() {
     if (state.agentMenuOpen && event.key === 'Escape' && !event.isComposing) {
       event.preventDefault();
       closeAgentMenu();
+      return;
+    }
+    if (
+      dom.questionDock &&
+      !dom.questionDock.classList.contains('hidden')
+    ) {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        void dismissQuestion();
+        return;
+      }
+      if (
+        event.key === 'Enter' &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.isComposing
+      ) {
+        event.preventDefault();
+        void submitQuestion();
+        return;
+      }
+      const inDock =
+        event.target instanceof Element &&
+        Boolean(event.target.closest('#question-dock'));
+      if (
+        !inDock &&
+        (event.key === 'Tab' || event.code === 'Space' || event.key === ' ')
+      ) {
+        event.preventDefault();
+      }
       return;
     }
     if (
@@ -6815,6 +7167,11 @@ function bindEvents() {
   api.onToolApproval(({ requestId, id, tool, path, allowedDirs }) => {
     if (requestId !== state.requestId) return;
     enqueueToolApproval({ id, tool, path, allowedDirs });
+  });
+
+  api.onToolQuestion(({ requestId, id, questions }) => {
+    if (requestId !== state.requestId) return;
+    enqueueQuestion({ id, questions });
   });
 
   api.onChatDone(({ requestId, text, usage }) => {

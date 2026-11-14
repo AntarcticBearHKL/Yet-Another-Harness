@@ -82,6 +82,37 @@
     ></div>
 
     <div
+      id="question-dock"
+      class="question-dock hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Questions"
+      aria-hidden="true"
+    >
+      <div class="question-dock-head">
+        <span class="question-dock-kicker">QUESTION</span>
+        <span id="question-dock-progress" class="question-dock-progress"></span>
+        <button
+          id="question-dock-close"
+          class="question-dock-close"
+          type="button"
+          aria-label="Dismiss question"
+        >
+          ×
+        </button>
+      </div>
+      <div id="question-dock-body" class="question-dock-body"></div>
+      <div class="question-dock-foot">
+        <button id="question-dock-back" class="pill compact" type="button">
+          Back
+        </button>
+        <button id="question-dock-next" class="pill primary" type="button">
+          Next
+        </button>
+      </div>
+    </div>
+
+    <div
       id="catalog"
       class="catalog hidden"
       role="dialog"

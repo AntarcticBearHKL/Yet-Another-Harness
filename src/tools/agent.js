@@ -72,12 +72,62 @@ async function lookAtTool(args, context = null) {
   }
 }
 
-function questionTool(args) {
-  const questions = Array.isArray(args.questions) ? args.questions : [];
-  if (questions.length === 0) return 'tool error: questions are required';
-  return `Questions for the user:\n${questions
-    .map((question, index) => `${index + 1}. ${String(question.question || question)}`)
-    .join('\n')}\n\nAsk these in your reply; interactive question UI is not available.`;
+function normalizeQuestions(args) {
+  const raw = Array.isArray(args?.questions) ? args.questions : [];
+  const questions = [];
+  for (const item of raw.slice(0, 5)) {
+    const source = typeof item === 'string' ? { question: item } : item;
+    if (!source || typeof source !== 'object') continue;
+    const question = String(source.question || '').trim();
+    if (!question) continue;
+    const header =
+      String(source.header || '').trim().slice(0, 30) ||
+      question.slice(0, 30);
+    const options = [];
+    if (Array.isArray(source.options)) {
+      for (const option of source.options.slice(0, 12)) {
+        const label = String(option?.label || '').trim();
+        if (!label) continue;
+        options.push({
+          label: label.slice(0, 120),
+          description: String(option?.description || '').trim().slice(0, 300),
+        });
+      }
+    }
+    questions.push({
+      question,
+      header,
+      options,
+      multiple: source.multiple === true,
+    });
+  }
+  if (questions.length === 0) {
+    throw new Error('question requires at least one question');
+  }
+  return questions;
+}
+
+async function questionTool(args, context = null) {
+  const questions = normalizeQuestions(args);
+  if (typeof context?.askQuestions !== 'function') {
+    return 'tool error: interactive questions are not available in this client';
+  }
+  const result = await context.askQuestions(questions);
+  if (result?.cancelled === true) {
+    throw new Error('The user dismissed this question');
+  }
+  const answers = Array.isArray(result) ? result : result?.answers;
+  const formatted = questions
+    .map((question, index) => {
+      const values = Array.isArray(answers?.[index])
+        ? answers[index].map(String).filter(Boolean)
+        : [];
+      return `"${question.question}"="${
+        values.length ? values.join(', ') : 'Unanswered'
+      }"`;
+    })
+    .join(', ');
+  return `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`;
 }
 
 function sessionRename(args) {
@@ -304,6 +354,7 @@ module.exports = {
   subagentTool,
   lookAtTool,
   questionTool,
+  normalizeQuestions,
   sessionRename,
   modelsTool,
   skillTool,

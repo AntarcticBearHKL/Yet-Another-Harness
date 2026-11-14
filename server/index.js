@@ -531,6 +531,21 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'POST' && pathname.startsWith('/api/questions/')) {
+    const questionId = decodeURIComponent(
+      pathname.slice('/api/questions/'.length)
+    );
+    readJson(req)
+      .then((body) => {
+        const ok = runner.resolveQuestions(questionId, body);
+        sendJson(res, ok ? 200 : 404, { ok });
+      })
+      .catch((error) =>
+        sendJson(res, error.status || 400, { error: error.message })
+      );
+    return true;
+  }
+
   if (req.method === 'GET' && pathname === '/api/pairing') {
     void respondPairing(res);
     return true;

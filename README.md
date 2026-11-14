@@ -50,6 +50,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 所有弹出框、菜单和工作区使用更透明的暖色磨砂背景，保留原有背景模糊效果；文字和选中态保持清晰
 - 每个对话顶部、第一条消息之前显示两个只读 block：`SYSTEM PROMPT` 和 `AGENTS.MD`；没有内容时保留空 block。`AGENTS.md` / `agent.md` 在对话开始时从项目目录读取一次并随会话保存，之后文件变化不影响当前对话；内容会以 `# AGENTS.md` 注入 system prompt
 - 有弹窗（设置、raw 查看器、MCP、工具目录、改名/确认、全文磨砂页）打开时，右键等于关闭弹窗
+- `question` 是系统工具：模型可以在执行中暂停并向你提问，一次最多 5 个问题，可分多轮；聊天底部会上滑一块磨砂提问面板，每个选项都能单选 / 多选，也可以自己输入答案；关闭面板等于取消这次提问
 - 主界面右键在鼠标位置弹出方形两列菜单，每列从上到下排列方形按钮：工具、Skill、Agent、MCP；左键点击执行，点击外部或 Esc 关闭
 - Tab 工作区右键在鼠标位置弹出同一套方形两列菜单：项目上显示「改名 / 配置目录 / 删除」，具体对话上显示「改名 / 配置 MCP / 删除」，空白处显示「最小化 / 最大化 / 关闭」；菜单不依赖按住右键，松开 Tab 后仍可继续点击
 - Tab 工作区左侧栏只显示项目名和对话名，名字后面不放任何图标；删除通过右键方形菜单完成
@@ -217,7 +218,7 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 
 YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（OMO）的工具；同名工具按 OMO 优先覆盖 OpenCode。
 
-- OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`list_mcp_resources`、`read_mcp_resource`、`session_rename`、`models`、`worktree_*`
+- OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`list_mcp_resources`、`read_mcp_resource`、`session_rename`、`models`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）、`skill`
 - OMO 常驻 / 条件工具：`session_list/read/search/info`、`task_create/get/list/update`、`background_output/cancel`、`monitor_start/stop/list/output`、`interactive_bash`、`task/subagent/call_omo_agent/delegate_task`、`create_goal/update_goal/get_goal`、`skill_mcp`、`look_at`、`team_*`
 - 兼容别名：`read_file`、`web_search`、`hashline_edit`
@@ -241,6 +242,8 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 `read` / `read_file` 读取本地 UTF-8 文本文件，返回带 `LINE#ID` 的内容；支持 `offset` / `limit` 分页
 （默认 2000 行），自动拒绝目录和二进制文件。相对路径按后端进程工作目录解析，跨项目读取建议用绝对路径。
 `write` 写文件并自动创建父目录；`edit` 支持 LINE#ID 锚点和 `oldString`/`newString` 两种模式。
+
+`question` 让模型在任务中途停下来提问：一次调用最多 5 个问题，每个问题可带选项（`multiple: true` 支持多选），前端会自动追加「其他（自己输入）」。答案通过 `POST /api/questions/:id` 回传，工具返回 `User has answered your questions: ...`；关闭面板会返回 `tool error: The user dismissed this question`。
 
 ## MCP
 
