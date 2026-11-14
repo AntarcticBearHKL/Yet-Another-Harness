@@ -45,6 +45,21 @@
 
   --font: "YAH Rounded", "Resource Han Rounded CN", "Microsoft YaHei",
     "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  /* unified surfaces and spacing */
+  --radius-panel: 18px;
+  --radius-menu: 14px;
+  --radius-card: 12px;
+  --radius-control: 9px;
+  --surface-workspace: rgba(251, 246, 239, 0.90);
+  --surface-panel: rgba(251, 246, 239, 0.96);
+  --surface-card: rgba(255, 252, 247, 0.82);
+  --surface-row: rgba(252, 246, 238, 0.52);
+  --surface-input: rgba(255, 252, 247, 0.72);
+  --shadow-float:
+    0 14px 34px rgba(74, 54, 40, 0.12),
+    0 2px 8px rgba(74, 54, 40, 0.05);
+  --shadow-panel: 0 18px 48px rgba(60, 40, 25, 0.10);
 }
 
 * {
@@ -812,9 +827,9 @@ body.ring-open #window-controls {
   gap: 9px;
   width: 100%;
   flex: none;
-  min-height: 54px;
-  margin: 0 0 48px;
-  padding: 0 18px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 16px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: rgba(252, 246, 238, 0.62);
@@ -826,6 +841,16 @@ body.ring-open #window-controls {
 
 .mcp-summary:hover {
   background: var(--hover);
+}
+
+.messages .mcp-summary {
+  margin-bottom: 32px;
+}
+
+.mcp-summary,
+.composer-queue,
+.goal-strip {
+  background: var(--surface-row);
 }
 
 .mcp-summary-dot {
@@ -2208,7 +2233,7 @@ body.ring-open #window-controls {
 .composer-queue-empty {
   display: flex;
   align-items: center;
-  min-height: 48px;
+  min-height: 44px;
   padding: 0 16px;
   color: var(--faint);
   font-size: 12.5px;
@@ -5284,7 +5309,8 @@ body.maximized .mcp {
   flex-wrap: wrap;
   gap: 6px 12px;
   width: 100%;
-  padding: 9px 12px;
+  min-height: 44px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: rgba(252, 246, 238, 0.58);
@@ -5596,4 +5622,398 @@ body.maximized .mcp {
   font-size: 10px;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+/* ---------------------------------------------------------------- unified surface language */
+/* One background, one radius and one border language for every menu,
+   popover, workspace and modal. */
+
+#switcher,
+.catalog,
+.mcp,
+.web-content {
+  background: var(--surface-workspace);
+  -webkit-backdrop-filter: blur(18px) saturate(1.04);
+  backdrop-filter: blur(18px) saturate(1.04);
+}
+
+.overlay,
+.mcp-config {
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(12px) saturate(1.02);
+  backdrop-filter: blur(12px) saturate(1.02);
+}
+
+.overlay-panel,
+.mcp-config-panel {
+  border-radius: var(--radius-panel);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-panel);
+  -webkit-backdrop-filter: blur(18px) saturate(1.04);
+  backdrop-filter: blur(18px) saturate(1.04);
+}
+
+.overlay-head {
+  min-height: 30px;
+  gap: 12px;
+}
+
+.overlay-head h2,
+.mcp-config-title {
+  color: var(--dim);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.overlay-head .muted,
+.mcp-config-summary {
+  color: var(--faint);
+  font-size: 10.5px;
+}
+
+.divider {
+  margin: 12px 0;
+}
+
+.overlay-actions {
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.skill-popup,
+.agent-menu,
+.ring-usage-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-menu);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-float);
+  -webkit-backdrop-filter: blur(18px) saturate(1.04);
+  backdrop-filter: blur(18px) saturate(1.04);
+}
+
+.skill-popup {
+  width: min(300px, calc(100% - 24px));
+  padding: 6px;
+}
+
+.agent-menu {
+  min-width: 200px;
+  max-width: 280px;
+  padding: 6px;
+}
+
+.skill-popup-item,
+.agent-menu-item {
+  min-height: 36px;
+  border-radius: var(--radius-control);
+  color: var(--dim);
+  font-size: 12.5px;
+}
+
+.skill-popup-item {
+  padding: 0 12px 0 24px;
+}
+
+.skill-popup-item::before {
+  left: 9px;
+  top: 50%;
+  bottom: auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+}
+
+.skill-popup-item:hover,
+.agent-menu-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.skill-popup-item.selected,
+.agent-menu-item.selected {
+  background: var(--selected);
+  color: var(--text);
+}
+
+.skill-popup-item.selected::before {
+  background: var(--accent);
+}
+
+.skill-popup-name,
+.agent-menu-item-name {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.skill-popup-source,
+.agent-menu-hint {
+  color: var(--faint);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+.skill-popup-command {
+  border-radius: 5px;
+  background: var(--selected);
+  color: var(--accent-deep);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.catalog-head h2,
+.mcp-side-title,
+.mcp-title-wrap h2,
+.mcp-pane-title h3,
+#web-content-title {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.catalog-section-label,
+.mcp-section-kicker,
+.mcp-list-group {
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.project-pane,
+.catalog-side,
+.mcp-side {
+  padding: 14px 12px 14px 14px;
+}
+
+.project-pane::after,
+.catalog-side::after,
+.mcp-side::after {
+  top: 18px;
+  bottom: 18px;
+  background: var(--line);
+}
+
+.project-row,
+.catalog-category,
+.mcp-server-row,
+.mcp-list-item {
+  border-radius: var(--radius-control);
+}
+
+.project-row:hover,
+.catalog-category:hover,
+.mcp-server-row:hover,
+.mcp-list-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.project-row.selected,
+.catalog-category.selected,
+.mcp-server-row.selected,
+.mcp-list-item.selected {
+  background: var(--selected);
+  color: var(--text);
+}
+
+.project-name,
+.catalog-category-name,
+.switch-title {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.mcp-server-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mcp-head {
+  padding: 0 24px;
+}
+
+.mcp-pane-desc {
+  font-size: 13px;
+}
+
+.text-input,
+.mcp-input,
+.mcp-textarea,
+.mcp-select,
+.mcp-search-input {
+  border-radius: var(--radius-control);
+  background: var(--surface-input);
+}
+
+.text-input,
+.mcp-input,
+.mcp-select,
+.mcp-search-input {
+  height: 34px;
+}
+
+.pairing-card,
+.mcp-panel,
+.mcp-details,
+.mcp-server-button,
+.project-dir {
+  border-radius: var(--radius-card);
+  background: var(--surface-card);
+}
+
+.mcp-panel {
+  padding: 16px 18px;
+}
+
+.pill,
+.mcp-add,
+.goal-strip-button,
+.mcp-text-button {
+  border-radius: var(--radius-control);
+}
+
+.pill {
+  height: 32px;
+  padding: 0 13px;
+  font-size: 12px;
+}
+
+.pill.compact {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11.5px;
+}
+
+.mcp-add {
+  height: 34px;
+  background: var(--surface-row);
+}
+
+.mcp-add:hover {
+  background: var(--hover);
+}
+
+.goal-strip-button {
+  min-height: 24px;
+  padding: 0 9px;
+  font-size: 10px;
+}
+
+.mcp-text-button {
+  padding: 3px 6px;
+  color: var(--accent-deep);
+  font-size: 11.5px;
+}
+
+.mcp-text-button:hover {
+  background: var(--hover);
+  text-decoration: none;
+}
+
+.empty,
+.switcher-empty,
+.catalog-empty,
+.mcp-empty,
+.mcp-pane-empty,
+.mcp-side-empty,
+.mcp-list-empty,
+.mcp-config-empty,
+.skill-popup-empty,
+.agent-menu-hint,
+.web-content-empty,
+.raw-empty {
+  color: var(--faint);
+  font-size: 12.5px;
+  line-height: 1.7;
+  text-align: center;
+  opacity: 0.8;
+}
+
+.skill-popup-empty,
+.agent-menu-hint {
+  padding: 10px 9px;
+  font-size: 10.5px;
+  text-align: left;
+}
+
+/* One column rhythm for the three full-screen workspaces. */
+.switcher-body,
+.catalog-body,
+.mcp-body {
+  grid-template-columns: clamp(210px, 22vw, 260px) minmax(0, 1fr);
+}
+
+.project-list,
+.switcher-list,
+.catalog-categories,
+.mcp-server-list {
+  padding-top: 48px;
+}
+
+.switch-card {
+  min-height: 42px;
+  padding: 0 10px 0 14px;
+}
+
+.project-add {
+  border-radius: var(--radius-control);
+}
+
+.ring-usage-title {
+  color: var(--faint);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.mcp-config-head {
+  align-items: center;
+  min-height: 30px;
+  padding: 0 2px 12px;
+}
+
+.web-content-head {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.icon-btn,
+.win-btn {
+  border-radius: 8px;
+}
+
+.mcp-toast {
+  border-radius: var(--radius-card);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-float);
+  font-size: 11.5px;
+}
+
+@media (max-width: 700px) {
+  .catalog-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .catalog.single .catalog-body {
+    grid-template-rows: minmax(0, 1fr);
+  }
+}
+
+button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--faint);
+  opacity: 0.75;
 }
