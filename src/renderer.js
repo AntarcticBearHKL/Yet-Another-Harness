@@ -20,6 +20,7 @@ const dom = {
   agentPickerButton: $('agent-picker-button'),
   agentPickerValue: $('agent-picker-value'),
   agentMenu: $('agent-menu'),
+  actionMenu: $('action-menu'),
   composerContext: $('composer-context'),
   composerBox: $('composer-box'),
   composerTokens: $('composer-tokens'),
@@ -4187,7 +4188,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -4354,6 +4355,339 @@ let ringUsagePanel = null;
 let ringUsageRows = [];
 let ringItems = RING_ITEMS;
 let ringCatcher = null;
+let actionMenuUsageCard = null;
+let actionMenuConfirm = null;
+
+function buildActionMenuUsageCard() {
+  const panel = el('div', 'ring-usage-panel usage-card');
+  panel.append(el('div', 'ring-usage-title', 'usage'));
+  const usageItems = [
+    { key: 'rolling', label: '5 小时' },
+    { key: 'weekly', label: '本周' },
+    { key: 'monthly', label: '本月' },
+  ];
+  ringUsageRows = [];
+  for (const item of usageItems) {
+    const row = el('div', 'ring-usage-row');
+    const head = el('div', 'ring-usage-head');
+    head.append(el('span', 'ring-usage-label', item.label));
+    const percent = el('span', 'ring-usage-percent', '—');
+    head.append(percent);
+    const bar = el('div', 'ring-usage-bar');
+    const fill = el('div', 'ring-usage-bar-fill');
+    bar.append(fill);
+    const reset = el('div', 'ring-usage-reset', '加载中…');
+    row.append(head, bar, reset);
+    panel.append(row);
+    ringUsageRows.push({
+      key: item.key,
+      row,
+      percent,
+      fill,
+      reset,
+    });
+  }
+  ringUsagePanel = panel;
+  return panel;
+}
+
+function resetActionMenuConfirm() {
+  if (!actionMenuConfirm) return;
+  clearTimeout(actionMenuConfirm.timer);
+  const { item, button, label } = actionMenuConfirm;
+  if (button) {
+    button.classList.remove('armed');
+    if (label) label.textContent = item.label;
+  }
+  actionMenuConfirm = null;
+}
+
+function closeActionMenu() {
+  resetActionMenuConfirm();
+  if (actionMenuUsageCard) {
+    actionMenuUsageCard.remove();
+    actionMenuUsageCard = null;
+  }
+  ringUsagePanel = null;
+  ringUsageRows = [];
+  state.ringOpen = false;
+  dom.actionMenu?.classList.add('hidden');
+  dom.actionMenu?.setAttribute('aria-hidden', 'true');
+}
+
+function positionActionMenu(menu, x, y) {
+  const margin = 10;
+  const rect = menu.getBoundingClientRect();
+  let left = Number(x) || 0;
+  let top = Number(y) || 0;
+  if (left + rect.width > window.innerWidth - margin) {
+    left = window.innerWidth - rect.width - margin;
+  }
+  if (top + rect.height > window.innerHeight - margin) {
+    top = window.innerHeight - rect.height - margin;
+  }
+  menu.style.left = `${Math.round(Math.max(margin, left))}px`;
+  menu.style.top = `${Math.round(Math.max(margin, top))}px`;
+  return menu.getBoundingClientRect();
+}
+
+function positionUsageCard(card, menuRect) {
+  const margin = 10;
+  const gap = 8;
+  const width = card.offsetWidth;
+  const height = card.offsetHeight;
+  let left = menuRect.left + (menuRect.width - width) / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+  let top = menuRect.top - height - gap;
+  if (top < margin) top = menuRect.bottom + gap;
+  top = Math.max(margin, Math.min(top, window.innerHeight - height - margin));
+  card.style.left = `${Math.round(left)}px`;
+  card.style.top = `${Math.round(top)}px`;
+}
+
+function activateActionItem(item, button, label) {
+  if (item.confirm) {
+    if (!actionMenuConfirm || actionMenuConfirm.item !== item) {
+      resetActionMenuConfirm();
+      actionMenuConfirm = {
+        item,
+        button,
+        label,
+        timer: setTimeout(resetActionMenuConfirm, 3200),
+      };
+      button.classList.add('armed');
+      label.textContent = '确认删除';
+      return;
+    }
+    resetActionMenuConfirm();
+  }
+  closeActionMenu();
+  if (typeof item.action === 'function') item.action();
+}
+
+function openActionMenu({ x, y, columns, usage = false }) {
+  if (!dom.actionMenu) return;
+  closeActionMenu();
+  const menu = dom.actionMenu;
+  menu.replaceChildren();
+  const source = Array.isArray(columns) ? columns : [];
+  for (const column of source) {
+    const stack = el('div', 'action-menu-column');
+    for (const item of Array.isArray(column) ? column : []) {
+      if (!item) continue;
+      const button = el('button', 'action-menu-item');
+      button.type = 'button';
+      button.setAttribute('role', 'menuitem');
+      if (item.confirm) button.classList.add('danger');
+      if (item.icon) {
+        const icon = el('span', 'action-menu-icon');
+        icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg>`;
+        button.append(icon);
+      }
+      const label = el('span', 'action-menu-label', item.label || '');
+      button.append(label);
+      button.addEventListener('mousedown', (event) => event.preventDefault());
+      button.addEventListener('click', () =>
+        activateActionItem(item, button, label)
+      );
+      stack.append(button);
+    }
+    if (stack.childElementCount > 0) menu.append(stack);
+  }
+  menu.classList.remove('hidden');
+  menu.setAttribute('aria-hidden', 'false');
+  menu.style.left = '0px';
+  menu.style.top = '0px';
+  state.ringOpen = true;
+  const rect = positionActionMenu(menu, x, y);
+  if (usage) {
+    actionMenuUsageCard = buildActionMenuUsageCard();
+    document.body.append(actionMenuUsageCard);
+    positionUsageCard(actionMenuUsageCard, rect);
+    renderUsageCards();
+    void loadUsage();
+  }
+}
+
+function openMainActionMenu(x, y) {
+  openActionMenu({
+    x,
+    y,
+    usage: true,
+    columns: [
+      [RING_ITEMS[0], RING_ITEMS[1]],
+      [RING_ITEMS[2], RING_ITEMS[3]],
+    ],
+  });
+}
+
+function openSwitcherActionMenu(event) {
+  const target = event.target instanceof Element ? event.target : null;
+  const projectRow = target?.closest('.project-row, .project-row-wrap');
+  if (projectRow?.dataset.projectId) {
+    const projectId = projectRow.dataset.projectId;
+    if (!state.projects.some((project) => project.id === projectId)) return;
+    openActionMenu({
+      x: event.clientX,
+      y: event.clientY,
+      columns: [
+        [
+          {
+            label: '改名',
+            icon: RING_ICONS.rename,
+            action: () => openRename('project', projectId),
+          },
+          {
+            label: '配置目录',
+            icon: RING_ICONS.folder,
+            action: () => openProjectDialog('edit', projectId),
+          },
+        ],
+        [
+          {
+            label: '删除',
+            icon: RING_ICONS.trash,
+            action: () => deleteProject(projectId),
+            confirm: true,
+          },
+        ],
+      ],
+    });
+    return;
+  }
+
+  const card = target?.closest('.switch-card');
+  if (card?.dataset.sessionId) {
+    const sessionId = card.dataset.sessionId;
+    if (!state.sessions.some((session) => session.id === sessionId)) return;
+    openActionMenu({
+      x: event.clientX,
+      y: event.clientY,
+      columns: [
+        [
+          {
+            label: '改名',
+            icon: RING_ICONS.rename,
+            action: () => openRename('session', sessionId),
+          },
+          {
+            label: '配置 MCP',
+            icon: RING_ICONS.mcp,
+            action: () => openMcpConfigForSession(sessionId),
+          },
+        ],
+        [
+          {
+            label: '删除',
+            icon: RING_ICONS.trash,
+            action: () => deleteSessionById(sessionId),
+            confirm: true,
+          },
+        ],
+      ],
+    });
+    return;
+  }
+
+  if (!api.isElectron) return;
+  openActionMenu({
+    x: event.clientX,
+    y: event.clientY,
+    columns: [
+      [
+        {
+          label: '最小化',
+          icon: RING_ICONS.minimize,
+          action: () => api.minimize(),
+        },
+        {
+          label: '最大化',
+          icon: RING_ICONS.maximize,
+          action: () => api.maximize(),
+        },
+      ],
+      [
+        {
+          label: '关闭',
+          icon: RING_ICONS.close,
+          action: () => api.close(),
+        },
+      ],
+    ],
+  });
+}
+
+function handleContextMenu(event) {
+  event.preventDefault();
+  if (
+    event.target instanceof Element &&
+    event.target.closest('#action-menu')
+  ) {
+    return;
+  }
+  if (state.ringOpen) closeActionMenu();
+
+  if (dom.approvalOverlay && !dom.approvalOverlay.classList.contains('hidden')) {
+    resolveToolApproval(false);
+    return;
+  }
+  if (dom.goalOverlay && !dom.goalOverlay.classList.contains('hidden')) {
+    closeGoalDialog();
+    return;
+  }
+  if (dom.mcpConfig && !dom.mcpConfig.classList.contains('hidden')) {
+    closeMcpConfig();
+    return;
+  }
+  if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
+    closeWebContent();
+    return;
+  }
+  if (!dom.renameOverlay.classList.contains('hidden')) {
+    closeRename();
+    return;
+  }
+  if (!dom.confirmOverlay.classList.contains('hidden')) {
+    closeConfirm();
+    return;
+  }
+  if (dom.projectOverlay && !dom.projectOverlay.classList.contains('hidden')) {
+    closeProjectDialog();
+    return;
+  }
+  if (
+    dom.skillArgsOverlay &&
+    !dom.skillArgsOverlay.classList.contains('hidden')
+  ) {
+    closeSkillArgs();
+    return;
+  }
+  if (window.mcpOverlayOpen?.()) {
+    window.closeMcp?.();
+    return;
+  }
+  if (state.catalogOpen) {
+    closeCatalog();
+    return;
+  }
+  if (!dom.rawOverlay.classList.contains('hidden')) {
+    closeRawRequest();
+    return;
+  }
+  if (!dom.settingsOverlay.classList.contains('hidden')) {
+    closeSettings();
+    return;
+  }
+  if (state.switcherOpen || dom.switcher.classList.contains('open')) {
+    openSwitcherActionMenu(event);
+    return;
+  }
+  if (state.composerOpen) {
+    closeComposer();
+    return;
+  }
+  openMainActionMenu(event.clientX, event.clientY);
+}
 
 function ringPolar(radius, angleDeg) {
   const rad = (angleDeg * Math.PI) / 180;
@@ -4666,15 +5000,7 @@ function removeRingCatcher() {
 }
 
 function closeRingMenu() {
-  if (!state.ringOpen) return;
-  state.ringOpen = false;
-  state.ringConfirmIndex = -1;
-  ringItems = RING_ITEMS;
-  updateRingSelection(-1);
-  removeRingCatcher();
-  document.body.classList.remove('ring-open');
-  dom.ringMenu.classList.remove('open');
-  dom.ringMenu.setAttribute('aria-hidden', 'true');
+  closeActionMenu();
 }
 
 function updateRingFromPointer(event) {
@@ -5641,8 +5967,6 @@ async function openCatalog(kind) {
 }
 
 function bindEvents() {
-  buildRingMenu();
-
   // 禁止原生 hover tooltip：进入元素时清掉残留的 title
   document.addEventListener(
     'mouseover',
@@ -5665,76 +5989,7 @@ function bindEvents() {
   );
 
   // 整体禁用鼠标右键菜单与框选；有弹窗时右键等于关闭
-  document.addEventListener('contextmenu', (event) => {
-    event.preventDefault();
-    if (dom.approvalOverlay && !dom.approvalOverlay.classList.contains('hidden')) {
-      resolveToolApproval(false);
-      return;
-    }
-    if (dom.goalOverlay && !dom.goalOverlay.classList.contains('hidden')) {
-      closeGoalDialog();
-      return;
-    }
-    if (state.ringSuppress) {
-      state.ringSuppress = false;
-      return;
-    }
-    if (dom.mcpConfig && !dom.mcpConfig.classList.contains('hidden')) {
-      closeRingMenu();
-      closeMcpConfig();
-      return;
-    }
-    if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
-      closeRingMenu();
-      closeWebContent();
-      return;
-    }
-    if (state.ringOpen) return;
-    if (!dom.renameOverlay.classList.contains('hidden')) {
-      closeRename();
-      return;
-    }
-    if (!dom.confirmOverlay.classList.contains('hidden')) {
-      closeConfirm();
-      return;
-    }
-    if (dom.projectOverlay && !dom.projectOverlay.classList.contains('hidden')) {
-      closeProjectDialog();
-      return;
-    }
-    if (dom.goalOverlay && !dom.goalOverlay.classList.contains('hidden')) {
-      closeGoalDialog();
-      return;
-    }
-    if (dom.skillArgsOverlay && !dom.skillArgsOverlay.classList.contains('hidden')) {
-      closeSkillArgs();
-      return;
-    }
-    if (window.mcpOverlayOpen?.()) {
-      window.closeMcp?.();
-      return;
-    }
-    if (state.catalogOpen) {
-      closeCatalog();
-      return;
-    }
-    if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
-      closeWebContent();
-      return;
-    }
-    if (!dom.rawOverlay.classList.contains('hidden')) {
-      closeRawRequest();
-      return;
-    }
-    if (!dom.settingsOverlay.classList.contains('hidden')) {
-      closeSettings();
-      return;
-    }
-    if (state.switcherOpen || dom.switcher.classList.contains('open')) {
-      return;
-    }
-    if (state.composerOpen) closeComposer();
-  }, true);
+  document.addEventListener('contextmenu', handleContextMenu, true);
   document.addEventListener('selectstart', (event) => {
     const target = event.target;
     if (target instanceof Element && target.closest('input, textarea')) return;
@@ -5748,11 +6003,37 @@ function bindEvents() {
   window.addEventListener('resize', syncMaximized);
   syncMaximized();
 
-  document.addEventListener('mousedown', onRightMouseDown, true);
-  document.addEventListener('mousemove', updateRingFromPointer);
-  document.addEventListener('mouseup', onRightMouseUp, true);
-  window.addEventListener('blur', closeRingMenu);
+  document.addEventListener(
+    'mousedown',
+    (event) => {
+      if (!state.ringOpen) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest('#action-menu, .usage-card')
+      ) {
+        return;
+      }
+      closeActionMenu();
+    },
+    true
+  );
+  window.addEventListener('blur', closeActionMenu);
   window.addEventListener('blur', closeAgentMenu);
+  window.addEventListener('resize', closeActionMenu);
+  document.addEventListener(
+    'scroll',
+    (event) => {
+      if (!state.ringOpen) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest('#action-menu')
+      ) {
+        return;
+      }
+      closeActionMenu();
+    },
+    true
+  );
 
   dom.switcherSettings.addEventListener('click', () => {
     closeSwitcher();
