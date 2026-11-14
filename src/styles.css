@@ -3804,6 +3804,13 @@ body.ring-open #messages {
 .agent-tools-side {
   display: flex;
   flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-tools-side-list {
+  display: flex;
+  flex-direction: column;
   gap: 2px;
   max-height: 320px;
   min-width: 0;
@@ -3870,13 +3877,6 @@ body.ring-open #messages {
   color: var(--accent);
 }
 
-.agent-tools-category-count {
-  flex: none;
-  color: var(--faint);
-  font-size: 9.5px;
-  font-variant-numeric: tabular-nums;
-}
-
 .agent-tools-empty {
   padding: 14px;
   color: var(--faint);
@@ -3888,6 +3888,8 @@ body.ring-open #messages {
   display: flex;
   align-items: center;
   gap: 12px;
+  height: 32px;
+  padding: 0 8px;
 }
 
 .agent-toggle {
@@ -3901,13 +3903,6 @@ body.ring-open #messages {
 
 .agent-toggle input {
   accent-color: var(--accent);
-}
-
-.agent-tools-count {
-  margin-left: auto;
-  color: var(--faint);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
 }
 
 .agent-tools-search {
@@ -3992,7 +3987,7 @@ body.ring-open #messages {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .agent-tools-side {
+  .agent-tools-side-list {
     flex-direction: row;
     flex-wrap: wrap;
   }

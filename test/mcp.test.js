@@ -211,6 +211,17 @@ test('registry exposes MCP tools and routes calls', async () => {
       false
     );
 
+    const agentFiltered = tools.definitions({ allowedTools: ['read'] });
+    assert.ok(
+      agentFiltered.some((def) => def.function.name.startsWith('mcp__')),
+      'MCP tools stay available when Agent tool permissions are restricted'
+    );
+    assert.ok(agentFiltered.some((def) => def.function.name === 'read'));
+    assert.equal(
+      agentFiltered.some((def) => def.function.name === 'write'),
+      false
+    );
+
     const output = await tools.execute(
       mcpDef.function.name,
       JSON.stringify({ path: 'a.txt' })

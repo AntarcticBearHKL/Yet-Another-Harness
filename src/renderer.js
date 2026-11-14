@@ -6897,28 +6897,8 @@ function deleteAgent(agentId) {
 
 function agentToolGroups(allTools) {
   const groups = [];
-  const mcpGroups = new Map();
-  const builtIn = [];
-  for (const entry of allTools) {
-    const fn = entry.function || entry;
-    const name = String(fn.name || entry.name || '');
-    if (name.startsWith('mcp__')) {
-      const serverId = name.split('__')[1] || 'mcp';
-      if (!mcpGroups.has(serverId)) {
-        const server = state.mcpServers.find((item) => item.id === serverId);
-        mcpGroups.set(serverId, {
-          id: `mcp:${serverId}`,
-          label: `MCP · ${server?.name || serverId}`,
-          tools: [],
-        });
-      }
-      mcpGroups.get(serverId).tools.push(entry);
-    } else {
-      builtIn.push(entry);
-    }
-  }
   for (const group of TOOL_GROUPS) {
-    const tools = builtIn.filter((entry) => {
+    const tools = allTools.filter((entry) => {
       const fn = entry.function || entry;
       return toolGroupFor(fn).id === group.id;
     });
@@ -6926,14 +6906,13 @@ function agentToolGroups(allTools) {
       groups.push({ id: group.id, label: group.label, tools });
     }
   }
-  const other = builtIn.filter((entry) => {
+  const other = allTools.filter((entry) => {
     const fn = entry.function || entry;
     return toolGroupFor(fn).id === 'other';
   });
   if (other.length > 0) {
     groups.push({ id: 'other', label: '其他', tools: other });
   }
-  groups.push(...mcpGroups.values());
   return groups;
 }
 
@@ -6961,6 +6940,7 @@ function renderAgentToolsEditor(agent, allTools) {
 
   const layout = el('div', 'agent-tools-layout');
   const side = el('div', 'agent-tools-side');
+  const sideList = el('div', 'agent-tools-side-list');
   const main = el('div', 'agent-tools-main');
 
   const head = el('div', 'agent-tools-head');
@@ -6970,9 +6950,7 @@ function renderAgentToolsEditor(agent, allTools) {
   allLabel.append(allCheckbox);
   allLabel.append(el('span', 'agent-toggle-label', '允许所有工具'));
   head.append(allLabel);
-  const count = el('span', 'agent-tools-count', '');
-  head.append(count);
-  main.append(head);
+  side.append(head, sideList);
 
   const search = el('input', 'agent-tools-search');
   search.type = 'search';
@@ -7003,14 +6981,12 @@ function renderAgentToolsEditor(agent, allTools) {
 
   const updateState = () => {
     const active = selected.size;
-    count.textContent = `${active} / ${allNames.length}`;
     allCheckbox.checked = allNames.length > 0 && active === allNames.length;
     allCheckbox.indeterminate = active > 0 && active < allNames.length;
     for (const group of groups) {
       const entry = categoryRows.get(group.id);
       if (!entry) continue;
       const groupCount = groupSelectedCount(group);
-      entry.count.textContent = `${groupCount}/${group.tools.length}`;
       entry.checkbox.checked = groupCount === group.tools.length;
       entry.checkbox.indeterminate =
         groupCount > 0 && groupCount < group.tools.length;
@@ -7077,8 +7053,6 @@ function renderAgentToolsEditor(agent, allTools) {
     name.type = 'button';
     name.title = group.label;
     row.append(name);
-    const groupCount = el('span', 'agent-tools-category-count', '');
-    row.append(groupCount);
     const select = () => {
       state.agentToolGroup = group.id;
       renderList();
@@ -7088,8 +7062,8 @@ function renderAgentToolsEditor(agent, allTools) {
       if (event.target === checkbox) return;
       select();
     });
-    side.append(row);
-    categoryRows.set(group.id, { row, checkbox, count: groupCount });
+    sideList.append(row);
+    categoryRows.set(group.id, { row, checkbox });
   }
 
   allCheckbox.addEventListener('change', () => {
@@ -7124,13 +7098,15 @@ function renderAgentEditor(agentId) {
     );
     return;
   }
-  const allTools = Array.isArray(state.catalogData?.agentTools)
-    ? state.catalogData.agentTools
-    : [];
+  const allTools = (
+    Array.isArray(state.catalogData?.agentTools)
+      ? state.catalogData.agentTools
+      : []
+  ).filter((tool) => {
+    const fn = tool.function || tool;
+    return !String(fn.name || '').startsWith('mcp__');
+  });
   const builtin = agent.builtin === true;
-  const selected = new Set(
-    Array.isArray(agent.tools) ? agent.tools : allTools.map((tool) => tool.name)
-  );
   const editor = el('div', 'agent-editor');
   const head = el('div', 'agent-editor-head');
   const name = el('input', 'agent-name-input');

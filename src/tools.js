@@ -33,7 +33,11 @@ function definitions(options = {}) {
   if (!Array.isArray(options.allowedTools)) return all;
   const allowed = new Set(options.allowedTools.map(String));
   if (allowed.has('web_search')) allowed.add('websearch');
-  return all.filter((definition) => allowed.has(definition.function?.name));
+  return all.filter((definition) => {
+    const name = String(definition.function?.name || '');
+    // MCP 由对话的 MCP 开关控制，不属于 Agent 的工具权限。
+    return name.startsWith('mcp__') || allowed.has(name);
+  });
 }
 
 async function execute(name, args, context = null) {
