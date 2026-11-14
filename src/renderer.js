@@ -6101,37 +6101,22 @@ function renderCatalogCategories(data, selectedKind, page) {
 
   if (page === 'skills') {
     const { system, locals, servers } = skillCatalogGroups(data);
-    if (system.length > 0) {
-      const systemSection = el('div', 'catalog-section');
-      systemSection.append(el('div', 'catalog-section-label', '系统'));
-      for (const item of system) {
-        systemSection.append(catalogCategoryButton(item, selectedKind));
-      }
-      dom.catalogCategories.append(systemSection);
+    const items = [
+      ...system,
+      ...locals,
+      ...servers.map((item) => ({
+        ...item,
+        label: `MCP · ${item.label}`,
+      })),
+    ];
+    if (items.length === 0) {
+      items.push({ id: 'local:内置', label: '内置', count: 0 });
     }
-    const localSection = el('div', 'catalog-section');
-    localSection.append(el('div', 'catalog-section-label', 'Skill'));
-    if (locals.length === 0) {
-      localSection.append(
-        catalogCategoryButton(
-          { id: 'local:内置', label: '内置', count: 0 },
-          selectedKind
-        )
-      );
-    } else {
-      for (const item of locals) {
-        localSection.append(catalogCategoryButton(item, selectedKind));
-      }
+    const section = el('div', 'catalog-section');
+    for (const item of items) {
+      section.append(catalogCategoryButton(item, selectedKind));
     }
-    dom.catalogCategories.append(localSection);
-    if (servers.length > 0) {
-      const serverSection = el('div', 'catalog-section');
-      serverSection.append(el('div', 'catalog-section-label', 'MCP'));
-      for (const item of servers) {
-        serverSection.append(catalogCategoryButton(item, selectedKind));
-      }
-      dom.catalogCategories.append(serverSection);
-    }
+    dom.catalogCategories.append(section);
     return;
   }
 
@@ -6201,6 +6186,95 @@ function selectCatalogKind(kind) {
   dom.catalogList.scrollTop = 0;
 }
 
+function catalogChevron() {
+  const chevron = el('span', 'catalog-tool-chevron');
+  chevron.innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  return chevron;
+}
+
+function bindCatalogCardToggle(item, head) {
+  head.addEventListener('click', () => {
+    const wasOpen = item.classList.contains('open');
+    for (const other of dom.catalogList.querySelectorAll(
+      '.catalog-tool-item.open'
+    )) {
+      other.classList.remove('open');
+      other
+        .querySelector('.catalog-tool-head')
+        ?.setAttribute('aria-expanded', 'false');
+    }
+    if (wasOpen) return;
+    item.classList.add('open');
+    head.setAttribute('aria-expanded', 'true');
+  });
+}
+
+function renderCatalogSkillItem(entry) {
+  const item = el('div', 'catalog-item catalog-tool-item');
+  const args = Array.isArray(entry.arguments) ? entry.arguments : [];
+  const hasDetails = Boolean(
+    entry.description || entry.instruction || args.length
+  );
+  const parts = [];
+  const category = skillCategory(entry);
+  const source = entry.sourceKind === 'mcp' ? 'MCP' : entry.source || '';
+  if (category) parts.push(category);
+  if (source && source !== category) parts.push(source);
+  if (entry.readOnly) parts.push('只读');
+  if (entry.command) parts.push('系统命令');
+  if (args.length > 0) parts.push(`${args.length} 参数`);
+
+  const head = el('button', 'catalog-tool-head');
+  head.type = 'button';
+  head.setAttribute('aria-expanded', 'false');
+  head.append(el('span', 'catalog-tool-dot'));
+  head.append(el('span', 'catalog-tool-name', entry.name || 'Skill'));
+  if (parts.length > 0) {
+    head.append(el('span', 'catalog-tool-meta', parts.join(' · ')));
+  }
+  if (hasDetails) head.append(catalogChevron());
+  item.append(head);
+  if (!hasDetails) return item;
+
+  const body = el('div', 'catalog-tool-body');
+  const clip = el('div', 'catalog-tool-clip');
+  const inner = el('div', 'catalog-tool-inner');
+  if (entry.description) {
+    inner.append(el('div', 'catalog-desc', entry.description));
+  }
+  if (entry.instruction) {
+    const block = el('div', 'catalog-skill-instruction-block');
+    block.append(el('div', 'catalog-skill-label', '固定指令'));
+    block.append(el('pre', 'catalog-skill-instruction', entry.instruction));
+    inner.append(block);
+  }
+  if (args.length > 0) {
+    const params = el('div', 'catalog-params');
+    for (const argument of args) {
+      const row = el('div', 'catalog-param');
+      const paramHead = el('div', 'catalog-param-head');
+      paramHead.append(
+        el('span', 'catalog-param-name', argument.name || 'argument')
+      );
+      if (argument.required) {
+        paramHead.append(el('span', 'catalog-param-required', 'required'));
+      }
+      row.append(paramHead);
+      if (argument.description) {
+        row.append(el('div', 'catalog-param-desc', argument.description));
+      }
+      params.append(row);
+    }
+    inner.append(params);
+  }
+  clip.append(inner);
+  body.append(clip);
+  item.append(body);
+  bindCatalogCardToggle(item, head);
+  return item;
+}
+
 function renderCatalogToolItem(entry) {
   const fn = entry.function || entry;
   const item = el('div', 'catalog-item catalog-tool-item');
@@ -6217,12 +6291,7 @@ function renderCatalogToolItem(entry) {
   head.append(el('span', 'catalog-tool-dot'));
   head.append(el('span', 'catalog-tool-name', fn.name || 'tool'));
   head.append(el('span', 'catalog-tool-meta', meta));
-  if (hasDetails) {
-    const chevron = el('span', 'catalog-tool-chevron');
-    chevron.innerHTML =
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
-    head.append(chevron);
-  }
+  if (hasDetails) head.append(catalogChevron());
   item.append(head);
   if (!hasDetails) return item;
 
@@ -6256,20 +6325,7 @@ function renderCatalogToolItem(entry) {
   clip.append(inner);
   body.append(clip);
   item.append(body);
-  head.addEventListener('click', () => {
-    const wasOpen = item.classList.contains('open');
-    for (const other of dom.catalogList.querySelectorAll(
-      '.catalog-tool-item.open'
-    )) {
-      other.classList.remove('open');
-      other
-        .querySelector('.catalog-tool-head')
-        ?.setAttribute('aria-expanded', 'false');
-    }
-    if (wasOpen) return;
-    item.classList.add('open');
-    head.setAttribute('aria-expanded', 'true');
-  });
+  bindCatalogCardToggle(item, head);
   return item;
 }
 
@@ -6344,7 +6400,7 @@ function renderCatalogList(kind, entries) {
 
   if (kind === 'skills') {
     for (const entry of entries) {
-      dom.catalogList.append(renderCatalogEntryItem(kind, entry));
+      dom.catalogList.append(renderCatalogSkillItem(entry));
     }
     return;
   }
