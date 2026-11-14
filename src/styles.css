@@ -2359,7 +2359,9 @@ body.ring-open #window-controls {
   justify-content: center;
   gap: 10px;
   flex: none;
-  padding: 0 56px 10px;
+  height: 44px;
+  padding: 0 56px 12px;
+  box-sizing: border-box;
 }
 
 .agent-picker {
