@@ -49,7 +49,7 @@ const mcpState = {
   servers: [],
   selectedId: null,
   detail: null,
-  tab: 'tools',
+  tab: 'overview',
   loadingState: false,
   loadingDetail: false,
   events: null,
@@ -441,7 +441,6 @@ function mcpRenderServerList() {
   const servers = [...mcpState.servers].sort((left, right) =>
     left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })
   );
-  if (servers.length === 0) return;
   for (const server of servers) {
     const row = mcpEl('button', 'mcp-server-row');
     row.type = 'button';
@@ -464,6 +463,9 @@ function mcpRenderServerList() {
     row.append(dot, body);
     row.addEventListener('click', () => mcpSelectServer(server.id));
     mcpDom.serverList.append(row);
+  }
+  if (mcpDom.add) {
+    mcpDom.serverList.append(mcpDom.add);
   }
 }
 
@@ -688,17 +690,6 @@ function mcpRenderToolDetail() {
   }
   if (badges.childNodes.length) titleWrap.append(badges);
   head.append(titleWrap);
-
-  const actions = mcpEl('div', 'mcp-pane-actions');
-  actions.append(
-    mcpButton('插入到对话', 'pill compact', () => mcpInsertTool(tool))
-  );
-  actions.append(
-    mcpButton('复制调用名', 'pill compact', () =>
-      mcpCopy(tool.exposedName || mcpExposedName(server, tool))
-    )
-  );
-  head.append(actions);
   pane.append(head);
 
   pane.append(
@@ -2124,25 +2115,6 @@ function mcpInsertText(text) {
   dom.input.value = existing ? `${existing}\n\n${value}` : value;
   dom.input.dispatchEvent(new Event('input', { bubbles: true }));
   openComposer();
-}
-
-function mcpInsertTool(tool) {
-  const server = mcpSelectedServer();
-  if (!server) return;
-  const schema = JSON.stringify(tool.inputSchema || {}, null, 2);
-  mcpInsertText(
-    [
-      '[MCP 工具]',
-      `服务器: ${server.name}`,
-      `工具: ${tool.name}`,
-      `调用名: ${tool.exposedName || mcpExposedName(server, tool)}`,
-      tool.description ? `说明: ${tool.description}` : '',
-      '参数 Schema:',
-      schema,
-    ]
-      .filter(Boolean)
-      .join('\n')
-  );
 }
 
 function mcpInsertToolResult(tool, response) {

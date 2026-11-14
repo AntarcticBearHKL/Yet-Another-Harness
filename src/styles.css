@@ -4954,7 +4954,8 @@ body.maximized .mcp {
   justify-content: center;
   gap: 6px;
   flex: none;
-  height: 34px;
+  height: 40px;
+  margin-top: 6px;
   border: 1px dashed var(--line);
   border-radius: 8px;
   color: var(--dim);
@@ -5319,7 +5320,7 @@ body.maximized .mcp {
 
 .mcp-detail-pane {
   min-height: 0;
-  padding: 20px 24px 40px;
+  padding: 24px 24px 44px;
   overflow-y: auto;
 }
 
@@ -5338,7 +5339,7 @@ body.maximized .mcp {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .mcp-pane-title {
@@ -5410,7 +5411,7 @@ body.maximized .mcp {
 }
 
 .mcp-panel {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -5660,7 +5661,7 @@ body.maximized .mcp {
 }
 
 .mcp-details {
-  margin-top: 12px;
+  margin: 16px 0;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel);
@@ -6762,8 +6763,9 @@ body.maximized .mcp {
 }
 
 .mcp-add {
-  height: 34px;
-  background: var(--surface-row);
+  height: 40px;
+  margin-top: 6px;
+  background: transparent;
 }
 
 .mcp-add:hover {
