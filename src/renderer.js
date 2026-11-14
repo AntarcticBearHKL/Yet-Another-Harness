@@ -2697,7 +2697,14 @@ function navigateTurn(direction) {
 
 function openComposer() {
   const session = currentSession();
-  if (state.composerOpen || !session || session.frozen) return;
+  if (
+    state.composerOpen ||
+    !session ||
+    session.frozen ||
+    isCompacting(session)
+  ) {
+    return;
+  }
   if (!dom.settingsOverlay.classList.contains('hidden')) return;
   if (!dom.rawOverlay.classList.contains('hidden')) return;
   if (state.switcherOpen) return;
