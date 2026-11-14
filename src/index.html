@@ -593,26 +593,35 @@
       </div>
     </div>
 
-    <div id="approval-overlay" class="overlay hidden" aria-hidden="true">
-      <div class="overlay-panel approval-panel">
-        <p class="approval-text">
-          访问项目目录之外的路径
-        </p>
-        <div class="approval-row">
-          <span>工具</span>
-          <code id="approval-tool"></code>
+    <div
+      id="approval-overlay"
+      class="approval-dock hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="File access approval"
+      aria-hidden="true"
+    >
+      <div class="approval-dock-head">
+        <div class="approval-dock-copy">
+          <span class="approval-kicker">FILE ACCESS</span>
+          <span class="approval-text">访问项目目录之外的路径</span>
         </div>
+        <span id="approval-tool" class="approval-tool-badge">file</span>
+      </div>
+      <div class="approval-dock-body">
         <div id="approval-path" class="approval-path"></div>
         <div class="approval-dirs">
           <div class="approval-dirs-label">当前项目目录</div>
           <div id="approval-dirs"></div>
         </div>
-        <div class="overlay-actions">
-          <button id="approval-deny" class="pill" type="button">拒绝</button>
-          <button id="approval-allow" class="pill primary" type="button">
-            允许一次
-          </button>
-        </div>
+      </div>
+      <div class="approval-dock-foot">
+        <button id="approval-deny" class="pill compact" type="button">
+          拒绝
+        </button>
+        <button id="approval-allow" class="pill primary" type="button">
+          允许一次
+        </button>
       </div>
     </div>
 

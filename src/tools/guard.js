@@ -41,14 +41,21 @@ async function guardPath(target, context, options = {}) {
   if (typeof context.approve !== 'function') {
     throw new Error(`path is outside the project directories: ${resolved}`);
   }
-  const approved = await context.approve({
-    tool: String(options.tool || 'file'),
+  const tool = String(options.tool || 'file');
+  const result = await context.approve({
+    tool,
     path: resolved,
     allowedDirs: allowed,
   });
-  if (!approved) {
-    throw new Error('access denied by user');
+  if (result === true || result?.approved === true) return;
+  if (result?.reason === 'cancelled') {
+    throw new Error(
+      `The run was cancelled while waiting for permission to access "${resolved}".`
+    );
   }
+  throw new Error(
+    `User denied access to "${resolved}" for the ${tool} tool. The user explicitly rejected this file operation; do not assume permission. Choose a different approach or ask the user for guidance.`
+  );
 }
 
 module.exports = { guardPath, isInside };

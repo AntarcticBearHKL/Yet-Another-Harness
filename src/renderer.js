@@ -6603,7 +6603,6 @@ function onRightMouseDown(event) {
   if (event.button !== 2) return;
   closeAgentMenu();
   if (dom.approvalOverlay && !dom.approvalOverlay.classList.contains('hidden')) {
-    resolveToolApproval(false);
     state.ringSuppress = true;
     return;
   }
@@ -7831,9 +7830,6 @@ function bindEvents() {
 
   dom.approvalDeny?.addEventListener('click', () => resolveToolApproval(false));
   dom.approvalAllow?.addEventListener('click', () => resolveToolApproval(true));
-  dom.approvalOverlay?.addEventListener('click', (event) => {
-    if (event.target === dom.approvalOverlay) resolveToolApproval(false);
-  });
   dom.questionClose?.addEventListener('click', () => void dismissQuestion());
   dom.questionBack?.addEventListener('click', () => {
     const active = state.activeQuestion;

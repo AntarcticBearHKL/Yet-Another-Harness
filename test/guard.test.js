@@ -48,7 +48,20 @@ test('guardPath asks for approval outside the project directories', async () => 
         allowedDirs: [dir],
         approve: async () => false,
       }),
-      /access denied/
+      /User denied access/
+    );
+    await guardPath(outside, {
+      enforceProjectRoots: true,
+      allowedDirs: [dir],
+      approve: async () => ({ approved: true, reason: 'approved' }),
+    });
+    await assert.rejects(
+      guardPath(outside, {
+        enforceProjectRoots: true,
+        allowedDirs: [dir],
+        approve: async () => ({ approved: false, reason: 'cancelled' }),
+      }),
+      /cancelled/
     );
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

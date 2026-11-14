@@ -196,7 +196,7 @@ test('file tools require approval outside project directories', async () => {
       JSON.stringify({ path: outside }),
       context
     );
-    assert.match(deniedRead, /access denied by user/);
+    assert.match(deniedRead, /User denied access/);
     const allowedWrite = await tools.execute(
       'write',
       JSON.stringify({ path: inside, content: 'ok' }),
@@ -208,7 +208,7 @@ test('file tools require approval outside project directories', async () => {
       JSON.stringify({ path: outside, content: 'x' }),
       context
     );
-    assert.match(deniedWrite, /access denied by user/);
+    assert.match(deniedWrite, /User denied access/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.rmSync(outside, { force: true });
