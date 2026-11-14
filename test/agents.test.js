@@ -42,11 +42,44 @@ test('agents round-trip through the JSON file', () => {
     const saved = saveAgents(file, [
       { id: 'a1', name: 'A', prompt: 'p', tools: [] },
     ]);
-    assert.deepEqual(saved[0].tools, []);
+    assert.equal(saved[0].id, 'basic');
+    assert.equal(saved[0].builtin, true);
+    const custom = saved.find((agent) => agent.id === 'a1');
+    assert.deepEqual(custom.tools, []);
     const loaded = loadAgents(file);
-    assert.equal(loaded[0].name, 'A');
-    assert.deepEqual(getAgent(file, 'a1'), loaded[0]);
+    assert.equal(loaded[0].id, 'basic');
+    assert.equal(loaded[1].name, 'A');
+    assert.deepEqual(getAgent(file, 'a1'), loaded[1]);
+    assert.equal(getAgent(file, 'basic').name, '基础 Agent');
     assert.equal(getAgent(file, 'missing'), null);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the built-in agent is always present and cannot be overwritten', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-agents-'));
+  const file = path.join(dir, 'agents.json');
+  try {
+    assert.deepEqual(
+      loadAgents(file).map((agent) => agent.id),
+      ['basic']
+    );
+    assert.equal(getAgent(file, '').id, 'basic');
+    const saved = saveAgents(file, [
+      { id: 'basic', name: 'Overwritten', prompt: 'nope' },
+      { id: 'a1', name: 'A', prompt: 'p', tools: null },
+    ]);
+    assert.deepEqual(
+      saved.map((agent) => agent.id),
+      ['basic', 'a1']
+    );
+    assert.equal(saved[0].name, '基础 Agent');
+    const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepEqual(
+      stored.agents.map((agent) => agent.id),
+      ['a1']
+    );
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

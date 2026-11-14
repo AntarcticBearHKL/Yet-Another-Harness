@@ -2,6 +2,8 @@
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
+const DEFAULT_AGENT_ID = 'basic';
+const DEFAULT_AGENT_NAME = '基础 Agent';
 const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
 const NO_KEY_HINT =
   'No OpenCode Go API key yet. Hold Tab and open Settings to paste your key.';
@@ -115,6 +117,7 @@ const state = {
   renderedOpenKeys: new Set(),
   renderedSessionId: null,
   collapsedProcessKeys: new Set(),
+  contextCollapsed: new Set(),
   viewMode: null,
   foldRestored: false,
   foldSessionId: null,
@@ -490,7 +493,7 @@ function structurePayload() {
       id: session.id,
       title: session.title,
       system: session.system,
-      agentId: session.agentId || '',
+      agentId: session.agentId || DEFAULT_AGENT_ID,
       projectId: session.projectId,
       mcpDisabled: Array.isArray(session.mcpDisabled)
         ? session.mcpDisabled
@@ -687,6 +690,7 @@ function applyFoldState(session) {
   state.foldSessionId = session?.id || null;
   state.viewMode = fold?.viewMode || null;
   state.collapsedProcessKeys = new Set(fold?.collapsedProcessKeys || []);
+  state.contextCollapsed = new Set(fold?.contextCollapsed || []);
   state.openCardKey = fold?.openKey || null;
   state.foldRestored = Boolean(fold);
 }
@@ -695,6 +699,7 @@ function captureFoldState() {
   return {
     openKey: state.viewMode ? null : state.openCardKey || null,
     collapsedProcessKeys: [...state.collapsedProcessKeys],
+    contextCollapsed: [...state.contextCollapsed],
     viewMode: state.viewMode || null,
   };
 }
@@ -1969,12 +1974,17 @@ function renderMcpConfig() {
   }
 }
 
-function contextBlock(title, text) {
+function contextBlock(title, text, key) {
+  const collapsed = state.contextCollapsed.has(key);
   const block = el('div', 'context-block');
-  const head = el('div', 'context-head');
+  if (collapsed) block.classList.add('collapsed');
+  const head = el('button', 'context-head');
+  head.type = 'button';
+  head.setAttribute('aria-expanded', String(!collapsed));
   head.append(el('span', 'context-dot'));
   head.append(el('span', 'context-title', title));
   head.append(el('span', 'context-meta', '只读'));
+  head.append(el('span', 'context-fold', collapsed ? '展开' : '收起'));
   block.append(head);
   const body = el('div', 'context-body');
   const value = String(text || '');
@@ -1984,12 +1994,24 @@ function contextBlock(title, text) {
     body.classList.add('empty');
   }
   block.append(body);
+  head.addEventListener('click', () => {
+    const nextCollapsed = block.classList.toggle('collapsed');
+    head.setAttribute('aria-expanded', String(!nextCollapsed));
+    const fold = head.querySelector('.context-fold');
+    if (fold) fold.textContent = nextCollapsed ? '展开' : '收起';
+    if (nextCollapsed) state.contextCollapsed.add(key);
+    else state.contextCollapsed.delete(key);
+    persistFoldState();
+  });
   return block;
 }
 
 function renderContextBlocks(session, container) {
-  container.append(contextBlock('SYSTEM PROMPT', session.system));
-  container.append(contextBlock('AGENTS.MD', session.agentsMd));
+  const stack = el('div', 'context-stack');
+  renderMcpSummary(session, stack);
+  stack.append(contextBlock('SYSTEM PROMPT', session.system, 'system'));
+  stack.append(contextBlock('AGENTS.MD', session.agentsMd, 'agents'));
+  container.append(stack);
 }
 
 function renderMessages({ animate = true } = {}) {
@@ -2006,7 +2028,6 @@ function renderMessages({ animate = true } = {}) {
 
   dom.messages.replaceChildren();
   if (session) {
-    renderMcpSummary(session, dom.messages);
     renderContextBlocks(session, dom.messages);
   }
   if (!session) {
@@ -3007,7 +3028,7 @@ function newSession(projectId) {
     title: `Chat ${state.seq}`,
     system: DEFAULT_SYSTEM_PROMPT,
     agentsMd: null,
-    agentId: previous?.agentId || '',
+    agentId: previous?.agentId || DEFAULT_AGENT_ID,
     projectId: targetProjectId,
     mcpDisabled: Array.isArray(previous?.mcpDisabled)
       ? [...previous.mcpDisabled]
@@ -3139,7 +3160,7 @@ async function startPrompt(
       chatId: session.id,
       text,
       skills,
-      agentId: agentId || session.agentId || '',
+      agentId: agentId || session.agentId || DEFAULT_AGENT_ID,
     });
   } catch (error) {
     if (state.requestId !== requestId) return;
@@ -3179,7 +3200,7 @@ async function sendMessage() {
   const text =
     inputText || (skills.length ? `/${skills[0].name}` : '');
   if (!text) return;
-  const agentId = session.agentId || '';
+  const agentId = session.agentId || DEFAULT_AGENT_ID;
 
   if (
     state.streaming ||
@@ -3338,13 +3359,14 @@ function renderComposerContext() {
 }
 
 function agentMenuEntries() {
-  return [
-    { id: '', name: '不指定' },
-    ...state.agents.map((agent) => ({
-      id: agent.id,
-      name: agent.name || 'Agent',
-    })),
-  ];
+  const agents =
+    state.agents.length > 0
+      ? state.agents
+      : [{ id: DEFAULT_AGENT_ID, name: DEFAULT_AGENT_NAME }];
+  return agents.map((agent) => ({
+    id: agent.id || DEFAULT_AGENT_ID,
+    name: agent.name || DEFAULT_AGENT_NAME,
+  }));
 }
 
 function updateAgentMenuActive() {
@@ -3358,7 +3380,7 @@ function updateAgentMenuActive() {
 function renderAgentMenu() {
   if (!dom.agentMenu) return;
   const session = currentSession();
-  const current = String(session?.agentId || '');
+  const current = String(session?.agentId || DEFAULT_AGENT_ID);
   const entries = agentMenuEntries();
   if (state.agentMenuIndex < 0 || state.agentMenuIndex >= entries.length) {
     state.agentMenuIndex = Math.max(
@@ -3391,7 +3413,7 @@ function renderAgentMenu() {
     dom.agentMenu.append(item);
   });
   dom.agentMenu.append(
-    el('div', 'agent-menu-hint', '不指定时使用对话默认提示词')
+    el('div', 'agent-menu-hint', '所有对话都必须使用一个 Agent')
   );
 }
 
@@ -3439,7 +3461,7 @@ function openAgentMenu() {
     closeAgentMenu();
     return;
   }
-  const current = String(session.agentId || '');
+  const current = String(session.agentId || DEFAULT_AGENT_ID);
   const entries = agentMenuEntries();
   state.agentMenuOpen = true;
   state.agentMenuIndex = Math.max(
@@ -3456,7 +3478,7 @@ function openAgentMenu() {
 function selectAgent(agentId) {
   const session = currentSession();
   if (!session) return;
-  session.agentId = String(agentId || '');
+  session.agentId = String(agentId || DEFAULT_AGENT_ID);
   saveChatsSoon();
   renderAgentPicker();
   closeAgentMenu();
@@ -3477,10 +3499,18 @@ function moveAgentMenu(delta) {
 
 function renderAgentPicker() {
   const session = currentSession();
-  const current = String(session?.agentId || '');
+  if (session && !session.agentId) {
+    session.agentId = DEFAULT_AGENT_ID;
+    saveChatsSoon();
+  }
+  const current = String(session?.agentId || DEFAULT_AGENT_ID);
   const known = state.agents.find((agent) => agent.id === current);
+  const fallback = state.agents.find(
+    (agent) => agent.id === DEFAULT_AGENT_ID
+  );
   if (dom.agentPickerValue) {
-    dom.agentPickerValue.textContent = known?.name || '不指定';
+    dom.agentPickerValue.textContent =
+      (known || fallback)?.name || DEFAULT_AGENT_NAME;
   }
   if (dom.agentPickerButton) dom.agentPickerButton.disabled = !session;
   if (
@@ -3490,9 +3520,11 @@ function renderAgentPicker() {
     !state.agentsLoading &&
     !known
   ) {
-    session.agentId = '';
+    session.agentId = DEFAULT_AGENT_ID;
     saveChatsSoon();
-    if (dom.agentPickerValue) dom.agentPickerValue.textContent = '不指定';
+    if (dom.agentPickerValue) {
+      dom.agentPickerValue.textContent = DEFAULT_AGENT_NAME;
+    }
   }
   if (state.agentMenuOpen) {
     renderAgentMenu();
@@ -4247,7 +4279,8 @@ function editQueuedPrompt(session, index) {
     item && typeof item === 'object' && Array.isArray(item.skills)
       ? item.skills
       : [];
-  session.agentId = item && typeof item === 'object' ? item.agentId || '' : '';
+  session.agentId =
+    (item && typeof item === 'object' && item.agentId) || DEFAULT_AGENT_ID;
   saveChatsSoon();
   if (!state.composerOpen) openComposer();
   state.attachedSkills = skills.map((skill) => {
@@ -4294,7 +4327,7 @@ function sendQueuedPrompt(session, index) {
   if (state.composerOpen) renderComposerContext();
   void startPrompt(session, text, {
     skills,
-    agentId: item.agentId || session.agentId || '',
+    agentId: item.agentId || session.agentId || DEFAULT_AGENT_ID,
   });
 }
 
@@ -4330,7 +4363,7 @@ function processNextQueuedPrompt(session) {
   if (state.composerOpen) renderComposerContext();
   void startPrompt(session, text, {
     skills,
-    agentId: item.agentId || session.agentId || '',
+    agentId: item.agentId || session.agentId || DEFAULT_AGENT_ID,
   });
 }
 
@@ -5982,12 +6015,14 @@ function saveAgentsSoon() {
 async function saveAgentsNow() {
   clearTimeout(state.agentSaveTimer);
   state.agentSaveTimer = null;
-  const payload = state.agents.map((agent) => ({
-    id: agent.id,
-    name: agent.name,
-    prompt: agent.prompt,
-    tools: Array.isArray(agent.tools) ? agent.tools : null,
-  }));
+  const payload = state.agents
+    .filter((agent) => agent.id !== DEFAULT_AGENT_ID)
+    .map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      prompt: agent.prompt,
+      tools: Array.isArray(agent.tools) ? agent.tools : null,
+    }));
   try {
     const data = await api.saveAgents(payload);
     if (!Array.isArray(data?.agents)) {
@@ -6004,9 +6039,12 @@ async function saveAgentsNow() {
 }
 
 function createAgent() {
+  const customCount = state.agents.filter(
+    (agent) => agent.id !== DEFAULT_AGENT_ID
+  ).length;
   const agent = {
     id: makeId(),
-    name: `Agent ${state.agents.length + 1}`,
+    name: `Agent ${customCount + 1}`,
     prompt: '',
     tools: null,
   };
@@ -6018,6 +6056,7 @@ function createAgent() {
 }
 
 function deleteAgent(agentId) {
+  if (agentId === DEFAULT_AGENT_ID) return;
   const index = state.agents.findIndex((agent) => agent.id === agentId);
   if (index < 0) return;
   state.agents.splice(index, 1);
@@ -6026,7 +6065,7 @@ function deleteAgent(agentId) {
   let changed = false;
   for (const session of state.sessions) {
     if (session.agentId === agentId) {
-      session.agentId = '';
+      session.agentId = DEFAULT_AGENT_ID;
       changed = true;
     }
   }
@@ -6056,6 +6095,7 @@ function renderAgentEditor(agentId) {
   const allTools = Array.isArray(state.catalogData?.agentTools)
     ? state.catalogData.agentTools
     : [];
+  const readonly = agent.builtin === true;
   const selected = new Set(
     Array.isArray(agent.tools) ? agent.tools : allTools.map((tool) => tool.name)
   );
@@ -6065,33 +6105,39 @@ function renderAgentEditor(agentId) {
   name.type = 'text';
   name.value = agent.name;
   name.placeholder = 'Agent 名称';
+  name.disabled = readonly;
   name.addEventListener('input', () => {
+    if (readonly) return;
     agent.name = name.value.slice(0, 80);
     saveAgentsSoon();
   });
   head.append(name);
 
-  const del = el('button', 'pill agent-delete');
-  del.type = 'button';
-  const armed = state.agentDeleteArmed === agent.id;
-  del.textContent = armed ? '确认删除' : '删除';
-  if (armed) del.classList.add('danger-solid');
-  del.addEventListener('click', () => {
-    if (state.agentDeleteArmed === agent.id) {
-      deleteAgent(agent.id);
-      return;
-    }
-    state.agentDeleteArmed = agent.id;
-    clearTimeout(state.agentDeleteTimer);
-    state.agentDeleteTimer = setTimeout(() => {
-      state.agentDeleteArmed = null;
-      if (state.catalogOpen && state.catalogKind === `agent:${agent.id}`) {
-        renderAgentEditor(agent.id);
+  if (readonly) {
+    head.append(el('span', 'agent-builtin-badge', '内置'));
+  } else {
+    const del = el('button', 'pill agent-delete');
+    del.type = 'button';
+    const armed = state.agentDeleteArmed === agent.id;
+    del.textContent = armed ? '确认删除' : '删除';
+    if (armed) del.classList.add('danger-solid');
+    del.addEventListener('click', () => {
+      if (state.agentDeleteArmed === agent.id) {
+        deleteAgent(agent.id);
+        return;
       }
-    }, 3200);
-    renderAgentEditor(agent.id);
-  });
-  head.append(del);
+      state.agentDeleteArmed = agent.id;
+      clearTimeout(state.agentDeleteTimer);
+      state.agentDeleteTimer = setTimeout(() => {
+        state.agentDeleteArmed = null;
+        if (state.catalogOpen && state.catalogKind === `agent:${agent.id}`) {
+          renderAgentEditor(agent.id);
+        }
+      }, 3200);
+      renderAgentEditor(agent.id);
+    });
+    head.append(del);
+  }
   editor.append(head);
 
   const promptField = el('div', 'agent-field');
@@ -6101,7 +6147,9 @@ function renderAgentEditor(agentId) {
   prompt.placeholder =
     '这段提示词会作为 Agent Context 插入到所有对话的上下文之前。';
   prompt.value = agent.prompt || '';
+  prompt.readOnly = readonly;
   prompt.addEventListener('input', () => {
+    if (readonly) return;
     agent.prompt = prompt.value;
     saveAgentsSoon();
   });
@@ -6122,6 +6170,7 @@ function renderAgentEditor(agentId) {
   const allCheckbox = document.createElement('input');
   allCheckbox.type = 'checkbox';
   allCheckbox.checked = agent.tools === null;
+  allCheckbox.disabled = readonly;
   allLabel.append(allCheckbox);
   allLabel.append(el('span', 'agent-toggle-label', '允许所有工具'));
   toolsHead.append(allLabel);
@@ -6141,9 +6190,10 @@ function renderAgentEditor(agentId) {
     count.textContent = `${active} / ${total}`;
   };
   const setEnabled = (enabled) => {
-    list.classList.toggle('disabled', !enabled);
+    const next = enabled && !readonly;
+    list.classList.toggle('disabled', !next);
     for (const input of list.querySelectorAll('input')) {
-      input.disabled = !enabled;
+      input.disabled = !next;
     }
   };
   for (const tool of allTools) {
@@ -6151,9 +6201,9 @@ function renderAgentEditor(agentId) {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = agent.tools === null || selected.has(tool.name);
-    checkbox.disabled = agent.tools === null;
+    checkbox.disabled = readonly || agent.tools === null;
     checkbox.addEventListener('change', () => {
-      if (agent.tools === null) return;
+      if (readonly || agent.tools === null) return;
       if (checkbox.checked) selected.add(tool.name);
       else selected.delete(tool.name);
       agent.tools = [...selected];
@@ -6171,6 +6221,7 @@ function renderAgentEditor(agentId) {
     list.append(row);
   }
   allCheckbox.addEventListener('change', () => {
+    if (readonly) return;
     if (allCheckbox.checked) {
       agent.tools = null;
       for (const input of list.querySelectorAll('input')) {
@@ -6206,7 +6257,13 @@ function renderAgentEditor(agentId) {
     )
   );
   editor.append(toolsField);
-  editor.append(el('div', 'agent-editor-status', '修改会自动保存'));
+  editor.append(
+    el(
+      'div',
+      'agent-editor-status',
+      readonly ? '内置 Agent · 不能修改或删除' : '修改会自动保存'
+    )
+  );
   dom.catalogList.append(editor);
   updateCount();
   setEnabled(agent.tools !== null);
@@ -7246,7 +7303,7 @@ async function boot() {
         id: makeId(),
         title: 'Chat 1',
         system: DEFAULT_SYSTEM_PROMPT,
-        agentId: '',
+        agentId: DEFAULT_AGENT_ID,
         projectId: DEFAULT_PROJECT.id,
         mcpDisabled: [],
         foldState: null,
@@ -7263,6 +7320,7 @@ async function boot() {
     if (typeof session.system !== 'string') {
       session.system = DEFAULT_SYSTEM_PROMPT;
     }
+    if (!session.agentId) session.agentId = DEFAULT_AGENT_ID;
   });
   ensureProjects();
   applyFoldState(currentSession());

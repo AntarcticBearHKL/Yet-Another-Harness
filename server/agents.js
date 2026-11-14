@@ -3,6 +3,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const {
+  DEFAULT_AGENT_ID,
+  BUILTIN_AGENT,
+} = require('../src/agent-defaults');
 
 const MAX_AGENTS = 50;
 const MAX_NAME = 80;
@@ -56,14 +60,19 @@ function normalizeAgents(raw) {
 function loadAgents(file) {
   try {
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return normalizeAgents(data?.agents);
+    const custom = normalizeAgents(data?.agents).filter(
+      (agent) => agent.id !== DEFAULT_AGENT_ID
+    );
+    return [BUILTIN_AGENT, ...custom];
   } catch {
-    return [];
+    return [BUILTIN_AGENT];
   }
 }
 
 function saveAgents(file, agents) {
-  const normalized = normalizeAgents(agents);
+  const normalized = normalizeAgents(agents).filter(
+    (agent) => agent.id !== DEFAULT_AGENT_ID
+  );
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temp = `${file}.tmp`;
   fs.writeFileSync(
@@ -72,16 +81,18 @@ function saveAgents(file, agents) {
     'utf8'
   );
   fs.renameSync(temp, file);
-  return normalized;
+  return [BUILTIN_AGENT, ...normalized];
 }
 
 function getAgent(file, id) {
   const key = String(id || '').trim();
-  if (!key) return null;
+  if (!key || key === DEFAULT_AGENT_ID) return BUILTIN_AGENT;
   return loadAgents(file).find((agent) => agent.id === key) || null;
 }
 
 module.exports = {
+  BUILTIN_AGENT,
+  DEFAULT_AGENT_ID,
   normalizeAgents,
   loadAgents,
   saveAgents,

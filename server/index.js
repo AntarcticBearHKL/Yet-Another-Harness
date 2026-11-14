@@ -14,7 +14,7 @@ const runner = require('./runner');
 const usage = require('./usage');
 const { McpManager } = require('./mcp/manager');
 const { createSkillService } = require('./skills');
-const { loadAgents, saveAgents, getAgent } = require('./agents');
+const { loadAgents, saveAgents, getAgent, BUILTIN_AGENT } = require('./agents');
 const { ensureAgentsMd, readAgentsMd } = require('./context');
 const { normalizeGoal } = require('../src/goal');
 
@@ -459,7 +459,11 @@ function handleApi(req, res, url) {
           body?.skills,
           sessionMcpDisabled(sessionId)
         );
-        const agent = getAgent(AGENTS_FILE, body?.agentId);
+        const chats = store.loadChats();
+        const session = chats.sessions.find((item) => item.id === sessionId);
+        const agent =
+          getAgent(AGENTS_FILE, body?.agentId || session?.agentId) ||
+          BUILTIN_AGENT;
         const result = runner.startRun({
           sessionId,
           text: String(body?.text || ''),

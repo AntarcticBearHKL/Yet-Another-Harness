@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const store = require('../src/store');
 const deepseek = require('../src/deepseek');
 const { ensureAgentsMd } = require('./context');
+const { BUILTIN_AGENT } = require('./agents');
 const {
   buildAuditPrompt,
   parseAuditAnswer,
@@ -17,6 +18,7 @@ const sessionRuns = new Map();
 const subscribers = new Map();
 const pendingApprovals = new Map();
 const pendingQuestions = new Map();
+const sessionAgentConfigs = new Map();
 
 function subscribe(sessionId, fn) {
   if (!subscribers.has(sessionId)) subscribers.set(sessionId, new Set());
@@ -424,6 +426,10 @@ function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null 
   const agentSeq = store.appendMessage(sessionId, 'Agent', '', '');
   store.createRun(id, sessionId, 'running');
 
+  const resolvedAgentConfig =
+    agentConfig || sessionAgentConfigs.get(sessionId) || BUILTIN_AGENT;
+  if (agentConfig) sessionAgentConfigs.set(sessionId, agentConfig);
+
   const agent = {
     role: 'Agent',
     text: '',
@@ -457,9 +463,9 @@ function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null 
   const agentsMd = ensureAgentsMd(session, chats);
   const agentsMdBlock = agentsMd ? `# AGENTS.md\n${agentsMd}` : '';
   const skillBlock = String(skillsText || '').trim();
-  const agentPrompt = String(agentConfig?.prompt || '').trim();
+  const agentPrompt = String(resolvedAgentConfig?.prompt || '').trim();
   const agentBlock = agentPrompt
-    ? `# Agent Context${agentConfig?.name ? ` · ${agentConfig.name}` : ''}\n${agentPrompt}`
+    ? `# Agent Context${resolvedAgentConfig?.name ? ` · ${resolvedAgentConfig.name}` : ''}\n${agentPrompt}`
     : '';
   const goal = session.goal;
   const goalBlock =
@@ -509,7 +515,9 @@ function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null 
       mcpDisabled: Array.isArray(session.mcpDisabled)
         ? session.mcpDisabled
         : [],
-      allowedTools: Array.isArray(agentConfig?.tools) ? agentConfig.tools : null,
+      allowedTools: Array.isArray(resolvedAgentConfig?.tools)
+        ? resolvedAgentConfig.tools
+        : null,
       toolContext,
       compaction: session.compaction,
       compactionThrough: session.msgs.length,

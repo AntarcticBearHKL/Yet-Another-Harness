@@ -322,6 +322,7 @@ test('session MCP switches and step metrics round-trip', () => {
           foldState: {
             openKey: 'a:1',
             collapsedProcessKeys: ['p:0'],
+            contextCollapsed: ['system'],
             viewMode: null,
           },
           pendingQueue: [
@@ -383,6 +384,7 @@ test('session MCP switches and step metrics round-trip', () => {
     assert.deepEqual(loaded.sessions[0].foldState, {
       openKey: 'a:1',
       collapsedProcessKeys: ['p:0'],
+      contextCollapsed: ['system'],
       viewMode: null,
     });
     assert.deepEqual(loaded.sessions[0].pendingQueue, [
@@ -450,6 +452,7 @@ test('session MCP switches and step metrics round-trip', () => {
     assert.deepEqual(loaded.sessions[0].foldState, {
       openKey: null,
       collapsedProcessKeys: ['p:0', 'p:1'],
+      contextCollapsed: [],
       viewMode: 'replies',
     });
     assert.deepEqual(loaded.sessions[0].pendingQueue, [
@@ -602,5 +605,23 @@ test('goal and compaction state round-trip through sqlite', () => {
 
     store.updateSessionGoal('s-goal', null);
     assert.equal(store.loadChats().sessions[0].goal, null);
+  });
+});
+
+test('sessions always default to the built-in agent', () => {
+  withStoreDir(() => {
+    const chats = store.defaultChats();
+    chats.sessions.push({
+      id: 's-agent',
+      title: 'Agent Chat',
+      system: 'sys',
+      projectId: chats.projects[0].id,
+      mcpDisabled: [],
+      pendingQueue: [],
+      msgs: [],
+    });
+    store.saveChats(chats);
+    const loaded = store.loadChats();
+    assert.equal(loaded.sessions[0].agentId, 'basic');
   });
 });

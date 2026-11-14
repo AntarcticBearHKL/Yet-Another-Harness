@@ -56,6 +56,21 @@
   --surface-card: rgba(255, 252, 247, 0.56);
   --surface-row: rgba(252, 246, 238, 0.40);
   --surface-input: rgba(255, 252, 247, 0.48);
+  --glass-menu: linear-gradient(
+    135deg,
+    rgba(255, 252, 247, 0.46),
+    rgba(251, 246, 239, 0.28)
+  );
+  --glass-panel: linear-gradient(
+    135deg,
+    rgba(255, 252, 247, 0.58),
+    rgba(251, 246, 239, 0.40)
+  );
+  --glass-workspace: linear-gradient(
+    135deg,
+    rgba(255, 252, 247, 0.62),
+    rgba(251, 246, 239, 0.46)
+  );
   --shadow-float:
     0 14px 34px rgba(74, 54, 40, 0.12),
     0 2px 8px rgba(74, 54, 40, 0.05);
@@ -844,7 +859,7 @@ body.ring-open #window-controls {
 }
 
 .messages .mcp-summary {
-  margin-bottom: 32px;
+  margin-bottom: 0;
 }
 
 .mcp-summary,
@@ -2390,22 +2405,27 @@ body.ring-open #window-controls {
 .agent-picker-button {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 26px;
-  padding: 0 4px;
-  margin: 0 -4px;
+  gap: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: 0;
   background: transparent;
-  color: var(--faint);
+  color: var(--dim);
   cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
   transition:
-    background 120ms ease,
-    color 120ms ease;
+    color 120ms ease,
+    text-decoration-color 120ms ease;
 }
 
 .agent-picker-button:hover {
-  background: var(--hover);
+  background: transparent;
+  color: var(--accent);
+  text-decoration-color: currentColor;
 }
 
 .agent-picker-button:focus-visible {
@@ -2418,40 +2438,18 @@ body.ring-open #window-controls {
   cursor: default;
 }
 
-.agent-picker-label {
-  color: var(--faint);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
 .agent-picker-value {
   max-width: 190px;
   overflow: hidden;
-  color: var(--text-soft);
-  font-size: 11.5px;
+  color: inherit;
+  font-size: 12px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .agent-picker-button:hover .agent-picker-value {
-  color: var(--text);
-}
-
-.agent-picker-chevron {
-  width: 10px;
-  height: 10px;
-  fill: none;
-  stroke: var(--faint);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition: transform 150ms ease;
-}
-
-.agent-picker.open .agent-picker-chevron {
-  transform: rotate(180deg);
+  color: inherit;
 }
 
 .agent-menu {
@@ -3570,6 +3568,24 @@ body.ring-open #messages {
 .agent-delete {
   flex: none;
   color: #b23a2f;
+}
+
+.agent-builtin-badge {
+  flex: none;
+  padding: 3px 8px;
+  border: 1px solid rgba(185, 111, 61, 0.28);
+  border-radius: 999px;
+  background: rgba(185, 111, 61, 0.1);
+  color: var(--accent-deep);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.agent-name-input:disabled,
+.agent-prompt:read-only {
+  opacity: 0.72;
+  cursor: default;
 }
 
 .agent-field {
@@ -5632,9 +5648,9 @@ body.maximized .mcp {
 .catalog,
 .mcp,
 .web-content {
-  background: var(--surface-workspace);
-  -webkit-backdrop-filter: blur(18px) saturate(1.04);
-  backdrop-filter: blur(18px) saturate(1.04);
+  background: var(--glass-workspace);
+  -webkit-backdrop-filter: blur(22px) saturate(1.06);
+  backdrop-filter: blur(22px) saturate(1.06);
 }
 
 .overlay,
@@ -5647,10 +5663,10 @@ body.maximized .mcp {
 .overlay-panel,
 .mcp-config-panel {
   border-radius: var(--radius-panel);
-  background: var(--surface-panel);
+  background: var(--glass-panel);
   box-shadow: var(--shadow-panel);
-  -webkit-backdrop-filter: blur(18px) saturate(1.04);
-  backdrop-filter: blur(18px) saturate(1.04);
+  -webkit-backdrop-filter: blur(26px) saturate(1.08);
+  backdrop-filter: blur(26px) saturate(1.08);
 }
 
 .overlay-head {
@@ -5686,10 +5702,10 @@ body.maximized .mcp {
 .ring-usage-panel {
   border: 1px solid var(--line);
   border-radius: var(--radius-menu);
-  background: var(--surface-panel);
+  background: var(--glass-menu);
   box-shadow: var(--shadow-float);
-  -webkit-backdrop-filter: blur(18px) saturate(1.04);
-  backdrop-filter: blur(18px) saturate(1.04);
+  -webkit-backdrop-filter: blur(28px) saturate(1.12);
+  backdrop-filter: blur(28px) saturate(1.12);
 }
 
 .skill-popup {
@@ -5997,8 +6013,10 @@ body.maximized .mcp {
 
 .mcp-toast {
   border-radius: var(--radius-card);
-  background: var(--surface-panel);
+  background: var(--glass-menu);
   box-shadow: var(--shadow-float);
+  -webkit-backdrop-filter: blur(24px) saturate(1.1);
+  backdrop-filter: blur(24px) saturate(1.1);
   font-size: 11.5px;
 }
 
@@ -6024,22 +6042,54 @@ textarea::placeholder {
   opacity: 0.75;
 }
 
-/* Conversation context blocks: base system prompt and AGENTS.md snapshot. */
+/* Conversation context blocks: MCP, base system prompt and AGENTS.md snapshot. */
+.context-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 28px;
+}
+
 .context-block {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin: 0 0 10px;
+  margin: 0;
   padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   background: var(--surface-card);
 }
 
+.context-block.collapsed {
+  gap: 0;
+}
+
+.context-block.collapsed .context-body {
+  display: none;
+}
+
 .context-head {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-head:hover {
+  color: var(--text);
+}
+
+.context-head:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .context-dot {
@@ -6060,6 +6110,13 @@ textarea::placeholder {
 .context-meta {
   margin-left: auto;
   color: var(--faint);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+.context-fold {
+  flex: none;
+  color: var(--accent);
   font-size: 9.5px;
   letter-spacing: 0.04em;
 }
@@ -6092,9 +6149,9 @@ body:has(#action-menu:not(.hidden)) #window-controls {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: var(--surface-panel);
-  -webkit-backdrop-filter: blur(20px) saturate(1.04);
-  backdrop-filter: blur(20px) saturate(1.04);
+  background: var(--glass-menu);
+  -webkit-backdrop-filter: blur(30px) saturate(1.14);
+  backdrop-filter: blur(30px) saturate(1.14);
   box-shadow: var(--shadow-float);
 }
 
@@ -6201,10 +6258,10 @@ body:has(#action-menu:not(.hidden)) #window-controls {
   padding: 14px 16px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
-  background: var(--surface-panel);
+  background: var(--glass-panel);
   box-shadow: var(--shadow-panel);
-  -webkit-backdrop-filter: blur(22px) saturate(1.04);
-  backdrop-filter: blur(22px) saturate(1.04);
+  -webkit-backdrop-filter: blur(28px) saturate(1.08);
+  backdrop-filter: blur(28px) saturate(1.08);
   transform: translateX(-50%);
   animation: question-dock-in 220ms cubic-bezier(0.22, 0.9, 0.32, 1);
 }

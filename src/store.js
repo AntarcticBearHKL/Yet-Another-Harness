@@ -11,6 +11,7 @@ const zlib = require('node:zlib');
 const { DatabaseSync } = require('node:sqlite');
 const { normalizeGoal } = require('./goal');
 const { normalizeCompaction } = require('./compaction');
+const { DEFAULT_AGENT_ID } = require('./agent-defaults');
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
@@ -166,7 +167,10 @@ function normalizeFoldState(raw) {
   const collapsedProcessKeys = Array.isArray(raw.collapsedProcessKeys)
     ? [...new Set(raw.collapsedProcessKeys.map(String).filter(Boolean))]
     : [];
-  return { openKey, collapsedProcessKeys, viewMode };
+  const contextCollapsed = Array.isArray(raw.contextCollapsed)
+    ? [...new Set(raw.contextCollapsed.map(String).filter(Boolean))]
+    : [];
+  return { openKey, collapsedProcessKeys, contextCollapsed, viewMode };
 }
 
 function normalizeQueueSkill(raw) {
@@ -301,7 +305,7 @@ function normalizeChats(raw) {
         system: String(session.system ?? DEFAULT_SYSTEM_PROMPT),
         agentsMd:
           typeof session.agentsMd === 'string' ? session.agentsMd : null,
-        agentId: String(session.agentId || ''),
+        agentId: String(session.agentId || DEFAULT_AGENT_ID),
         projectId,
         mcpDisabled: Array.isArray(session.mcpDisabled)
           ? session.mcpDisabled.map(String).filter(Boolean)
@@ -644,7 +648,7 @@ function hashSession(session) {
       JSON.stringify({
         title: session.title,
         system: session.system,
-        agentId: session.agentId || '',
+        agentId: session.agentId || DEFAULT_AGENT_ID,
         projectId: session.projectId,
         mcpDisabled: session.mcpDisabled || [],
         msgs: session.msgs,
@@ -758,7 +762,7 @@ function readChats() {
             row.agents_md === null || row.agents_md === undefined
               ? null
               : String(row.agents_md),
-          agentId: row.agent_id || '',
+          agentId: row.agent_id || DEFAULT_AGENT_ID,
           projectId: projectIds.has(row.project_id)
             ? row.project_id
             : projects[0].id,
@@ -993,7 +997,7 @@ function writeChats(chats) {
         session.agentsMd === null || session.agentsMd === undefined
           ? null
           : String(session.agentsMd),
-        session.agentId || '',
+        session.agentId || DEFAULT_AGENT_ID,
         session.projectId,
         JSON.stringify(session.mcpDisabled || []),
         session.foldState ? JSON.stringify(session.foldState) : null,
@@ -1117,7 +1121,7 @@ function metadataHash(session) {
       JSON.stringify({
         title: session.title,
         system: session.system,
-        agentId: session.agentId || '',
+        agentId: session.agentId || DEFAULT_AGENT_ID,
         projectId: session.projectId,
         mcpDisabled: session.mcpDisabled || [],
       })
@@ -1196,7 +1200,7 @@ function saveStructure(chats) {
         session.id,
         session.title,
         session.system,
-        session.agentId || '',
+        session.agentId || DEFAULT_AGENT_ID,
         session.projectId,
         JSON.stringify(session.mcpDisabled || []),
         session.foldState ? JSON.stringify(session.foldState) : null,
