@@ -88,6 +88,94 @@ test('saveStructure allows deleting every project', () => {
   });
 });
 
+test('compact messages, frozen sessions and compact queue items round-trip', () => {
+  withStoreDir(() => {
+    const chats = store.defaultChats();
+    chats.projects.push({
+      id: 'p1',
+      name: 'Project 1',
+      directories: ['C:\\work'],
+    });
+    chats.sessions.push({
+      id: 's-compact',
+      title: '#1 Chat',
+      system: 'sys',
+      agentId: 'basic',
+      projectId: 'p1',
+      frozen: true,
+      mcpDisabled: [],
+      pendingQueue: [
+        {
+          kind: 'compact',
+          text: '压缩上下文',
+          skills: [],
+          agentId: 'basic',
+        },
+      ],
+      msgs: [
+        {
+          role: 'Compact',
+          text: 'summary',
+          request: '',
+          steps: [],
+          requests: [],
+          usage: { beforeTokens: 10, afterTokens: 5, auto: false },
+        },
+      ],
+    });
+    store.saveChats(chats);
+    const loaded = store.loadChats();
+    assert.equal(loaded.sessions[0].frozen, true);
+    assert.equal(loaded.sessions[0].msgs[0].role, 'Compact');
+    assert.equal(loaded.sessions[0].msgs[0].usage.beforeTokens, 10);
+    assert.equal(loaded.sessions[0].pendingQueue[0].kind, 'compact');
+  });
+});
+
+test('createSession stores compaction, pending queue and frozen state', () => {
+  withStoreDir(() => {
+    const id = store.createSession({
+      id: 'new-compact',
+      title: '#1 Chat',
+      system: 'sys',
+      agentId: 'basic',
+      projectId: null,
+      compaction: { summary: 's', recent: 'r', through: 1 },
+      pendingQueue: [
+        {
+          kind: 'compact',
+          text: '压缩上下文',
+          skills: [],
+          agentId: 'basic',
+        },
+      ],
+      frozen: false,
+    });
+    const seq = store.appendMessage(id, 'Compact', 'summary', '', {
+      beforeTokens: 1,
+      afterTokens: 2,
+    });
+    store.setSessionFrozen(id, true);
+    store.updateSessionPendingQueue(id, [
+      {
+        kind: 'compact',
+        text: '压缩上下文',
+        skills: [],
+        agentId: 'basic',
+      },
+    ]);
+    const session = store
+      .loadChats()
+      .sessions.find((item) => item.id === id);
+    assert.equal(seq, 0);
+    assert.equal(session.frozen, true);
+    assert.equal(session.msgs[0].role, 'Compact');
+    assert.equal(session.msgs[0].usage.afterTokens, 2);
+    assert.equal(session.pendingQueue[0].kind, 'compact');
+    assert.equal(session.compaction.through, 1);
+  });
+});
+
 test('tool trace survives normalization', () => {
   const chats = store.normalizeChats({
     sessions: [

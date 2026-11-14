@@ -40,6 +40,19 @@ test('empty system prompt is omitted', () => {
   assert.equal(messages[0].role, 'user');
 });
 
+test('compact messages are not sent as chat history', () => {
+  const messages = deepseek.messagesFromHistory(
+    [
+      { role: 'Compact', text: 'summary', request: '' },
+      { role: 'User', text: 'hi', request: null },
+    ],
+    'sys'
+  );
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0].role, 'system');
+  assert.equal(messages[1].content, 'hi');
+});
+
 test('request body includes tools and streaming', () => {
   const body = deepseek.requestBody([{ role: 'user', content: 'hi' }]);
   assert.equal(body.stream, true);

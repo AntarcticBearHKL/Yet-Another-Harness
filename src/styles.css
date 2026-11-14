@@ -568,6 +568,13 @@ body.ring-open #window-controls {
   transition: color 120ms ease;
 }
 
+.switch-frozen {
+  flex: none;
+  color: var(--faint);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
 .switch-card:hover .switch-title,
 .switch-card.selected .switch-title,
 .switch-card.current .switch-title {
@@ -5961,6 +5968,32 @@ body.maximized .mcp {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(252, 246, 238, 0.42);
+}
+
+.compact-block.mode-failed {
+  border-color: rgba(178, 58, 47, 0.35);
+  background: rgba(178, 58, 47, 0.05);
+}
+
+.compact-block.mode-failed .compact-dot {
+  background: #b23a2f;
+}
+
+.compact-block.mode-failed .compact-title {
+  color: #b23a2f;
+}
+
+.compact-message {
+  margin-bottom: 0;
+  padding: 12px 16px;
+  background: var(--surface-card);
+}
+
+.frozen-note {
+  margin: 24px auto 8px;
+  color: var(--faint);
+  font-size: 11px;
+  text-align: center;
 }
 
 .compact-head {

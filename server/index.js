@@ -387,12 +387,14 @@ function handleApi(req, res, url) {
   if (req.method === 'POST' && pathname === '/api/compact') {
     readJson(req)
       .then(async (body) => {
-        const result = await runner.compactSession(body?.sessionId);
+        const result = await runner.compactSession(body?.sessionId, {
+          queue: body?.queue,
+        });
         sendJson(res, 200, result);
       })
       .catch((error) => {
         const status =
-          error.code === 'busy'
+          error.code === 'busy' || error.code === 'frozen'
             ? 409
             : error.code === 'not_found'
               ? 404

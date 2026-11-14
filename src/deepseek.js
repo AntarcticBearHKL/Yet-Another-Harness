@@ -94,7 +94,10 @@ function messagesFromHistory(
     ? (history || []).slice(checkpoint.through)
     : history || [];
   const usable = source.filter(
-    (msg) => msg && (msg.role === 'User' || msg.role === 'user' || msg.request != null)
+    (msg) =>
+      msg &&
+      msg.role !== 'Compact' &&
+      (msg.role === 'User' || msg.role === 'user' || msg.request != null)
   );
   const start = checkpoint ? 0 : Math.max(0, usable.length - maxHistory);
 

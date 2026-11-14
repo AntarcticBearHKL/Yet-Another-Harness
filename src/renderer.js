@@ -119,6 +119,7 @@ const state = {
   streaming: false,
   requestId: null,
   streamMessage: null,
+  compactStatus: null,
   pendingDelete: -1,
   deleteTimer: null,
   pendingQueueDelete: null,
@@ -360,8 +361,11 @@ const api = {
       method: 'POST',
       body: payload,
     }),
-  compactChat: (sessionId) =>
-    requestJson('/api/compact', { method: 'POST', body: { sessionId } }),
+  compactChat: (sessionId, queue = []) =>
+    requestJson('/api/compact', {
+      method: 'POST',
+      body: { sessionId, queue },
+    }),
   activeRun: (sessionId) =>
     requestJson(
       `/api/runs/active?sessionId=${encodeURIComponent(sessionId)}`
@@ -483,6 +487,7 @@ function structurePayload() {
       system: session.system,
       agentId: session.agentId || DEFAULT_AGENT_ID,
       projectId: session.projectId,
+      frozen: session.frozen === true,
       mcpDisabled: Array.isArray(session.mcpDisabled)
         ? session.mcpDisabled
         : [],
@@ -1828,10 +1833,13 @@ function autoCardKey() {
 }
 
 function renderCompactionBlock(step, key) {
-  const block = el(
-    'div',
-    `compact-block mode-${step.label === 'running' ? 'running' : 'done'}`
-  );
+  const mode =
+    step.label === 'running'
+      ? 'running'
+      : step.label === 'failed'
+        ? 'failed'
+        : 'done';
+  const block = el('div', `compact-block mode-${mode}`);
   if (key) block.dataset.cardKey = key;
   const head = el('div', 'compact-head');
   head.append(el('span', 'compact-dot'));
@@ -1856,7 +1864,7 @@ function renderCompactionBlock(step, key) {
   }
   block.append(head);
   if (step.text) {
-    if (step.label === 'running') {
+    if (step.label === 'running' || step.label === 'failed') {
       block.append(el('div', 'compact-text', step.text));
     } else {
       const details = el('details', 'compact-details');
@@ -1866,6 +1874,40 @@ function renderCompactionBlock(step, key) {
       block.append(details);
     }
   }
+  return block;
+}
+
+function renderCompactMessage(msg, key) {
+  const metrics =
+    msg?.usage && typeof msg.usage === 'object' ? msg.usage : {};
+  const block = renderCompactionBlock(
+    {
+      kind: 'compact',
+      label: metrics.auto ? 'auto' : 'manual',
+      text: String(msg?.text || ''),
+      name: metrics.auto ? 'auto' : 'manual',
+      ok: true,
+      metrics,
+    },
+    key
+  );
+  block.classList.add('compact-message');
+  return block;
+}
+
+function renderCompactStatus(status) {
+  const block = renderCompactionBlock(
+    {
+      kind: 'compact',
+      label: status.label || 'running',
+      text: status.text || '',
+      name: status.label || 'running',
+      ok: status.label !== 'failed',
+      metrics: status.metrics || {},
+    },
+    null
+  );
+  block.classList.add('compact-message');
   return block;
 }
 
@@ -2410,12 +2452,21 @@ function renderMessages({ animate = true } = {}) {
     state.openCardKey = null;
     state.renderedOpenKeys = new Set();
     state.renderedSessionId = sessionId;
-    dom.messages.append(el('div', 'empty', '还没有消息'));
+    dom.messages.append(
+      el('div', 'empty', session.frozen ? '对话已冻结' : '还没有消息')
+    );
     return;
   }
 
   let currentTurn = null;
   session.msgs.forEach((msg, index) => {
+    if (msg.role === 'Compact') {
+      currentTurn = null;
+      const turn = el('section', 'turn compact-turn');
+      turn.append(renderCompactMessage(msg, `compact:${index}`));
+      dom.messages.append(turn);
+      return;
+    }
     if (msg.role === 'User') {
       currentTurn = el('section', 'turn');
       dom.messages.append(currentTurn);
@@ -2443,6 +2494,15 @@ function renderMessages({ animate = true } = {}) {
       currentTurn.append(badge);
     }
   });
+
+  if (state.compactStatus?.sessionId === session.id) {
+    const turn = el('section', 'turn compact-turn');
+    turn.append(renderCompactStatus(state.compactStatus));
+    dom.messages.append(turn);
+  }
+  if (session.frozen) {
+    dom.messages.append(el('div', 'frozen-note', '对话已冻结'));
+  }
 
   let autoKey = null;
   if (state.viewMode) {
@@ -2573,6 +2633,9 @@ function renderSwitcher() {
 
     const top = el('div', 'switch-top');
     top.append(el('span', 'switch-title', session.title || `Chat ${localIndex + 1}`));
+    if (session.frozen) {
+      top.append(el('span', 'switch-frozen', '冻结'));
+    }
 
     card.dataset.index = String(localIndex);
     card.dataset.sessionId = session.id;
@@ -2633,7 +2696,8 @@ function navigateTurn(direction) {
 }
 
 function openComposer() {
-  if (state.composerOpen || !currentSession()) return;
+  const session = currentSession();
+  if (state.composerOpen || !session || session.frozen) return;
   if (!dom.settingsOverlay.classList.contains('hidden')) return;
   if (!dom.rawOverlay.classList.contains('hidden')) return;
   if (state.switcherOpen) return;
@@ -3372,8 +3436,10 @@ function renderAll() {
 }
 
 function updateSendState() {
+  const session = currentSession();
   dom.send.disabled =
-    !currentSession() ||
+    !session ||
+    session.frozen === true ||
     (dom.input.value.trim() === '' && state.attachedSkills.length === 0);
 }
 
@@ -3505,7 +3571,7 @@ async function startPrompt(
   text,
   { clearInput = false, skills = [], agentId = '' } = {}
 ) {
-  if (!session || !text) return;
+  if (!session || session.frozen || !text) return;
   state.viewMode = null;
   state.foldRestored = false;
   state.foldSessionId = session.id;
@@ -3560,16 +3626,67 @@ async function startPrompt(
   }
 }
 
+function isCompacting(session) {
+  return (
+    state.compactStatus?.sessionId === session?.id &&
+    state.compactStatus.label === 'running'
+  );
+}
+
+function compactQueueItem(agentId) {
+  return {
+    kind: 'compact',
+    text: '压缩上下文',
+    skills: [],
+    agentId: agentId || DEFAULT_AGENT_ID,
+  };
+}
+
+function compactSkillDescriptor() {
+  return (
+    state.skills.find((skill) => skill.command === 'compact') || {
+      id: 'system:compact',
+      name: 'compact',
+      source: '系统',
+      sourceKind: 'system',
+      category: '系统',
+      command: 'compact',
+      arguments: {},
+    }
+  );
+}
+
+async function queueOrRunCompact(session, agentId) {
+  const item = compactQueueItem(agentId);
+  const busy =
+    state.streaming ||
+    isCompacting(session) ||
+    (Array.isArray(session.pendingQueue) && session.pendingQueue.length > 0);
+  if (busy) {
+    if (!Array.isArray(session.pendingQueue)) session.pendingQueue = [];
+    session.pendingQueue.push(item);
+    saveChatsSoon();
+    if (state.composerOpen) renderComposerContext();
+    if (!state.streaming && !isCompacting(session)) {
+      processNextQueuedPrompt(session);
+    }
+    return;
+  }
+  await runCompactFlow(session);
+}
+
 async function sendMessage() {
   const session = currentSession();
-  if (!session) return;
+  if (!session || session.frozen) return;
   const command = parseSlashCommand(dom.input.value);
+  const agentId = session.agentId || DEFAULT_AGENT_ID;
   if (command) {
     dom.input.value = '';
     state.slashDismissed = false;
     updateSendState();
     if (command.command === 'compact') {
-      await manualCompact(session);
+      clearAttachedSkills();
+      await queueOrRunCompact(session, agentId);
       return;
     }
     if (command.command === 'goal') {
@@ -3582,15 +3699,27 @@ async function sendMessage() {
     id: skill.id,
     name: skill.name,
     arguments: { ...(skill.arguments || {}) },
+    command: skill.command || '',
   }));
+  if (
+    skills.some(
+      (skill) => skill.command === 'compact' || skill.id === 'system:compact'
+    )
+  ) {
+    dom.input.value = '';
+    state.slashDismissed = false;
+    clearAttachedSkills();
+    await queueOrRunCompact(session, agentId);
+    return;
+  }
   const inputText = dom.input.value.trim();
   const text =
     inputText || (skills.length ? `/${skills[0].name}` : '');
   if (!text) return;
-  const agentId = session.agentId || DEFAULT_AGENT_ID;
 
   if (
     state.streaming ||
+    isCompacting(session) ||
     (Array.isArray(session.pendingQueue) && session.pendingQueue.length > 0)
   ) {
     if (!Array.isArray(session.pendingQueue)) session.pendingQueue = [];
@@ -4190,6 +4319,11 @@ function chooseSlashSkill(skill) {
   state.slashDismissed = false;
   dom.input.value = '';
   updateSendState();
+  if (skill.command === 'compact') {
+    attachSkill(skill, {});
+    renderComposerSkills();
+    return;
+  }
   if (skill.command) {
     executeSystemSkill(
       skill,
@@ -4204,6 +4338,10 @@ function chooseSlashSkill(skill) {
 
 function selectSkill(skill) {
   if (!skill) return;
+  if (skill.command === 'compact') {
+    attachSkill(skill, {});
+    return;
+  }
   if (skill.command) {
     executeSystemSkill(skill, '');
     return;
@@ -4227,6 +4365,7 @@ function attachSkill(skill, args = {}) {
     sourceKind: skill.sourceKind || '',
     serverName: skill.serverName || '',
     category: skill.category || '',
+    command: skill.command || '',
     arguments: { ...args },
   });
   renderComposerSkills();
@@ -4506,54 +4645,57 @@ function renderGoalStrip(session) {
   return strip;
 }
 
-async function manualCompact(session) {
-  if (!session) return;
+async function runCompactFlow(session) {
+  if (!session || session.frozen) return;
   if (state.streaming) {
-    const message = ensureLastAgentMessage(session);
-    appendStepOnce(message, {
-      kind: 'status',
-      label: '生成中，不能压缩',
-      ok: false,
-    });
-    renderAll();
+    await queueOrRunCompact(session, session.agentId || DEFAULT_AGENT_ID);
     return;
   }
-  const message = ensureLastAgentMessage(session);
-  const temp = {
-    kind: 'compact',
+  state.compactStatus = {
+    sessionId: session.id,
     label: 'running',
     text: '压缩中…',
-    name: 'manual',
-    ok: true,
     metrics: { at: Date.now() },
   };
-  appendStepOnce(message, temp);
   renderAll();
   try {
-    const result = await api.compactChat(session.id);
-    message.steps = (message.steps || []).filter(
-      (step) => stepKey(step) !== stepKey(temp)
-    );
-    if (result?.step) appendStepOnce(message, result.step);
-    if (result?.compaction) session.compaction = result.compaction;
+    const queue = Array.isArray(session.pendingQueue)
+      ? [...session.pendingQueue]
+      : [];
+    const result = await api.compactChat(session.id, queue);
+    state.compactStatus = null;
+    closeComposer();
+    if (result?.newSessionId) {
+      await refreshChats(result.newSessionId);
+      const next = currentSession();
+      if (
+        next &&
+        !next.frozen &&
+        !state.streaming &&
+        Array.isArray(next.pendingQueue) &&
+        next.pendingQueue.length > 0
+      ) {
+        processNextQueuedPrompt(next);
+      }
+    } else {
+      await refreshChats();
+    }
   } catch (error) {
-    message.steps = (message.steps || []).filter(
-      (step) => stepKey(step) !== stepKey(temp)
-    );
-    appendStepOnce(message, {
-      kind: 'status',
-      label: `compact failed: ${error.message}`,
-      ok: false,
-    });
+    state.compactStatus = {
+      sessionId: session.id,
+      label: 'failed',
+      text: String(error.message || '压缩失败'),
+      metrics: {},
+    };
+    renderAll();
   }
-  renderAll();
 }
 
 function executeSystemSkill(skill, args = '') {
   const session = currentSession();
   if (!session) return;
   if (skill?.command === 'compact') {
-    void manualCompact(session);
+    void queueOrRunCompact(session, session.agentId || DEFAULT_AGENT_ID);
     return;
   }
   if (skill?.command === 'goal') {
@@ -4662,15 +4804,37 @@ function editQueuedPrompt(session, index) {
   const [item] = session.pendingQueue.splice(index, 1);
   if (!item) return;
   clearPendingQueueDelete(item);
+  session.agentId =
+    (item && typeof item === 'object' && item.agentId) || DEFAULT_AGENT_ID;
+  saveChatsSoon();
+  if (!state.composerOpen) openComposer();
+  if (item && typeof item === 'object' && item.kind === 'compact') {
+    const skill = compactSkillDescriptor();
+    state.attachedSkills = [
+      {
+        id: skill.id,
+        name: skill.name,
+        source: skill.source || '',
+        sourceKind: skill.sourceKind || '',
+        serverName: skill.serverName || '',
+        category: skill.category || '',
+        command: 'compact',
+        arguments: {},
+      },
+    ];
+    dom.input.value = '';
+    updateSendState();
+    renderAgentPicker();
+    if (state.composerOpen) renderComposerContext();
+    renderComposerSkills();
+    requestAnimationFrame(() => dom.input.focus());
+    return;
+  }
   const text = typeof item === 'string' ? item : item.text || '';
   const skills =
     item && typeof item === 'object' && Array.isArray(item.skills)
       ? item.skills
       : [];
-  session.agentId =
-    (item && typeof item === 'object' && item.agentId) || DEFAULT_AGENT_ID;
-  saveChatsSoon();
-  if (!state.composerOpen) openComposer();
   state.attachedSkills = skills.map((skill) => {
     const known = state.skills.find((entry) => entry.id === skill.id);
     return {
@@ -4680,6 +4844,7 @@ function editQueuedPrompt(session, index) {
       sourceKind: known?.sourceKind || '',
       serverName: known?.serverName || '',
       category: known?.category || '',
+      command: skill.command || known?.command || '',
       arguments: { ...(skill.arguments || {}) },
     };
   });
@@ -4700,10 +4865,16 @@ function sendQueuedPrompt(session, index) {
   const [item] = session.pendingQueue.splice(index, 1);
   if (!item) return;
   clearPendingQueueDelete(item);
-  if (state.streaming) {
+  if (state.streaming || session.frozen || isCompacting(session)) {
     session.pendingQueue.unshift(item);
     saveChatsSoon();
     if (state.composerOpen) renderComposerContext();
+    return;
+  }
+  if (item.kind === 'compact') {
+    saveChatsSoon();
+    if (state.composerOpen) renderComposerContext();
+    void runCompactFlow(session);
     return;
   }
   const text = typeof item === 'string' ? item : item.text || '';
@@ -4731,7 +4902,8 @@ function moveQueuedPrompt(session, from, to) {
 }
 
 function processNextQueuedPrompt(session) {
-  if (!session || state.streaming) return;
+  if (!session || state.streaming || session.frozen) return;
+  if (isCompacting(session)) return;
   if (
     !Array.isArray(session.pendingQueue) ||
     session.pendingQueue.length === 0
@@ -4742,6 +4914,12 @@ function processNextQueuedPrompt(session) {
   const item = session.pendingQueue.shift();
   if (!item) return;
   clearPendingQueueDelete(item);
+  if (item.kind === 'compact') {
+    saveChatsSoon();
+    if (state.composerOpen) renderComposerContext();
+    void runCompactFlow(session);
+    return;
+  }
   const text = typeof item === 'string' ? item : item.text || '';
   const skills =
     item && typeof item === 'object' && Array.isArray(item.skills)
@@ -4755,10 +4933,11 @@ function processNextQueuedPrompt(session) {
   });
 }
 
-async function refreshChats() {
+async function refreshChats(preferredSessionId = null) {
   try {
     const chats = await api.loadChats();
-    const currentId = currentSession()?.id;
+    const previousId = currentSession()?.id;
+    const currentId = preferredSessionId || previousId;
     state.projects = chats.projects || [];
     state.sessions = chats.sessions || [];
     state.seq = chats.seq;
@@ -4768,6 +4947,10 @@ async function refreshChats() {
     state.current = index >= 0 ? index : chats.current;
     ensureProjects();
     applyFoldState(currentSession());
+    if (currentId !== previousId) {
+      resetComposerSkills();
+      state.compactStatus = null;
+    }
     renderAll();
   } catch (error) {
     console.error('refresh chats failed', error);
@@ -7697,7 +7880,8 @@ function bindEvents() {
     if (state.composerOpen) renderComposerContext();
   });
 
-  api.onCompaction(({ messageSeq, step, compaction }) => {
+  api.onCompaction(({ messageSeq, step, compaction, auto }) => {
+    if (auto === false) return;
     const session = currentSession();
     if (!session || !step) return;
     const message =

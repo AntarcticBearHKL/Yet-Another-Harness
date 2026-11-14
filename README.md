@@ -65,7 +65,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 新建对话默认继承同项目上一个对话的 MCP 服务器开关配置
 - Skill 是带 frontmatter 的 Markdown 文件（`name` / `description` / `keywords` / `category`），放在项目 `skills/`（内置）或 `%APPDATA%\yah\skills`（用户）；内置包含 `skills/test-skill.md` 测试 Skill
 - Skill 页新增「系统」分组：`compact` / `goal` 是内置系统 Skill，不是可编辑的 Markdown，而是固定指令；只读，不能修改，输入 `/` 可以像其他 Skill 一样搜索和调用
-- 上下文压缩按 OpenCode 的方式工作：每次请求前用「已测量的 prompt + 之后新增内容的估算」判断，达到模型窗口减去 10%（至少 16k）时自动压缩；保留最近约 15k tokens，旧历史写成结构化 checkpoint。手动 `/compact` 随时触发；聊天里会显示 `CONTEXT COMPACTED` block（auto / manual、压缩前后 token 数、可展开摘要）
+- 上下文压缩按 OpenCode 的方式工作：每次请求前用「已测量的 prompt + 之后新增内容的估算」判断，达到模型窗口减去 10%（至少 16k）时自动压缩；保留最近约 15k tokens，旧历史写成结构化 checkpoint。手动 `/compact` 或在 Skill 里选 `compact` 不会立刻执行，而是先作为 `/ compact` 标记放进输入框，可以和其他消息一起排队；发送后压缩结果显示为一条独立的 `CONTEXT COMPACTED` 消息（manual、压缩前后 token 数、可展开摘要），完成后旧对话被冻结、不能再发消息，并自动新建一个 `#1 原标题` 的对话，把同一条压缩摘要放在开头，接着在新对话里继续聊。自动压缩仍在过程组里显示 `CONTEXT COMPACTED` block
 - Goal 模式按 OpenChamber 的方式实现：`/goal` 打开目标对话框，`/goal <目标>` 直接开始；目标保存在当前对话，输入框上方显示目标状态条（进度、token、暂停 / 继续 / 清除）。每轮结束后会运行一个独立的 `GOAL CHECK` block，用三个 yes/no 问题判断 `complete` / `continue` / `blocked`；未完成会自动继续，直到完成、被阻塞、token 预算用完或达到自动轮次上限
 - 在输入框开头输入 `/` 会在光标位置弹出搜索式 Skill 联想：按名称、描述、关键词匹配当前对话可用的 Skill，上下键移动、回车或点击选择；选中后输入框本身不变色，只在输入框上方显示一个带颜色的 `/ Skill` 标记，按 Backspace 或点 × 整体删除；带参数的 MCP Skill 会先弹出参数表单
 - 附加的 Skill 在发送时解析并注入该次请求的 system prompt（`# Active Skills`），不会写进用户输入；排队消息会一起保存自己的 Skill
@@ -180,8 +180,8 @@ agent 循环、工具、SQLite、API key 都在本地后端。`contextIsolation:
 ## 数据
 
 - `%APPDATA%\yah\chats.db`：所有对话数据（SQLite，WAL）
-  - `sessions`：会话 id、标题、system、排序、该会话禁用的 MCP 服务器、折叠状态（`fold_state` JSON）、排队消息（`pending_queue` JSON）
-  - `messages`：每个会话的消息角色和文字
+  - `sessions`：会话 id、标题、system、排序、该会话禁用的 MCP 服务器、折叠状态（`fold_state` JSON）、排队消息（`pending_queue` JSON）、是否已冻结（`frozen`）
+  - `messages`：每个会话的消息角色和文字；手动压缩会写入一条 `Compact` 消息，在聊天里显示为独立的 `CONTEXT COMPACTED` 卡片
   - `steps`：工具调用/返回、文本片段、轮次、工具耗时和 LLM 首 token/tok-s 指标
   - `requests`：每条助手消息每轮的原始请求 body（gzip 压缩的 JSON BLOB）
   - `runs`：一次 agent 执行的状态

@@ -11,6 +11,13 @@ const {
   hasSummaryHeadings,
   SUMMARY_TEMPLATE,
 } = require('../src/compaction');
+const { continuationTitle } = require('../server/runner');
+
+test('compaction continuation titles get a #n prefix', () => {
+  assert.equal(continuationTitle('Chat 1'), '#1 Chat 1');
+  assert.equal(continuationTitle('#1 Chat 1'), '#2 Chat 1');
+  assert.equal(continuationTitle(''), '#1 Chat');
+});
 
 test('token estimates and the OpenCode ceiling', () => {
   assert.equal(estimateTextTokens(''), 0);

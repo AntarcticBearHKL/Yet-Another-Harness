@@ -16,7 +16,7 @@ const { DEFAULT_AGENT_ID } = require('./agent-defaults');
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 12;
+const SCHEMA_VERSION = 13;
 
 let dataDir = null;
 let legacyDir = null;
@@ -79,7 +79,9 @@ function normalizeSettings(raw) {
 
 function normalizeRole(role) {
   const value = String(role || '').toLowerCase();
-  return value === 'agent' || value === 'assistant' ? 'Agent' : 'User';
+  if (value === 'agent' || value === 'assistant') return 'Agent';
+  if (value === 'compact') return 'Compact';
+  return 'User';
 }
 
 function normalizeStep(step) {
@@ -211,11 +213,13 @@ function normalizePendingQueue(raw) {
     const skills = Array.isArray(item.skills)
       ? item.skills.map(normalizeQueueSkill).filter(Boolean).slice(0, 5)
       : [];
-    out.push({
+    const entry = {
       text,
       skills,
       agentId: String(item.agentId || '').trim(),
-    });
+    };
+    if (item.kind === 'compact') entry.kind = 'compact';
+    out.push(entry);
   }
   return out.slice(0, 100);
 }
@@ -311,6 +315,7 @@ function normalizeChats(raw) {
           typeof session.agentsMd === 'string' ? session.agentsMd : null,
         agentId: String(session.agentId || DEFAULT_AGENT_ID),
         projectId,
+        frozen: session.frozen === true || session.frozen === 1,
         mcpDisabled: Array.isArray(session.mcpDisabled)
           ? session.mcpDisabled.map(String).filter(Boolean)
           : [],
@@ -423,6 +428,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   pending_queue TEXT,
   goal TEXT,
   compaction TEXT,
+  frozen INTEGER NOT NULL DEFAULT 0,
   sort_order INTEGER NOT NULL,
   content_hash TEXT NOT NULL,
   updated_at INTEGER NOT NULL
@@ -592,6 +598,14 @@ function ensureSchema(database) {
       database.exec('ALTER TABLE sessions ADD COLUMN agents_md TEXT');
     }
 
+    // v12 -> v13: frozen sessions after a manual compaction fork.
+    const frozenColumns = database.prepare('PRAGMA table_info(sessions)').all();
+    if (!frozenColumns.some((column) => column.name === 'frozen')) {
+      database.exec(
+        'ALTER TABLE sessions ADD COLUMN frozen INTEGER NOT NULL DEFAULT 0'
+      );
+    }
+
     const fallbackProject = database
       .prepare('SELECT id FROM projects ORDER BY sort_order ASC LIMIT 1')
       .get();
@@ -674,7 +688,7 @@ function readChats() {
 
   const sessionRows = database
     .prepare(
-      'SELECT id, title, system, agents_md, agent_id, project_id, mcp_disabled, fold_state, pending_queue, goal, compaction FROM sessions ORDER BY sort_order ASC'
+      'SELECT id, title, system, agents_md, agent_id, project_id, frozen, mcp_disabled, fold_state, pending_queue, goal, compaction FROM sessions ORDER BY sort_order ASC'
     )
     .all();
   if (sessionRows.length === 0) {
@@ -763,6 +777,7 @@ function readChats() {
           projectId: projectIds.has(row.project_id)
             ? row.project_id
             : projects[0]?.id || null,
+          frozen: Boolean(row.frozen),
           mcpDisabled,
           foldState,
           pendingQueue,
@@ -917,14 +932,15 @@ function writeChats(chats) {
   );
 
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, agents_md, agent_id, project_id, mcp_disabled, fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, agents_md, agent_id, project_id, frozen, mcp_disabled, fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
        agents_md = excluded.agents_md,
        agent_id = excluded.agent_id,
        project_id = excluded.project_id,
+       frozen = MAX(frozen, excluded.frozen),
        mcp_disabled = excluded.mcp_disabled,
        fold_state = excluded.fold_state,
        pending_queue = excluded.pending_queue,
@@ -996,6 +1012,7 @@ function writeChats(chats) {
           : String(session.agentsMd),
         session.agentId || DEFAULT_AGENT_ID,
         session.projectId,
+        session.frozen ? 1 : 0,
         JSON.stringify(session.mcpDisabled || []),
         session.foldState ? JSON.stringify(session.foldState) : null,
         JSON.stringify(session.pendingQueue || []),
@@ -1152,13 +1169,14 @@ function saveStructure(chats) {
        sort_order = excluded.sort_order`
   );
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, agent_id, project_id, mcp_disabled, fold_state, pending_queue, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, agent_id, project_id, frozen, mcp_disabled, fold_state, pending_queue, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
        agent_id = excluded.agent_id,
        project_id = excluded.project_id,
+       frozen = MAX(frozen, excluded.frozen),
        mcp_disabled = excluded.mcp_disabled,
        fold_state = excluded.fold_state,
        pending_queue = excluded.pending_queue,
@@ -1228,6 +1246,7 @@ function saveStructure(chats) {
         session.system,
         session.agentId || DEFAULT_AGENT_ID,
         session.projectId,
+        session.frozen ? 1 : 0,
         JSON.stringify(session.mcpDisabled || []),
         session.foldState ? JSON.stringify(session.foldState) : null,
         JSON.stringify(session.pendingQueue || []),
@@ -1297,7 +1316,7 @@ function updateSessionAgentsMd(sessionId, text) {
   return value;
 }
 
-function appendMessage(sessionId, role, text, request) {
+function appendMessage(sessionId, role, text, request, usage = null) {
   const database = openDb();
   const row = database
     .prepare(
@@ -1315,12 +1334,88 @@ function appendMessage(sessionId, role, text, request) {
       normalizeRole(role),
       String(text ?? ''),
       request === undefined ? null : request,
-      null
+      usage && typeof usage === 'object' ? JSON.stringify(usage) : null
     );
   database
     .prepare('UPDATE sessions SET updated_at = ? WHERE id = ?')
     .run(Date.now(), sessionId);
   return seq;
+}
+
+function createSession(session) {
+  const database = openDb();
+  const row = database
+    .prepare(
+      'SELECT COALESCE(MAX(sort_order) + 1, 0) AS sort_order FROM sessions'
+    )
+    .get();
+  const order = Number(row?.sort_order) || 0;
+  const id = String(session?.id || crypto.randomUUID());
+  const source = session && typeof session === 'object' ? session : {};
+  const mcpDisabled = Array.isArray(source.mcpDisabled)
+    ? source.mcpDisabled.map(String).filter(Boolean)
+    : [];
+  const compaction = source.compaction
+    ? normalizeCompaction(source.compaction)
+    : null;
+  const pendingQueue = normalizePendingQueue(source.pendingQueue);
+  const frozen = source.frozen === true || source.frozen === 1;
+  const hash = metadataHash({
+    title: source.title,
+    system: source.system,
+    agentId: source.agentId,
+    projectId: source.projectId,
+    mcpDisabled,
+  });
+  database
+    .prepare(
+      `INSERT INTO sessions
+         (id, title, system, agents_md, agent_id, project_id, frozen, mcp_disabled,
+          fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      id,
+      String(source.title || 'Chat'),
+      String(source.system ?? DEFAULT_SYSTEM_PROMPT),
+      source.agentsMd === null || source.agentsMd === undefined
+        ? null
+        : String(source.agentsMd),
+      String(source.agentId || DEFAULT_AGENT_ID),
+      source.projectId || null,
+      frozen ? 1 : 0,
+      JSON.stringify(mcpDisabled),
+      null,
+      JSON.stringify(pendingQueue),
+      null,
+      compaction ? JSON.stringify(compaction) : null,
+      order,
+      hash,
+      Date.now()
+    );
+  return id;
+}
+
+function setSessionFrozen(sessionId, frozen) {
+  openDb()
+    .prepare('UPDATE sessions SET frozen = ?, updated_at = ? WHERE id = ?')
+    .run(frozen ? 1 : 0, Date.now(), sessionId);
+  return Boolean(frozen);
+}
+
+function setCurrentSession(sessionId) {
+  openDb()
+    .prepare('UPDATE app_state SET current_session_id = ? WHERE id = 1')
+    .run(sessionId || null);
+  return sessionId || null;
+}
+
+function updateSessionPendingQueue(sessionId, queue) {
+  const normalized = normalizePendingQueue(queue);
+  openDb()
+    .prepare('UPDATE sessions SET pending_queue = ?, updated_at = ? WHERE id = ?')
+    .run(JSON.stringify(normalized), Date.now(), sessionId);
+  return normalized;
 }
 
 function updateMessage(sessionId, seq, msg) {
@@ -1529,6 +1624,10 @@ module.exports = {
   saveStructure,
   deleteSession,
   appendMessage,
+  createSession,
+  setSessionFrozen,
+  setCurrentSession,
+  updateSessionPendingQueue,
   updateMessage,
   updateSessionGoal,
   updateSessionCompaction,

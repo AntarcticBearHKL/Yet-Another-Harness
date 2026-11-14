@@ -332,7 +332,15 @@ function startGoalContinuation(sessionId, goal, maxTurns) {
   }
 }
 
-async function compactSession(sessionId) {
+function continuationTitle(title) {
+  const text = String(title || 'Chat').trim() || 'Chat';
+  const match = text.match(/^#(\d+)\s+(.+)$/);
+  const next = match ? Number(match[1]) + 1 : 1;
+  const base = match ? match[2] : text;
+  return `#${next} ${base}`;
+}
+
+async function compactSession(sessionId, options = {}) {
   const id = String(sessionId || '').trim();
   if (!id) throw Object.assign(new Error('sessionId is required'), { code: 'bad_request' });
   if (sessionRuns.has(id)) {
@@ -343,6 +351,9 @@ async function compactSession(sessionId) {
   const session = findSession(id);
   if (!session) {
     throw Object.assign(new Error('session not found'), { code: 'not_found' });
+  }
+  if (session.frozen) {
+    throw Object.assign(new Error('session is frozen'), { code: 'frozen' });
   }
   const apiKey = String(
     process.env.OPENCODE_API_KEY || store.loadSettings().apiKey || ''
@@ -357,39 +368,74 @@ async function compactSession(sessionId) {
     compaction: session.compaction,
     sessionId: id,
   });
-  store.updateSessionCompaction(id, result.compaction);
+  const metrics = {
+    beforeTokens: result.beforeTokens,
+    afterTokens: result.afterTokens,
+    recentTokens: result.split.recentTokens,
+    through: result.compaction.through,
+    auto: false,
+    at: Date.now(),
+  };
   const step = {
     kind: 'compact',
     label: 'manual',
     text: result.compaction.summary,
     name: 'manual',
     ok: true,
-    metrics: {
-      beforeTokens: result.beforeTokens,
-      afterTokens: result.afterTokens,
-      recentTokens: result.split.recentTokens,
-      through: result.compaction.through,
-      auto: false,
-      at: Date.now(),
-    },
+    metrics,
   };
-  let messageSeq = lastAgentIndex(session.msgs);
-  let message = messageSeq >= 0 ? session.msgs[messageSeq] : null;
-  if (!message) {
-    messageSeq = store.appendMessage(id, 'Agent', '', '');
-    message = { role: 'Agent', text: '', request: '', steps: [], requests: [] };
-  }
-  message.steps = Array.isArray(message.steps) ? message.steps : [];
-  message.steps.push(step);
-  store.updateMessage(id, messageSeq, message);
+  const oldSeq = store.appendMessage(
+    id,
+    'Compact',
+    result.compaction.summary,
+    '',
+    metrics
+  );
+  store.updateSessionCompaction(id, result.compaction);
+
+  const newSessionId = crypto.randomUUID();
+  const newCompaction = {
+    ...result.compaction,
+    through: 1,
+  };
+  store.createSession({
+    id: newSessionId,
+    title: continuationTitle(session.title),
+    system: session.system,
+    agentsMd: session.agentsMd,
+    agentId: session.agentId,
+    projectId: session.projectId,
+    mcpDisabled: session.mcpDisabled,
+    compaction: newCompaction,
+    pendingQueue: Array.isArray(options.queue) ? options.queue : [],
+    frozen: false,
+  });
+  store.appendMessage(
+    newSessionId,
+    'Compact',
+    result.compaction.summary,
+    '',
+    metrics
+  );
+  store.setSessionFrozen(id, true);
+  store.updateSessionPendingQueue(id, []);
+  store.setCurrentSession(newSessionId);
+
   emit(id, null, 'compaction.done', {
-    messageSeq,
+    messageSeq: oldSeq,
     step,
     compaction: result.compaction,
     auto: false,
+    newSessionId,
+  });
+  emit(id, null, 'session.created', {
+    sessionId: newSessionId,
+    fromSessionId: id,
   });
   return {
     ok: true,
+    oldSessionId: id,
+    newSessionId,
     step,
     compaction: result.compaction,
     beforeTokens: result.beforeTokens,
@@ -734,6 +780,7 @@ module.exports = {
   cancelRun,
   cancelSessionRuns,
   compactSession,
+  continuationTitle,
   resolveApproval,
   resolveQuestions,
   activeRunForSession: (sessionId) => sessionRuns.get(sessionId) || null,
