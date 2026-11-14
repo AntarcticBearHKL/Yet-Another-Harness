@@ -11,6 +11,47 @@ const MAX_SKILLS = 100;
 const MAX_SKILL_TEXT = 24_000;
 const MAX_ATTACHED_SKILLS = 5;
 
+// Built-in system skills carry fixed instructions and cannot be edited. They
+// are commands rather than plain text skills: `/compact` and `/goal` execute
+// the matching backend action instead of being attached to a prompt.
+const SYSTEM_SKILLS = [
+  {
+    id: 'system:compact',
+    name: 'compact',
+    description:
+      '压缩当前对话上下文：保留结构化摘要和最近消息，然后继续工作。',
+    keywords: ['compact', '压缩', '上下文', 'summary', 'checkpoint'],
+    category: '系统',
+    source: '系统',
+    sourceKind: 'system',
+    readOnly: true,
+    command: 'compact',
+    body:
+      '# System Skill · compact\n' +
+      'Compress the conversation into the structured checkpoint template, ' +
+      'keep the newest exchanges verbatim, and continue from that checkpoint. ' +
+      'This instruction is built in and cannot be edited.',
+  },
+  {
+    id: 'system:goal',
+    name: 'goal',
+    description:
+      '把一条消息设为会话目标，自动推进，并在每轮结束后验证目标是否完成。',
+    keywords: ['goal', '目标', '自动推进', '验证', 'audit'],
+    category: '系统',
+    source: '系统',
+    sourceKind: 'system',
+    readOnly: true,
+    command: 'goal',
+    body:
+      '# System Skill · goal\n' +
+      'Keep working toward the persisted objective across turns. After every ' +
+      'turn, report what is done, what was verified, and what remains. A ' +
+      'separate goal check decides whether to continue, complete, or block. ' +
+      'This instruction is built in and cannot be edited.',
+  },
+];
+
 function parseKeywords(value) {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
   return String(value || '')
@@ -52,7 +93,7 @@ function readSkillFile(filePath, source) {
   if (!body) return null;
   const base = path.basename(filePath, path.extname(filePath));
   const category = String(
-    meta.category || (source === 'user' ? '系统' : '内置')
+    meta.category || (source === 'user' ? '用户' : '内置')
   ).trim();
   return {
     id: `${source}:${base}`,
@@ -142,6 +183,12 @@ function createSkillService({ root, dataDir, mcpManager }) {
 
   function list({ mcpDisabled = [] } = {}) {
     return [
+      ...SYSTEM_SKILLS.map(({ body, ...meta }) => ({
+        ...meta,
+        system: true,
+        readOnly: true,
+        instruction: body.slice(0, 1_200),
+      })),
       ...fileSkills().map(({ body, ...meta }) => meta),
       ...mcpSkills(mcpDisabled),
     ];
@@ -150,6 +197,12 @@ function createSkillService({ root, dataDir, mcpManager }) {
   async function resolveOne(skill, mcpDisabled) {
     const id = String(skill?.id || '').trim();
     if (!id) throw new Error('skill id is required');
+
+    if (id.startsWith('system:')) {
+      const entry = SYSTEM_SKILLS.find((item) => item.id === id);
+      if (!entry) throw new Error('系统 Skill 不存在');
+      return { id, name: entry.name, text: entry.body };
+    }
 
     if (id.startsWith('mcp:')) {
       const entry = mcpSkills([]).find((item) => item.id === id);
@@ -214,4 +267,4 @@ function createSkillService({ root, dataDir, mcpManager }) {
   return { list, resolveMany };
 }
 
-module.exports = { createSkillService, parseFrontmatter };
+module.exports = { createSkillService, parseFrontmatter, SYSTEM_SKILLS };

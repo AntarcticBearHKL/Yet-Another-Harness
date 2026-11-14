@@ -48,7 +48,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 项目、项目归属和对话一起持久化到 SQLite；工作区空白区域仍然可以按住左键拖动窗口
 - 有弹窗（设置、raw 查看器、MCP、工具目录、改名/确认、全文磨砂页）打开时，右键等于关闭弹窗
 - 主界面按住右键弹出环形菜单：工具、Skill、Agent、MCP；把鼠标拖到对应扇区后松开右键打开对应信息界面
-- Tab 工作区按住右键弹出二级环形菜单；松开 Tab 后工作区关闭，环形菜单保留，可以继续左键点扇区或按住右键拖到扇区后松开：项目上显示「改名 / 配置目录 / 删除」，具体对话上显示「改名 / 配置 MCP / 删除」，空白处显示「最小化 / 最大化 / 关闭」
+- Tab 工作区按住右键弹出二级环形菜单，拖到扇区后松开右键执行；按住右键期间松开 Tab，工作区会关闭但环形菜单保留，可以继续拖到扇区后松开右键：项目上显示「改名 / 配置目录 / 删除」，具体对话上显示「改名 / 配置 MCP / 删除」，空白处显示「最小化 / 最大化 / 关闭」
 - Tab 工作区左侧栏只显示项目名和对话名，名字后面不放任何图标；删除通过右键环形菜单完成
 - 新建项目会弹出「拖入文件夹」对话框：可以把任意多个文件夹拖进虚线框，也可以点击虚线框选择文件夹；至少有一个开发目录才能创建项目。右键项目可以随时「配置目录」
 - 项目目录保存在 SQLite 的 `projects.directories`；`read`、`write`、`edit`、`glob`、`grep`、`patch`、`look_at` 只允许访问当前项目目录下的文件。越界时工具调用会暂停，弹出 `TOOL ACCESS` 审核窗：点「允许一次」继续，点「拒绝」返回 `access denied by user`
@@ -58,7 +58,10 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
 - 输入框（Space）里：新对话（还没有任何消息）上方只显示 MCP 摘要按钮；已有消息的对话上方只显示排队消息框。生成中仍可继续输入，消息按顺序排队、一行一条，左侧拖动排序，行尾是编辑 / 立即发送 / 删除三个纯图标按钮；当前生成结束后自动按顺序处理队列；这两块都是和输入框同宽的圆角矩形
 - 新建对话默认继承同项目上一个对话的 MCP 服务器开关配置
-- Skill 是带 frontmatter 的 Markdown 文件（`name` / `description` / `keywords` / `category`），放在项目 `skills/`（内置）或 `%APPDATA%\yah\skills`（系统）；内置包含 `skills/test-skill.md` 测试 Skill
+- Skill 是带 frontmatter 的 Markdown 文件（`name` / `description` / `keywords` / `category`），放在项目 `skills/`（内置）或 `%APPDATA%\yah\skills`（用户）；内置包含 `skills/test-skill.md` 测试 Skill
+- Skill 页新增「系统」分组：`compact` / `goal` 是内置系统 Skill，不是可编辑的 Markdown，而是固定指令；只读，不能修改，输入 `/` 可以像其他 Skill 一样搜索和调用
+- 上下文压缩按 OpenCode 的方式工作：每次请求前用「已测量的 prompt + 之后新增内容的估算」判断，达到模型窗口减去 10%（至少 16k）时自动压缩；保留最近约 15k tokens，旧历史写成结构化 checkpoint。手动 `/compact` 随时触发；聊天里会显示 `CONTEXT COMPACTED` block（auto / manual、压缩前后 token 数、可展开摘要）
+- Goal 模式按 OpenChamber 的方式实现：`/goal` 打开目标对话框，`/goal <目标>` 直接开始；目标保存在当前对话，输入框上方显示目标状态条（进度、token、暂停 / 继续 / 清除）。每轮结束后会运行一个独立的 `GOAL CHECK` block，用三个 yes/no 问题判断 `complete` / `continue` / `blocked`；未完成会自动继续，直到完成、被阻塞、token 预算用完或达到自动轮次上限
 - 在输入框开头输入 `/` 会在光标位置弹出搜索式 Skill 联想：按名称、描述、关键词匹配当前对话可用的 Skill，上下键移动、回车或点击选择；选中后输入框本身不变色，只在输入框上方显示一个带颜色的 `/ Skill` 标记，按 Backspace 或点 × 整体删除；带参数的 MCP Skill 会先弹出参数表单
 - 附加的 Skill 在发送时解析并注入该次请求的 system prompt（`# Active Skills`），不会写进用户输入；排队消息会一起保存自己的 Skill
 - 已连接且当前对话启用的 MCP 服务器会把 prompts 暴露为临时 Skill；切换 MCP 开关后列表实时更新
@@ -66,7 +69,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；工具权限可以限制 Agent 只能调用勾选的工具，不勾选则不能调用工具
 - 输入框底部有 Agent 选择器，按对话保存选择；新对话继承同项目上一个对话的 Agent；排队消息会保存自己的 Agent
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
-- 工具和 Skill 面板是无标题的左右分栏：工具页左侧按分类列出内置工具（搜索 / 文件 / 系统 / 代理等），右侧显示名称、说明、参数；Skill 页左侧先列本地 Skill 分类（内置 / 系统 / 绘画等，由 frontmatter `category` 决定），再按 MCP 服务器名分组列出该服务器导入的 Skill；MCP 工具只出现在独立的 MCP 工作区，不混进工具目录；MCP 工作区左侧服务器、右侧工具 / 资源 / 提示词 / 日志 / 概览；没有内容时显示空状态
+- 工具和 Skill 面板是无标题的左右分栏：工具页左侧按分类列出内置工具（搜索 / 文件 / 系统 / 代理等），右侧显示名称、说明、参数；Skill 页左侧先列系统 Skill（compact / goal），再列本地 Skill 分类（内置 / 用户 / 绘画等，由 frontmatter `category` 决定），最后按 MCP 服务器名分组列出该服务器导入的 Skill；MCP 工具只出现在独立的 MCP 工作区，不混进工具目录；MCP 工作区左侧服务器、右侧工具 / 资源 / 提示词 / 日志 / 概览；没有内容时显示空状态
 - 聊天里的 MCP 工具调用显示为「MCP 调用」，不会和内置工具的「工具调用」混在一起；调用参数和返回结果仍然合并在同一个卡片里；工具返回后右侧显示 `ok` / `error` 圆角标签，错误卡片带红色侧边和浅红背景，过程组标题会汇总错误数量
 - 所有空状态（无对话、无消息、无工具/Skill/MCP、raw 为空、全文为空）统一在可用区域居中，颜色比正文淡一档
 - 工具调用的 JSON 参数和 JSON 输出用带语法着色、可折叠节点的查看器展示
@@ -137,6 +140,8 @@ src/deepseek.js    OpenCode Go SSE + tool_calls 累积 + agent loop（后端）
 src/tools.js       工具注册表：OpenCode + OMO 合并、MCP 路由、兼容别名
 src/tools/         hashline、文件/搜索、shell/后台、会话/任务/目标、子模型、web 工具模块
 src/tools/guard.js 项目目录路径守卫：越界时暂停工具并等待人工审批
+src/compaction.js  上下文压缩：OpenCode 阈值、checkpoint 模板、最近消息切分
+src/goal.js        Goal 模式：目标归一化、审计问题、continue/complete/blocked 判定
 src/mcp-registry.js MCP 工具到 OpenAI function 的映射（后端）
 src/store.js       chats.db（SQLite/WAL）+ settings.json 原子写 + 旧版迁移
 src/renderer.js    网页客户端：聊天、项目工作区、设置、环形菜单、HTTP/SSE

@@ -58,6 +58,13 @@ const dom = {
   approvalDirs: $('approval-dirs'),
   approvalDeny: $('approval-deny'),
   approvalAllow: $('approval-allow'),
+  goalOverlay: $('goal-overlay'),
+  goalTitle: $('goal-title'),
+  goalObjective: $('goal-objective'),
+  goalBudget: $('goal-budget'),
+  goalError: $('goal-error'),
+  goalCancel: $('goal-cancel'),
+  goalStart: $('goal-start'),
   rawBody: $('raw-body'),
   rawMeta: $('raw-meta'),
   apiKey: $('api-key'),
@@ -117,7 +124,6 @@ const state = {
   ringOpen: false,
   ringIndex: -1,
   ringSuppress: false,
-  ringPersistent: false,
   ringMoved: false,
   ringConfirmIndex: -1,
   catalogOpen: false,
@@ -152,6 +158,8 @@ const state = {
   slashDismissed: false,
   approvalQueue: [],
   activeApproval: null,
+  goalDialog: null,
+  goalSaving: false,
 };
 
 async function requestJson(path, options = {}) {
@@ -335,6 +343,17 @@ const api = {
       method: 'POST',
       body: { approved },
     }),
+  compactChat: (sessionId) =>
+    requestJson('/api/compact', { method: 'POST', body: { sessionId } }),
+  activeRun: (sessionId) =>
+    requestJson(
+      `/api/runs/active?sessionId=${encodeURIComponent(sessionId)}`
+    ),
+  saveGoal: (sessionId, goal) =>
+    requestJson('/api/goals', {
+      method: 'POST',
+      body: { sessionId, goal },
+    }),
   deleteSession: (id) =>
     requestJson(`/api/sessions/${encodeURIComponent(id)}`, {
       method: 'DELETE',
@@ -380,6 +399,9 @@ const api = {
   onChatToolCall: (callback) => subscribeEvent('tool.call', callback),
   onChatToolResult: (callback) => subscribeEvent('tool.result', callback),
   onToolApproval: (callback) => subscribeEvent('tool.approval', callback),
+  onGoalCheck: (callback) => subscribeEvent('goal.check', callback),
+  onGoalUpdated: (callback) => subscribeEvent('goal.updated', callback),
+  onCompaction: (callback) => subscribeEvent('compaction.done', callback),
   onChatDone: (callback) => subscribeEvent('run.done', callback),
   onChatError: (callback) => subscribeEvent('run.error', callback),
   onRunStarted: (callback) => subscribeEvent('run.started', callback),
@@ -1449,6 +1471,105 @@ function autoCardKey() {
   return streamingAutoKey() || lastCardKey(currentSession());
 }
 
+function renderCompactionBlock(step, key) {
+  const block = el(
+    'div',
+    `compact-block mode-${step.label === 'running' ? 'running' : 'done'}`
+  );
+  if (key) block.dataset.cardKey = key;
+  const head = el('div', 'compact-head');
+  head.append(el('span', 'compact-dot'));
+  head.append(el('span', 'compact-title', 'CONTEXT COMPACTED'));
+  head.append(
+    el(
+      'span',
+      `compact-badge ${step.label || 'auto'}`,
+      step.label === 'running' ? 'running' : step.label || 'auto'
+    )
+  );
+  const before = Number(step.metrics?.beforeTokens) || 0;
+  const after = Number(step.metrics?.afterTokens) || 0;
+  if (before || after) {
+    head.append(
+      el(
+        'span',
+        'compact-meta',
+        `${compactTokens(before)} → ${compactTokens(after)}`
+      )
+    );
+  }
+  block.append(head);
+  if (step.text) {
+    if (step.label === 'running') {
+      block.append(el('div', 'compact-text', step.text));
+    } else {
+      const details = el('details', 'compact-details');
+      const summary = el('summary', '', '查看摘要');
+      const pre = el('pre', 'compact-summary', step.text);
+      details.append(summary, pre);
+      block.append(details);
+    }
+  }
+  return block;
+}
+
+function renderGoalCheckBlock(step) {
+  const verdict = step.label || 'continue';
+  const block = el('div', `goal-check-block verdict-${verdict}`);
+  const head = el('div', 'goal-check-head');
+  head.append(el('span', 'goal-check-dot'));
+  head.append(el('span', 'goal-check-title', 'GOAL CHECK'));
+  head.append(el('span', 'goal-check-badge', verdict));
+  const turn = Number(step.metrics?.turn) || 0;
+  const tokens = Number(step.metrics?.tokensUsed) || 0;
+  if (turn || tokens) {
+    head.append(
+      el(
+        'span',
+        'goal-check-meta',
+        `turn ${turn}${tokens ? ` · ${compactTokens(tokens)} tokens` : ''}`
+      )
+    );
+  }
+  block.append(head);
+  if (step.metrics?.objective) {
+    block.append(
+      el('div', 'goal-check-objective', `目标：${step.metrics.objective}`)
+    );
+  }
+  const scores = step.metrics?.scores;
+  if (scores && typeof scores === 'object') {
+    const row = el('div', 'goal-check-scores');
+    for (const id of ['all_done', 'remaining', 'needs_user']) {
+      const yes = Number(scores[id]) >= 0.5;
+      row.append(
+        el(
+          'span',
+          `goal-check-score ${yes ? 'yes' : 'no'}`,
+          `${yes ? '✓' : '✗'} ${id}`
+        )
+      );
+    }
+    block.append(row);
+  }
+  if (step.text) block.append(el('div', 'goal-check-reason', step.text));
+  return block;
+}
+
+function appendSpecialSteps(msg, msgIndex, container) {
+  const steps = Array.isArray(msg.steps) ? msg.steps : [];
+  steps.forEach((step, index) => {
+    if (!step) return;
+    if (step.kind === 'compact') {
+      container.append(
+        renderCompactionBlock(step, stepCardKey(msgIndex, index))
+      );
+    } else if (step.kind === 'goal') {
+      container.append(renderGoalCheckBlock(step));
+    }
+  });
+}
+
 function renderAgentMessage(msg, msgIndex, container) {
   const steps = Array.isArray(msg.steps) ? msg.steps : [];
   const rich = isRichTrace(steps);
@@ -1493,6 +1614,7 @@ function renderAgentMessage(msg, msgIndex, container) {
     }
     if (streaming) card.classList.add('streaming');
     appendRow(card, {}, container);
+    appendSpecialSteps(msg, msgIndex, container);
     return;
   }
 
@@ -1656,6 +1778,7 @@ function renderAgentMessage(msg, msgIndex, container) {
       );
     }
   }
+  appendSpecialSteps(msg, msgIndex, container);
 }
 
 function mcpBlockServerEnabled(session, server) {
@@ -2690,6 +2813,21 @@ async function startPrompt(
 async function sendMessage() {
   const session = currentSession();
   if (!session) return;
+  const command = parseSlashCommand(dom.input.value);
+  if (command) {
+    dom.input.value = '';
+    state.slashDismissed = false;
+    updateSendState();
+    if (command.command === 'compact') {
+      await manualCompact(session);
+      return;
+    }
+    if (command.command === 'goal') {
+      if (command.args) await startGoalFromObjective(session, command.args);
+      else openGoalDialog();
+      return;
+    }
+  }
   const skills = state.attachedSkills.map((skill) => ({
     id: skill.id,
     name: skill.name,
@@ -2846,13 +2984,15 @@ function renderComposerContext() {
     dom.composerContext.replaceChildren();
     return;
   }
+  const children = [];
+  const goalStrip = renderGoalStrip(session);
+  if (goalStrip) children.push(goalStrip);
   if (session.msgs.length === 0) {
-    dom.composerContext.replaceChildren(
-      buildMcpSummary(session, () => openMcpConfig(session.id))
-    );
-    return;
+    children.push(buildMcpSummary(session, () => openMcpConfig(session.id)));
+  } else {
+    children.push(renderComposerQueue(session));
   }
-  dom.composerContext.replaceChildren(renderComposerQueue(session));
+  dom.composerContext.replaceChildren(...children);
 }
 
 function renderAgentPicker() {
@@ -3136,6 +3276,9 @@ function renderSlashPopup() {
     item.type = 'button';
     if (index === state.slashIndex) item.classList.add('selected');
     item.append(el('span', 'skill-popup-name', skill.name || skill.id));
+    if (skill.command) {
+      item.append(el('span', 'skill-popup-command', '命令'));
+    }
     item.append(el('span', 'skill-popup-source', skillSourceLabel(skill)));
     item.addEventListener('mousedown', (event) => event.preventDefault());
     item.addEventListener('click', () => chooseSlashSkill(skill));
@@ -3153,17 +3296,30 @@ function moveSlashSelection(delta) {
 
 function chooseSlashSkill(skill) {
   if (!skill) return;
+  const command = parseSlashCommand(dom.input.value);
   state.slashOpen = false;
   state.slashIndex = 0;
   state.slashDismissed = false;
   dom.input.value = '';
   updateSendState();
+  if (skill.command) {
+    executeSystemSkill(
+      skill,
+      command?.command === skill.command ? command.args : ''
+    );
+    renderComposerSkills();
+    return;
+  }
   selectSkill(skill);
   renderComposerSkills();
 }
 
 function selectSkill(skill) {
   if (!skill) return;
+  if (skill.command) {
+    executeSystemSkill(skill, '');
+    return;
+  }
   const args = Array.isArray(skill.arguments) ? skill.arguments : [];
   if (args.length > 0) {
     openSkillArgs(skill);
@@ -3218,6 +3374,308 @@ function resetComposerSkills() {
   clearTimeout(state.queueDeleteTimer);
   renderComposerSkills();
   updateSendState();
+}
+
+function lastAgentMessageIndex(messages) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'Agent') return index;
+  }
+  return -1;
+}
+
+function ensureLastAgentMessage(session) {
+  const index = lastAgentMessageIndex(session.msgs);
+  if (index >= 0) {
+    const message = session.msgs[index];
+    if (!Array.isArray(message.steps)) message.steps = [];
+    return message;
+  }
+  const message = {
+    role: 'Agent',
+    text: '',
+    request: '',
+    steps: [],
+    requests: [],
+  };
+  session.msgs.push(message);
+  return message;
+}
+
+function stepKey(step) {
+  return [
+    step?.kind || '',
+    step?.metrics?.at || step?.metrics?.createdAt || '',
+    step?.label || '',
+    String(step?.text || '').slice(0, 80),
+  ].join('|');
+}
+
+function appendStepOnce(message, step) {
+  if (!message || !step) return;
+  if (!Array.isArray(message.steps)) message.steps = [];
+  const key = stepKey(step);
+  if (message.steps.some((entry) => stepKey(entry) === key)) return;
+  message.steps.push(step);
+}
+
+function parseSlashCommand(value) {
+  const text = String(value || '').trim();
+  if (/^\/compact\b/i.test(text)) {
+    return {
+      command: 'compact',
+      args: text.replace(/^\/compact\b/i, '').trim(),
+    };
+  }
+  const goal = text.match(/^\/goal\b([\s\S]*)$/i);
+  if (goal) return { command: 'goal', args: goal[1].trim() };
+  return null;
+}
+
+function showGoalError(message) {
+  if (!dom.goalError) return;
+  dom.goalError.textContent = message || '';
+  dom.goalError.classList.toggle('hidden', !message);
+}
+
+function openGoalDialog(prefill = '') {
+  if (!dom.goalOverlay) return;
+  state.goalDialog = { objective: String(prefill || '') };
+  dom.goalObjective.value = state.goalDialog.objective;
+  dom.goalBudget.value = '';
+  dom.goalStart.disabled = false;
+  showGoalError('');
+  dom.goalOverlay.classList.remove('hidden');
+  dom.goalOverlay.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => {
+    dom.goalObjective.focus();
+    dom.goalObjective.setSelectionRange(
+      dom.goalObjective.value.length,
+      dom.goalObjective.value.length
+    );
+  });
+}
+
+function closeGoalDialog() {
+  if (!dom.goalOverlay) return;
+  state.goalDialog = null;
+  state.goalSaving = false;
+  dom.goalOverlay.classList.add('hidden');
+  dom.goalOverlay.setAttribute('aria-hidden', 'true');
+}
+
+async function startGoalFromObjective(session, objective, tokenBudget = 0) {
+  if (!session) return false;
+  if (state.streaming) {
+    showGoalError('正在生成，等当前回复结束后再开始目标');
+    const message = ensureLastAgentMessage(session);
+    appendStepOnce(message, {
+      kind: 'status',
+      label: '正在生成，等当前回复结束后再开始目标',
+      ok: false,
+    });
+    renderAll();
+    return false;
+  }
+  const text = String(objective || '').trim();
+  if (!text) {
+    showGoalError('请填写目标');
+    return false;
+  }
+  const budget = Number(tokenBudget) || 0;
+  if (budget > 0 && budget < 1000) {
+    showGoalError('Token 预算至少 1000，或留空表示不限制');
+    return false;
+  }
+  const now = Date.now();
+  const goal = {
+    id: makeId(),
+    objective: text,
+    status: 'active',
+    tokenBudget: budget > 0 ? Math.floor(budget) : null,
+    tokensUsed: 0,
+    turnsUsed: 0,
+    maxTurns: 20,
+    auditFailStreak: 0,
+    statusReason: '',
+    createdAt: now,
+    updatedAt: now,
+    lastCheck: null,
+  };
+  state.goalSaving = true;
+  if (dom.goalStart) dom.goalStart.disabled = true;
+  try {
+    const data = await api.saveGoal(session.id, goal);
+    session.goal = data?.goal || goal;
+    closeGoalDialog();
+    renderAll();
+    if (!state.streaming) {
+      await startPrompt(session, text, { clearInput: true });
+    }
+    return true;
+  } catch (error) {
+    showGoalError(`启动目标失败：${error.message}`);
+    state.goalSaving = false;
+    if (dom.goalStart) dom.goalStart.disabled = false;
+    return false;
+  }
+}
+
+async function updateGoalState(session, patch) {
+  if (!session?.goal) return null;
+  const next = { ...session.goal, ...patch, updatedAt: Date.now() };
+  try {
+    const data = await api.saveGoal(session.id, next);
+    session.goal = data?.goal || next;
+    renderAll();
+    return session.goal;
+  } catch (error) {
+    console.error('update goal failed', error);
+    return session.goal;
+  }
+}
+
+async function pauseGoal(session) {
+  await updateGoalState(session, {
+    status: 'paused',
+    statusReason: 'paused by user',
+  });
+}
+
+async function resumeGoal(session) {
+  if (!session?.goal) return;
+  const goal = await updateGoalState(session, {
+    status: 'active',
+    statusReason: 'resumed',
+  });
+  if (goal && !state.streaming) {
+    await startPrompt(
+      session,
+      'Continue working toward the active session goal.',
+      { clearInput: true }
+    );
+  }
+}
+
+async function clearGoal(session) {
+  if (!session?.goal) return;
+  try {
+    await api.saveGoal(session.id, null);
+  } catch (error) {
+    console.error('clear goal failed', error);
+    return;
+  }
+  session.goal = null;
+  renderAll();
+}
+
+function renderGoalStrip(session) {
+  const goal = session?.goal;
+  if (!goal) return null;
+  const strip = el('div', `goal-strip status-${goal.status}`);
+  const main = el('div', 'goal-strip-main');
+  main.append(el('span', 'goal-strip-label', 'GOAL'));
+  main.append(el('span', 'goal-strip-objective', goal.objective));
+  strip.append(main);
+  const meta = el('div', 'goal-strip-meta');
+  const parts = [goal.status];
+  parts.push(`turn ${goal.turnsUsed || 0}/${goal.maxTurns || 20}`);
+  parts.push(
+    `${compactTokens(goal.tokensUsed || 0)}${
+      goal.tokenBudget ? ` / ${compactTokens(goal.tokenBudget)}` : ''
+    }`
+  );
+  if (goal.statusReason) parts.push(goal.statusReason);
+  meta.textContent = parts.join(' · ');
+  strip.append(meta);
+  const actions = el('div', 'goal-strip-actions');
+  if (goal.status === 'active') {
+    const pause = el('button', 'goal-strip-button', '暂停');
+    pause.type = 'button';
+    pause.addEventListener('click', () => void pauseGoal(session));
+    actions.append(pause);
+  } else if (
+    goal.status === 'paused' ||
+    goal.status === 'blocked' ||
+    goal.status === 'budgetLimited'
+  ) {
+    const resume = el('button', 'goal-strip-button', '继续');
+    resume.type = 'button';
+    resume.addEventListener('click', () => void resumeGoal(session));
+    actions.append(resume);
+  }
+  const clear = el('button', 'goal-strip-clear', '×');
+  clear.type = 'button';
+  clear.setAttribute('aria-label', '清除目标');
+  clear.addEventListener('click', () => {
+    openConfirm({
+      title: 'CLEAR GOAL',
+      text: '清除当前目标？已生成的对话会保留。',
+      action: () => void clearGoal(session),
+    });
+  });
+  actions.append(clear);
+  strip.append(actions);
+  return strip;
+}
+
+async function manualCompact(session) {
+  if (!session) return;
+  if (state.streaming) {
+    const message = ensureLastAgentMessage(session);
+    appendStepOnce(message, {
+      kind: 'status',
+      label: '正在生成，暂时不能压缩上下文',
+      ok: false,
+    });
+    renderAll();
+    return;
+  }
+  const message = ensureLastAgentMessage(session);
+  const temp = {
+    kind: 'compact',
+    label: 'running',
+    text: '正在压缩上下文…',
+    name: 'manual',
+    ok: true,
+    metrics: { at: Date.now() },
+  };
+  appendStepOnce(message, temp);
+  renderAll();
+  try {
+    const result = await api.compactChat(session.id);
+    message.steps = (message.steps || []).filter(
+      (step) => stepKey(step) !== stepKey(temp)
+    );
+    if (result?.step) appendStepOnce(message, result.step);
+    if (result?.compaction) session.compaction = result.compaction;
+  } catch (error) {
+    message.steps = (message.steps || []).filter(
+      (step) => stepKey(step) !== stepKey(temp)
+    );
+    appendStepOnce(message, {
+      kind: 'status',
+      label: `compact failed: ${error.message}`,
+      ok: false,
+    });
+  }
+  renderAll();
+}
+
+function executeSystemSkill(skill, args = '') {
+  const session = currentSession();
+  if (!session) return;
+  if (skill?.command === 'compact') {
+    void manualCompact(session);
+    return;
+  }
+  if (skill?.command === 'goal') {
+    const objective = String(args || '').trim();
+    if (objective) {
+      void startGoalFromObjective(session, objective);
+      return;
+    }
+    openGoalDialog();
+  }
 }
 
 function openSkillArgs(skill) {
@@ -3426,6 +3884,33 @@ async function refreshChats() {
   } catch (error) {
     console.error('refresh chats failed', error);
   }
+}
+
+async function adoptExternalRun(requestId) {
+  if (!requestId || state.streaming) return;
+  await refreshChats();
+  const session = currentSession();
+  if (!session) return;
+  let active = null;
+  try {
+    active = await api.activeRun(session.id);
+  } catch {
+    active = null;
+  }
+  if (active?.runId !== requestId) {
+    state.streaming = false;
+    state.requestId = null;
+    renderAll();
+    return;
+  }
+  const index = lastAgentMessageIndex(session.msgs);
+  if (index < 0) return;
+  state.streamMessage = session.msgs[index];
+  state.streaming = true;
+  state.requestId = requestId;
+  state.forceScroll = true;
+  state.openCardKey = autoCardKey();
+  renderAll();
 }
 
 function finishStream() {
@@ -3969,7 +4454,6 @@ function openRingMenu(x, y, items = RING_ITEMS, options = {}) {
   dom.ringMenu.style.left = `${cx}px`;
   dom.ringMenu.style.top = `${cy}px`;
   state.ringOpen = true;
-  state.ringPersistent = options.persistent === true;
   state.ringMoved = false;
   state.ringConfirmIndex = -1;
   state.ringSuppress = true;
@@ -4015,7 +4499,6 @@ function removeRingCatcher() {
 function closeRingMenu() {
   if (!state.ringOpen) return;
   state.ringOpen = false;
-  state.ringPersistent = false;
   state.ringConfirmIndex = -1;
   ringItems = RING_ITEMS;
   updateRingSelection(-1);
@@ -4066,7 +4549,7 @@ function openSwitcherRingMenu(event) {
           confirm: true,
         },
       ],
-      { usage: false, persistent: true }
+      { usage: false }
     );
     return;
   }
@@ -4096,7 +4579,7 @@ function openSwitcherRingMenu(event) {
           confirm: true,
         },
       ],
-      { usage: false, persistent: true }
+      { usage: false }
     );
     return;
   }
@@ -4122,7 +4605,7 @@ function openSwitcherRingMenu(event) {
         action: () => api.close(),
       },
     ],
-    { usage: false, persistent: true }
+    { usage: false }
   );
 }
 
@@ -4130,6 +4613,11 @@ function onRightMouseDown(event) {
   if (event.button !== 2) return;
   if (dom.approvalOverlay && !dom.approvalOverlay.classList.contains('hidden')) {
     resolveToolApproval(false);
+    state.ringSuppress = true;
+    return;
+  }
+  if (dom.goalOverlay && !dom.goalOverlay.classList.contains('hidden')) {
+    closeGoalDialog();
     state.ringSuppress = true;
     return;
   }
@@ -4168,6 +4656,11 @@ function onRightMouseDown(event) {
   }
   if (dom.projectOverlay && !dom.projectOverlay.classList.contains('hidden')) {
     closeProjectDialog();
+    state.ringSuppress = true;
+    return;
+  }
+  if (dom.goalOverlay && !dom.goalOverlay.classList.contains('hidden')) {
+    closeGoalDialog();
     state.ringSuppress = true;
     return;
   }
@@ -4212,10 +4705,6 @@ function onRightMouseDown(event) {
 
 function onRightMouseUp(event) {
   if (event.button !== 2 || !state.ringOpen) return;
-  if (state.ringPersistent && !state.ringMoved) {
-    // A plain right-click keeps the switcher menu open so items can be clicked.
-    return;
-  }
   const index = ringIndexForPoint(event.clientX, event.clientY);
   if (index < 0) {
     closeRingMenu();
@@ -4332,6 +4821,7 @@ function toolCountsByGroup(tools) {
 }
 
 function skillCatalogGroups(data) {
+  const system = [];
   const locals = [];
   const servers = [];
   const localMap = new Map();
@@ -4349,6 +4839,10 @@ function skillCatalogGroups(data) {
         servers.push(entry);
       }
       serverMap.get(key).count += 1;
+    } else if (skill.sourceKind === 'system') {
+      const entry = system.find((item) => item.id === 'local:系统');
+      if (entry) entry.count += 1;
+      else system.push({ id: 'local:系统', label: '系统', count: 1 });
     } else {
       const category = skillCategory(skill);
       if (!localMap.has(category)) {
@@ -4359,7 +4853,7 @@ function skillCatalogGroups(data) {
       localMap.get(category).count += 1;
     }
   }
-  return { locals, servers };
+  return { system, locals, servers };
 }
 
 function ensureCatalogSelection(data, page) {
@@ -4375,10 +4869,10 @@ function ensureCatalogSelection(data, page) {
     return;
   }
   if (page === 'skills') {
-    const { locals, servers } = skillCatalogGroups(data);
-    const all = [...locals, ...servers];
+    const { system, locals, servers } = skillCatalogGroups(data);
+    const all = [...system, ...locals, ...servers];
     if (!all.some((item) => item.id === state.catalogKind)) {
-      state.catalogKind = all[0]?.id || 'local:内置';
+      state.catalogKind = all[0]?.id || 'local:系统';
     }
     return;
   }
@@ -4417,7 +4911,15 @@ function renderCatalogCategories(data, selectedKind, page) {
   dom.catalogCategories.replaceChildren();
 
   if (page === 'skills') {
-    const { locals, servers } = skillCatalogGroups(data);
+    const { system, locals, servers } = skillCatalogGroups(data);
+    if (system.length > 0) {
+      const systemSection = el('div', 'catalog-section');
+      systemSection.append(el('div', 'catalog-section-label', '系统'));
+      for (const item of system) {
+        systemSection.append(catalogCategoryButton(item, selectedKind));
+      }
+      dom.catalogCategories.append(systemSection);
+    }
     const localSection = el('div', 'catalog-section');
     localSection.append(el('div', 'catalog-section-label', 'Skill'));
     if (locals.length === 0) {
@@ -4578,6 +5080,8 @@ function renderCatalogEntryItem(kind, entry) {
       ? [
           skillCategory(entry),
           entry.sourceKind === 'mcp' ? 'MCP' : '',
+          entry.readOnly ? '只读' : '',
+          entry.command ? '系统命令' : '',
           Array.isArray(entry.arguments) && entry.arguments.length
             ? `${entry.arguments.length} 个参数`
             : '',
@@ -4588,6 +5092,12 @@ function renderCatalogEntryItem(kind, entry) {
           .filter(Boolean)
           .join(' · ');
   if (meta) item.append(el('div', 'catalog-meta', meta));
+  if (entry.instruction) {
+    const details = el('details', 'catalog-instruction');
+    details.append(el('summary', '', '固定指令（只读）'));
+    details.append(el('pre', 'catalog-instruction-text', entry.instruction));
+    item.append(details);
+  }
   return item;
 }
 
@@ -4634,9 +5144,12 @@ function renderCatalogContent(kind) {
   }
   if (kind?.startsWith('local:')) {
     const category = kind.slice('local:'.length);
-    const entries = (state.catalogData?.skills || []).filter(
-      (skill) =>
-        skill.sourceKind !== 'mcp' && skillCategory(skill) === category
+    const entries = (state.catalogData?.skills || []).filter((skill) =>
+      category === '系统'
+        ? skill.sourceKind === 'system'
+        : skill.sourceKind !== 'mcp' &&
+          skill.sourceKind !== 'system' &&
+          skillCategory(skill) === category
     );
     renderCatalogList('skills', entries);
     return;
@@ -4918,7 +5431,7 @@ async function openCatalog(kind) {
     page === 'tools'
       ? 'tool:search'
       : page === 'skills'
-        ? 'local:内置'
+        ? 'local:系统'
         : page === 'agents'
           ? 'agent:none'
           : 'mcp';
@@ -4987,6 +5500,10 @@ function bindEvents() {
       resolveToolApproval(false);
       return;
     }
+    if (dom.goalOverlay && !dom.goalOverlay.classList.contains('hidden')) {
+      closeGoalDialog();
+      return;
+    }
     if (state.ringSuppress) {
       state.ringSuppress = false;
       return;
@@ -5012,6 +5529,10 @@ function bindEvents() {
     }
     if (dom.projectOverlay && !dom.projectOverlay.classList.contains('hidden')) {
       closeProjectDialog();
+      return;
+    }
+    if (dom.goalOverlay && !dom.goalOverlay.classList.contains('hidden')) {
+      closeGoalDialog();
       return;
     }
     if (dom.skillArgsOverlay && !dom.skillArgsOverlay.classList.contains('hidden')) {
@@ -5098,6 +5619,25 @@ function bindEvents() {
   dom.projectSave?.addEventListener('click', saveProjectDialog);
   dom.projectOverlay?.addEventListener('click', (event) => {
     if (event.target === dom.projectOverlay) closeProjectDialog();
+  });
+  dom.goalCancel?.addEventListener('click', closeGoalDialog);
+  dom.goalStart?.addEventListener('click', async () => {
+    const session = currentSession();
+    if (!session || state.goalSaving) return;
+    await startGoalFromObjective(
+      session,
+      dom.goalObjective.value,
+      dom.goalBudget.value
+    );
+  });
+  dom.goalOverlay?.addEventListener('click', (event) => {
+    if (event.target === dom.goalOverlay) closeGoalDialog();
+  });
+  dom.goalObjective?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      dom.goalStart?.click();
+    }
   });
   dom.projectName?.addEventListener('input', () => {
     if (!projectDialog) return;
@@ -5274,6 +5814,13 @@ function bindEvents() {
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
         closeProjectDialog();
+      }
+      return;
+    }
+    if (dom.goalOverlay && !dom.goalOverlay.classList.contains('hidden')) {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        closeGoalDialog();
       }
       return;
     }
@@ -5505,6 +6052,9 @@ function bindEvents() {
           dom.projectOverlay &&
             !dom.projectOverlay.classList.contains('hidden')
         ) ||
+        Boolean(
+          dom.goalOverlay && !dom.goalOverlay.classList.contains('hidden')
+        ) ||
         state.switcherOpen ||
         state.composerOpen ||
         state.catalogOpen ||
@@ -5719,7 +6269,40 @@ function bindEvents() {
   api.onRunStarted(({ requestId }) => {
     if (!requestId || requestId === state.requestId) return;
     if (state.streaming) return;
-    refreshChats();
+    void adoptExternalRun(requestId);
+  });
+
+  api.onGoalCheck(({ messageSeq, step, goal }) => {
+    const session = currentSession();
+    if (!session || !step) return;
+    const message =
+      Number.isInteger(messageSeq) && session.msgs[messageSeq]?.role === 'Agent'
+        ? session.msgs[messageSeq]
+        : ensureLastAgentMessage(session);
+    appendStepOnce(message, step);
+    if (goal) session.goal = goal;
+    state.openCardKey = autoCardKey();
+    renderAll();
+  });
+
+  api.onGoalUpdated(({ goal }) => {
+    const session = currentSession();
+    if (!session) return;
+    session.goal = goal || null;
+    if (state.composerOpen) renderComposerContext();
+  });
+
+  api.onCompaction(({ messageSeq, step, compaction }) => {
+    const session = currentSession();
+    if (!session || !step) return;
+    const message =
+      Number.isInteger(messageSeq) && session.msgs[messageSeq]?.role === 'Agent'
+        ? session.msgs[messageSeq]
+        : ensureLastAgentMessage(session);
+    appendStepOnce(message, step);
+    if (compaction) session.compaction = compaction;
+    state.openCardKey = autoCardKey();
+    renderAll();
   });
 
   api.onToolApproval(({ requestId, id, tool, path, allowedDirs }) => {

@@ -5124,3 +5124,372 @@ body.maximized .mcp {
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
   font-size: 12px;
 }
+
+/* Goal dialog, goal strip, goal check block, context compaction block. */
+#goal-overlay {
+  z-index: 75;
+}
+
+.goal-panel {
+  width: min(560px, calc(100vw - 40px));
+}
+
+.goal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.goal-field-label {
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.goal-field .text-input {
+  width: 100%;
+}
+
+.goal-objective-input {
+  min-height: 112px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.goal-hint {
+  margin: 0;
+  color: var(--faint);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.goal-error {
+  color: #b23a2f;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.goal-error.hidden {
+  display: none;
+}
+
+.goal-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(252, 246, 238, 0.58);
+}
+
+.goal-strip.status-active {
+  border-color: rgba(185, 111, 61, 0.36);
+  background: rgba(185, 111, 61, 0.07);
+}
+
+.goal-strip.status-blocked,
+.goal-strip.status-budgetLimited {
+  border-color: rgba(178, 58, 47, 0.3);
+  background: rgba(178, 58, 47, 0.05);
+}
+
+.goal-strip-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.goal-strip-label {
+  flex: none;
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.goal-strip-objective {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal-strip-meta {
+  flex: none;
+  color: var(--faint);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+}
+
+.goal-strip-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.goal-strip-button {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--dim);
+  font-size: 10px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.goal-strip-button:hover {
+  background: var(--hover);
+  color: var(--text-soft);
+}
+
+.goal-strip-clear {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--faint);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.goal-strip-clear:hover {
+  background: var(--hover);
+  color: var(--text-soft);
+}
+
+.goal-check-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 0 10px 32px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 12px;
+  background: rgba(252, 246, 238, 0.5);
+}
+
+.goal-check-block.verdict-complete {
+  border-left-color: #4f8a5b;
+}
+
+.goal-check-block.verdict-blocked,
+.goal-check-block.verdict-budgetLimited {
+  border-left-color: #b23a2f;
+  background: rgba(178, 58, 47, 0.04);
+}
+
+.goal-check-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.goal-check-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.goal-check-block.verdict-complete .goal-check-dot {
+  background: #4f8a5b;
+}
+
+.goal-check-block.verdict-blocked .goal-check-dot,
+.goal-check-block.verdict-budgetLimited .goal-check-dot {
+  background: #b23a2f;
+}
+
+.goal-check-title {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.goal-check-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(185, 111, 61, 0.12);
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.goal-check-block.verdict-complete .goal-check-badge {
+  background: rgba(79, 138, 91, 0.12);
+  color: #3f7449;
+}
+
+.goal-check-block.verdict-blocked .goal-check-badge,
+.goal-check-block.verdict-budgetLimited .goal-check-badge {
+  background: rgba(178, 58, 47, 0.1);
+  color: #a5382e;
+}
+
+.goal-check-meta {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 9.5px;
+}
+
+.goal-check-objective {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal-check-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.goal-check-score {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--faint);
+  font-size: 9.5px;
+}
+
+.goal-check-score.yes {
+  border-color: rgba(79, 138, 91, 0.3);
+  color: #3f7449;
+}
+
+.goal-check-score.no {
+  border-color: rgba(178, 58, 47, 0.2);
+  color: #a5382e;
+}
+
+.goal-check-reason {
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.compact-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 0 10px 32px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(252, 246, 238, 0.42);
+}
+
+.compact-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.compact-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #8a7a66;
+}
+
+.compact-block.mode-running .compact-dot {
+  background: var(--accent);
+  animation: goal-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes goal-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.compact-title {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.compact-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(138, 122, 102, 0.12);
+  color: var(--dim);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.compact-meta {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 9.5px;
+}
+
+.compact-text {
+  color: var(--faint);
+  font-size: 10.5px;
+}
+
+.compact-details summary {
+  color: var(--faint);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.compact-summary {
+  max-height: 220px;
+  margin: 6px 0 0;
+  overflow: auto;
+  color: var(--dim);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.skill-popup-command {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(185, 111, 61, 0.12);
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.catalog-instruction {
+  margin-top: 6px;
+}
+
+.catalog-instruction summary {
+  color: var(--faint);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.catalog-instruction-text {
+  max-height: 180px;
+  margin: 6px 0 0;
+  overflow: auto;
+  color: var(--dim);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}

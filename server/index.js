@@ -15,6 +15,7 @@ const usage = require('./usage');
 const { McpManager } = require('./mcp/manager');
 const { createSkillService } = require('./skills');
 const { loadAgents, saveAgents, getAgent } = require('./agents');
+const { normalizeGoal } = require('../src/goal');
 
 const ROOT = path.resolve(__dirname, '..');
 const APP_DATA =
@@ -343,6 +344,51 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'POST' && pathname === '/api/goals') {
+    readJson(req)
+      .then((body) => {
+        const sessionId = String(body?.sessionId || '').trim();
+        if (!sessionId) {
+          sendJson(res, 400, { error: 'sessionId is required' });
+          return;
+        }
+        const goal =
+          body?.goal === null || body?.goal === undefined
+            ? null
+            : normalizeGoal(body.goal);
+        if (body?.goal && !goal) {
+          sendJson(res, 400, { error: 'goal objective is required' });
+          return;
+        }
+        const saved = store.updateSessionGoal(sessionId, goal);
+        sendJson(res, 200, { ok: true, goal: saved });
+      })
+      .catch((error) =>
+        sendJson(res, error.status || 400, { error: error.message })
+      );
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/compact') {
+    readJson(req)
+      .then(async (body) => {
+        const result = await runner.compactSession(body?.sessionId);
+        sendJson(res, 200, result);
+      })
+      .catch((error) => {
+        const status =
+          error.code === 'busy'
+            ? 409
+            : error.code === 'not_found'
+              ? 404
+              : error.code === 'no_key'
+                ? 400
+                : 400;
+        sendJson(res, status, { error: error.message, code: error.code });
+      });
+    return true;
+  }
+
   if (req.method === 'DELETE' && pathname.startsWith('/api/sessions/')) {
     const sessionId = decodeURIComponent(
       pathname.slice('/api/sessions/'.length)
@@ -655,6 +701,18 @@ function handleApi(req, res, url) {
     }
 
     sendJson(res, 404, { error: 'not found' });
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/runs/active') {
+    const sessionId = String(url.searchParams.get('sessionId') || '');
+    if (!sessionId) {
+      sendJson(res, 400, { error: 'sessionId is required' });
+      return true;
+    }
+    sendJson(res, 200, {
+      runId: runner.activeRunForSession(sessionId) || null,
+    });
     return true;
   }
 

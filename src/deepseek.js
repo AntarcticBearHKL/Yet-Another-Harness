@@ -5,6 +5,18 @@
 // 执行工具、把结果塞回下一轮。
 
 const tools = require('./tools');
+const {
+  buildSummaryPrompt,
+  SUMMARY_NUDGE,
+  hasSummaryHeadings,
+  splitForCompaction,
+  checkpointText,
+  estimateMessagesTokens,
+  estimateTextTokens,
+  compactionCeiling,
+  normalizeCompaction,
+  KEEP_TOKENS,
+} = require('./compaction');
 
 const ENDPOINT = 'https://opencode.ai/inference/go/openai/v1/chat/completions';
 const MODEL = 'deepseek-v4.1-flash';
@@ -69,17 +81,26 @@ function messagesFromHistory(
   history,
   system,
   maxHistory = MAX_HISTORY,
-  route = { provider: PROVIDER, api: API, model: MODEL }
+  route = { provider: PROVIDER, api: API, model: MODEL },
+  compaction = null
 ) {
   const messages = [];
   if (system && system.trim()) {
     messages.push({ role: 'system', content: system });
   }
 
-  const usable = (history || []).filter(
+  const checkpoint = normalizeCompaction(compaction);
+  const source = checkpoint
+    ? (history || []).slice(checkpoint.through)
+    : history || [];
+  const usable = source.filter(
     (msg) => msg && (msg.role === 'User' || msg.role === 'user' || msg.request != null)
   );
-  const start = Math.max(0, usable.length - maxHistory);
+  const start = checkpoint ? 0 : Math.max(0, usable.length - maxHistory);
+
+  if (checkpoint) {
+    messages.push({ role: 'user', content: checkpointText(checkpoint) });
+  }
 
   for (const msg of usable.slice(start)) {
     if (msg.role === 'User' || msg.role === 'user') {
@@ -411,11 +432,141 @@ const TOOL_LIMIT_INSTRUCTION =
   '请直接基于上面已经获得的工具结果和对话信息，用当前掌握的信息给出完整、可用的最终回复。' +
   '如果任务还没全部完成，说明已经完成了什么、还差什么。';
 
+const COMPACTION_SYSTEM =
+  'You compress conversation history into a structured checkpoint for another agent. Do not call tools.';
+
+function lastUserIndex(messages) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'user') return index;
+  }
+  return -1;
+}
+
+function isContextOverflow(error) {
+  const message = String(error?.message || error || '');
+  return /context length|context window|maximum context|too many tokens|token limit|too long|too large|exceeds?.*(context|tokens)/i.test(
+    message
+  );
+}
+
+function messageRequest(messages) {
+  return {
+    model: MODEL,
+    messages,
+    stream: true,
+    stream_options: { include_usage: true },
+  };
+}
+
+async function summarizeMessages({
+  apiKey,
+  olderText,
+  update = false,
+  signal,
+  sessionId,
+}) {
+  const prompt = buildSummaryPrompt(update);
+  const base = [
+    { role: 'system', content: COMPACTION_SYSTEM },
+    { role: 'user', content: `${olderText}\n\n${prompt}` },
+  ];
+  const first = await streamChat({
+    apiKey,
+    body: messageRequest(base),
+    signal,
+    sessionId,
+  });
+  let text = String(first.content || '').trim();
+  if (hasSummaryHeadings(text)) return text;
+
+  const retry = await streamChat({
+    apiKey,
+    body: messageRequest([
+      ...base,
+      { role: 'assistant', content: String(first.content || '') },
+      { role: 'user', content: SUMMARY_NUDGE },
+    ]),
+    signal,
+    sessionId,
+  });
+  text = String(retry.content || '').trim();
+  if (hasSummaryHeadings(text)) return text;
+  throw new Error('compaction summary did not match the required template');
+}
+
+function estimateCompactedTokens(checkpoint, afterMessages = []) {
+  return (
+    estimateMessagesTokens([
+      { role: 'user', content: checkpointText(checkpoint) },
+    ]) + estimateMessagesTokens(afterMessages)
+  );
+}
+
+async function compactHistory({
+  apiKey,
+  system,
+  history,
+  compaction = null,
+  signal,
+  keep = KEEP_TOKENS,
+  sessionId,
+}) {
+  const messages = messagesFromHistory(
+    history,
+    system,
+    Number.POSITIVE_INFINITY,
+    { provider: PROVIDER, api: API, model: MODEL },
+    compaction
+  );
+  const systemCount = messages[0]?.role === 'system' ? 1 : 0;
+  const conversation = messages.slice(systemCount);
+  const split = splitForCompaction(conversation, keep);
+  if (!split) {
+    throw Object.assign(new Error('nothing to compact yet'), {
+      code: 'nothing_to_compact',
+    });
+  }
+  const summary = await summarizeMessages({
+    apiKey,
+    olderText: split.olderText,
+    update: Boolean(normalizeCompaction(compaction)),
+    signal,
+    sessionId,
+  });
+  const recent = split.recentText;
+  const through = Array.isArray(history) ? history.length : 0;
+  const beforeTokens = estimateMessagesTokens(messages);
+  const checkpoint = normalizeCompaction({
+    summary,
+    recent,
+    through,
+    beforeTokens,
+    afterTokens: estimateCompactedTokens({ summary, recent }),
+    createdAt: Date.now(),
+  });
+  return {
+    compaction: checkpoint,
+    split,
+    beforeTokens,
+    afterTokens: estimateCompactedTokens(checkpoint),
+  };
+}
+
+async function runAudit({ apiKey, prompt, signal, sessionId }) {
+  const result = await streamChat({
+    apiKey,
+    body: messageRequest([{ role: 'user', content: String(prompt || '') }]),
+    signal,
+    sessionId,
+  });
+  return String(result.content || result.reasoning || '').trim();
+}
+
 /**
  * 跑完整的一轮用户请求：模型 → 工具 → 模型，最多 MAX_TOOL_ROUNDS 轮。
  * 到达轮次上限后不再报错，而是追加一条总结指令，用当前已有的信息直接给出最终回复。
- * onRequest 收每一轮实际发出去的请求 body；onDelta 收正文增量；
- * onToolCall / onToolResult 收每次工具调用的参数和返回内容。
+ * 每次请求前按 OpenCode 的方式检查上下文：已测量的 prompt + 之后新增内容的估算
+ * 达到窗口上限（留 10% / 至少 16k）时，先把旧历史压缩成 checkpoint 再继续。
  */
 async function runAgent({
   apiKey,
@@ -424,6 +575,11 @@ async function runAgent({
   mcpDisabled,
   allowedTools,
   toolContext,
+  compaction = null,
+  compactionThrough = 0,
+  autoCompact = true,
+  onCompaction,
+  onCompactionError,
   onDelta,
   onRequest,
   onUsage,
@@ -437,9 +593,27 @@ async function runAgent({
     provider: PROVIDER,
     api: API,
     model: MODEL,
-  });
+  }, compaction);
+  let currentCompaction = normalizeCompaction(compaction);
+  const systemCount = messages[0]?.role === 'system' ? 1 : 0;
   let finalText = '';
   let activeRound = 0;
+  let measuredTokens = null;
+  let sentLength = messages.length;
+  let compactionFailed = false;
+  let toolTokens = 0;
+  try {
+    toolTokens = estimateTextTokens(
+      JSON.stringify(tools.definitions({ mcpDisabled, allowedTools }))
+    );
+  } catch {
+    toolTokens = 0;
+  }
+
+  const currentEstimate = () =>
+    measuredTokens === null
+      ? estimateMessagesTokens(messages) + toolTokens
+      : measuredTokens + estimateMessagesTokens(messages.slice(sentLength));
 
   const emitDelta = (text, reasoning) => {
     if (!text) return;
@@ -468,8 +642,87 @@ async function runAgent({
     return result;
   };
 
+  const tryCompact = async () => {
+    const lastUser = lastUserIndex(messages);
+    if (lastUser <= systemCount) return false;
+    const prefix = messages.slice(systemCount, lastUser);
+    const split = splitForCompaction(prefix, KEEP_TOKENS);
+    if (!split) return false;
+    const beforeTokens = currentEstimate();
+    try {
+      const summary = await summarizeMessages({
+        apiKey,
+        olderText: split.olderText,
+        update: Boolean(currentCompaction),
+        signal,
+        sessionId,
+      });
+      const checkpoint = normalizeCompaction({
+        summary,
+        recent: split.recentText,
+        through: Math.max(0, Number(compactionThrough) || 0),
+        beforeTokens,
+        afterTokens: 0,
+        createdAt: Date.now(),
+      });
+      const afterMessages = messages.slice(lastUser);
+      checkpoint.afterTokens = estimateCompactedTokens(
+        checkpoint,
+        afterMessages
+      );
+      const next = [
+        ...messages.slice(0, systemCount),
+        { role: 'user', content: checkpointText(checkpoint) },
+        ...afterMessages,
+      ];
+      await onCompaction?.(checkpoint, {
+        split,
+        beforeTokens,
+        afterTokens: checkpoint.afterTokens,
+      });
+      messages.splice(0, messages.length, ...next);
+      currentCompaction = checkpoint;
+      measuredTokens = null;
+      sentLength = messages.length;
+      return true;
+    } catch (error) {
+      compactionFailed = true;
+      onCompactionError?.(error);
+      return false;
+    }
+  };
+
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-    const result = await send(round, messages);
+    if (
+      autoCompact &&
+      !compactionFailed &&
+      currentEstimate() >= compactionCeiling()
+    ) {
+      await tryCompact();
+    }
+
+    const sentCount = messages.length;
+    let result;
+    try {
+      result = await send(round, messages);
+    } catch (error) {
+      if (
+        autoCompact &&
+        !compactionFailed &&
+        !signal?.aborted &&
+        isContextOverflow(error)
+      ) {
+        const compacted = await tryCompact();
+        if (compacted) {
+          round -= 1;
+          continue;
+        }
+      }
+      throw error;
+    }
+    const usage = tokenUsage(result.usage);
+    measuredTokens = usage.hit + usage.miss + usage.output;
+    sentLength = sentCount;
 
     if (result.toolCalls.length === 0) {
       return finalText;
@@ -625,6 +878,9 @@ module.exports = {
   toolResultsSummary,
   TOOL_LIMIT_INSTRUCTION,
   runAgent,
+  compactHistory,
+  summarizeMessages,
+  runAudit,
   runSubagent,
   runVisionSubagent,
 };

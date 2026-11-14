@@ -47,7 +47,8 @@ test('file skills are listed and resolved', () => {
       mcpManager: { promptList: () => [] },
     });
     const skills = service.list({});
-    assert.equal(skills.length, 2);
+    const files = skills.filter((skill) => skill.sourceKind !== 'system');
+    assert.equal(files.length, 2);
     assert.equal(skills.find((skill) => skill.name === 'Demo Skill').source, '内置');
     assert.equal(skills.find((skill) => skill.name === 'My Skill').source, '用户');
     return service
@@ -89,12 +90,33 @@ test('file skills get a category', () => {
     );
     assert.equal(
       skills.find((skill) => skill.name === 'My Skill').category,
-      '系统'
+      '用户'
     );
     assert.equal(
       skills.find((skill) => skill.name === 'Draw Skill').category,
       '绘画'
     );
+  });
+});
+
+test('system skills are built in, read-only commands', async () => {
+  await withSkillDirs(async (root, data) => {
+    const service = createSkillService({
+      root,
+      dataDir: data,
+      mcpManager: { promptList: () => [] },
+    });
+    const system = service
+      .list({})
+      .filter((skill) => skill.sourceKind === 'system');
+    assert.deepEqual(
+      system.map((skill) => skill.id),
+      ['system:compact', 'system:goal']
+    );
+    assert.ok(system.every((skill) => skill.readOnly === true));
+    assert.ok(system.every((skill) => skill.command));
+    const resolved = await service.resolveMany([{ id: 'system:compact' }]);
+    assert.match(resolved.text, /System Skill · compact/);
   });
 });
 
@@ -123,11 +145,15 @@ test('MCP prompts become per-session skills and resolve', async () => {
     };
     const service = createSkillService({ root, dataDir: data, mcpManager });
     const skills = service.list({});
-    assert.equal(skills.length, 1);
-    assert.equal(skills[0].id, 'mcp:s1:summarize');
-    assert.equal(skills[0].source, 'MCP');
-    assert.equal(skills[0].arguments[0].required, true);
-    assert.deepEqual(service.list({ mcpDisabled: ['s1'] }), []);
+    const mcpSkills = skills.filter((skill) => skill.sourceKind === 'mcp');
+    assert.equal(mcpSkills.length, 1);
+    assert.equal(mcpSkills[0].id, 'mcp:s1:summarize');
+    assert.equal(mcpSkills[0].source, 'MCP');
+    assert.equal(mcpSkills[0].arguments[0].required, true);
+    assert.equal(
+      service.list({ mcpDisabled: ['s1'] }).some((skill) => skill.sourceKind === 'mcp'),
+      false
+    );
 
     const result = await service.resolveMany(
       [{ id: 'mcp:s1:summarize', arguments: { topic: 'skills' } }],

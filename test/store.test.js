@@ -550,3 +550,57 @@ test('legacy chats.json migrates into sqlite and is kept as a backup', () => {
     assert.ok(fs.existsSync(path.join(dir, 'chats.db')));
   });
 });
+
+test('goal and compaction state round-trip through sqlite', () => {
+  withStoreDir(() => {
+    const chats = store.defaultChats();
+    chats.sessions.push({
+      id: 's-goal',
+      title: 'Goal Chat',
+      system: 'sys',
+      agentId: '',
+      projectId: chats.projects[0].id,
+      mcpDisabled: [],
+      pendingQueue: [],
+      goal: {
+        id: 'g1',
+        objective: 'ship it',
+        status: 'active',
+        tokenBudget: 5000,
+        tokensUsed: 12,
+        turnsUsed: 1,
+        maxTurns: 20,
+      },
+      compaction: {
+        summary: '## Objective\n- ship it',
+        recent: '[User]: go',
+        through: 4,
+      },
+      msgs: [],
+    });
+    store.saveChats(chats);
+    const loaded = store.loadChats();
+    assert.equal(loaded.sessions[0].goal.objective, 'ship it');
+    assert.equal(loaded.sessions[0].goal.tokenBudget, 5000);
+    assert.equal(loaded.sessions[0].compaction.through, 4);
+    assert.match(loaded.sessions[0].compaction.summary, /ship it/);
+
+    const nextGoal = store.updateSessionGoal('s-goal', {
+      ...loaded.sessions[0].goal,
+      status: 'paused',
+      statusReason: 'paused by user',
+    });
+    assert.equal(nextGoal.status, 'paused');
+    const nextCompaction = store.updateSessionCompaction('s-goal', {
+      ...loaded.sessions[0].compaction,
+      through: 9,
+    });
+    assert.equal(nextCompaction.through, 9);
+    const again = store.loadChats();
+    assert.equal(again.sessions[0].goal.status, 'paused');
+    assert.equal(again.sessions[0].compaction.through, 9);
+
+    store.updateSessionGoal('s-goal', null);
+    assert.equal(store.loadChats().sessions[0].goal, null);
+  });
+});

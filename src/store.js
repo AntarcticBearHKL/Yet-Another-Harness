@@ -9,11 +9,13 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 const { DatabaseSync } = require('node:sqlite');
+const { normalizeGoal } = require('./goal');
+const { normalizeCompaction } = require('./compaction');
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1', directories: [] };
 
 let dataDir = null;
@@ -122,6 +124,28 @@ function normalizeStep(step) {
           ...(metrics ? { metrics } : {}),
         }
       : null;
+  }
+  if (kind === 'compact') {
+    return {
+      kind: 'compact',
+      label: String(step.label ?? 'auto'),
+      text: String(step.text ?? ''),
+      name: String(step.name ?? ''),
+      ok: step.ok !== false,
+      round,
+      ...(metrics ? { metrics } : {}),
+    };
+  }
+  if (kind === 'goal') {
+    return {
+      kind: 'goal',
+      label: String(step.label ?? 'continue'),
+      text: String(step.text ?? ''),
+      name: String(step.name ?? ''),
+      ok: step.ok !== false,
+      round,
+      ...(metrics ? { metrics } : {}),
+    };
   }
   const label = String(step.label ?? '');
   return label ? { kind: 'status', label, ok: step.ok !== false } : null;
@@ -282,6 +306,8 @@ function normalizeChats(raw) {
           : [],
         foldState: normalizeFoldState(session.foldState),
         pendingQueue: normalizePendingQueue(session.pendingQueue),
+        goal: normalizeGoal(session.goal),
+        compaction: normalizeCompaction(session.compaction),
         msgs,
       };
     });
@@ -384,6 +410,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   mcp_disabled TEXT,
   fold_state TEXT,
   pending_queue TEXT,
+  goal TEXT,
+  compaction TEXT,
   sort_order INTEGER NOT NULL,
   content_hash TEXT NOT NULL,
   updated_at INTEGER NOT NULL
@@ -538,6 +566,15 @@ function ensureSchema(database) {
       database.exec('ALTER TABLE projects ADD COLUMN directories TEXT');
     }
 
+    // v10 -> v11: session goal state and context compaction checkpoint.
+    const goalColumns = database.prepare('PRAGMA table_info(sessions)').all();
+    if (!goalColumns.some((column) => column.name === 'goal')) {
+      database.exec('ALTER TABLE sessions ADD COLUMN goal TEXT');
+    }
+    if (!goalColumns.some((column) => column.name === 'compaction')) {
+      database.exec('ALTER TABLE sessions ADD COLUMN compaction TEXT');
+    }
+
     const projectCount =
       Number(database.prepare('SELECT COUNT(*) AS n FROM projects').get().n) || 0;
     if (projectCount === 0) {
@@ -627,7 +664,7 @@ function readChats() {
 
   const sessionRows = database
     .prepare(
-      'SELECT id, title, system, agent_id, project_id, mcp_disabled, fold_state, pending_queue FROM sessions ORDER BY sort_order ASC'
+      'SELECT id, title, system, agent_id, project_id, mcp_disabled, fold_state, pending_queue, goal, compaction FROM sessions ORDER BY sort_order ASC'
     )
     .all();
   if (sessionRows.length === 0) {
@@ -686,6 +723,22 @@ function readChats() {
           /* ignore malformed pending_queue */
         }
       }
+      let goal = null;
+      if (row.goal) {
+        try {
+          goal = normalizeGoal(JSON.parse(row.goal));
+        } catch {
+          goal = null;
+        }
+      }
+      let compaction = null;
+      if (row.compaction) {
+        try {
+          compaction = normalizeCompaction(JSON.parse(row.compaction));
+        } catch {
+          compaction = null;
+        }
+      }
       return [
         row.id,
         {
@@ -699,6 +752,8 @@ function readChats() {
           mcpDisabled,
           foldState,
           pendingQueue,
+          goal,
+          compaction,
           msgs: [],
         },
       ];
@@ -780,6 +835,24 @@ function readChats() {
         label: String(row.label ?? ''),
         ok: Boolean(row.ok),
       });
+    } else if (row.kind === 'compact') {
+      msg.steps.push({
+        kind: 'compact',
+        label: String(row.label ?? 'auto'),
+        text: String(row.text ?? ''),
+        name: String(row.name ?? ''),
+        ok: Boolean(row.ok),
+        ...(metrics ? { metrics } : {}),
+      });
+    } else if (row.kind === 'goal') {
+      msg.steps.push({
+        kind: 'goal',
+        label: String(row.label ?? 'continue'),
+        text: String(row.text ?? ''),
+        name: String(row.name ?? ''),
+        ok: Boolean(row.ok),
+        ...(metrics ? { metrics } : {}),
+      });
     }
   }
 
@@ -830,8 +903,8 @@ function writeChats(chats) {
   );
 
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, agent_id, project_id, mcp_disabled, fold_state, pending_queue, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, agent_id, project_id, mcp_disabled, fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
@@ -840,6 +913,8 @@ function writeChats(chats) {
        mcp_disabled = excluded.mcp_disabled,
        fold_state = excluded.fold_state,
        pending_queue = excluded.pending_queue,
+       goal = excluded.goal,
+       compaction = excluded.compaction,
        sort_order = excluded.sort_order,
        content_hash = excluded.content_hash,
        updated_at = excluded.updated_at`
@@ -906,6 +981,8 @@ function writeChats(chats) {
         JSON.stringify(session.mcpDisabled || []),
         session.foldState ? JSON.stringify(session.foldState) : null,
         JSON.stringify(session.pendingQueue || []),
+        session.goal ? JSON.stringify(session.goal) : null,
+        session.compaction ? JSON.stringify(session.compaction) : null,
         order,
         hash,
         now
@@ -1137,6 +1214,31 @@ function saveStructure(chats) {
 
 function deleteSession(sessionId) {
   openDb().prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+}
+
+function updateSessionGoal(sessionId, goal) {
+  const database = openDb();
+  const normalized = goal === null || goal === undefined ? null : normalizeGoal(goal);
+  database
+    .prepare('UPDATE sessions SET goal = ?, updated_at = ? WHERE id = ?')
+    .run(normalized ? JSON.stringify(normalized) : null, Date.now(), sessionId);
+  return normalized;
+}
+
+function updateSessionCompaction(sessionId, compaction) {
+  const database = openDb();
+  const normalized =
+    compaction === null || compaction === undefined
+      ? null
+      : normalizeCompaction(compaction);
+  database
+    .prepare('UPDATE sessions SET compaction = ?, updated_at = ? WHERE id = ?')
+    .run(
+      normalized ? JSON.stringify(normalized) : null,
+      Date.now(),
+      sessionId
+    );
+  return normalized;
 }
 
 function appendMessage(sessionId, role, text, request) {
@@ -1372,6 +1474,8 @@ module.exports = {
   deleteSession,
   appendMessage,
   updateMessage,
+  updateSessionGoal,
+  updateSessionCompaction,
   appendEvent,
   listEvents,
   lastEventSeq,

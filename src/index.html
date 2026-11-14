@@ -538,6 +538,46 @@
       </div>
     </div>
 
+    <div id="goal-overlay" class="overlay hidden" aria-hidden="true">
+      <div class="overlay-panel goal-panel">
+        <div class="overlay-head">
+          <h2 id="goal-title">GOAL</h2>
+        </div>
+        <div class="divider"></div>
+        <label class="goal-field">
+          <span class="goal-field-label">目标</span>
+          <textarea
+            id="goal-objective"
+            class="text-input goal-objective-input"
+            rows="5"
+            spellcheck="false"
+            placeholder="描述要达成的最终状态，以及如何验证它…"
+          ></textarea>
+        </label>
+        <label class="goal-field">
+          <span class="goal-field-label">Token 预算（可选）</span>
+          <input
+            id="goal-budget"
+            class="text-input"
+            type="number"
+            min="1000"
+            step="1000"
+            placeholder="留空表示不限制"
+          />
+        </label>
+        <p class="goal-hint">
+          目标会持久保存在当前对话；每轮结束后会单独验证一次，未完成就继续推进。
+        </p>
+        <div id="goal-error" class="goal-error hidden"></div>
+        <div class="overlay-actions">
+          <button id="goal-cancel" class="pill" type="button">Cancel</button>
+          <button id="goal-start" class="pill primary" type="button">
+            Start Goal
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div id="settings-overlay" class="overlay hidden">
       <div class="overlay-panel settings-panel">
         <div class="overlay-head">
