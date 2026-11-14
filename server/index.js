@@ -795,6 +795,13 @@ function openEventStream(req, res, sessionId, after) {
 
   const sendEvent = (event) => {
     if (closed || event.seq <= lastSeq) return;
+    // 重放历史事件时，已经处理过或随进程重启丢失的审批不再弹出。
+    if (
+      event.type === 'tool.approval' &&
+      !runner.isApprovalPending(event.payload?.id)
+    ) {
+      return;
+    }
     const data = {
       seq: event.seq,
       type: event.type,

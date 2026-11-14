@@ -83,6 +83,10 @@ function requestToolApproval(sessionId, runId, request) {
   });
 }
 
+function isApprovalPending(approvalId) {
+  return pendingApprovals.has(String(approvalId || ''));
+}
+
 function resolveApproval(approvalId, approved) {
   const entry = pendingApprovals.get(String(approvalId || ''));
   if (!entry) return false;
@@ -797,6 +801,7 @@ module.exports = {
   cancelSessionRuns,
   compactSession,
   continuationTitle,
+  isApprovalPending,
   resolveApproval,
   resolveQuestions,
   activeRunForSession: (sessionId) => sessionRuns.get(sessionId) || null,
