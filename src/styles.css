@@ -2940,13 +2940,15 @@ body.ring-open #window-controls {
   width: 100%;
 }
 
-#project-name {
+#project-name,
+#rename-input {
   background: rgba(252, 246, 238, 0.28);
   -webkit-backdrop-filter: blur(10px) saturate(1.04);
   backdrop-filter: blur(10px) saturate(1.04);
 }
 
-#project-name:focus {
+#project-name:focus,
+#rename-input:focus {
   background: rgba(252, 246, 238, 0.28);
 }
 
