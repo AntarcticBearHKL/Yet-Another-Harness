@@ -3800,6 +3800,96 @@ body.ring-open #messages {
   border-color: var(--accent);
 }
 
+.agent-tools-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.agent-tools-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.agent-tools-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-tools-category {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.agent-tools-category:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.agent-tools-category.selected {
+  background: var(--selected);
+  color: var(--text);
+}
+
+.agent-tools-category input {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.agent-tools-category-name {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-tools-category-name:focus-visible {
+  outline: none;
+  color: var(--accent);
+}
+
+.agent-tools-category-count {
+  flex: none;
+  color: var(--faint);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-tools-empty {
+  padding: 14px;
+  color: var(--faint);
+  font-size: 11px;
+  text-align: center;
+}
+
 .agent-tools-head {
   display: flex;
   align-items: center;
@@ -3844,8 +3934,8 @@ body.ring-open #messages {
 }
 
 .agent-tools {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 2px;
   max-height: 320px;
   padding: 6px;
@@ -3853,10 +3943,6 @@ body.ring-open #messages {
   border-radius: 12px;
   background: rgba(252, 246, 238, 0.38);
   overflow-y: auto;
-}
-
-.agent-tools.disabled {
-  opacity: 0.55;
 }
 
 .agent-tool-row {
@@ -3908,8 +3994,17 @@ body.ring-open #messages {
 }
 
 @media (max-width: 720px) {
-  .agent-tools {
+  .agent-tools-layout {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agent-tools-side {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .agent-tools-category {
+    flex: 0 0 auto;
   }
 }
 

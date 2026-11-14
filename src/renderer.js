@@ -153,6 +153,7 @@ const state = {
   agentsLoading: false,
   agentsFetchedAt: 0,
   agentSaveTimer: null,
+  agentToolGroup: null,
   agentDeleteArmed: null,
   agentDeleteTimer: null,
   agentMenuOpen: false,
@@ -6873,6 +6874,222 @@ function deleteAgent(agentId) {
   renderCatalogContent(state.catalogKind);
 }
 
+function agentToolGroups(allTools) {
+  const groups = [];
+  const mcpGroups = new Map();
+  const builtIn = [];
+  for (const entry of allTools) {
+    const fn = entry.function || entry;
+    const name = String(fn.name || entry.name || '');
+    if (name.startsWith('mcp__')) {
+      const serverId = name.split('__')[1] || 'mcp';
+      if (!mcpGroups.has(serverId)) {
+        const server = state.mcpServers.find((item) => item.id === serverId);
+        mcpGroups.set(serverId, {
+          id: `mcp:${serverId}`,
+          label: `MCP · ${server?.name || serverId}`,
+          tools: [],
+        });
+      }
+      mcpGroups.get(serverId).tools.push(entry);
+    } else {
+      builtIn.push(entry);
+    }
+  }
+  for (const group of TOOL_GROUPS) {
+    const tools = builtIn.filter((entry) => {
+      const fn = entry.function || entry;
+      return toolGroupFor(fn).id === group.id;
+    });
+    if (tools.length > 0) {
+      groups.push({ id: group.id, label: group.label, tools });
+    }
+  }
+  const other = builtIn.filter((entry) => {
+    const fn = entry.function || entry;
+    return toolGroupFor(fn).id === 'other';
+  });
+  if (other.length > 0) {
+    groups.push({ id: 'other', label: '其他', tools: other });
+  }
+  groups.push(...mcpGroups.values());
+  return groups;
+}
+
+function renderAgentToolsEditor(agent, allTools) {
+  const field = el('div', 'agent-field');
+  field.append(el('div', 'agent-field-label', '工具权限'));
+
+  const allNames = allTools.map((tool) => tool.name).filter(Boolean);
+  const known = new Set(allNames);
+  const selected = new Set(
+    Array.isArray(agent.tools)
+      ? agent.tools.map(String).filter((name) => known.has(name))
+      : allNames
+  );
+  const groups = agentToolGroups(allTools);
+  if (!groups.some((group) => group.id === state.agentToolGroup)) {
+    state.agentToolGroup = groups[0]?.id || null;
+  }
+
+  const saveTools = () => {
+    if (selected.size === allNames.length) agent.tools = null;
+    else agent.tools = allNames.filter((name) => selected.has(name));
+    saveAgentsSoon();
+  };
+
+  const layout = el('div', 'agent-tools-layout');
+  const side = el('div', 'agent-tools-side');
+  const main = el('div', 'agent-tools-main');
+
+  const head = el('div', 'agent-tools-head');
+  const allLabel = el('label', 'agent-toggle');
+  const allCheckbox = document.createElement('input');
+  allCheckbox.type = 'checkbox';
+  allLabel.append(allCheckbox);
+  allLabel.append(el('span', 'agent-toggle-label', '允许所有工具'));
+  head.append(allLabel);
+  const count = el('span', 'agent-tools-count', '');
+  head.append(count);
+  main.append(head);
+
+  const search = el('input', 'agent-tools-search');
+  search.type = 'search';
+  search.placeholder = '搜索工具…';
+  main.append(search);
+
+  const list = el('div', 'agent-tools');
+  main.append(list);
+
+  const categoryRows = new Map();
+  const toolCheckboxes = new Map();
+
+  const groupSelectedCount = (group) =>
+    group.tools.reduce(
+      (total, tool) => total + (selected.has(tool.name) ? 1 : 0),
+      0
+    );
+
+  const applySearch = () => {
+    const query = search.value.trim().toLowerCase();
+    for (const row of list.querySelectorAll('.agent-tool-row')) {
+      row.classList.toggle(
+        'hidden',
+        Boolean(query) && !row.dataset.search.includes(query)
+      );
+    }
+  };
+
+  const updateState = () => {
+    const active = selected.size;
+    count.textContent = `${active} / ${allNames.length}`;
+    allCheckbox.checked = allNames.length > 0 && active === allNames.length;
+    allCheckbox.indeterminate = active > 0 && active < allNames.length;
+    for (const group of groups) {
+      const entry = categoryRows.get(group.id);
+      if (!entry) continue;
+      const groupCount = groupSelectedCount(group);
+      entry.count.textContent = `${groupCount}/${group.tools.length}`;
+      entry.checkbox.checked = groupCount === group.tools.length;
+      entry.checkbox.indeterminate =
+        groupCount > 0 && groupCount < group.tools.length;
+      entry.row.classList.toggle(
+        'selected',
+        state.agentToolGroup === group.id
+      );
+    }
+    for (const [name, checkbox] of toolCheckboxes) {
+      checkbox.checked = selected.has(name);
+    }
+  };
+
+  const renderList = () => {
+    list.replaceChildren();
+    toolCheckboxes.clear();
+    const group = groups.find((item) => item.id === state.agentToolGroup);
+    const tools = group?.tools || [];
+    if (tools.length === 0) {
+      list.append(el('div', 'agent-tools-empty', '没有工具'));
+      return;
+    }
+    for (const tool of tools) {
+      const row = el('label', 'agent-tool-row');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = selected.has(tool.name);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) selected.add(tool.name);
+        else selected.delete(tool.name);
+        saveTools();
+        updateState();
+      });
+      const body = el('span', 'agent-tool-body');
+      body.append(el('span', 'agent-tool-name', tool.name));
+      if (tool.description) {
+        body.append(el('span', 'agent-tool-desc', tool.description));
+      }
+      row.append(checkbox, body);
+      row.dataset.search =
+        `${tool.name} ${tool.description || ''}`.toLowerCase();
+      list.append(row);
+      toolCheckboxes.set(tool.name, checkbox);
+    }
+    applySearch();
+  };
+
+  for (const group of groups) {
+    const row = el('div', 'agent-tools-category');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.addEventListener('click', (event) => event.stopPropagation());
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) {
+        for (const tool of group.tools) selected.add(tool.name);
+      } else {
+        for (const tool of group.tools) selected.delete(tool.name);
+      }
+      saveTools();
+      updateState();
+    });
+    row.append(checkbox);
+    const name = el('button', 'agent-tools-category-name', group.label);
+    name.type = 'button';
+    name.title = group.label;
+    row.append(name);
+    const groupCount = el('span', 'agent-tools-category-count', '');
+    row.append(groupCount);
+    const select = () => {
+      state.agentToolGroup = group.id;
+      renderList();
+      updateState();
+    };
+    row.addEventListener('click', (event) => {
+      if (event.target === checkbox) return;
+      select();
+    });
+    side.append(row);
+    categoryRows.set(group.id, { row, checkbox, count: groupCount });
+  }
+
+  allCheckbox.addEventListener('change', () => {
+    if (allCheckbox.checked) {
+      for (const name of allNames) selected.add(name);
+    } else {
+      selected.clear();
+    }
+    saveTools();
+    updateState();
+  });
+
+  search.addEventListener('input', applySearch);
+
+  layout.append(side, main);
+  field.append(layout);
+  renderList();
+  updateState();
+  return field;
+}
+
 function renderAgentEditor(agentId) {
   dom.catalogList.replaceChildren();
   const agent = state.agents.find((item) => item.id === agentId);
@@ -6946,93 +7163,8 @@ function renderAgentEditor(agentId) {
   promptField.append(prompt);
   editor.append(promptField);
 
-  const toolsField = el('div', 'agent-field');
-  toolsField.append(el('div', 'agent-field-label', '工具权限'));
-  const toolsHead = el('div', 'agent-tools-head');
-  const allLabel = el('label', 'agent-toggle');
-  const allCheckbox = document.createElement('input');
-  allCheckbox.type = 'checkbox';
-  allCheckbox.checked = agent.tools === null;
-  allLabel.append(allCheckbox);
-  allLabel.append(el('span', 'agent-toggle-label', '允许所有工具'));
-  toolsHead.append(allLabel);
-  const count = el('span', 'agent-tools-count', '');
-  toolsHead.append(count);
-  toolsField.append(toolsHead);
-
-  const search = el('input', 'agent-tools-search');
-  search.type = 'search';
-  search.placeholder = '搜索工具…';
-  toolsField.append(search);
-
-  const list = el('div', 'agent-tools');
-  const updateCount = () => {
-    const total = allTools.length;
-    const active = agent.tools === null ? total : selected.size;
-    count.textContent = `${active} / ${total}`;
-  };
-  const setEnabled = (enabled) => {
-    list.classList.toggle('disabled', !enabled);
-    for (const input of list.querySelectorAll('input')) {
-      input.disabled = !enabled;
-    }
-  };
-  for (const tool of allTools) {
-    const row = el('label', 'agent-tool-row');
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = agent.tools === null || selected.has(tool.name);
-    checkbox.disabled = agent.tools === null;
-    checkbox.addEventListener('change', () => {
-      if (agent.tools === null) return;
-      if (checkbox.checked) selected.add(tool.name);
-      else selected.delete(tool.name);
-      agent.tools = [...selected];
-      updateCount();
-      saveAgentsSoon();
-    });
-    const body = el('span', 'agent-tool-body');
-    body.append(el('span', 'agent-tool-name', tool.name));
-    if (tool.description) {
-      body.append(el('span', 'agent-tool-desc', tool.description));
-    }
-    row.append(checkbox, body);
-    row.dataset.search =
-      `${tool.name} ${tool.description || ''}`.toLowerCase();
-    list.append(row);
-  }
-  allCheckbox.addEventListener('change', () => {
-    if (allCheckbox.checked) {
-      agent.tools = null;
-      for (const input of list.querySelectorAll('input')) {
-        input.checked = true;
-      }
-    } else {
-      agent.tools = allTools.map((tool) => tool.name);
-      selected.clear();
-      for (const toolName of agent.tools) selected.add(toolName);
-      for (const input of list.querySelectorAll('input')) {
-        input.checked = true;
-      }
-    }
-    setEnabled(agent.tools !== null);
-    updateCount();
-    saveAgentsSoon();
-  });
-  search.addEventListener('input', () => {
-    const query = search.value.trim().toLowerCase();
-    for (const row of list.querySelectorAll('.agent-tool-row')) {
-      row.classList.toggle(
-        'hidden',
-        Boolean(query) && !row.dataset.search.includes(query)
-      );
-    }
-  });
-  toolsField.append(list);
-  editor.append(toolsField);
+  editor.append(renderAgentToolsEditor(agent, allTools));
   dom.catalogList.append(editor);
-  updateCount();
-  setEnabled(agent.tools !== null);
 }
 
 async function openCatalog(kind) {
