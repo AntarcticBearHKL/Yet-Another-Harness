@@ -25,32 +25,8 @@
               <div id="composer-context" class="composer-context"></div>
               <div id="composer-box" class="composer-box">
                 <div id="composer-tokens" class="composer-tokens hidden"></div>
-                <textarea id="input" rows="4" spellcheck="false" placeholder="输入新对话…" aria-label="New message"></textarea>
+                <textarea id="input" rows="4" spellcheck="false" aria-label="New message"></textarea>
                 <div id="skill-popup" class="skill-popup hidden" role="listbox" aria-label="Skills"></div>
-                <div id="composer-effort" class="composer-effort">
-                  <span class="composer-effort-label">思考强度</span>
-                  <div
-                    id="composer-effort-rail"
-                    class="effort-rail"
-                    role="slider"
-                    tabindex="0"
-                    aria-label="Reasoning effort"
-                    aria-valuemin="0"
-                    aria-valuemax="2"
-                    aria-valuenow="1"
-                    aria-valuetext="high"
-                  >
-                    <div class="effort-rail-fill" aria-hidden="true"></div>
-                    <div class="effort-rail-grid" aria-hidden="true"></div>
-                    <div class="effort-rail-knob" aria-hidden="true"></div>
-                  </div>
-                  <span id="composer-effort-value" class="composer-effort-value">high</span>
-                  <div id="composer-effort-ticks" class="effort-ticks">
-                    <button type="button" class="effort-tick" data-index="0">low</button>
-                    <button type="button" class="effort-tick" data-index="1">high</button>
-                    <button type="button" class="effort-tick" data-index="2">max</button>
-                  </div>
-                </div>
                 <div class="composer-foot">
                   <div id="agent-picker" class="agent-picker">
                     <button
@@ -65,12 +41,57 @@
                       <span id="agent-picker-value" class="agent-picker-value">Build</span>
                     </button>
                   </div>
+                  <div id="model-picker" class="model-picker">
+                    <button
+                      id="model-picker-button"
+                      class="model-picker-button"
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded="false"
+                      aria-controls="model-menu"
+                    >
+                      <span id="model-picker-value" class="model-picker-value">deepseek-v4.1-flash-1017</span>
+                      <svg class="model-picker-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                    <div id="model-menu" class="model-menu hidden" role="listbox" aria-label="Model">
+                      <button class="model-menu-item selected" type="button" role="option" aria-selected="true">
+                        <span>deepseek-v4.1-flash-1017</span>
+                        <span class="model-menu-check" aria-hidden="true">✓</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div id="composer-effort" class="composer-effort">
+                    <span class="composer-effort-label">思考强度</span>
+                    <div
+                      id="composer-effort-rail"
+                      class="effort-rail"
+                      role="slider"
+                      tabindex="0"
+                      aria-label="Reasoning effort"
+                      aria-valuemin="0"
+                      aria-valuemax="2"
+                      aria-valuenow="1"
+                      aria-valuetext="high"
+                    >
+                      <div class="effort-rail-fill" aria-hidden="true"></div>
+                      <div class="effort-rail-grid" aria-hidden="true"></div>
+                      <div class="effort-rail-knob" aria-hidden="true"></div>
+                    </div>
+                    <div id="composer-effort-ticks" class="effort-ticks">
+                      <button type="button" class="effort-tick" data-index="0">low</button>
+                      <button type="button" class="effort-tick" data-index="1">high</button>
+                      <button type="button" class="effort-tick" data-index="2">max</button>
+                    </div>
+                  </div>
+                  <button id="send" class="send-btn" aria-label="Send">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M18 6v6a3 3 0 0 1-3 3H7" />
+                      <path d="M10 12l-3 3 3 3" />
+                    </svg>
+                  </button>
                 </div>
-                <button id="send" class="send-btn" aria-label="Send">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M2 21L23 12L2 3L2 10L17 12L2 14Z" />
-                  </svg>
-                </button>
               </div>
             </div>
           </div>

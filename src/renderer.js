@@ -89,8 +89,10 @@ const dom = {
   webContentBody: $('web-content-body'),
   webContentClose: $('web-content-close'),
   composerEffortRail: $('composer-effort-rail'),
-  composerEffortValue: $('composer-effort-value'),
   composerEffortTicks: $('composer-effort-ticks'),
+  modelPicker: $('model-picker'),
+  modelPickerButton: $('model-picker-button'),
+  modelMenu: $('model-menu'),
   mcpConfig: $('mcp-config'),
   mcpConfigSummary: $('mcp-config-summary'),
   mcpConfigGrid: $('mcp-config-grid'),
@@ -565,7 +567,6 @@ function renderComposerEffort() {
   dom.composerEffortRail.dataset.level = effort;
   dom.composerEffortRail.setAttribute('aria-valuenow', String(index));
   dom.composerEffortRail.setAttribute('aria-valuetext', effort);
-  if (dom.composerEffortValue) dom.composerEffortValue.textContent = effort;
   if (dom.composerEffortTicks) {
     for (const tick of dom.composerEffortTicks.querySelectorAll('.effort-tick')) {
       const tickIndex = Number(tick.dataset.index);
@@ -623,9 +624,7 @@ function updateControls() {
   }
 
   dom.input.disabled = false;
-  dom.input.placeholder = state.streaming
-    ? '输入排队消息…'
-    : '输入新对话…';
+  dom.input.placeholder = state.streaming ? '输入排队消息…' : '';
   updateSendState();
 }
 
@@ -2798,9 +2797,7 @@ function openComposer() {
   dom.composer.inert = false;
   dom.composer.setAttribute('aria-hidden', 'false');
   dom.composer.classList.add('open');
-  dom.input.placeholder = state.streaming
-    ? '输入排队消息…'
-    : '输入新对话…';
+  dom.input.placeholder = state.streaming ? '输入排队消息…' : '';
   renderComposerContext();
   renderComposerSkills();
   void loadSkills(true);
@@ -2815,6 +2812,7 @@ function openComposer() {
 
 function closeComposer() {
   closeAgentMenu();
+  closeModelMenu();
   if (!state.composerOpen) return;
   state.composerOpen = false;
   dom.composer.classList.remove('open');
@@ -4115,10 +4113,27 @@ function closeAgentMenu() {
   dom.agentPicker?.classList.remove('open');
 }
 
+function closeModelMenu() {
+  dom.modelMenu?.classList.add('hidden');
+  dom.modelPickerButton?.setAttribute('aria-expanded', 'false');
+}
+
+function toggleModelMenu() {
+  if (!dom.modelMenu || !dom.modelPickerButton) return;
+  if (!dom.modelMenu.classList.contains('hidden')) {
+    closeModelMenu();
+    return;
+  }
+  closeAgentMenu();
+  dom.modelMenu.classList.remove('hidden');
+  dom.modelPickerButton.setAttribute('aria-expanded', 'true');
+}
+
 function openAgentMenu() {
   if (!dom.agentMenu || !dom.agentPickerButton) return;
   const session = currentSession();
   if (!session) return;
+  closeModelMenu();
   if (state.agentMenuOpen) {
     closeAgentMenu();
     return;
@@ -7628,6 +7643,33 @@ function bindEvents() {
     if (state.agentMenuOpen) closeAgentMenu();
     else openAgentMenu();
   });
+  dom.modelPickerButton?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleModelMenu();
+  });
+  dom.modelMenu?.addEventListener('click', (event) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest('.model-menu-item')
+    ) {
+      closeModelMenu();
+    }
+  });
+  document.addEventListener(
+    'mousedown',
+    (event) => {
+      if (!dom.modelMenu || dom.modelMenu.classList.contains('hidden')) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest('#model-picker')
+      ) {
+        return;
+      }
+      closeModelMenu();
+    },
+    true
+  );
+  window.addEventListener('resize', closeModelMenu);
   const agentPickerKeydown = (event) => {
     if (event.isComposing) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
