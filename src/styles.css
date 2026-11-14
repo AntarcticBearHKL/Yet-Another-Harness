@@ -3888,7 +3888,7 @@ body.ring-open #messages {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 32px;
+  height: 34px;
   padding: 0 8px;
 }
 
@@ -3907,11 +3907,11 @@ body.ring-open #messages {
 
 .agent-tools-search {
   width: 100%;
-  height: 32px;
+  height: 34px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 9px;
-  background: rgba(252, 246, 238, 0.5);
+  border-radius: var(--radius-control);
+  background: var(--surface-input);
   color: var(--text);
   font: inherit;
   font-size: 12px;
@@ -7137,4 +7137,135 @@ body:has(#action-menu:not(.hidden)) #window-controls {
   gap: 8px;
   flex: none;
   padding-top: 10px;
+}
+
+/* Unified type scale for the Agent / tool / Skill / MCP workspaces. */
+.catalog-head h2,
+.mcp-side-title,
+.mcp-title-wrap h2,
+.mcp-name,
+.mcp-pane-title h3,
+#web-content-title {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.agent-name-input {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.catalog-section-label,
+.catalog-group-name,
+.agent-field-label,
+.catalog-skill-label,
+.mcp-section-kicker,
+.mcp-list-group {
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.catalog-category-name,
+.project-name,
+.switch-title,
+.mcp-server-name,
+.agent-tools-category,
+.agent-tools-category-name {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.catalog-category.selected .catalog-category-name,
+.mcp-server-row.selected .mcp-server-name,
+.agent-tools-category.selected .agent-tools-category-name {
+  font-weight: 600;
+}
+
+.catalog-tool-name,
+.agent-tool-name,
+.mcp-list-name {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.catalog-desc,
+.catalog-tool-inner .catalog-desc,
+.agent-prompt,
+.mcp-pane-desc {
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.catalog-param {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.catalog-tool-meta,
+.catalog-category-count,
+.catalog-meta,
+.catalog-group-count,
+.mcp-server-meta,
+.mcp-tab-count,
+.mcp-list-code,
+.catalog-param-type {
+  font-size: 11px;
+}
+
+.agent-tool-desc,
+.mcp-list-desc {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.agent-toggle,
+.agent-tools-search,
+.text-input,
+.mcp-input,
+.mcp-textarea,
+.mcp-select,
+.mcp-search-input,
+.mcp-tabs button {
+  font-size: 13px;
+}
+
+.mcp-tabs button {
+  font-weight: 500;
+}
+
+.mcp-tabs button.active {
+  font-weight: 600;
+}
+
+.agent-builtin-badge,
+.catalog-param-required,
+.mcp-badge,
+.mcp-transport,
+.catalog-instruction summary {
+  font-size: 10.5px;
+}
+
+.mcp-details-head {
+  font-size: 12px;
+}
+
+.mcp-code-label {
+  font-size: 11px;
+}
+
+.catalog-instruction-text {
+  font-size: 11px;
+}
+
+.agent-tools-empty {
+  font-size: 12.5px;
+}
+
+.pill.compact,
+.mcp-text-button {
+  font-size: 12px;
 }

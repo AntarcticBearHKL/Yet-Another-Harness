@@ -5328,7 +5328,12 @@ const RING_VISUAL_HALF_H = 330;
 
 const RING_ITEMS = [
   {
-    label: '工具',
+    label: 'Agent',
+    icon: '<path d="M12 3a3 3 0 0 1 3 3v1h1a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3h1V6a3 3 0 0 1 3-3Z"/><path d="M9 12h.01M15 12h.01M9 16h6"/>',
+    action: () => openCatalog('agents'),
+  },
+  {
+    label: 'tool',
     icon: '<path d="M14.5 6.5a3.5 3.5 0 0 0-4.9 4.9L4 17v3h3l5.6-5.6a3.5 3.5 0 0 0 4.9-4.9l-2.1 2.1-2.1-2.1 2.1-2.1Z"/>',
     action: () => openCatalog('tools'),
   },
@@ -5336,11 +5341,6 @@ const RING_ITEMS = [
     label: 'Skill',
     icon: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z"/>',
     action: () => openCatalog('skills'),
-  },
-  {
-    label: 'Agent',
-    icon: '<path d="M12 3a3 3 0 0 1 3 3v1h1a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3h1V6a3 3 0 0 1 3-3Z"/><path d="M9 12h.01M15 12h.01M9 16h6"/>',
-    action: () => openCatalog('agents'),
   },
   {
     label: 'MCP',
@@ -7177,7 +7177,7 @@ async function openCatalog(kind) {
         ? 'MCP'
         : page === 'agents'
           ? 'Agent'
-          : '工具'
+          : 'tool'
   );
   state.catalogOpen = true;
   state.catalogKind =
