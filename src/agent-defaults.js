@@ -1,7 +1,7 @@
 'use strict';
 
 const DEFAULT_AGENT_ID = 'basic';
-const DEFAULT_AGENT_NAME = '基础 Agent';
+const DEFAULT_AGENT_NAME = 'Build';
 const DEFAULT_AGENT_PROMPT =
   'You are the default general-purpose YAH agent. Work directly in the current project, use tools when they help, keep replies concise, and ask the user with the question tool when a decision is genuinely ambiguous.';
 

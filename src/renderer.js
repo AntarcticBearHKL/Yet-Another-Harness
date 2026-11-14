@@ -3,7 +3,7 @@
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const DEFAULT_AGENT_ID = 'basic';
-const DEFAULT_AGENT_NAME = '基础 Agent';
+const DEFAULT_AGENT_NAME = 'Build';
 const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1' };
 const NO_KEY_HINT = 'No API key. Open Settings to add one.';
 // DeepSeek V4.1 Flash (OpenCode Go) context window.
@@ -6071,14 +6071,12 @@ function saveAgentsSoon() {
 async function saveAgentsNow() {
   clearTimeout(state.agentSaveTimer);
   state.agentSaveTimer = null;
-  const payload = state.agents
-    .filter((agent) => agent.id !== DEFAULT_AGENT_ID)
-    .map((agent) => ({
-      id: agent.id,
-      name: agent.name,
-      prompt: agent.prompt,
-      tools: Array.isArray(agent.tools) ? agent.tools : null,
-    }));
+  const payload = state.agents.map((agent) => ({
+    id: agent.id,
+    name: agent.name,
+    prompt: agent.prompt,
+    tools: Array.isArray(agent.tools) ? agent.tools : null,
+  }));
   try {
     const data = await api.saveAgents(payload);
     if (!Array.isArray(data?.agents)) {
@@ -6151,7 +6149,7 @@ function renderAgentEditor(agentId) {
   const allTools = Array.isArray(state.catalogData?.agentTools)
     ? state.catalogData.agentTools
     : [];
-  const readonly = agent.builtin === true;
+  const builtin = agent.builtin === true;
   const selected = new Set(
     Array.isArray(agent.tools) ? agent.tools : allTools.map((tool) => tool.name)
   );
@@ -6161,15 +6159,13 @@ function renderAgentEditor(agentId) {
   name.type = 'text';
   name.value = agent.name;
   name.placeholder = 'Agent 名称';
-  name.disabled = readonly;
   name.addEventListener('input', () => {
-    if (readonly) return;
     agent.name = name.value.slice(0, 80);
     saveAgentsSoon();
   });
   head.append(name);
 
-  if (readonly) {
+  if (builtin) {
     head.append(el('span', 'agent-builtin-badge', '内置'));
   } else {
     const del = el('button', 'pill agent-delete');
@@ -6203,9 +6199,7 @@ function renderAgentEditor(agentId) {
   prompt.placeholder =
     '会注入 system prompt';
   prompt.value = agent.prompt || '';
-  prompt.readOnly = readonly;
   prompt.addEventListener('input', () => {
-    if (readonly) return;
     agent.prompt = prompt.value;
     saveAgentsSoon();
   });
@@ -6219,7 +6213,6 @@ function renderAgentEditor(agentId) {
   const allCheckbox = document.createElement('input');
   allCheckbox.type = 'checkbox';
   allCheckbox.checked = agent.tools === null;
-  allCheckbox.disabled = readonly;
   allLabel.append(allCheckbox);
   allLabel.append(el('span', 'agent-toggle-label', '允许所有工具'));
   toolsHead.append(allLabel);
@@ -6239,10 +6232,9 @@ function renderAgentEditor(agentId) {
     count.textContent = `${active} / ${total}`;
   };
   const setEnabled = (enabled) => {
-    const next = enabled && !readonly;
-    list.classList.toggle('disabled', !next);
+    list.classList.toggle('disabled', !enabled);
     for (const input of list.querySelectorAll('input')) {
-      input.disabled = !next;
+      input.disabled = !enabled;
     }
   };
   for (const tool of allTools) {
@@ -6250,9 +6242,9 @@ function renderAgentEditor(agentId) {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = agent.tools === null || selected.has(tool.name);
-    checkbox.disabled = readonly || agent.tools === null;
+    checkbox.disabled = agent.tools === null;
     checkbox.addEventListener('change', () => {
-      if (readonly || agent.tools === null) return;
+      if (agent.tools === null) return;
       if (checkbox.checked) selected.add(tool.name);
       else selected.delete(tool.name);
       agent.tools = [...selected];
@@ -6270,7 +6262,6 @@ function renderAgentEditor(agentId) {
     list.append(row);
   }
   allCheckbox.addEventListener('change', () => {
-    if (readonly) return;
     if (allCheckbox.checked) {
       agent.tools = null;
       for (const input of list.querySelectorAll('input')) {
@@ -6310,7 +6301,7 @@ function renderAgentEditor(agentId) {
     el(
       'div',
       'agent-editor-status',
-      readonly ? '内置，只读' : '自动保存'
+      builtin ? '内置，可修改，不可删除' : '自动保存'
     )
   );
   dom.catalogList.append(editor);

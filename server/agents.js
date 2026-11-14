@@ -57,36 +57,56 @@ function normalizeAgents(raw) {
   return agents;
 }
 
+function builtinAgent(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  return {
+    ...BUILTIN_AGENT,
+    ...source,
+    id: DEFAULT_AGENT_ID,
+    builtin: true,
+  };
+}
+
 function loadAgents(file) {
   try {
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const custom = normalizeAgents(data?.agents).filter(
+    const normalized = normalizeAgents(data?.agents);
+    const stored = normalized.find(
+      (agent) => agent.id === DEFAULT_AGENT_ID
+    );
+    const custom = normalized.filter(
       (agent) => agent.id !== DEFAULT_AGENT_ID
     );
-    return [BUILTIN_AGENT, ...custom];
+    return [builtinAgent(stored), ...custom];
   } catch {
     return [BUILTIN_AGENT];
   }
 }
 
 function saveAgents(file, agents) {
-  const normalized = normalizeAgents(agents).filter(
+  const normalized = normalizeAgents(agents);
+  const stored = normalized.find((agent) => agent.id === DEFAULT_AGENT_ID);
+  const custom = normalized.filter(
     (agent) => agent.id !== DEFAULT_AGENT_ID
   );
+  const output = [builtinAgent(stored), ...custom];
+  const payload = output.map(({ builtin, ...agent }) => agent);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temp = `${file}.tmp`;
   fs.writeFileSync(
     temp,
-    JSON.stringify({ agents: normalized }, null, 2),
+    JSON.stringify({ agents: payload }, null, 2),
     'utf8'
   );
   fs.renameSync(temp, file);
-  return [BUILTIN_AGENT, ...normalized];
+  return output;
 }
 
 function getAgent(file, id) {
   const key = String(id || '').trim();
-  if (!key || key === DEFAULT_AGENT_ID) return BUILTIN_AGENT;
+  if (!key || key === DEFAULT_AGENT_ID) {
+    return loadAgents(file)[0] || BUILTIN_AGENT;
+  }
   return loadAgents(file).find((agent) => agent.id === key) || null;
 }
 
