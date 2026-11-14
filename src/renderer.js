@@ -754,6 +754,13 @@ function applyOpenKey(key, opts) {
 function viewModeOpenKeys(cards) {
   const keys = new Set();
   for (const card of cards) {
+    if (
+      card.classList.contains('streaming') &&
+      card.querySelector('.card-waiting')
+    ) {
+      keys.add(card.dataset.cardKey);
+      continue;
+    }
     if (!card.classList.contains('answer-card')) continue;
     if (
       state.viewMode === 'replies' ||
@@ -1573,6 +1580,8 @@ function textCard({
     const textNode = el('div', 'card-text');
     renderTextContent(textNode, text);
     body.append(textNode);
+  } else if (streaming) {
+    body.append(el('div', 'card-text card-waiting'));
   }
   if (streaming) card.classList.add('streaming');
   return card;
@@ -1895,6 +1904,39 @@ function renderToolCard(callStep, resultStep, msg, key, options = {}) {
   return card;
 }
 
+function dropWaitingThinking(msg, round) {
+  if (!msg || !Array.isArray(msg.steps)) return;
+  const stepRound = Number.isInteger(round) ? round : 0;
+  msg.steps = msg.steps.filter(
+    (step) =>
+      !(
+        step.placeholder === true &&
+        step.kind === 'thinking' &&
+        step.round === stepRound &&
+        !String(step.text || '').trim()
+      )
+  );
+}
+
+function ensureWaitingThinking(msg, round) {
+  if (!msg) return false;
+  if (!Array.isArray(msg.steps)) msg.steps = [];
+  const stepRound = Number.isInteger(round) ? round : 0;
+  const hasContent = msg.steps.some(
+    (step) =>
+      (step.kind === 'thinking' || step.kind === 'text') &&
+      step.round === stepRound
+  );
+  if (hasContent) return false;
+  msg.steps.push({
+    kind: 'thinking',
+    text: '',
+    round: stepRound,
+    placeholder: true,
+  });
+  return true;
+}
+
 function isRichTrace(steps) {
   return steps.some(
     (step) =>
@@ -2168,8 +2210,14 @@ function renderAgentMessage(msg, msgIndex, container) {
         : state.viewMode === 'processes'
           ? false
           : null;
-    const collapsed =
-      modeCollapsed === null
+    // While waiting for the first token there is no reply card yet. Keep the
+    // process group open so the thinking placeholder (and its blinking cursor)
+    // stays visible even in questions/replies view or a previously collapsed
+    // process group.
+    const forceProcessOpen = streaming && lastTextIndex < 0;
+    const collapsed = forceProcessOpen
+      ? false
+      : modeCollapsed === null
         ? state.collapsedProcessKeys.has(processKey)
         : modeCollapsed;
     if (collapsed) group.classList.add('collapsed');
@@ -3854,6 +3902,7 @@ async function startPrompt(
   const requestId = makeId();
   state.streaming = true;
   state.requestId = requestId;
+  ensureWaitingThinking(agent, 0);
   renderAll();
 
   try {
@@ -5352,11 +5401,25 @@ async function adoptExternalRun(requestId) {
 function finishStream() {
   clearToolApprovals();
   clearQuestionDock();
+  const finishedMessage = state.streamMessage;
   const finishedSession = state.streamMessage
     ? state.sessions.find((session) =>
         session.msgs.includes(state.streamMessage)
       )
     : currentSession();
+  let removedPlaceholder = false;
+  if (finishedMessage && Array.isArray(finishedMessage.steps)) {
+    const steps = finishedMessage.steps.filter(
+      (step) =>
+        !(
+          step.placeholder === true &&
+          step.kind === 'thinking' &&
+          !String(step.text || '').trim()
+        )
+    );
+    removedPlaceholder = steps.length !== finishedMessage.steps.length;
+    finishedMessage.steps = steps;
+  }
   const stick = state.followBottom;
   state.streaming = false;
   state.requestId = null;
@@ -5372,7 +5435,7 @@ function finishStream() {
 
   state.foldRestored = true;
   state.foldSessionId = currentSession()?.id || state.foldSessionId;
-  if (state.viewMode) {
+  if (removedPlaceholder || state.viewMode) {
     renderMessages();
   } else {
     state.openCardKey = autoCardKey();
@@ -8312,6 +8375,7 @@ function bindEvents() {
     let newStep = false;
     if (last && last.kind === stepKind && last.round === stepRound) {
       last.text += text;
+      if (last.placeholder) delete last.placeholder;
     } else {
       msg.steps.push({ kind: stepKind, text, round: stepRound });
       newStep = true;
@@ -8372,7 +8436,13 @@ function bindEvents() {
     if (!Array.isArray(msg.requests)) msg.requests = [];
     const index = Number.isInteger(round) ? round : 0;
     msg.requests[index] = body;
+    const waiting = ensureWaitingThinking(msg, index);
     saveChatsSoon();
+    if (!waiting) return;
+    const session = currentSession();
+    if (!session || !session.msgs.includes(msg)) return;
+    state.openCardKey = autoCardKey();
+    renderMessages();
   });
 
   api.onChatUsage(({ requestId, usage }) => {
@@ -8445,12 +8515,14 @@ function bindEvents() {
     if (!Array.isArray(state.streamMessage.steps)) {
       state.streamMessage.steps = [];
     }
+    const stepRound = Number.isInteger(round) ? round : 0;
+    dropWaitingThinking(state.streamMessage, stepRound + 1);
     state.streamMessage.steps.push({
       kind: 'result',
       name: String(name || 'tool'),
       output: String(output ?? ''),
       ok: ok !== false,
-      round: Number.isInteger(round) ? round : 0,
+      round: stepRound,
       metrics: {
         startedAt: Number.isFinite(Number(startedAt))
           ? Number(startedAt)
@@ -8460,6 +8532,10 @@ function bindEvents() {
           : undefined,
       },
     });
+    // The next model request starts right after a tool result. Show its
+    // waiting thinking block immediately instead of leaving the tool card
+    // as the last visible line until the first token arrives.
+    ensureWaitingThinking(state.streamMessage, stepRound + 1);
     saveChatsSoon();
 
     const session = currentSession();
