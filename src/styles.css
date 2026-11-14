@@ -471,12 +471,6 @@ body.ring-open #window-controls {
   font-weight: 600;
 }
 
-.project-empty {
-  padding: 10px 14px;
-  color: var(--faint);
-  font-size: 12px;
-}
-
 .project-add {
   display: flex;
   align-items: center;

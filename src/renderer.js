@@ -2598,10 +2598,6 @@ function renderSwitcher() {
     row.addEventListener('mouseenter', () => selectProject(item.id));
     dom.projectList.append(row);
   });
-  if (!project) {
-    dom.projectList.append(el('div', 'project-empty', '还没有项目'));
-  }
-
   const addProject = el('button', 'project-add', '+');
   addProject.type = 'button';
   addProject.setAttribute('aria-label', 'New project');
