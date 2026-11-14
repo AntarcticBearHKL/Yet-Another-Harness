@@ -184,6 +184,73 @@ test('tool assistant message keeps reasoning separate from content', () => {
   assert.equal(message.tool_calls[0].function.name, 'web_search');
 });
 
+test('messages from history replay the last tool request for cache stability', () => {
+  const stored = [
+    { role: 'system', content: 'OLD SYSTEM' },
+    { role: 'user', content: 'hi' },
+    {
+      role: 'assistant',
+      content: null,
+      tool_calls: [
+        {
+          id: 'call_1',
+          type: 'function',
+          function: { name: 'read', arguments: '{"path":"a.txt"}' },
+        },
+      ],
+      reasoning_content: 'think',
+    },
+    { role: 'tool', tool_call_id: 'call_1', content: 'file body' },
+  ];
+  const messages = deepseek.messagesFromHistory(
+    [
+      { role: 'User', text: 'hi', request: null },
+      {
+        role: 'Agent',
+        text: 'done',
+        request: '',
+        steps: [{ kind: 'text', text: 'done', round: 0 }],
+        requests: [
+          {
+            model: deepseek.MODEL,
+            messages: stored,
+            tools: [{ type: 'function' }],
+          },
+        ],
+      },
+      { role: 'User', text: 'next', request: null },
+    ],
+    'CURRENT SYSTEM'
+  );
+
+  assert.equal(messages[0].content, 'CURRENT SYSTEM');
+  assert.equal(messages[1].content, 'hi');
+  assert.equal(messages[2].tool_calls[0].function.name, 'read');
+  assert.equal(messages[2].reasoning_content, 'think');
+  assert.equal(messages[3].role, 'tool');
+  assert.equal(messages[4].role, 'assistant');
+  assert.equal(messages[4].content, 'done');
+  assert.equal('reasoning_content' in messages[4], false);
+  assert.equal(messages[5].content, 'next');
+});
+
+test('messages from history keep more than 40 messages', () => {
+  const history = [];
+  for (let i = 0; i < 45; i += 1) {
+    history.push({ role: 'User', text: `u${i}`, request: null });
+    history.push({
+      role: 'Agent',
+      text: `a${i}`,
+      request: '',
+      steps: [{ kind: 'text', text: `a${i}`, round: 0 }],
+    });
+  }
+  const messages = deepseek.messagesFromHistory(history, 'S');
+  assert.equal(messages.length, 91);
+  assert.equal(messages[1].content, 'u0');
+  assert.equal(messages[90].content, 'a44');
+});
+
 test('messages from history fall back to text without steps', () => {
   const messages = deepseek.messagesFromHistory(
     [

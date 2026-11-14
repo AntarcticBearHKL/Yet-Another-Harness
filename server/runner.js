@@ -542,16 +542,14 @@ function startRun({
     ? `# Agent Context${resolvedAgentConfig?.name ? ` · ${resolvedAgentConfig.name}` : ''}\n${agentPrompt}`
     : '';
   const goal = session.goal;
+  // Keep the system prefix stable for prompt caching: the live token/turn
+  // counters live in the goal strip and goal audit, not in this block.
   const goalBlock =
     goal && (goal.status === 'active' || goal.status === 'paused')
       ? [
           '# Goal Mode',
           `Objective: ${goal.objective}`,
           `Status: ${goal.status}`,
-          typeof goal.tokenBudget === 'number'
-            ? `Token budget: ${goal.tokensUsed || 0} / ${goal.tokenBudget}`
-            : 'Token budget: none',
-          `Auto-continuations used: ${goal.turnsUsed || 0} / ${goal.maxTurns || 20}`,
           'Keep working toward the objective. End every turn with what is done, what was verified, and what remains.',
         ].join('\n')
       : '';

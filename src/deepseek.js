@@ -25,7 +25,7 @@ const PROVIDER = 'opencode-go';
 const API = 'openai-chat-completions';
 const REASONING_FIELD = 'reasoning_content';
 const USER_AGENT = 'yah/0.3.0';
-const MAX_HISTORY = 40;
+const MAX_HISTORY = 1000;
 const MAX_TOOL_ROUNDS = 6;
 
 function answerText(msg) {
@@ -78,6 +78,72 @@ function sameRoute(a, b) {
   );
 }
 
+function finalAnswerText(msg) {
+  const steps = Array.isArray(msg?.steps) ? msg.steps : [];
+  const lastText = [...steps].reverse().find((step) => step?.kind === 'text');
+  const text = String(lastText?.text ?? '');
+  return text.trim() ? text : String(msg?.text ?? '');
+}
+
+/**
+ * Replay the exact messages of the previous turn's last tool-bearing request.
+ * That request already contains the system prompt, tool calls, tool results and
+ * per-tool-turn reasoning_content, so the next turn keeps the same cache prefix.
+ */
+function replayStoredHistory(history, system, route, compaction) {
+  if (normalizeCompaction(compaction)) return null;
+  const source = Array.isArray(history) ? history : [];
+  let agentIndex = -1;
+  for (let i = source.length - 1; i >= 0; i -= 1) {
+    const msg = source[i];
+    if (
+      msg?.role === 'Agent' &&
+      Array.isArray(msg.requests) &&
+      msg.requests.length > 0
+    ) {
+      agentIndex = i;
+      break;
+    }
+  }
+  if (agentIndex < 0) return null;
+
+  const agent = source[agentIndex];
+  const requests = agent.requests.filter(
+    (body) => body && Array.isArray(body.messages) && body.messages.length > 0
+  );
+  if (requests.length === 0) return null;
+
+  const withTools = requests.filter(
+    (body) => Array.isArray(body.tools) && body.tools.length > 0
+  );
+  const body = (withTools.length > 0 ? withTools : requests).at(-1);
+  if (route?.model && body.model && body.model !== route.model) return null;
+
+  const stored = body.messages.slice();
+  if (stored[0]?.role === 'system') stored.shift();
+
+  const messages = [];
+  if (system && system.trim()) {
+    messages.push({ role: 'system', content: system });
+  }
+  messages.push(...stored);
+
+  const finalText = finalAnswerText(agent);
+  if (finalText.trim()) {
+    // DeepSeek only needs reasoning_content replayed for tool turns; the
+    // final assistant answer is plain content.
+    messages.push({ role: 'assistant', content: finalText });
+  }
+
+  for (const msg of source.slice(agentIndex + 1)) {
+    if (!msg || msg.role === 'Compact') continue;
+    if (msg.role === 'User' || msg.role === 'user') {
+      messages.push({ role: 'user', content: String(msg.text ?? '') });
+    }
+  }
+  return messages;
+}
+
 function messagesFromHistory(
   history,
   system,
@@ -85,6 +151,9 @@ function messagesFromHistory(
   route = { provider: PROVIDER, api: API, model: MODEL },
   compaction = null
 ) {
+  const replayed = replayStoredHistory(history, system, route, compaction);
+  if (replayed) return replayed;
+
   const messages = [];
   if (system && system.trim()) {
     messages.push({ role: 'system', content: system });

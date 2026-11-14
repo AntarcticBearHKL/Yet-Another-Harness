@@ -886,37 +886,42 @@ function compactTokens(value) {
   return String(number);
 }
 
+function usageRound(usage) {
+  const rounds = usage?.rounds;
+  if (rounds && typeof rounds === 'object') {
+    let best = null;
+    for (const round of Object.values(rounds)) {
+      if (!round || typeof round !== 'object') continue;
+      const hit = Math.max(0, Number(round.hit) || 0);
+      const miss = Math.max(0, Number(round.miss) || 0);
+      const output = Math.max(0, Number(round.output) || 0);
+      const total = hit + miss + output;
+      if (!best || total > best.total) {
+        best = { hit, miss, output, total };
+      }
+    }
+    if (best) return best;
+  }
+  if (!usage || typeof usage !== 'object') return null;
+  return {
+    hit: Math.max(0, Number(usage.hit) || 0),
+    miss: Math.max(0, Number(usage.miss) || 0),
+    output: Math.max(0, Number(usage.output) || 0),
+  };
+}
+
 function usageText(usage) {
-  if (!usage) return '';
-  const hit = Math.max(0, Number(usage.hit) || 0);
-  const miss = Math.max(0, Number(usage.miss) || 0);
-  const output = Math.max(0, Number(usage.output) || 0);
-  const input = hit + miss;
-  const hitPercent = input > 0 ? Math.round((hit / input) * 100) : 0;
-  return `${compactTokens(input)} / ${hitPercent}% / ${compactTokens(output)}`;
+  const round = usageRound(usage);
+  if (!round) return '';
+  const input = round.hit + round.miss;
+  const hitPercent = input > 0 ? Math.round((round.hit / input) * 100) : 0;
+  return `${compactTokens(input)} / ${hitPercent}% / ${compactTokens(round.output)}`;
 }
 
 function contextTokensForMessage(msg) {
-  const usage = msg?.usage;
-  if (!usage || typeof usage !== 'object') return 0;
-  const rounds = usage.rounds;
-  if (rounds && typeof rounds === 'object') {
-    const roundKeys = Object.keys(rounds)
-      .map((key) => Number(key))
-      .filter((key) => Number.isInteger(key))
-      .sort((a, b) => a - b);
-    for (let i = roundKeys.length - 1; i >= 0; i -= 1) {
-      const round = rounds[roundKeys[i]] || {};
-      const prompt = Number(round.hit || 0) + Number(round.miss || 0);
-      const output = Number(round.output || 0);
-      if (prompt + output > 0) return prompt + output;
-    }
-  }
-  const total =
-    Number(usage.hit || 0) +
-    Number(usage.miss || 0) +
-    Number(usage.output || 0);
-  return total > 0 ? total : 0;
+  const round = usageRound(msg?.usage);
+  if (!round) return 0;
+  return round.hit + round.miss + round.output;
 }
 
 function contextBadge(msg) {
@@ -1066,16 +1071,24 @@ function makeCard(opts) {
     }
     if (opts.usage) {
       const usage = el('span', 'card-usage', usageText(opts.usage));
-      const hit = Math.max(0, Number(opts.usage.hit) || 0);
-      const miss = Math.max(0, Number(opts.usage.miss) || 0);
-      const input = hit + miss;
-      const hitPercent = input > 0 ? Math.round((hit / input) * 100) : 0;
-      usage.setAttribute(
-        'aria-label',
-        `输入总共 ${input} · 缓存命中 ${hit} (${hitPercent}%) · 输出 ${
-          Number(opts.usage.output) || 0
-        }`
-      );
+      const round = usageRound(opts.usage);
+      if (round) {
+        const input = round.hit + round.miss;
+        const hitPercent = input > 0 ? Math.round((round.hit / input) * 100) : 0;
+        const totalHit = Math.max(0, Number(opts.usage.hit) || 0);
+        const totalMiss = Math.max(0, Number(opts.usage.miss) || 0);
+        const totalInput = totalHit + totalMiss;
+        const totalPercent =
+          totalInput > 0 ? Math.round((totalHit / totalInput) * 100) : 0;
+        usage.setAttribute(
+          'aria-label',
+          `当前上下文 输入 ${input} · 缓存命中 ${round.hit} (${hitPercent}%) · 输出 ${
+            round.output
+          }；全部轮次 输入 ${totalInput} · 缓存命中 ${totalHit} (${totalPercent}%) · 输出 ${
+            Number(opts.usage.output) || 0
+          }`
+        );
+      }
       tail.append(usage);
     }
     if (opts.badge) {
