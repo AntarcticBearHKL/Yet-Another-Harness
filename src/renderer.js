@@ -5799,8 +5799,7 @@ function renderCatalogCategories(data, selectedKind, page) {
   }
 
   if (page === 'agents') {
-    const section = el('div', 'catalog-section');
-    section.append(el('div', 'catalog-section-label', 'Agent'));
+    const section = el('div', 'catalog-section catalog-agent-section');
     for (const agent of state.agents) {
       section.append(
         catalogCategoryButton(
@@ -5809,9 +5808,10 @@ function renderCatalogCategories(data, selectedKind, page) {
         )
       );
     }
-    const add = el('button', 'catalog-category catalog-add');
+    const add = el('button', 'catalog-category catalog-add catalog-add-row');
     add.type = 'button';
-    add.append(el('span', 'catalog-category-name', '+ 新建 Agent'));
+    add.setAttribute('aria-label', '新建 Agent');
+    add.append(el('span', 'catalog-add-plus', '+'));
     add.addEventListener('click', createAgent);
     section.append(add);
     dom.catalogCategories.append(section);

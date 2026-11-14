@@ -70,7 +70,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 在输入框开头输入 `/` 会在光标位置弹出搜索式 Skill 联想：按名称、描述、关键词匹配当前对话可用的 Skill，上下键移动、回车或点击选择；选中后输入框本身不变色，只在输入框上方显示一个带颜色的 `/ Skill` 标记，按 Backspace 或点 × 整体删除；带参数的 MCP Skill 会先弹出参数表单
 - 附加的 Skill 在发送时解析并注入该次请求的 system prompt（`# Active Skills`），不会写进用户输入；排队消息会一起保存自己的 Skill
 - 已连接且当前对话启用的 MCP 服务器会把 prompts 暴露为临时 Skill；切换 MCP 开关后列表实时更新
-- Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧列出 Agent 和「+ 新建 Agent」，右侧配置名称、提示词和工具权限；内置「基础 Agent」始终存在且不可删除，自定义 Agent 配置保存在 `%APPDATA%\yah\agents.json`
+- Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧列出 Agent 和一个只有 `+` 的新建行，右侧配置名称、提示词和工具权限；内置「基础 Agent」始终存在且不可删除，自定义 Agent 配置保存在 `%APPDATA%\yah\agents.json`
 - Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；工具权限可以限制 Agent 只能调用勾选的工具，不勾选则不能调用工具
 - 输入框底部只显示当前 Agent 名字（如 `基础 Agent`），居中显示，是一段可点击的文字，没有额外标签和三角；点击后在上方居中展开紧凑的暖色磨砂下拉菜单选择 Agent，Agent 多时列表可滚动。每个对话必须有一个 Agent，新对话默认使用「基础 Agent」；按对话保存选择，新对话继承同项目上一个对话的 Agent；排队消息会保存自己的 Agent
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒

@@ -3649,6 +3649,31 @@ body.ring-open #messages {
   color: var(--accent);
 }
 
+.catalog-agent-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.catalog-add-row {
+  justify-content: center;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--accent);
+}
+
+.catalog-add-row:hover {
+  border-color: rgba(185, 111, 61, 0.35);
+  background: var(--hover);
+}
+
+.catalog-add-plus {
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1;
+}
+
 .catalog-add .catalog-category-name {
   font-weight: 600;
 }
