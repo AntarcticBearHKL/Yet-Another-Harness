@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const {
   DEFAULT_AGENT_ID,
   BUILTIN_AGENT,
+  LEGACY_BUILTIN_PROMPTS,
 } = require('../src/agent-defaults');
 
 const MAX_AGENTS = 50;
@@ -59,10 +60,14 @@ function normalizeAgents(raw) {
 
 function builtinAgent(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
+  const prompt = String(source.prompt || '');
+  const useDefaultPrompt =
+    !prompt.trim() || LEGACY_BUILTIN_PROMPTS.includes(prompt.trim());
   return {
     ...BUILTIN_AGENT,
     ...source,
     id: DEFAULT_AGENT_ID,
+    prompt: useDefaultPrompt ? BUILTIN_AGENT.prompt : prompt,
     builtin: true,
   };
 }

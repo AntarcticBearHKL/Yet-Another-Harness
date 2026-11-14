@@ -278,7 +278,7 @@ function renderWebContent(payload) {
     );
     return;
   }
-  renderTextContent(dom.webContentBody, payload?.text);
+  renderMarkdownContent(dom.webContentBody, payload?.text);
 }
 
 function openWebContent(payload) {
@@ -304,7 +304,7 @@ function updateWebContent(payload) {
       dom.webContentBody.scrollTop -
       dom.webContentBody.clientHeight <
     40;
-  renderTextContent(dom.webContentBody, payload.text);
+  renderMarkdownContent(dom.webContentBody, payload.text);
   if (atBottom) {
     dom.webContentBody.scrollTop = dom.webContentBody.scrollHeight;
   } else {
@@ -1062,6 +1062,340 @@ function renderTextContent(container, text) {
     } else {
       container.append(el('div', 'text-block', block));
     }
+  }
+}
+
+function renderMarkdownContent(container, text) {
+  const root = el('div', 'md-body');
+  renderMarkdownBlocks(root, String(text ?? ''));
+  container.replaceChildren(root);
+}
+
+function mdSafeHref(value) {
+  const url = String(value || '').trim();
+  return /^(https?:|mailto:|#)/i.test(url) ? url : '';
+}
+
+function mdInline(text) {
+  const source = String(text ?? '');
+  const nodes = [];
+  const pattern =
+    /(`[^`\n]+`|\*\*\*[^*\n]+\*\*\*|\*\*[^*\n]+\*\*|\*[^*\n]+\*|~~[^~\n]+~~|\[([^\]\n]+)\]\(([^)\n]+)\))/g;
+  let last = 0;
+  let match;
+  while ((match = pattern.exec(source))) {
+    if (match.index > last) {
+      nodes.push(document.createTextNode(source.slice(last, match.index)));
+    }
+    const token = match[0];
+    if (token.startsWith('`')) {
+      nodes.push(el('code', 'md-code-inline', token.slice(1, -1)));
+    } else if (token.startsWith('***')) {
+      const strong = el('strong');
+      const em = el('em');
+      em.append(...mdInline(token.slice(3, -3)));
+      strong.append(em);
+      nodes.push(strong);
+    } else if (token.startsWith('**')) {
+      const strong = el('strong');
+      strong.append(...mdInline(token.slice(2, -2)));
+      nodes.push(strong);
+    } else if (token.startsWith('*')) {
+      const em = el('em');
+      em.append(...mdInline(token.slice(1, -1)));
+      nodes.push(em);
+    } else if (token.startsWith('~~')) {
+      const del = el('del');
+      del.append(...mdInline(token.slice(2, -2)));
+      nodes.push(del);
+    } else if (token.startsWith('[')) {
+      const label = match[2] || '';
+      const href = mdSafeHref(match[3] || '');
+      if (href) {
+        const link = el('a', 'md-link');
+        link.href = href;
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+        link.append(...mdInline(label));
+        nodes.push(link);
+      } else {
+        nodes.push(document.createTextNode(label || token));
+      }
+    }
+    last = match.index + token.length;
+  }
+  if (last < source.length) {
+    nodes.push(document.createTextNode(source.slice(last)));
+  }
+  return nodes;
+}
+
+function mdSplitRow(line) {
+  let value = String(line || '').trim();
+  if (value.startsWith('|')) value = value.slice(1);
+  if (value.endsWith('|')) value = value.slice(0, -1);
+  return value.split('|').map((cell) => cell.trim());
+}
+
+function mdIsTableStart(lines, index) {
+  if (index + 1 >= lines.length) return false;
+  if (!lines[index].includes('|') || !lines[index + 1].includes('-')) {
+    return false;
+  }
+  return /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(
+    lines[index + 1].trim()
+  );
+}
+
+function mdListMatch(line) {
+  const match = String(line || '').match(
+    /^(\s*)([-*+]|\d+[.)])\s+(.*)$/
+  );
+  if (!match) return null;
+  return {
+    indent: match[1].length,
+    ordered: /^\d/.test(match[2]),
+    content: match[3],
+  };
+}
+
+function mdParseList(lines, start) {
+  const first = mdListMatch(lines[start]);
+  const list = el(
+    first.ordered ? 'ol' : 'ul',
+    `md-list ${first.ordered ? 'md-ordered' : 'md-unordered'}`
+  );
+  let index = start;
+  while (index < lines.length) {
+    const item = mdListMatch(lines[index]);
+    if (
+      !item ||
+      item.indent !== first.indent ||
+      item.ordered !== first.ordered
+    ) {
+      break;
+    }
+    const li = el('li', 'md-list-item');
+    let content = item.content;
+    const task = content.match(/^\[([ xX])\]\s+(.*)$/);
+    if (task) {
+      li.classList.add('md-task');
+      const box = el(
+        'span',
+        `md-task-box${task[1].trim() ? ' checked' : ''}`
+      );
+      li.append(box);
+      content = task[2];
+    }
+    let cursor = index + 1;
+    const extra = [];
+    let nested = null;
+    while (cursor < lines.length) {
+      const next = lines[cursor];
+      if (!next.trim()) break;
+      const nextItem = mdListMatch(next);
+      if (nextItem && nextItem.indent <= first.indent) break;
+      if (!/^\s+/.test(next)) break;
+      if (nextItem && nextItem.indent > first.indent) {
+        nested = mdParseList(lines, cursor);
+        break;
+      }
+      extra.push(next.trim());
+      cursor += 1;
+    }
+    li.append(
+      ...mdInline(
+        content + (extra.length ? ` ${extra.join(' ')}` : '')
+      )
+    );
+    if (nested) {
+      li.append(nested.node);
+      index = nested.next;
+    } else {
+      index = cursor;
+    }
+    list.append(li);
+  }
+  return { node: list, next: index };
+}
+
+function mdParseTable(lines, start) {
+  const header = mdSplitRow(lines[start]);
+  const separator = mdSplitRow(lines[start + 1]);
+  const aligns = separator.map((cell) => {
+    const left = cell.startsWith(':');
+    const right = cell.endsWith(':');
+    if (left && right) return 'center';
+    if (right) return 'right';
+    if (left) return 'left';
+    return '';
+  });
+  const table = el('table', 'md-table');
+  const thead = el('thead');
+  const headRow = el('tr');
+  header.forEach((cell, index) => {
+    const th = el(
+      'th',
+      aligns[index] ? `md-align-${aligns[index]}` : ''
+    );
+    th.append(...mdInline(cell));
+    headRow.append(th);
+  });
+  thead.append(headRow);
+  table.append(thead);
+  const tbody = el('tbody');
+  let index = start + 2;
+  while (
+    index < lines.length &&
+    lines[index].trim() &&
+    lines[index].includes('|')
+  ) {
+    const cells = mdSplitRow(lines[index]);
+    const row = el('tr');
+    for (let column = 0; column < header.length; column += 1) {
+      const td = el(
+        'td',
+        aligns[column] ? `md-align-${aligns[column]}` : ''
+      );
+      td.append(...mdInline(cells[column] || ''));
+      row.append(td);
+    }
+    tbody.append(row);
+    index += 1;
+  }
+  table.append(tbody);
+  return { node: table, next: index };
+}
+
+function mdParseCodeFence(lines, start) {
+  const match = lines[start].match(
+    /^\s*(`{3,}|~{3,})\s*([\w-]*)\s*$/
+  );
+  const fence = match[1];
+  const language = match[2] || '';
+  const body = [];
+  let index = start + 1;
+  while (index < lines.length) {
+    if (lines[index].trim().startsWith(fence)) {
+      index += 1;
+      break;
+    }
+    body.push(lines[index]);
+    index += 1;
+  }
+  const wrap = el('div', 'md-code-block');
+  const head = el('div', 'md-code-head');
+  head.append(el('span', 'md-code-lang', language || 'code'));
+  const copy = el('button', 'md-copy', '复制');
+  copy.type = 'button';
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(body.join('\n'));
+      copy.textContent = '已复制';
+      setTimeout(() => {
+        copy.textContent = '复制';
+      }, 1200);
+    } catch {
+      copy.textContent = '复制失败';
+    }
+  });
+  head.append(copy);
+  const pre = el('pre', 'md-pre');
+  const code = el('code', 'md-code', body.join('\n'));
+  if (language) code.classList.add(`language-${language}`);
+  pre.append(code);
+  wrap.append(head, pre);
+  return { node: wrap, next: index };
+}
+
+function mdIsBlockStart(lines, index) {
+  const line = lines[index];
+  if (!line.trim()) return true;
+  if (/^\s*(`{3,}|~{3,})/.test(line)) return true;
+  if (/^#{1,6}\s+/.test(line)) return true;
+  if (/^\s*>\s?/.test(line)) return true;
+  if (mdListMatch(line)) return true;
+  if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) return true;
+  return mdIsTableStart(lines, index);
+}
+
+function renderMarkdownBlocks(container, text) {
+  const lines = String(text ?? '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n');
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+
+    if (/^\s*(`{3,}|~{3,})/.test(line)) {
+      const code = mdParseCodeFence(lines, index);
+      container.append(code.node);
+      index = code.next;
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      const level = heading[1].length;
+      const node = el(`h${level}`, `md-heading md-h${level}`);
+      node.append(...mdInline(heading[2]));
+      container.append(node);
+      index += 1;
+      continue;
+    }
+
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+      container.append(el('hr', 'md-hr'));
+      index += 1;
+      continue;
+    }
+
+    if (/^\s*>\s?/.test(line)) {
+      const quoteLines = [];
+      while (index < lines.length && /^\s*>\s?/.test(lines[index])) {
+        quoteLines.push(lines[index].replace(/^\s*>\s?/, ''));
+        index += 1;
+      }
+      const quote = el('blockquote', 'md-quote');
+      renderMarkdownBlocks(quote, quoteLines.join('\n'));
+      container.append(quote);
+      continue;
+    }
+
+    if (mdIsTableStart(lines, index)) {
+      const table = mdParseTable(lines, index);
+      container.append(table.node);
+      index = table.next;
+      continue;
+    }
+
+    if (mdListMatch(line)) {
+      const list = mdParseList(lines, index);
+      container.append(list.node);
+      index = list.next;
+      continue;
+    }
+
+    const paragraph = [line.trim()];
+    index += 1;
+    while (
+      index < lines.length &&
+      lines[index].trim() &&
+      !mdIsBlockStart(lines, index)
+    ) {
+      paragraph.push(lines[index].trim());
+      index += 1;
+    }
+    const p = el('p', 'md-p');
+    paragraph.forEach((row, rowIndex) => {
+      if (rowIndex > 0) p.append(el('br'));
+      p.append(...mdInline(row));
+    });
+    container.append(p);
   }
 }
 
@@ -6393,7 +6727,12 @@ function bindEvents() {
   document.addEventListener('contextmenu', handleContextMenu, true);
   document.addEventListener('selectstart', (event) => {
     const target = event.target;
-    if (target instanceof Element && target.closest('input, textarea')) return;
+    if (
+      target instanceof Element &&
+      target.closest('input, textarea, #web-content-body')
+    ) {
+      return;
+    }
     event.preventDefault();
   });
 

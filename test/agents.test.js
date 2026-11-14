@@ -57,6 +57,33 @@ test('agents round-trip through the JSON file', () => {
   }
 });
 
+test('the legacy built-in prompt upgrades to the Markdown instruction', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-agents-'));
+  const file = path.join(dir, 'agents.json');
+  try {
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        agents: [
+          {
+            id: 'basic',
+            name: 'Build',
+            prompt:
+              'You are the default general-purpose YAH agent. Work directly in the current project, use tools when they help, keep replies concise, and ask the user with the question tool when a decision is genuinely ambiguous.',
+            tools: null,
+          },
+        ],
+      }),
+      'utf8'
+    );
+    const loaded = loadAgents(file)[0];
+    assert.equal(loaded.name, 'Build');
+    assert.match(loaded.prompt, /Markdown/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('the built-in agent is always present, editable, and cannot be deleted', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-agents-'));
   const file = path.join(dir, 'agents.json');
