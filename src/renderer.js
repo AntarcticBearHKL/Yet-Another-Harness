@@ -658,11 +658,15 @@ function applyOpenKey(key, opts) {
 
 function viewModeOpenKeys(cards) {
   const keys = new Set();
-  if (state.viewMode !== 'replies' && state.viewMode !== 'processes') {
-    return keys;
-  }
   for (const card of cards) {
-    if (card.classList.contains('answer-card')) keys.add(card.dataset.cardKey);
+    if (!card.classList.contains('answer-card')) continue;
+    if (
+      state.viewMode === 'replies' ||
+      state.viewMode === 'processes' ||
+      (state.viewMode === 'questions' && card.classList.contains('streaming'))
+    ) {
+      keys.add(card.dataset.cardKey);
+    }
   }
   return keys;
 }
@@ -3566,7 +3570,6 @@ async function startPrompt(
   { clearInput = false, skills = [], agentId = '' } = {}
 ) {
   if (!session || session.frozen || !text) return;
-  state.viewMode = null;
   state.foldRestored = false;
   state.foldSessionId = session.id;
   const firstMessage = session.msgs.length === 0;
