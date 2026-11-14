@@ -5,6 +5,7 @@
 // 执行工具、把结果塞回下一轮。
 
 const tools = require('./tools');
+const { normalizeReasoningEffort } = require('./reasoning');
 const {
   buildSummaryPrompt,
   SUMMARY_NUDGE,
@@ -131,6 +132,11 @@ function requestBody(messages, options = {}) {
     stream: true,
     stream_options: { include_usage: true },
   };
+  if (options.reasoningEffort) {
+    body.reasoning_effort = normalizeReasoningEffort(
+      options.reasoningEffort
+    );
+  }
   if (options.tools !== false) {
     const definitions = tools.definitions({
       mcpDisabled: options.mcpDisabled,
@@ -577,6 +583,7 @@ async function runAgent({
   history,
   mcpDisabled,
   allowedTools,
+  reasoningEffort = null,
   toolContext,
   compaction = null,
   compactionThrough = 0,
@@ -629,6 +636,7 @@ async function runAgent({
     const body = requestBody(requestMessages, {
       mcpDisabled,
       allowedTools,
+      ...(reasoningEffort ? { reasoningEffort } : {}),
       ...options,
     });
     onRequest?.(structuredClone(body), round);

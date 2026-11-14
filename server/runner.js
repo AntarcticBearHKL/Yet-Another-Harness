@@ -5,6 +5,7 @@ const store = require('../src/store');
 const deepseek = require('../src/deepseek');
 const { ensureAgentsMd } = require('./context');
 const { BUILTIN_AGENT } = require('./agents');
+const { normalizeReasoningEffort } = require('../src/reasoning');
 const {
   buildAuditPrompt,
   parseAuditAnswer,
@@ -463,7 +464,14 @@ async function compactSession(sessionId, options = {}) {
   };
 }
 
-function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null }) {
+function startRun({
+  sessionId,
+  text,
+  runId,
+  skillsText = '',
+  agentConfig = null,
+  reasoningEffort = 'high',
+}) {
   const id = String(runId || '').trim();
   const prompt = String(text || '').trim();
   if (!id) throw Object.assign(new Error('runId is required'), { code: 'bad_request' });
@@ -584,6 +592,7 @@ function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null 
       allowedTools: Array.isArray(resolvedAgentConfig?.tools)
         ? resolvedAgentConfig.tools
         : null,
+      reasoningEffort: normalizeReasoningEffort(reasoningEffort),
       toolContext,
       compaction: session.compaction,
       compactionThrough: session.msgs.length,

@@ -12,6 +12,10 @@ const { DatabaseSync } = require('node:sqlite');
 const { normalizeGoal } = require('./goal');
 const { normalizeCompaction } = require('./compaction');
 const { DEFAULT_AGENT_ID } = require('./agent-defaults');
+const {
+  DEFAULT_REASONING_EFFORT,
+  normalizeReasoningEffort,
+} = require('./reasoning');
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
@@ -41,6 +45,7 @@ function legacyFile(name) {
 function defaultSettings() {
   return {
     apiKey: '',
+    reasoningEffort: DEFAULT_REASONING_EFFORT,
     window: null,
   };
 }
@@ -73,6 +78,7 @@ function normalizeSettings(raw) {
 
   return {
     apiKey: String(raw.apiKey ?? raw.api_key ?? ''),
+    reasoningEffort: normalizeReasoningEffort(raw.reasoningEffort),
     window,
   };
 }

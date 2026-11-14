@@ -2347,6 +2347,223 @@ body.ring-open #window-controls {
   stroke-linejoin: round;
 }
 
+.composer-effort {
+  --effort-inset: 13px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: 30px 16px;
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: center;
+  flex: none;
+  width: min(560px, calc(100% - 44px));
+  margin: 0 auto;
+  padding: 2px 0 0;
+}
+
+.composer-effort-label {
+  grid-column: 1;
+  grid-row: 1;
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.composer-effort-value {
+  grid-column: 3;
+  grid-row: 1;
+  color: var(--accent-deep);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.effort-rail {
+  --effort-ratio: 0.5;
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+  height: 30px;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    rgba(74, 54, 40, 0.16),
+    rgba(74, 54, 40, 0.06)
+  );
+  box-shadow:
+    inset 0 2px 7px rgba(74, 54, 40, 0.18),
+    inset 0 0 0 1px rgba(74, 54, 40, 0.1);
+  cursor: ew-resize;
+  touch-action: none;
+  outline: none;
+  transition: box-shadow 140ms ease;
+}
+
+.effort-rail:focus-visible {
+  box-shadow:
+    inset 0 2px 7px rgba(74, 54, 40, 0.18),
+    inset 0 0 0 1px rgba(74, 54, 40, 0.1),
+    0 0 0 2px rgba(185, 111, 61, 0.32);
+}
+
+.effort-rail-fill {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  width: calc(
+    var(--effort-inset) +
+      (100% - 2 * var(--effort-inset)) * var(--effort-ratio)
+  );
+  overflow: hidden;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e2a46f, #c57b46 55%, #94522a);
+  box-shadow:
+    0 0 12px rgba(185, 111, 61, 0.45),
+    inset 0 1px 0 rgba(255, 248, 240, 0.35);
+  transition: width 120ms ease;
+}
+
+.effort-rail-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 248, 240, 0.38),
+    transparent
+  );
+  background-size: 42% 100%;
+  background-repeat: no-repeat;
+  animation: effort-flow 2.8s linear infinite;
+  opacity: 0.8;
+}
+
+@keyframes effort-flow {
+  from {
+    background-position: -60% 0;
+  }
+  to {
+    background-position: 160% 0;
+  }
+}
+
+.effort-rail-grid {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: linear-gradient(
+    90deg,
+    transparent calc(50% - 0.5px),
+    rgba(255, 248, 240, 0.18) 50%,
+    transparent calc(50% + 0.5px)
+  );
+}
+
+.effort-rail-knob {
+  position: absolute;
+  top: 50%;
+  left: calc(
+    var(--effort-inset) +
+      (100% - 2 * var(--effort-inset)) * var(--effort-ratio)
+  );
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 30%,
+    #fff8f0 0 22%,
+    #f6d9be 48%,
+    #c98555 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(255, 248, 240, 0.85),
+    0 0 10px rgba(255, 224, 190, 0.9),
+    0 0 22px rgba(185, 111, 61, 0.55);
+  pointer-events: none;
+  transition:
+    left 120ms ease,
+    box-shadow 160ms ease;
+}
+
+.effort-rail[data-level="max"] {
+  box-shadow:
+    inset 0 2px 7px rgba(74, 54, 40, 0.18),
+    inset 0 0 0 1px rgba(74, 54, 40, 0.1),
+    0 0 16px rgba(185, 111, 61, 0.18);
+}
+
+.effort-rail[data-level="max"] .effort-rail-knob {
+  box-shadow:
+    0 0 0 1px rgba(255, 248, 240, 0.95),
+    0 0 14px rgba(255, 224, 190, 1),
+    0 0 30px rgba(185, 111, 61, 0.7);
+}
+
+.effort-ticks {
+  position: relative;
+  grid-column: 2;
+  grid-row: 2;
+  height: 16px;
+}
+
+.effort-tick {
+  position: absolute;
+  top: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.effort-tick[data-index="0"] {
+  left: 0;
+}
+
+.effort-tick[data-index="1"] {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.effort-tick[data-index="2"] {
+  right: 0;
+}
+
+.effort-tick:hover {
+  color: var(--accent);
+}
+
+.effort-tick[data-on="1"] {
+  color: var(--accent-deep);
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(185, 111, 61, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .effort-rail-fill::after {
+    animation: none;
+  }
+
+  .effort-rail-fill,
+  .effort-rail-knob {
+    transition: none;
+  }
+}
+
 .composer-foot {
   display: flex;
   align-items: center;

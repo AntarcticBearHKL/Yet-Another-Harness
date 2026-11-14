@@ -62,6 +62,26 @@ test('request body includes tools and streaming', () => {
   assert.ok(!names.includes('web_search'));
 });
 
+test('request body carries the selected reasoning effort', () => {
+  assert.equal(
+    deepseek.requestBody([], { reasoningEffort: 'low' }).reasoning_effort,
+    'low'
+  );
+  assert.equal(
+    deepseek.requestBody([], { reasoningEffort: 'high' }).reasoning_effort,
+    'high'
+  );
+  assert.equal(
+    deepseek.requestBody([], { reasoningEffort: 'max' }).reasoning_effort,
+    'max'
+  );
+  assert.equal(
+    deepseek.requestBody([], { reasoningEffort: 'bogus' }).reasoning_effort,
+    'high'
+  );
+  assert.equal('reasoning_effort' in deepseek.requestBody([]), false);
+});
+
 test('request body can omit tools for the final summary', () => {
   const body = deepseek.requestBody(
     [{ role: 'user', content: 'hi' }],

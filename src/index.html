@@ -27,6 +27,30 @@
                 <div id="composer-tokens" class="composer-tokens hidden"></div>
                 <textarea id="input" rows="4" spellcheck="false" placeholder="输入新对话…" aria-label="New message"></textarea>
                 <div id="skill-popup" class="skill-popup hidden" role="listbox" aria-label="Skills"></div>
+                <div id="composer-effort" class="composer-effort">
+                  <span class="composer-effort-label">思考强度</span>
+                  <div
+                    id="composer-effort-rail"
+                    class="effort-rail"
+                    role="slider"
+                    tabindex="0"
+                    aria-label="Reasoning effort"
+                    aria-valuemin="0"
+                    aria-valuemax="2"
+                    aria-valuenow="1"
+                    aria-valuetext="high"
+                  >
+                    <div class="effort-rail-fill" aria-hidden="true"></div>
+                    <div class="effort-rail-grid" aria-hidden="true"></div>
+                    <div class="effort-rail-knob" aria-hidden="true"></div>
+                  </div>
+                  <span id="composer-effort-value" class="composer-effort-value">high</span>
+                  <div id="composer-effort-ticks" class="effort-ticks">
+                    <button type="button" class="effort-tick" data-index="0">low</button>
+                    <button type="button" class="effort-tick" data-index="1">high</button>
+                    <button type="button" class="effort-tick" data-index="2">max</button>
+                  </div>
+                </div>
                 <div class="composer-foot">
                   <div id="agent-picker" class="agent-picker">
                     <button

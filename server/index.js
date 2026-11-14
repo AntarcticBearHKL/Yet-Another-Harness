@@ -17,6 +17,7 @@ const { createSkillService } = require('./skills');
 const { loadAgents, saveAgents, getAgent, BUILTIN_AGENT } = require('./agents');
 const { ensureAgentsMd, readAgentsMd } = require('./context');
 const { normalizeGoal } = require('../src/goal');
+const { normalizeReasoningEffort } = require('../src/reasoning');
 
 const ROOT = path.resolve(__dirname, '..');
 const APP_DATA =
@@ -191,7 +192,11 @@ function settingsView() {
   const hasApiKey = Boolean(
     String(process.env.OPENCODE_API_KEY || settings.apiKey || '').trim()
   );
-  return { hasApiKey, apiKey: '' };
+  return {
+    hasApiKey,
+    apiKey: '',
+    reasoningEffort: normalizeReasoningEffort(settings.reasoningEffort),
+  };
 }
 
 async function respondPairing(res) {
@@ -315,11 +320,21 @@ function handleApi(req, res, url) {
     readJson(req)
       .then((body) => {
         const current = store.loadSettings();
+        const next = { ...current };
         if (body?.clearApiKey) {
-          store.saveSettings({ ...current, apiKey: '' });
+          next.apiKey = '';
         } else if (typeof body?.apiKey === 'string' && body.apiKey.trim()) {
-          store.saveSettings({ ...current, apiKey: body.apiKey.trim() });
+          next.apiKey = body.apiKey.trim();
         }
+        if (
+          body &&
+          Object.prototype.hasOwnProperty.call(body, 'reasoningEffort')
+        ) {
+          next.reasoningEffort = normalizeReasoningEffort(
+            body.reasoningEffort
+          );
+        }
+        store.saveSettings(next);
         sendJson(res, 200, settingsView());
       })
       .catch((error) =>
@@ -472,6 +487,9 @@ function handleApi(req, res, url) {
           runId: String(body?.requestId || ''),
           skillsText: resolved.text,
           agentConfig: agent,
+          reasoningEffort: normalizeReasoningEffort(
+            body?.reasoningEffort || store.loadSettings().reasoningEffort
+          ),
         });
         sendJson(res, 200, result);
       })

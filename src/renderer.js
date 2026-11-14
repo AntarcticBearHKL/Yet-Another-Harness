@@ -4,6 +4,8 @@ const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const DEFAULT_AGENT_ID = 'basic';
 const DEFAULT_AGENT_NAME = 'Build';
+const EFFORT_LEVELS = ['low', 'high', 'max'];
+const DEFAULT_EFFORT = 'high';
 const NO_KEY_HINT = 'No API key. Open Settings to add one.';
 // DeepSeek V4.1 Flash (OpenCode Go) context window.
 const CONTEXT_WINDOW_TOKENS = 1_000_000;
@@ -86,6 +88,9 @@ const dom = {
   webContent: $('web-content'),
   webContentBody: $('web-content-body'),
   webContentClose: $('web-content-close'),
+  composerEffortRail: $('composer-effort-rail'),
+  composerEffortValue: $('composer-effort-value'),
+  composerEffortTicks: $('composer-effort-ticks'),
   mcpConfig: $('mcp-config'),
   mcpConfigSummary: $('mcp-config-summary'),
   mcpConfigGrid: $('mcp-config-grid'),
@@ -99,11 +104,13 @@ const state = {
   settings: {
     apiKey: '',
     hasApiKey: false,
+    reasoningEffort: DEFAULT_EFFORT,
   },
   switcherOpen: false,
   switcherIndex: 0,
   switcherProjectId: null,
   composerOpen: false,
+  effortDragging: false,
   openCardKey: null,
   renderedOpenKeys: new Set(),
   renderedSessionId: null,
@@ -521,7 +528,10 @@ function saveChatsSoon() {
 
 function settingsPayload() {
   const key = String(state.settings.apiKey || '').trim();
-  return key ? { apiKey: key } : {};
+  return {
+    ...(key ? { apiKey: key } : {}),
+    reasoningEffort: currentEffort(),
+  };
 }
 
 function saveSettingsNow() {
@@ -537,6 +547,61 @@ function saveSettingsSoon() {
   state.settingsTimer = setTimeout(saveSettingsNow, 300);
 }
 
+function normalizeEffort(value) {
+  const effort = String(value || '').trim().toLowerCase();
+  return EFFORT_LEVELS.includes(effort) ? effort : DEFAULT_EFFORT;
+}
+
+function currentEffort() {
+  return normalizeEffort(state.settings.reasoningEffort);
+}
+
+function renderComposerEffort() {
+  if (!dom.composerEffortRail) return;
+  const effort = currentEffort();
+  const index = EFFORT_LEVELS.indexOf(effort);
+  const ratio = index / (EFFORT_LEVELS.length - 1);
+  dom.composerEffortRail.style.setProperty('--effort-ratio', String(ratio));
+  dom.composerEffortRail.dataset.level = effort;
+  dom.composerEffortRail.setAttribute('aria-valuenow', String(index));
+  dom.composerEffortRail.setAttribute('aria-valuetext', effort);
+  if (dom.composerEffortValue) dom.composerEffortValue.textContent = effort;
+  if (dom.composerEffortTicks) {
+    for (const tick of dom.composerEffortTicks.querySelectorAll('.effort-tick')) {
+      const tickIndex = Number(tick.dataset.index);
+      tick.dataset.on = tickIndex === index ? '1' : '0';
+      tick.setAttribute('aria-pressed', tickIndex === index ? 'true' : 'false');
+    }
+  }
+}
+
+function setComposerEffort(value) {
+  const effort = normalizeEffort(value);
+  if (currentEffort() !== effort) {
+    state.settings.reasoningEffort = effort;
+    saveSettingsSoon();
+  }
+  renderComposerEffort();
+}
+
+function composerEffortIndexFromPointer(event) {
+  const rail = dom.composerEffortRail;
+  if (!rail) return 0;
+  const rect = rail.getBoundingClientRect();
+  const inset = 13;
+  const travel = Math.max(1, rect.width - inset * 2);
+  const ratio = Math.min(
+    1,
+    Math.max(0, (event.clientX - rect.left - inset) / travel)
+  );
+  return Math.round(ratio * (EFFORT_LEVELS.length - 1));
+}
+
+function updateComposerEffortFromPointer(event) {
+  const index = composerEffortIndexFromPointer(event);
+  setComposerEffort(EFFORT_LEVELS[index]);
+}
+
 function applySettings() {
   const s = state.settings;
   const hasKey = Boolean(s.hasApiKey);
@@ -545,6 +610,7 @@ function applySettings() {
   if (document.activeElement !== dom.apiKey) {
     dom.apiKey.value = '';
   }
+  renderComposerEffort();
 }
 
 function updateControls() {
@@ -3654,6 +3720,7 @@ async function startPrompt(
       text,
       skills,
       agentId: agentId || session.agentId || DEFAULT_AGENT_ID,
+      reasoningEffort: currentEffort(),
     });
   } catch (error) {
     if (state.requestId !== requestId) return;
@@ -3930,6 +3997,7 @@ function renderComposerQueue(session) {
 
 function renderComposerContext() {
   if (!dom.composerContext) return;
+  renderComposerEffort();
   renderAgentPicker();
   const session = currentSession();
   if (!session) {
@@ -7445,6 +7513,59 @@ function bindEvents() {
 
   $('mobile-compose')?.addEventListener('click', openComposer);
   dom.send.addEventListener('click', sendMessage);
+
+  if (dom.composerEffortRail) {
+    dom.composerEffortRail.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      state.effortDragging = true;
+      try {
+        dom.composerEffortRail.setPointerCapture(event.pointerId);
+      } catch {
+        /* ignore */
+      }
+      updateComposerEffortFromPointer(event);
+    });
+    dom.composerEffortRail.addEventListener('pointermove', (event) => {
+      if (!state.effortDragging) return;
+      updateComposerEffortFromPointer(event);
+    });
+    const endEffortDrag = (event) => {
+      if (!state.effortDragging) return;
+      state.effortDragging = false;
+      try {
+        dom.composerEffortRail.releasePointerCapture(event.pointerId);
+      } catch {
+        /* ignore */
+      }
+    };
+    dom.composerEffortRail.addEventListener('pointerup', endEffortDrag);
+    dom.composerEffortRail.addEventListener('pointercancel', endEffortDrag);
+    dom.composerEffortRail.addEventListener('keydown', (event) => {
+      const index = EFFORT_LEVELS.indexOf(currentEffort());
+      let next = index;
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') next -= 1;
+      else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') next += 1;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = EFFORT_LEVELS.length - 1;
+      else return;
+      event.preventDefault();
+      event.stopPropagation();
+      next = Math.min(EFFORT_LEVELS.length - 1, Math.max(0, next));
+      setComposerEffort(EFFORT_LEVELS[next]);
+    });
+  }
+  if (dom.composerEffortTicks) {
+    for (const tick of dom.composerEffortTicks.querySelectorAll('.effort-tick')) {
+      tick.addEventListener('click', () => {
+        const index = Number(tick.dataset.index);
+        if (Number.isInteger(index)) {
+          setComposerEffort(EFFORT_LEVELS[index]);
+        }
+      });
+    }
+  }
+
   dom.input.addEventListener('input', () => {
     state.slashDismissed = false;
     state.slashIndex = 0;
@@ -7571,7 +7692,11 @@ function bindEvents() {
   });
 
   $('reset-settings').addEventListener('click', () => {
-    state.settings = { apiKey: '', hasApiKey: false };
+    state.settings = {
+      apiKey: '',
+      hasApiKey: false,
+      reasoningEffort: currentEffort(),
+    };
     applySettings();
     api
       .saveSettings({ clearApiKey: true })
