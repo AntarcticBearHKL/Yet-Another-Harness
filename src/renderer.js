@@ -2580,6 +2580,7 @@ function refreshContextBlocks() {
   if (!session) return;
   const existing = dom.messages.querySelector('.context-stack');
   if (!existing) return;
+  ensureSystemInfo(session);
   existing.replaceWith(buildContextStack(session));
 }
 
