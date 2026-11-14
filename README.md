@@ -221,7 +221,7 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 
 YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（OMO）的工具；同名工具按 OMO 优先覆盖 OpenCode。
 
-- OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`list_mcp_resources`、`read_mcp_resource`、`session_rename`、`models`、`worktree_*`
+- OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`SystemInfo`、`list_mcp_resources`、`read_mcp_resource`、`session_rename`、`models`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）、`skill`
 - OMO 常驻 / 条件工具：`session_list/read/search/info`、`task_create/get/list/update`、`background_output/cancel`、`monitor_start/stop/list/output`、`interactive_bash`、`task/subagent/call_omo_agent/delegate_task`、`create_goal/update_goal/get_goal`、`skill_mcp`、`look_at`、`team_*`
 - 兼容别名：`read_file`、`web_search`、`hashline_edit`
@@ -247,6 +247,8 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 `write` 写文件并自动创建父目录；`edit` 支持 LINE#ID 锚点和 `oldString`/`newString` 两种模式。
 
 `question` 让模型在任务中途停下来提问：一次调用最多 5 个问题，每个问题可带选项（`multiple: true` 支持多选），前端会自动追加「其他（自己输入）」。答案通过 `POST /api/questions/:id` 回传，工具返回 `User has answered your questions: ...`；关闭面板会返回 `tool error: The user dismissed this question`。
+
+`SystemInfo` 快速返回本地系统快照：日期、时间、时区、位置（cwd / home / hostname / 时区城市和区域）、操作系统、架构、用户、系统语言、CPU、内存和 Node 运行时。全部本地读取，不联网。
 
 ## MCP
 

@@ -394,6 +394,11 @@ const MODELS = fn(
   'Search available models.',
   { query: str('Text to search in model names and ids'), provider: str('Provider filter'), limit: num('Max results') }
 );
+const SYSTEM_INFO = fn(
+  'SystemInfo',
+  'Get a quick local system snapshot: date, time, timezone, location (cwd/home/hostname/timezone city and area), OS, architecture, user, system language/locale, CPU, memory and runtime. No network.',
+  {}
+);
 const WORKTREE_LIST = fn('worktree_list', "List the current git repository's worktrees.", {});
 const WORKTREE_CREATE = fn(
   'worktree_create',
@@ -484,6 +489,7 @@ const OPENCODE = [
   PATCH,
   SESSION_RENAME,
   MODELS,
+  SYSTEM_INFO,
   WORKTREE_LIST,
   WORKTREE_CREATE,
   WORKTREE_REMOVE,

@@ -11,6 +11,7 @@ const processTools = require('./tools/process');
 const stateTools = require('./tools/state');
 const agentTools = require('./tools/agent');
 const webTools = require('./tools/web');
+const systemTools = require('./tools/system-info');
 
 function configure(next = {}) {
   agentTools.configure(next);
@@ -95,6 +96,8 @@ async function execute(name, args, context = null) {
       look_at: agentTools.lookAtTool,
       question: agentTools.questionTool,
       models: agentTools.modelsTool,
+      SystemInfo: systemTools.systemInfoTool,
+      system_info: systemTools.systemInfoTool,
       worktree_list: agentTools.worktreeList,
       worktree_create: agentTools.worktreeCreate,
       worktree_remove: agentTools.worktreeRemove,
@@ -211,6 +214,7 @@ function statusLabel(name, args) {
   if (name === 'models') {
     return value.query ? `models: ${value.query}` : 'models';
   }
+  if (name === 'SystemInfo' || name === 'system_info') return 'SystemInfo';
   if (name === 'worktree_create') {
     return value.name ? `worktree_create: ${value.name}` : 'worktree_create';
   }
