@@ -4651,6 +4651,7 @@ async function runCompactFlow(session) {
     await queueOrRunCompact(session, session.agentId || DEFAULT_AGENT_ID);
     return;
   }
+  closeComposer();
   state.compactStatus = {
     sessionId: session.id,
     label: 'running',
