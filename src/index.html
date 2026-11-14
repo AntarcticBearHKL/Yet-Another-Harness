@@ -503,15 +503,16 @@
             placeholder="Project"
           />
         </label>
-        <div id="project-drop" class="project-drop" tabindex="0">
+        <div
+          id="project-drop"
+          class="project-drop"
+          tabindex="0"
+          aria-label="添加开发目录"
+        >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
             <path d="M12 11v5M9.5 13.5 12 11l2.5 2.5" />
           </svg>
-          <div class="project-drop-title">拖入文件夹</div>
-          <div class="project-drop-hint">
-            拖入文件夹，或点击选择
-          </div>
         </div>
         <div id="project-dirs" class="project-dirs"></div>
         <div id="project-error" class="project-error hidden"></div>

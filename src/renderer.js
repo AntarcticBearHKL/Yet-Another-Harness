@@ -2836,11 +2836,8 @@ function renderProjectDialogDirs() {
   if (!dom.projectDirs) return;
   dom.projectDirs.replaceChildren();
   const dirs = projectDialog?.directories || [];
-  if (dirs.length === 0) {
-    dom.projectDirs.append(
-      el('div', 'project-dirs-empty', '还没有开发目录')
-    );
-  } else {
+  dom.projectDirs.hidden = dirs.length === 0;
+  if (dirs.length > 0) {
     dirs.forEach((dir, index) => {
       const row = el('div', 'project-dir');
       row.append(el('span', 'project-dir-path', dir));

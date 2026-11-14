@@ -2627,6 +2627,7 @@ body.ring-open #window-controls {
 }
 
 .project-field-label {
+  padding-left: 10px;
   color: var(--faint);
   font-size: 10.5px;
   font-weight: 700;
@@ -2635,6 +2636,16 @@ body.ring-open #window-controls {
 
 .project-field .text-input {
   width: 100%;
+}
+
+#project-name {
+  background: rgba(252, 246, 238, 0.28);
+  -webkit-backdrop-filter: blur(10px) saturate(1.04);
+  backdrop-filter: blur(10px) saturate(1.04);
+}
+
+#project-name:focus {
+  background: rgba(252, 246, 238, 0.28);
 }
 
 .project-drop {
@@ -2648,6 +2659,8 @@ body.ring-open #window-controls {
   border: 1.5px dashed var(--line);
   border-radius: 16px;
   background: rgba(252, 246, 238, 0.28);
+  -webkit-backdrop-filter: blur(10px) saturate(1.04);
+  backdrop-filter: blur(10px) saturate(1.04);
   color: var(--faint);
   cursor: pointer;
   transition:
@@ -2673,30 +2686,12 @@ body.ring-open #window-controls {
   stroke-linejoin: round;
 }
 
-.project-drop-title {
-  color: var(--text-soft);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.project-drop-hint {
-  font-size: 10.5px;
-  line-height: 1.6;
-  text-align: center;
-}
-
 .project-dirs {
   display: flex;
   flex-direction: column;
   gap: 4px;
   max-height: 150px;
   overflow-y: auto;
-}
-
-.project-dirs-empty {
-  padding: 4px 2px;
-  color: var(--faint);
-  font-size: 10.5px;
 }
 
 .project-dir {
