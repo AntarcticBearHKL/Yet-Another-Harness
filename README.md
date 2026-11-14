@@ -9,7 +9,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 所有对话条目同宽，占满窗口宽度，只留很窄的左右边距
 - 没有标题栏：按住任意非交互区域都能拖动窗口，拖动窗口边缘可缩放
 - 禁用 Chromium 默认的中键拖拽/自动滚动，中键不会进入滚动模式
-- 所有面板右上角都没有最小化 / 最大化 / 关闭按钮；三个窗口操作只放在 Tab 工作区空白处的右键方形菜单里
+- 所有面板右上角都没有最小化 / 最大化 / 关闭按钮；三个窗口操作只放在 Tab 工作区空白处的右键菜单里
 - 没有聊天顶栏和底部输入框：会话内容占满整个窗口高度；按 Space 打开居中的输入框
 - Space 输入框：透明毛玻璃高斯模糊遮罩；输入框为空时再按 Space 关闭；点击输入框外关闭，按住拖动则优先拖动窗口；Enter 发送，Shift+Enter 换行，Esc 关闭；关闭时保留草稿，新对话会清空
 - 没有侧边栏；全局屏蔽原生 Tab 焦点切换，Tab 只用于按住打开全屏工作区，松开收起，支持键盘选择和删除；Shift / Ctrl / Alt + Tab 不触发切换器
@@ -51,12 +51,12 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 每个对话顶部、第一条消息之前把 `MCP`、`SYSTEM PROMPT`、`AGENTS.MD` 三个 block 放在同一个上下文组里，组后与实际消息留出间隔；`SYSTEM PROMPT` / `AGENTS.MD` 点击标题即可折叠 / 展开，折叠状态随会话保存。`AGENTS.md` / `agent.md` 在对话开始时从项目目录读取一次并随会话保存，之后文件变化不影响当前对话；内容会以 `# AGENTS.md` 注入 system prompt
 - 有弹窗（设置、raw 查看器、MCP、工具目录、改名/确认、全文磨砂页）打开时，右键等于关闭弹窗
 - `question` 是系统工具：模型可以在执行中暂停并向你提问，一次最多 5 个问题，可分多轮；聊天底部会上滑一块磨砂提问面板，每个选项都能单选 / 多选，也可以自己输入答案；关闭面板等于取消这次提问
-- 主界面右键在鼠标位置弹出方形两列菜单，每列从上到下排列方形按钮：工具、Skill、Agent、MCP；左键点击执行，点击外部或 Esc 关闭
-- Tab 工作区右键在鼠标位置弹出同一套方形两列菜单：项目上显示「改名 / 配置目录 / 删除」，具体对话上显示「改名 / 配置 MCP / 删除」，空白处显示「最小化 / 最大化 / 关闭」；菜单不依赖按住右键，松开 Tab 后仍可继续点击
-- Tab 工作区左侧栏只显示项目名和对话名，名字后面不放任何图标；删除通过右键方形菜单完成
+- 主界面按住右键约 150ms 弹出竖向菜单：上方是 usage 面板，下方是工具、Skill、Agent、MCP 四个独立玻璃按钮，每个按钮与 usage 面板等宽；菜单会出现在鼠标左侧或右侧，拖动到按钮上高亮，松开右键执行，松开在空白处直接关闭
+- Tab 工作区按住右键弹出同样的竖向菜单：项目上显示「改名 / 配置目录 / 删除」，具体对话上显示「改名 / 配置 MCP / 删除」，空白处显示「最小化 / 最大化 / 关闭」；每个操作都是独立按钮，不再放在同一个框里
+- Tab 工作区左侧栏只显示项目名和对话名，名字后面不放任何图标；删除通过右键菜单完成
 - 新建项目会弹出「拖入文件夹」对话框：可以把任意多个文件夹拖进虚线框，也可以点击虚线框选择文件夹；至少有一个开发目录才能创建项目。右键项目可以随时「配置目录」
 - 项目目录保存在 SQLite 的 `projects.directories`；`read`、`write`、`edit`、`glob`、`grep`、`patch`、`look_at` 只允许访问当前项目目录下的文件。越界时工具调用会暂停，弹出 `TOOL ACCESS` 审核窗：点「允许一次」继续，点「拒绝」返回 `access denied by user`
-- 所有删除都是两步：第一次点击后按钮变成红色「确认删除」，第二次点击才真正删除，3 秒内不确认会自动取消；不会因为鼠标拖到删除项就删除
+- 所有删除都是两步：松开「删除」按钮后先弹出确认框，确认后才真正删除；不会因为鼠标拖到删除项就删除
 - 删除项目会一次性删除项目本身以及里面的所有对话记录；删除对话、排队消息、MCP 服务器也都遵循同样的两步确认
 - 对话面板里按 Space 总是打开输入框（焦点在按钮 / 消息块上时也一样，不会触发折叠或按钮点击）；只有正在输入文本时 Space 才作为空格
 - 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
@@ -69,7 +69,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 在输入框开头输入 `/` 会在光标位置弹出搜索式 Skill 联想：按名称、描述、关键词匹配当前对话可用的 Skill，上下键移动、回车或点击选择；选中后输入框本身不变色，只在输入框上方显示一个带颜色的 `/ Skill` 标记，按 Backspace 或点 × 整体删除；带参数的 MCP Skill 会先弹出参数表单
 - 附加的 Skill 在发送时解析并注入该次请求的 system prompt（`# Active Skills`），不会写进用户输入；排队消息会一起保存自己的 Skill
 - 已连接且当前对话启用的 MCP 服务器会把 prompts 暴露为临时 Skill；切换 MCP 开关后列表实时更新
-- Agent 面板从右键方形菜单的 Agent 入口打开，左右分栏：左侧列出 Agent 和「+ 新建 Agent」，右侧配置名称、提示词和工具权限；内置「基础 Agent」始终存在且不可删除，自定义 Agent 配置保存在 `%APPDATA%\yah\agents.json`
+- Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧列出 Agent 和「+ 新建 Agent」，右侧配置名称、提示词和工具权限；内置「基础 Agent」始终存在且不可删除，自定义 Agent 配置保存在 `%APPDATA%\yah\agents.json`
 - Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；工具权限可以限制 Agent 只能调用勾选的工具，不勾选则不能调用工具
 - 输入框底部只显示当前 Agent 名字（如 `基础 Agent`），是一段可点击的文字，没有额外标签和三角；点击后在上方展开暖色磨砂下拉菜单选择 Agent。每个对话必须有一个 Agent，新对话默认使用「基础 Agent」；按对话保存选择，新对话继承同项目上一个对话的 Agent；排队消息会保存自己的 Agent
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
@@ -83,7 +83,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - MCP 服务器分两类：OpenCode 配置里的服务器自动继承（只读），以及 YAH 自己的 `%APPDATA%\yah\mcp.json` 自定义服务器；支持 STDIO、Streamable HTTP、legacy SSE，支持表单添加和粘贴 `mcpServers` / `mcp.servers` JSON
 - OpenCode 中启用的 MCP 启动时自动连接，默认对所有对话开放；每个对话顶部的 MCP 摘要按钮可以单独开关服务器，关闭后请求里不再带该服务器的工具；OpenCode 中禁用的服务器会显示但不会连接；工具名统一为 `mcp__<server>__<tool>`
 - MCP 工作区左侧是服务器列表（顶部没有标题和数字，底部只有「添加服务器」），右侧可以查看 tools / resources / prompts / logs / overview，手动调用工具、读取资源、获取提示词，并把工具、结果、资源或提示词插入输入框；没有服务器时空状态在整个内容区上下居中
-- 全局禁用鼠标框选和右键菜单；只有输入框保留文本选择
+- 全局禁用鼠标框选和原生右键菜单；只有输入框保留文本选择
 
 旧的 Rust/Slint 版已经删除；新开发都在 `D:\Dev\Harness\yah`。
 
@@ -150,7 +150,7 @@ src/compaction.js  上下文压缩：OpenCode 阈值、checkpoint 模板、最�
 src/goal.js        Goal 模式：目标归一化、审计问题、continue/complete/blocked 判定
 src/mcp-registry.js MCP 工具到 OpenAI function 的映射（后端）
 src/store.js       chats.db（SQLite/WAL）+ settings.json 原子写 + 旧版迁移
-src/renderer.js    网页客户端：聊天、项目工作区、设置、方形右键菜单、HTTP/SSE
+src/renderer.js    网页客户端：聊天、项目工作区、设置、右键菜单、HTTP/SSE
 src/mcp-ui.js      MCP 工作区：服务器、工具、资源、提示词、日志、概览
 src/index.html     页面骨架
 src/styles.css     主题、布局、浮层、输入区
@@ -249,7 +249,7 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 
 ## MCP
 
-MCP 工作区从右键方形菜单的 `MCP` 入口打开。YAH 会自动继承 OpenCode 配置里的 MCP 服务器，
+MCP 工作区从右键菜单的 `MCP` 入口打开。YAH 会自动继承 OpenCode 配置里的 MCP 服务器，
 读取顺序是全局 `~/.config/opencode/opencode.json(c)`、`%APPDATA%` / `%LOCALAPPDATA%` 下的
 OpenCode 配置、OpenChamber managed 配置，最后是当前 workspace 及各级父目录的
 `opencode.json(c)` / `.opencode/opencode.json(c)`；后面的层覆盖前面的同名服务器。

@@ -4684,7 +4684,9 @@ let ringUsageRows = [];
 let ringItems = RING_ITEMS;
 let ringCatcher = null;
 let actionMenuUsageCard = null;
-let actionMenuConfirm = null;
+let actionMenuItems = [];
+let actionMenuPress = null;
+const ACTION_MENU_HOLD_MS = 150;
 
 function buildActionMenuUsageCard() {
   const panel = el('div', 'ring-usage-panel usage-card');
@@ -4719,122 +4721,227 @@ function buildActionMenuUsageCard() {
   return panel;
 }
 
-function resetActionMenuConfirm() {
-  if (!actionMenuConfirm) return;
-  clearTimeout(actionMenuConfirm.timer);
-  const { item, button, label } = actionMenuConfirm;
-  if (button) {
-    button.classList.remove('armed');
-    if (label) label.textContent = item.label;
-  }
-  actionMenuConfirm = null;
-}
-
 function closeActionMenu() {
-  resetActionMenuConfirm();
-  if (actionMenuUsageCard) {
-    actionMenuUsageCard.remove();
-    actionMenuUsageCard = null;
-  }
+  actionMenuItems = [];
+  actionMenuUsageCard = null;
   ringUsagePanel = null;
   ringUsageRows = [];
   state.ringOpen = false;
-  dom.actionMenu?.classList.add('hidden');
-  dom.actionMenu?.setAttribute('aria-hidden', 'true');
+  if (!dom.actionMenu) return;
+  dom.actionMenu.classList.add('hidden');
+  dom.actionMenu.setAttribute('aria-hidden', 'true');
+  dom.actionMenu.replaceChildren();
+}
+
+function cancelActionMenuPress() {
+  if (actionMenuPress?.timer) clearTimeout(actionMenuPress.timer);
+  actionMenuPress = null;
+  closeActionMenu();
+}
+
+function closeRightClickOverlay() {
+  if (dom.approvalOverlay && !dom.approvalOverlay.classList.contains('hidden')) {
+    resolveToolApproval(false);
+    return true;
+  }
+  if (dom.goalOverlay && !dom.goalOverlay.classList.contains('hidden')) {
+    closeGoalDialog();
+    return true;
+  }
+  if (dom.mcpConfig && !dom.mcpConfig.classList.contains('hidden')) {
+    closeMcpConfig();
+    return true;
+  }
+  if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
+    closeWebContent();
+    return true;
+  }
+  if (!dom.renameOverlay.classList.contains('hidden')) {
+    closeRename();
+    return true;
+  }
+  if (!dom.confirmOverlay.classList.contains('hidden')) {
+    closeConfirm();
+    return true;
+  }
+  if (dom.projectOverlay && !dom.projectOverlay.classList.contains('hidden')) {
+    closeProjectDialog();
+    return true;
+  }
+  if (
+    dom.skillArgsOverlay &&
+    !dom.skillArgsOverlay.classList.contains('hidden')
+  ) {
+    closeSkillArgs();
+    return true;
+  }
+  if (window.mcpOverlayOpen?.()) {
+    window.closeMcp?.();
+    return true;
+  }
+  if (state.catalogOpen) {
+    closeCatalog();
+    return true;
+  }
+  if (!dom.rawOverlay.classList.contains('hidden')) {
+    closeRawRequest();
+    return true;
+  }
+  if (!dom.settingsOverlay.classList.contains('hidden')) {
+    closeSettings();
+    return true;
+  }
+  if (state.composerOpen) {
+    closeComposer();
+    return true;
+  }
+  return false;
 }
 
 function positionActionMenu(menu, x, y) {
-  const margin = 10;
+  const margin = 12;
+  const gap = 14;
   const rect = menu.getBoundingClientRect();
-  let left = Number(x) || 0;
-  let top = Number(y) || 0;
+  let left = x + gap;
+  if (left + rect.width > window.innerWidth - margin) {
+    left = x - rect.width - gap;
+  }
+  if (left < margin) left = margin;
   if (left + rect.width > window.innerWidth - margin) {
     left = window.innerWidth - rect.width - margin;
   }
-  if (top + rect.height > window.innerHeight - margin) {
-    top = window.innerHeight - rect.height - margin;
-  }
-  menu.style.left = `${Math.round(Math.max(margin, left))}px`;
-  menu.style.top = `${Math.round(Math.max(margin, top))}px`;
-  return menu.getBoundingClientRect();
+  let top = y - rect.height / 2;
+  top = Math.max(
+    margin,
+    Math.min(top, window.innerHeight - rect.height - margin)
+  );
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(top)}px`;
 }
 
-function positionUsageCard(card, menuRect) {
-  const margin = 10;
-  const gap = 8;
-  const width = card.offsetWidth;
-  const height = card.offsetHeight;
-  let left = menuRect.left + (menuRect.width - width) / 2;
-  left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
-  let top = menuRect.top - height - gap;
-  if (top < margin) top = menuRect.bottom + gap;
-  top = Math.max(margin, Math.min(top, window.innerHeight - height - margin));
-  card.style.left = `${Math.round(left)}px`;
-  card.style.top = `${Math.round(top)}px`;
-}
-
-function activateActionItem(item, button, label) {
+function runActionMenuItem(item) {
+  if (!item) return;
   if (item.confirm) {
-    if (!actionMenuConfirm || actionMenuConfirm.item !== item) {
-      resetActionMenuConfirm();
-      actionMenuConfirm = {
-        item,
-        button,
-        label,
-        timer: setTimeout(resetActionMenuConfirm, 3200),
-      };
-      button.classList.add('armed');
-      label.textContent = '确认删除';
-      return;
-    }
-    resetActionMenuConfirm();
+    openConfirm({
+      title: item.confirmTitle || 'DELETE',
+      text: item.confirmText || `删除「${item.label}」？`,
+      action: () => {
+        if (typeof item.action === 'function') item.action();
+      },
+    });
+    return;
   }
-  closeActionMenu();
   if (typeof item.action === 'function') item.action();
 }
 
-function openActionMenu({ x, y, columns, usage = false }) {
+function updateActionMenuHover(x, y) {
+  if (!dom.actionMenu || !state.ringOpen) return;
+  const hovered = document.elementFromPoint(x, y);
+  const button =
+    hovered instanceof Element
+      ? hovered.closest('#action-menu .action-menu-item')
+      : null;
+  for (const item of dom.actionMenu.querySelectorAll(
+    '.action-menu-item.active'
+  )) {
+    if (item !== button) item.classList.remove('active');
+  }
+  if (button) button.classList.add('active');
+}
+
+function openActionMenu({ x, y, items, usage = false }) {
   if (!dom.actionMenu) return;
   closeActionMenu();
   const menu = dom.actionMenu;
-  menu.replaceChildren();
-  const source = Array.isArray(columns) ? columns : [];
-  for (const column of source) {
-    const stack = el('div', 'action-menu-column');
-    for (const item of Array.isArray(column) ? column : []) {
-      if (!item) continue;
-      const button = el('button', 'action-menu-item');
-      button.type = 'button';
-      button.setAttribute('role', 'menuitem');
-      if (item.confirm) button.classList.add('danger');
-      if (item.icon) {
-        const icon = el('span', 'action-menu-icon');
-        icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg>`;
-        button.append(icon);
-      }
-      const label = el('span', 'action-menu-label', item.label || '');
-      button.append(label);
-      button.addEventListener('mousedown', (event) => event.preventDefault());
-      button.addEventListener('click', () =>
-        activateActionItem(item, button, label)
-      );
-      stack.append(button);
-    }
-    if (stack.childElementCount > 0) menu.append(stack);
+  actionMenuItems = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (actionMenuItems.length === 0) return;
+  if (usage) {
+    actionMenuUsageCard = buildActionMenuUsageCard();
+    menu.append(actionMenuUsageCard);
   }
+  const column = el('div', 'action-menu-column');
+  actionMenuItems.forEach((item, index) => {
+    const button = el('button', 'action-menu-item');
+    button.type = 'button';
+    button.setAttribute('role', 'menuitem');
+    button.dataset.actionIndex = String(index);
+    if (item.confirm) button.classList.add('danger');
+    if (item.icon) {
+      const icon = el('span', 'action-menu-icon');
+      icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg>`;
+      button.append(icon);
+    }
+    button.append(el('span', 'action-menu-label', item.label || ''));
+    column.append(button);
+  });
+  menu.append(column);
   menu.classList.remove('hidden');
   menu.setAttribute('aria-hidden', 'false');
   menu.style.left = '0px';
   menu.style.top = '0px';
   state.ringOpen = true;
-  const rect = positionActionMenu(menu, x, y);
+  positionActionMenu(menu, x, y);
   if (usage) {
-    actionMenuUsageCard = buildActionMenuUsageCard();
-    document.body.append(actionMenuUsageCard);
-    positionUsageCard(actionMenuUsageCard, rect);
     renderUsageCards();
     void loadUsage();
   }
+}
+
+function onActionMenuMove(event) {
+  if (!actionMenuPress) return;
+  actionMenuPress.x = event.clientX;
+  actionMenuPress.y = event.clientY;
+  if (state.ringOpen) updateActionMenuHover(event.clientX, event.clientY);
+}
+
+function startActionMenuPress(event) {
+  if (event.button !== 2) return;
+  if (
+    event.target instanceof Element &&
+    event.target.closest('#action-menu, .usage-card')
+  ) {
+    return;
+  }
+  if (dom.questionDock && !dom.questionDock.classList.contains('hidden')) {
+    return;
+  }
+  event.preventDefault();
+  if (actionMenuPress) cancelActionMenuPress();
+  if (state.ringOpen) closeActionMenu();
+  const switcherOpen =
+    state.switcherOpen || dom.switcher.classList.contains('open');
+  if (!switcherOpen && closeRightClickOverlay()) return;
+  const press = {
+    target: event.target instanceof Element ? event.target : null,
+    x: event.clientX,
+    y: event.clientY,
+    timer: null,
+  };
+  actionMenuPress = press;
+  press.timer = setTimeout(() => {
+    if (actionMenuPress !== press) return;
+    press.timer = null;
+    if (switcherOpen) openSwitcherActionMenu(press.target, press.x, press.y);
+    else openMainActionMenu(press.x, press.y);
+  }, ACTION_MENU_HOLD_MS);
+}
+
+function endActionMenuPress(event) {
+  if (event.button !== 2) return;
+  const press = actionMenuPress;
+  if (!press) return;
+  if (press.timer) clearTimeout(press.timer);
+  actionMenuPress = null;
+  if (!state.ringOpen) return;
+  const hovered = document.elementFromPoint(event.clientX, event.clientY);
+  const active =
+    hovered instanceof Element
+      ? hovered.closest('#action-menu .action-menu-item')
+      : null;
+  const index = active ? Number(active.dataset.actionIndex) : -1;
+  const item = index >= 0 ? actionMenuItems[index] : null;
+  closeActionMenu();
+  if (item) runActionMenuItem(item);
 }
 
 function openMainActionMenu(x, y) {
@@ -4842,43 +4949,37 @@ function openMainActionMenu(x, y) {
     x,
     y,
     usage: true,
-    columns: [
-      [RING_ITEMS[0], RING_ITEMS[1]],
-      [RING_ITEMS[2], RING_ITEMS[3]],
-    ],
+    items: RING_ITEMS,
   });
 }
 
-function openSwitcherActionMenu(event) {
-  const target = event.target instanceof Element ? event.target : null;
+function openSwitcherActionMenu(target, x, y) {
   const projectRow = target?.closest('.project-row, .project-row-wrap');
   if (projectRow?.dataset.projectId) {
     const projectId = projectRow.dataset.projectId;
-    if (!state.projects.some((project) => project.id === projectId)) return;
+    const project = state.projects.find((item) => item.id === projectId);
+    if (!project) return;
     openActionMenu({
-      x: event.clientX,
-      y: event.clientY,
-      columns: [
-        [
-          {
-            label: '改名',
-            icon: RING_ICONS.rename,
-            action: () => openRename('project', projectId),
-          },
-          {
-            label: '配置目录',
-            icon: RING_ICONS.folder,
-            action: () => openProjectDialog('edit', projectId),
-          },
-        ],
-        [
-          {
-            label: '删除',
-            icon: RING_ICONS.trash,
-            action: () => deleteProject(projectId),
-            confirm: true,
-          },
-        ],
+      x,
+      y,
+      items: [
+        {
+          label: '改名',
+          icon: RING_ICONS.rename,
+          action: () => openRename('project', projectId),
+        },
+        {
+          label: '配置目录',
+          icon: RING_ICONS.folder,
+          action: () => openProjectDialog('edit', projectId),
+        },
+        {
+          label: '删除',
+          icon: RING_ICONS.trash,
+          action: () => deleteProject(projectId),
+          confirm: true,
+          confirmText: `删除「${project.name}」和所有对话？不可恢复。`,
+        },
       ],
     });
     return;
@@ -4887,31 +4988,29 @@ function openSwitcherActionMenu(event) {
   const card = target?.closest('.switch-card');
   if (card?.dataset.sessionId) {
     const sessionId = card.dataset.sessionId;
-    if (!state.sessions.some((session) => session.id === sessionId)) return;
+    const session = state.sessions.find((item) => item.id === sessionId);
+    if (!session) return;
     openActionMenu({
-      x: event.clientX,
-      y: event.clientY,
-      columns: [
-        [
-          {
-            label: '改名',
-            icon: RING_ICONS.rename,
-            action: () => openRename('session', sessionId),
-          },
-          {
-            label: '配置 MCP',
-            icon: RING_ICONS.mcp,
-            action: () => openMcpConfigForSession(sessionId),
-          },
-        ],
-        [
-          {
-            label: '删除',
-            icon: RING_ICONS.trash,
-            action: () => deleteSessionById(sessionId),
-            confirm: true,
-          },
-        ],
+      x,
+      y,
+      items: [
+        {
+          label: '改名',
+          icon: RING_ICONS.rename,
+          action: () => openRename('session', sessionId),
+        },
+        {
+          label: '配置 MCP',
+          icon: RING_ICONS.mcp,
+          action: () => openMcpConfigForSession(sessionId),
+        },
+        {
+          label: '删除',
+          icon: RING_ICONS.trash,
+          action: () => deleteSessionById(sessionId),
+          confirm: true,
+          confirmText: `删除「${session.title}」？不可恢复。`,
+        },
       ],
     });
     return;
@@ -4919,108 +5018,30 @@ function openSwitcherActionMenu(event) {
 
   if (!api.isElectron) return;
   openActionMenu({
-    x: event.clientX,
-    y: event.clientY,
-    columns: [
-      [
-        {
-          label: '最小化',
-          icon: RING_ICONS.minimize,
-          action: () => api.minimize(),
-        },
-        {
-          label: '最大化',
-          icon: RING_ICONS.maximize,
-          action: () => api.maximize(),
-        },
-      ],
-      [
-        {
-          label: '关闭',
-          icon: RING_ICONS.close,
-          action: () => api.close(),
-        },
-      ],
+    x,
+    y,
+    items: [
+      {
+        label: '最小化',
+        icon: RING_ICONS.minimize,
+        action: () => api.minimize(),
+      },
+      {
+        label: '最大化',
+        icon: RING_ICONS.maximize,
+        action: () => api.maximize(),
+      },
+      {
+        label: '关闭',
+        icon: RING_ICONS.close,
+        action: () => api.close(),
+      },
     ],
   });
 }
 
 function handleContextMenu(event) {
   event.preventDefault();
-  if (
-    event.target instanceof Element &&
-    event.target.closest('#action-menu')
-  ) {
-    return;
-  }
-  if (
-    dom.questionDock &&
-    !dom.questionDock.classList.contains('hidden')
-  ) {
-    return;
-  }
-  if (state.ringOpen) closeActionMenu();
-
-  if (dom.approvalOverlay && !dom.approvalOverlay.classList.contains('hidden')) {
-    resolveToolApproval(false);
-    return;
-  }
-  if (dom.goalOverlay && !dom.goalOverlay.classList.contains('hidden')) {
-    closeGoalDialog();
-    return;
-  }
-  if (dom.mcpConfig && !dom.mcpConfig.classList.contains('hidden')) {
-    closeMcpConfig();
-    return;
-  }
-  if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
-    closeWebContent();
-    return;
-  }
-  if (!dom.renameOverlay.classList.contains('hidden')) {
-    closeRename();
-    return;
-  }
-  if (!dom.confirmOverlay.classList.contains('hidden')) {
-    closeConfirm();
-    return;
-  }
-  if (dom.projectOverlay && !dom.projectOverlay.classList.contains('hidden')) {
-    closeProjectDialog();
-    return;
-  }
-  if (
-    dom.skillArgsOverlay &&
-    !dom.skillArgsOverlay.classList.contains('hidden')
-  ) {
-    closeSkillArgs();
-    return;
-  }
-  if (window.mcpOverlayOpen?.()) {
-    window.closeMcp?.();
-    return;
-  }
-  if (state.catalogOpen) {
-    closeCatalog();
-    return;
-  }
-  if (!dom.rawOverlay.classList.contains('hidden')) {
-    closeRawRequest();
-    return;
-  }
-  if (!dom.settingsOverlay.classList.contains('hidden')) {
-    closeSettings();
-    return;
-  }
-  if (state.switcherOpen || dom.switcher.classList.contains('open')) {
-    openSwitcherActionMenu(event);
-    return;
-  }
-  if (state.composerOpen) {
-    closeComposer();
-    return;
-  }
-  openMainActionMenu(event.clientX, event.clientY);
 }
 
 function ringPolar(radius, angleDeg) {
@@ -6347,6 +6368,9 @@ function bindEvents() {
     event.preventDefault();
   });
 
+  document.addEventListener('mousedown', startActionMenuPress, true);
+  document.addEventListener('mousemove', onActionMenuMove, true);
+  document.addEventListener('mouseup', endActionMenuPress, true);
   document.addEventListener('mousedown', onWindowDragStart);
   document.addEventListener('mousemove', onWindowDragMove);
   document.addEventListener('mouseup', onWindowDragEnd);
@@ -6368,20 +6392,20 @@ function bindEvents() {
     },
     true
   );
-  window.addEventListener('blur', closeActionMenu);
+  window.addEventListener('blur', cancelActionMenuPress);
   window.addEventListener('blur', closeAgentMenu);
-  window.addEventListener('resize', closeActionMenu);
+  window.addEventListener('resize', cancelActionMenuPress);
   document.addEventListener(
     'scroll',
     (event) => {
-      if (!state.ringOpen) return;
+      if (!state.ringOpen && !actionMenuPress) return;
       if (
         event.target instanceof Element &&
         event.target.closest('#action-menu')
       ) {
         return;
       }
-      closeActionMenu();
+      cancelActionMenuPress();
     },
     true
   );
