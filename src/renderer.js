@@ -5225,7 +5225,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, #web-content';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -7272,7 +7272,7 @@ function bindEvents() {
     const target = event.target;
     if (
       target instanceof Element &&
-      target.closest('input, textarea, #web-content-body')
+      target.closest('input, textarea, #web-content')
     ) {
       return;
     }

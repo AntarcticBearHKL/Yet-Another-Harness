@@ -4007,6 +4007,8 @@ body.ring-open #messages {
   background: rgba(251, 246, 239, 0.12);
   -webkit-backdrop-filter: blur(18px) saturate(1.06);
   backdrop-filter: blur(18px) saturate(1.06);
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .web-content.hidden {
