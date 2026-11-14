@@ -1000,6 +1000,8 @@ function startToolTimer() {
   toolTimer = setInterval(updateToolTimers, 100);
 }
 
+let previewClickTimer = 0;
+
 function makeCard(opts) {
   const card = el('div', `message-card ${opts.kind}`);
   card.dataset.cardKey = opts.key;
@@ -1017,6 +1019,34 @@ function makeCard(opts) {
       head.append(el('span', 'card-title', opts.title || ''));
     }
     head.append(el('span', 'card-meta', opts.meta || ''));
+    if (opts.preview && !opts.alwaysOpen) {
+      const previewInline = el('span', 'card-preview-inline', opts.preview);
+      previewInline.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (suppressNextCardClick) {
+          suppressNextCardClick = false;
+          return;
+        }
+        if (event.detail > 1) return;
+        clearTimeout(previewClickTimer);
+        previewClickTimer = setTimeout(() => {
+          previewClickTimer = 0;
+          toggleCard(opts.key);
+        }, 240);
+      });
+      previewInline.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        clearTimeout(previewClickTimer);
+        previewClickTimer = 0;
+        if (event.ctrlKey && typeof opts.onInspect === 'function') {
+          opts.onInspect();
+          return;
+        }
+        opts.onFullContent?.();
+      });
+      head.append(previewInline);
+    }
     const tail = el('div', 'card-tail');
     if (opts.timing) {
       const timingText =
@@ -1060,6 +1090,8 @@ function makeCard(opts) {
     if (tail.childElementCount > 0) head.append(tail);
 
     head.addEventListener('click', (event) => {
+      clearTimeout(previewClickTimer);
+      previewClickTimer = 0;
       if (suppressNextCardClick) {
         suppressNextCardClick = false;
         return;
@@ -1075,32 +1107,6 @@ function makeCard(opts) {
     });
   }
 
-  let previewWrap = null;
-  if (opts.preview && !opts.alwaysOpen && !opts.headless) {
-    previewWrap = el('div', 'card-preview-wrap');
-    const preview = el('div', 'card-preview');
-    const previewText = el('span', 'card-preview-text', opts.preview);
-    preview.append(previewText);
-    previewWrap.append(preview);
-    previewWrap.addEventListener('click', (event) => {
-      if (suppressNextCardClick) {
-        suppressNextCardClick = false;
-        return;
-      }
-      if (event.detail > 1) return;
-      toggleCard(opts.key);
-    });
-    previewWrap.addEventListener('dblclick', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.ctrlKey && typeof opts.onInspect === 'function') {
-        opts.onInspect();
-        return;
-      }
-      opts.onFullContent?.();
-    });
-  }
-
   const bodyWrap = el('div', 'card-body-wrap');
   bodyWrap.inert = !opts.alwaysOpen;
   const body = el('div', 'card-body');
@@ -1108,7 +1114,6 @@ function makeCard(opts) {
   body.append(inner);
   bodyWrap.append(body);
   if (head) card.append(head);
-  if (previewWrap) card.append(previewWrap);
   card.append(bodyWrap);
 
   bodyWrap.addEventListener('dblclick', (event) => {
@@ -5339,7 +5344,7 @@ function onWindowDragStart(event) {
   if (target instanceof HTMLElement && hitsScrollbar(target, event)) return;
 
   const isCardHead = Boolean(
-    target.closest('.card-head, .card-preview-wrap')
+    target.closest('.card-head')
   );
   const isComposerScrim = Boolean(
     state.composerOpen &&
