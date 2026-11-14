@@ -4047,8 +4047,9 @@ body.ring-open #messages {
   border-color: var(--accent);
 }
 
-.agent-delete {
+.agent-editor-head .agent-delete {
   flex: none;
+  height: 38px;
   color: #b23a2f;
 }
 
@@ -4195,21 +4196,25 @@ body.ring-open #messages {
 .agent-tools-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 34px;
+  gap: 8px;
+  height: 32px;
   padding: 0 8px;
 }
 
 .agent-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   color: var(--text-soft);
   font-size: 12px;
   cursor: pointer;
 }
 
 .agent-toggle input {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  margin: 0;
   accent-color: var(--accent);
 }
 
@@ -4232,8 +4237,10 @@ body.ring-open #messages {
 
 .agent-tools {
   display: flex;
+  flex: none;
   flex-direction: column;
   gap: 2px;
+  height: 320px;
   max-height: 320px;
   padding: 6px;
   border: 1px solid var(--line);
@@ -7507,7 +7514,8 @@ body:has(#action-menu:not(.hidden)) #window-controls {
 .switch-title,
 .mcp-server-name,
 .agent-tools-category,
-.agent-tools-category-name {
+.agent-tools-category-name,
+.agent-toggle {
   font-size: 13.5px;
   font-weight: 500;
 }
@@ -7555,7 +7563,6 @@ body:has(#action-menu:not(.hidden)) #window-controls {
   line-height: 1.5;
 }
 
-.agent-toggle,
 .agent-tools-search,
 .text-input,
 .mcp-input,
