@@ -89,7 +89,6 @@ const dom = {
   webContentBody: $('web-content-body'),
   webContentClose: $('web-content-close'),
   composerEffortRail: $('composer-effort-rail'),
-  composerEffortTicks: $('composer-effort-ticks'),
   modelPicker: $('model-picker'),
   modelPickerButton: $('model-picker-button'),
   modelMenu: $('model-menu'),
@@ -575,16 +574,8 @@ function renderComposerEffort() {
   const index = EFFORT_LEVELS.indexOf(effort);
   const ratio = index / (EFFORT_LEVELS.length - 1);
   dom.composerEffortRail.style.setProperty('--effort-ratio', String(ratio));
-  dom.composerEffortRail.dataset.level = effort;
   dom.composerEffortRail.setAttribute('aria-valuenow', String(index));
   dom.composerEffortRail.setAttribute('aria-valuetext', effort);
-  if (dom.composerEffortTicks) {
-    for (const tick of dom.composerEffortTicks.querySelectorAll('.effort-tick')) {
-      const tickIndex = Number(tick.dataset.index);
-      tick.dataset.on = tickIndex === index ? '1' : '0';
-      tick.setAttribute('aria-pressed', tickIndex === index ? 'true' : 'false');
-    }
-  }
 }
 
 function setComposerEffort(value) {
@@ -596,22 +587,32 @@ function setComposerEffort(value) {
   renderComposerEffort();
 }
 
-function composerEffortIndexFromPointer(event) {
+function composerEffortRatioFromPointer(event) {
   const rail = dom.composerEffortRail;
-  if (!rail) return 0;
+  if (!rail) return 0.5;
   const rect = rail.getBoundingClientRect();
-  const inset = 13;
+  const inset = 5;
   const travel = Math.max(1, rect.width - inset * 2);
-  const ratio = Math.min(
+  return Math.min(
     1,
     Math.max(0, (event.clientX - rect.left - inset) / travel)
   );
-  return Math.round(ratio * (EFFORT_LEVELS.length - 1));
 }
 
-function updateComposerEffortFromPointer(event) {
-  const index = composerEffortIndexFromPointer(event);
-  setComposerEffort(EFFORT_LEVELS[index]);
+function previewComposerEffort(event) {
+  const rail = dom.composerEffortRail;
+  if (!rail) return;
+  const ratio = composerEffortRatioFromPointer(event);
+  rail.classList.add('dragging');
+  rail.style.setProperty('--effort-ratio', String(ratio));
+  const index = Math.round(ratio * (EFFORT_LEVELS.length - 1));
+  const effort = EFFORT_LEVELS[index];
+  rail.setAttribute('aria-valuenow', String(index));
+  rail.setAttribute('aria-valuetext', effort);
+  if (currentEffort() !== effort) {
+    state.settings.reasoningEffort = effort;
+    saveSettingsSoon();
+  }
 }
 
 function applySettings() {
@@ -7750,23 +7751,30 @@ function bindEvents() {
       } catch {
         /* ignore */
       }
-      updateComposerEffortFromPointer(event);
+      previewComposerEffort(event);
     });
     dom.composerEffortRail.addEventListener('pointermove', (event) => {
       if (!state.effortDragging) return;
-      updateComposerEffortFromPointer(event);
+      previewComposerEffort(event);
     });
-    const endEffortDrag = (event) => {
+    const endEffortDrag = (event, updateFromPointer = true) => {
       if (!state.effortDragging) return;
+      if (updateFromPointer) previewComposerEffort(event);
       state.effortDragging = false;
+      dom.composerEffortRail.classList.remove('dragging');
       try {
         dom.composerEffortRail.releasePointerCapture(event.pointerId);
       } catch {
         /* ignore */
       }
+      renderComposerEffort();
     };
-    dom.composerEffortRail.addEventListener('pointerup', endEffortDrag);
-    dom.composerEffortRail.addEventListener('pointercancel', endEffortDrag);
+    dom.composerEffortRail.addEventListener('pointerup', (event) =>
+      endEffortDrag(event, true)
+    );
+    dom.composerEffortRail.addEventListener('pointercancel', (event) =>
+      endEffortDrag(event, false)
+    );
     dom.composerEffortRail.addEventListener('keydown', (event) => {
       const index = EFFORT_LEVELS.indexOf(currentEffort());
       let next = index;
@@ -7781,17 +7789,6 @@ function bindEvents() {
       setComposerEffort(EFFORT_LEVELS[next]);
     });
   }
-  if (dom.composerEffortTicks) {
-    for (const tick of dom.composerEffortTicks.querySelectorAll('.effort-tick')) {
-      tick.addEventListener('click', () => {
-        const index = Number(tick.dataset.index);
-        if (Number.isInteger(index)) {
-          setComposerEffort(EFFORT_LEVELS[index]);
-        }
-      });
-    }
-  }
-
   dom.input.addEventListener('input', () => {
     state.slashDismissed = false;
     state.slashIndex = 0;
