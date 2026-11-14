@@ -3355,15 +3355,6 @@ function deleteProject(projectId) {
   renderAll();
 }
 
-function openMcpConfigForSession(sessionId) {
-  const index = state.sessions.findIndex(
-    (session) => session.id === sessionId
-  );
-  if (index < 0) return;
-  selectSession(index);
-  openMcpConfig(sessionId);
-}
-
 function highlightSwitcher(index) {
   if (!state.switcherOpen) return;
   const sessions = sessionsInProject(state.switcherProjectId);
@@ -5344,7 +5335,6 @@ const RING_ICONS = {
     '<path d="M4 6h16M9 6V4h6v2M6 6l1 14h10l1-14M10 10v7M14 10v7"/>',
   folder:
     '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>',
-  mcp: '<path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0V8ZM12 16v5"/>',
   minimize: '<path d="M4 12h16"/>',
   maximize: '<path d="M5 5h14v14H5z"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
@@ -5671,11 +5661,6 @@ function openSwitcherActionMenu(target, x, y) {
           label: '改名',
           icon: RING_ICONS.rename,
           action: () => openRename('session', sessionId),
-        },
-        {
-          label: '配置 MCP',
-          icon: RING_ICONS.mcp,
-          action: () => openMcpConfigForSession(sessionId),
         },
         {
           label: '删除',
@@ -6088,11 +6073,6 @@ function openSwitcherRingMenu(event) {
           label: '改名',
           icon: RING_ICONS.rename,
           action: () => openRename('session', sessionId),
-        },
-        {
-          label: '配置 MCP',
-          icon: RING_ICONS.mcp,
-          action: () => openMcpConfigForSession(sessionId),
         },
         {
           label: '删除',
