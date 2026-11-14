@@ -3406,9 +3406,6 @@ function renderAgentMenu() {
     item.addEventListener('click', () => selectAgent(entry.id));
     dom.agentMenu.append(item);
   });
-  dom.agentMenu.append(
-    el('div', 'agent-menu-hint', '每个对话必须有 Agent')
-  );
 }
 
 function positionAgentMenu() {
@@ -3423,7 +3420,10 @@ function positionAgentMenu() {
   const height = dom.agentMenu.offsetHeight;
   const left = Math.max(
     margin,
-    Math.min(rect.left, window.innerWidth - width - margin)
+    Math.min(
+      rect.left + rect.width / 2 - width / 2,
+      window.innerWidth - width - margin
+    )
   );
   const above = rect.top - height - gap;
   dom.agentMenu.style.left = `${Math.round(left)}px`;
