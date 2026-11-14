@@ -6077,8 +6077,9 @@ textarea::placeholder {
 }
 
 .context-head:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: none;
+  background: var(--hover);
+  color: var(--text);
 }
 
 .context-dot {
@@ -6106,8 +6107,31 @@ textarea::placeholder {
   transition: color 120ms ease;
 }
 
+.context-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 10.5px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity 120ms ease;
+}
+
+.context-block:not(.collapsed) .context-preview {
+  opacity: 0;
+}
+
 .context-head:hover .context-title {
   color: var(--text);
+}
+
+.context-empty {
+  color: var(--faint);
+  font-size: 10.5px;
+  line-height: 1.6;
 }
 
 .context-chevron {

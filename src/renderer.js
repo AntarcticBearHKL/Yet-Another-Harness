@@ -1972,11 +1972,14 @@ function contextBlock(title, text, key) {
   const collapsed = state.contextCollapsed.has(key);
   const block = el('div', 'context-block');
   if (collapsed) block.classList.add('collapsed');
+  const value = String(text || '').trim();
+  const previewText = value ? previewLine(value) : key === 'agents' ? '没有' : '';
   const head = el('button', 'context-head');
   head.type = 'button';
   head.setAttribute('aria-expanded', String(!collapsed));
   head.append(el('span', 'context-dot'));
   head.append(el('span', 'context-title', title));
+  head.append(el('span', 'context-preview', previewText));
   const chevron = el('span', 'context-chevron');
   chevron.innerHTML =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
@@ -1985,9 +1988,10 @@ function contextBlock(title, text, key) {
   const body = el('div', 'context-body');
   const clip = el('div', 'context-body-clip');
   const inner = el('div', 'context-body-inner');
-  const value = String(text || '');
   if (value) {
     inner.append(el('pre', 'context-text', value));
+  } else if (key === 'agents') {
+    inner.append(el('div', 'context-empty', '没有'));
   } else {
     inner.classList.add('empty');
   }
