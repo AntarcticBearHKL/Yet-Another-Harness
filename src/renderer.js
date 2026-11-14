@@ -341,6 +341,10 @@ const api = {
   saveChats: (chats) =>
     requestJson('/api/chats', { method: 'POST', body: chats }),
   loadAgents: () => requestJson('/api/agents'),
+  loadProjectAgentsMd: (projectId) =>
+    requestJson(
+      `/api/agents-md?projectId=${encodeURIComponent(projectId)}`
+    ),
   saveAgents: (agents) =>
     requestJson('/api/agents', { method: 'POST', body: { agents } }),
   resolveApproval: (id, approved) =>
@@ -1950,6 +1954,29 @@ function renderMcpConfig() {
   }
 }
 
+function contextBlock(title, text) {
+  const block = el('div', 'context-block');
+  const head = el('div', 'context-head');
+  head.append(el('span', 'context-dot'));
+  head.append(el('span', 'context-title', title));
+  head.append(el('span', 'context-meta', '只读'));
+  block.append(head);
+  const body = el('div', 'context-body');
+  const value = String(text || '');
+  if (value) {
+    body.append(el('pre', 'context-text', value));
+  } else {
+    body.classList.add('empty');
+  }
+  block.append(body);
+  return block;
+}
+
+function renderContextBlocks(session, container) {
+  container.append(contextBlock('SYSTEM PROMPT', session.system));
+  container.append(contextBlock('AGENTS.MD', session.agentsMd));
+}
+
 function renderMessages({ animate = true } = {}) {
   const session = currentSession();
   const sessionId = session ? session.id : null;
@@ -1963,7 +1990,10 @@ function renderMessages({ animate = true } = {}) {
   state.forceScroll = false;
 
   dom.messages.replaceChildren();
-  if (session) renderMcpSummary(session, dom.messages);
+  if (session) {
+    renderMcpSummary(session, dom.messages);
+    renderContextBlocks(session, dom.messages);
+  }
   if (!session) {
     state.openCardKey = null;
     state.renderedOpenKeys = new Set();
@@ -2678,6 +2708,7 @@ function newSession(projectId) {
     id: makeId(),
     title: `Chat ${state.seq}`,
     system: DEFAULT_SYSTEM_PROMPT,
+    agentsMd: null,
     agentId: previous?.agentId || '',
     projectId: targetProjectId,
     mcpDisabled: Array.isArray(previous?.mcpDisabled)
@@ -2697,6 +2728,11 @@ function newSession(projectId) {
   updateSendState();
   saveChatsSoon();
   renderAll();
+  void api.loadProjectAgentsMd(targetProjectId).then((data) => {
+    if (!state.sessions.includes(session)) return;
+    session.agentsMd = String(data?.text || '');
+    renderMessages();
+  }).catch(() => {});
   persistFoldState();
   openComposer();
 }

@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const store = require('../src/store');
 const deepseek = require('../src/deepseek');
+const { ensureAgentsMd } = require('./context');
 const {
   buildAuditPrompt,
   parseAuditAnswer,
@@ -420,6 +421,9 @@ function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null 
     ...session.msgs,
     { role: 'User', text: prompt, request: null, steps: [], requests: [] },
   ];
+  const chats = store.loadChats();
+  const agentsMd = ensureAgentsMd(session, chats);
+  const agentsMdBlock = agentsMd ? `# AGENTS.md\n${agentsMd}` : '';
   const skillBlock = String(skillsText || '').trim();
   const agentPrompt = String(agentConfig?.prompt || '').trim();
   const agentBlock = agentPrompt
@@ -441,6 +445,7 @@ function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null 
       : '';
   const system = [
     session.system || '',
+    agentsMdBlock,
     goalBlock,
     agentBlock,
     skillBlock ? `# Active Skills\n${skillBlock}` : '',
@@ -448,7 +453,6 @@ function startRun({ sessionId, text, runId, skillsText = '', agentConfig = null 
     .filter(Boolean)
     .join('\n\n');
 
-  const chats = store.loadChats();
   const project = chats.projects.find(
     (item) => item.id === session.projectId
   );

@@ -15,6 +15,7 @@ const usage = require('./usage');
 const { McpManager } = require('./mcp/manager');
 const { createSkillService } = require('./skills');
 const { loadAgents, saveAgents, getAgent } = require('./agents');
+const { ensureAgentsMd, readAgentsMd } = require('./context');
 const { normalizeGoal } = require('../src/goal');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -328,7 +329,21 @@ function handleApi(req, res, url) {
   }
 
   if (req.method === 'GET' && pathname === '/api/chats') {
-    sendJson(res, 200, store.loadChats());
+    const chats = store.loadChats();
+    for (const session of chats.sessions) {
+      ensureAgentsMd(session, chats);
+    }
+    sendJson(res, 200, chats);
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/agents-md') {
+    const projectId = String(url.searchParams.get('projectId') || '');
+    const chats = store.loadChats();
+    const project = chats.projects.find((item) => item.id === projectId);
+    sendJson(res, 200, {
+      text: readAgentsMd(project?.directories || []),
+    });
     return true;
   }
 

@@ -6023,3 +6023,58 @@ textarea::placeholder {
   color: var(--faint);
   opacity: 0.75;
 }
+
+/* Conversation context blocks: base system prompt and AGENTS.md snapshot. */
+.context-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface-card);
+}
+
+.context-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.context-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent-soft);
+}
+
+.context-title {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.context-meta {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+.context-body {
+  min-height: 14px;
+}
+
+.context-text {
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  color: var(--dim);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}

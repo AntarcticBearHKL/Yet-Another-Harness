@@ -15,7 +15,7 @@ const { normalizeCompaction } = require('./compaction');
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 11;
+const SCHEMA_VERSION = 12;
 const DEFAULT_PROJECT = { id: 'project-default', name: 'Project 1', directories: [] };
 
 let dataDir = null;
@@ -299,6 +299,8 @@ function normalizeChats(raw) {
         id: String(session.id || crypto.randomUUID()),
         title: String(session.title || `Chat ${index + 1}`),
         system: String(session.system ?? DEFAULT_SYSTEM_PROMPT),
+        agentsMd:
+          typeof session.agentsMd === 'string' ? session.agentsMd : null,
         agentId: String(session.agentId || ''),
         projectId,
         mcpDisabled: Array.isArray(session.mcpDisabled)
@@ -405,6 +407,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   system TEXT NOT NULL,
+  agents_md TEXT,
   agent_id TEXT,
   project_id TEXT,
   mcp_disabled TEXT,
@@ -575,6 +578,12 @@ function ensureSchema(database) {
       database.exec('ALTER TABLE sessions ADD COLUMN compaction TEXT');
     }
 
+    // v11 -> v12: AGENTS.md snapshot loaded once when a conversation starts.
+    const agentsColumns = database.prepare('PRAGMA table_info(sessions)').all();
+    if (!agentsColumns.some((column) => column.name === 'agents_md')) {
+      database.exec('ALTER TABLE sessions ADD COLUMN agents_md TEXT');
+    }
+
     const projectCount =
       Number(database.prepare('SELECT COUNT(*) AS n FROM projects').get().n) || 0;
     if (projectCount === 0) {
@@ -664,7 +673,7 @@ function readChats() {
 
   const sessionRows = database
     .prepare(
-      'SELECT id, title, system, agent_id, project_id, mcp_disabled, fold_state, pending_queue, goal, compaction FROM sessions ORDER BY sort_order ASC'
+      'SELECT id, title, system, agents_md, agent_id, project_id, mcp_disabled, fold_state, pending_queue, goal, compaction FROM sessions ORDER BY sort_order ASC'
     )
     .all();
   if (sessionRows.length === 0) {
@@ -745,6 +754,10 @@ function readChats() {
           id: row.id,
           title: row.title,
           system: row.system,
+          agentsMd:
+            row.agents_md === null || row.agents_md === undefined
+              ? null
+              : String(row.agents_md),
           agentId: row.agent_id || '',
           projectId: projectIds.has(row.project_id)
             ? row.project_id
@@ -903,11 +916,12 @@ function writeChats(chats) {
   );
 
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, agent_id, project_id, mcp_disabled, fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, agents_md, agent_id, project_id, mcp_disabled, fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
+       agents_md = excluded.agents_md,
        agent_id = excluded.agent_id,
        project_id = excluded.project_id,
        mcp_disabled = excluded.mcp_disabled,
@@ -976,6 +990,9 @@ function writeChats(chats) {
         session.id,
         session.title,
         session.system,
+        session.agentsMd === null || session.agentsMd === undefined
+          ? null
+          : String(session.agentsMd),
         session.agentId || '',
         session.projectId,
         JSON.stringify(session.mcpDisabled || []),
@@ -1241,6 +1258,15 @@ function updateSessionCompaction(sessionId, compaction) {
   return normalized;
 }
 
+function updateSessionAgentsMd(sessionId, text) {
+  const database = openDb();
+  const value = text === null || text === undefined ? null : String(text);
+  database
+    .prepare('UPDATE sessions SET agents_md = ?, updated_at = ? WHERE id = ?')
+    .run(value, Date.now(), sessionId);
+  return value;
+}
+
 function appendMessage(sessionId, role, text, request) {
   const database = openDb();
   const row = database
@@ -1476,6 +1502,7 @@ module.exports = {
   updateMessage,
   updateSessionGoal,
   updateSessionCompaction,
+  updateSessionAgentsMd,
   appendEvent,
   listEvents,
   lastEventSeq,

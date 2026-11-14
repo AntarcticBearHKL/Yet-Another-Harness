@@ -47,6 +47,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - Tab 工作区的对话行后续可以展开查看 subagent；现在暂不展开
 - 项目、项目归属和对话一起持久化到 SQLite；工作区空白区域仍然可以按住左键拖动窗口
 - 所有菜单、浮层、工作区和表单共用同一套暖色表面：面板 18px、菜单 14px、卡片 12px、控件 9px 圆角；按钮、输入框、空状态、侧栏宽度和顶部间距统一，列表选中状态统一为暖色底 + 左侧色条（对话列表用圆点）
+- 每个对话顶部、第一条消息之前显示两个只读 block：`SYSTEM PROMPT` 和 `AGENTS.MD`；没有内容时保留空 block。`AGENTS.md` / `agent.md` 在对话开始时从项目目录读取一次并随会话保存，之后文件变化不影响当前对话；内容会以 `# AGENTS.md` 注入 system prompt
 - 有弹窗（设置、raw 查看器、MCP、工具目录、改名/确认、全文磨砂页）打开时，右键等于关闭弹窗
 - 主界面按住右键弹出环形菜单：工具、Skill、Agent、MCP；把鼠标拖到对应扇区后松开右键打开对应信息界面
 - Tab 工作区按住右键弹出二级环形菜单，拖到扇区后松开右键执行；按住右键期间松开 Tab，工作区会关闭但环形菜单保留，可以继续拖到扇区后松开右键：项目上显示「改名 / 配置目录 / 删除」，具体对话上显示「改名 / 配置 MCP / 删除」，空白处显示「最小化 / 最大化 / 关闭」
@@ -128,6 +129,7 @@ server/usage.js    OpenCode Go 额度查询（/api/usage，60 秒缓存）
 server/runner.js   agent 主循环、工具执行、消息/事件持久化
 server/skills.js   Skill 发现（skills/ + %APPDATA%\yah\skills）与 MCP prompts 转 Skill
 server/agents.js   Agent 配置（%APPDATA%\yah\agents.json）：提示词与工具权限
+server/context.js  项目 AGENTS.md / agent.md 读取与一次性快照
 skills/            内置 Skill Markdown（含 test-skill.md）
 server/mcp/config.js   MCP 自定义配置存储、JSON 配置解析
 server/mcp/opencode.js OpenCode 配置发现与 MCP 服务器继承
