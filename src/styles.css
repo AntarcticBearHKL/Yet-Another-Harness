@@ -6036,33 +6036,26 @@ textarea::placeholder {
 .context-block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
   margin: 0;
-  padding: 10px 14px;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   background: var(--surface-card);
-}
-
-.context-block.collapsed {
-  gap: 0;
-}
-
-.context-block.collapsed .context-body {
-  display: none;
+  overflow: hidden;
 }
 
 .context-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
-  padding: 2px 4px;
-  margin: -2px -4px;
+  min-height: 40px;
+  padding: 0 14px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-card);
   background: transparent;
-  color: inherit;
+  color: var(--faint);
   text-align: left;
   cursor: pointer;
   transition:
@@ -6077,26 +6070,87 @@ textarea::placeholder {
 
 .context-head:focus-visible {
   outline: 1px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: -1px;
 }
 
 .context-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   flex: none;
+  border: 1.5px solid transparent;
   border-radius: 50%;
   background: var(--accent-soft);
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.context-block.collapsed .context-dot {
+  border-color: var(--faint);
+  background: transparent;
 }
 
 .context-title {
-  color: var(--text-soft);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  transition: color 120ms ease;
+}
+
+.context-head:hover .context-title {
+  color: var(--text);
+}
+
+.context-chevron {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+  color: var(--faint);
+  transition: transform 160ms ease;
+}
+
+.context-block.collapsed .context-chevron {
+  transform: rotate(-90deg);
+}
+
+.context-chevron svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .context-body {
-  min-height: 14px;
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 200ms ease,
+    opacity 160ms ease;
+}
+
+.context-body-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.context-body-inner {
+  padding: 2px 14px 12px;
+}
+
+.context-body-inner.empty {
+  padding-bottom: 0;
+}
+
+.context-block.collapsed .context-body {
+  grid-template-rows: 0fr;
+  opacity: 0;
 }
 
 .context-text {

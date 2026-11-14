@@ -1977,14 +1977,22 @@ function contextBlock(title, text, key) {
   head.setAttribute('aria-expanded', String(!collapsed));
   head.append(el('span', 'context-dot'));
   head.append(el('span', 'context-title', title));
+  const chevron = el('span', 'context-chevron');
+  chevron.innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  head.append(chevron);
   block.append(head);
   const body = el('div', 'context-body');
+  const clip = el('div', 'context-body-clip');
+  const inner = el('div', 'context-body-inner');
   const value = String(text || '');
   if (value) {
-    body.append(el('pre', 'context-text', value));
+    inner.append(el('pre', 'context-text', value));
   } else {
-    body.classList.add('empty');
+    inner.classList.add('empty');
   }
+  clip.append(inner);
+  body.append(clip);
   block.append(body);
   head.addEventListener('click', () => {
     const nextCollapsed = block.classList.toggle('collapsed');
