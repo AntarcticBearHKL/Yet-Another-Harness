@@ -7580,6 +7580,16 @@ function bindEvents() {
         if (event.repeat || event.isComposing) return;
         const target = event.target;
         if (
+          state.composerOpen &&
+          target === dom.input &&
+          state.attachedSkills.length === 0 &&
+          dom.input.value.trim() === ''
+        ) {
+          event.preventDefault();
+          closeComposer();
+          return;
+        }
+        if (
           target instanceof Element &&
           target.closest('input, textarea, [contenteditable="true"]')
         ) {
