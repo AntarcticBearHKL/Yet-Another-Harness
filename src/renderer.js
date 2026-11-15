@@ -7352,6 +7352,7 @@ const TOOL_GROUP_BY_NAME = new Map([
   ['mouse', 'system'],
   ['code_view', 'view'],
   ['pdf_view', 'view'],
+  ['html_view', 'view'],
   ['background_start', 'background'],
   ['background_list', 'background'],
   ['background_stop', 'background'],
@@ -9342,7 +9343,7 @@ function bindEvents() {
           : undefined,
       },
     });
-    if (name === 'code_view' || name === 'pdf_view') {
+    if (name === 'code_view' || name === 'pdf_view' || name === 'html_view') {
       try {
         const view = JSON.parse(String(output ?? ''));
         if (view?.ok) {

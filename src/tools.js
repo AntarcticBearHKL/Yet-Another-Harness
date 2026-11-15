@@ -153,6 +153,7 @@ async function execute(name, args, context = null) {
       mouse: mouseTools.mouseTool,
       code_view: viewerTools.codeViewTool,
       pdf_view: viewerTools.pdfViewTool,
+      html_view: viewerTools.htmlViewTool,
       worktree_list: agentTools.worktreeList,
       worktree_create: agentTools.worktreeCreate,
       worktree_remove: agentTools.worktreeRemove,
@@ -219,6 +220,9 @@ function statusLabel(name, args) {
   if (name === 'code_view' || name === 'pdf_view') {
     const filePath = String(value.path || '');
     return filePath ? `${name}: ${path.basename(filePath)}` : name;
+  }
+  if (name === 'html_view') {
+    return value.title ? `html_view: ${value.title}` : 'html_view';
   }
   if (name === 'background_start') {
     const note = String(

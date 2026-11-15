@@ -1,11 +1,13 @@
 'use strict';
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { guardPath } = require('./guard');
 
 const MAX_CODE_BYTES = 4 * 1024 * 1024;
 const MAX_PDF_BYTES = 80 * 1024 * 1024;
+const MAX_HTML_BYTES = 2 * 1024 * 1024;
 
 function integer(value, fallback = null) {
   const parsed = Number(value);
@@ -90,4 +92,27 @@ async function pdfViewTool(args = {}, context = null) {
   });
 }
 
-module.exports = { codeViewTool, pdfViewTool };
+async function htmlViewTool(args = {}) {
+  const html = String(args.html ?? '');
+  if (!html.trim()) throw new Error('html is required');
+  if (Buffer.byteLength(html, 'utf8') > MAX_HTML_BYTES) {
+    throw new Error('HTML is larger than 2 MB');
+  }
+  const title = String(args.title || 'HTML').trim().slice(0, 120) || 'HTML';
+  const dir = path.join(os.tmpdir(), 'yah-html');
+  await fs.promises.mkdir(dir, { recursive: true });
+  const id = `${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+  const file = path.join(dir, `${id}.html`);
+  await fs.promises.writeFile(file, html, 'utf8');
+  return JSON.stringify({
+    ok: true,
+    kind: 'html',
+    key: `html:${title}`,
+    path: file,
+    title,
+  });
+}
+
+module.exports = { codeViewTool, pdfViewTool, htmlViewTool };

@@ -6,16 +6,17 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { mergedDefinitions } = require('../src/tools/definitions');
-const { codeViewTool, pdfViewTool } = require('../src/tools/viewer');
+const { codeViewTool, pdfViewTool, htmlViewTool } = require('../src/tools/viewer');
 
 const context = { enforceProjectRoots: false };
 
-test('code and pdf viewer tools are defined', () => {
+test('viewer tools are defined', () => {
   const names = new Set(
     mergedDefinitions().map((item) => item.function?.name)
   );
   assert.ok(names.has('code_view'));
   assert.ok(names.has('pdf_view'));
+  assert.ok(names.has('html_view'));
 });
 
 test('viewer tools return window payloads', async () => {
@@ -51,6 +52,21 @@ test('viewer tools return window payloads', async () => {
       () => pdfViewTool({ path: codeFile }, context),
       /not a PDF/
     );
+
+    const html = JSON.parse(
+      await htmlViewTool(
+        {
+          title: 'demo',
+          html: '<h1>Hello</h1><p>presentation</p>',
+        },
+        context
+      )
+    );
+    assert.equal(html.ok, true);
+    assert.equal(html.kind, 'html');
+    assert.equal(html.title, 'demo');
+    assert.match(fs.readFileSync(html.path, 'utf8'), /Hello/);
+    fs.rmSync(html.path, { force: true });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

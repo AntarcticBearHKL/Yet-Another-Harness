@@ -123,7 +123,7 @@ function saveBounds() {
 function prepareContentPayload(payload) {
   const next = { ...(payload || {}) };
   const kind = String(next.kind || 'text');
-  if (kind !== 'code' && kind !== 'pdf') return next;
+  if (kind !== 'code' && kind !== 'pdf' && kind !== 'html') return next;
   const filePath = path.resolve(String(next.path || ''));
   next.path = filePath;
   next.title = String(next.title || path.basename(filePath) || 'YAH');
@@ -140,6 +140,11 @@ function prepareContentPayload(payload) {
         throw new Error('code file looks binary');
       }
       next.text = buffer.toString('utf8');
+    } else if (kind === 'html') {
+      if (stat.size > 2 * 1024 * 1024) {
+        throw new Error('HTML is larger than 2 MB');
+      }
+      next.html = fs.readFileSync(filePath, 'utf8');
     } else {
       if (stat.size > 80 * 1024 * 1024) {
         throw new Error('PDF is larger than 80 MB');
@@ -177,10 +182,14 @@ function openContentWindow(payload) {
   }
 
   const win = new BrowserWindow({
-    width: kind === 'pdf' ? 1180 : kind === 'code' ? 1100 : 940,
-    height: kind === 'pdf' ? 900 : kind === 'code' ? 820 : 760,
-    minWidth: kind === 'pdf' || kind === 'code' ? 720 : 520,
-    minHeight: kind === 'pdf' || kind === 'code' ? 520 : 360,
+    width:
+      kind === 'pdf' ? 1180 : kind === 'code' || kind === 'html' ? 1100 : 940,
+    height:
+      kind === 'pdf' ? 900 : kind === 'code' || kind === 'html' ? 820 : 760,
+    minWidth:
+      kind === 'pdf' || kind === 'code' || kind === 'html' ? 720 : 520,
+    minHeight:
+      kind === 'pdf' || kind === 'code' || kind === 'html' ? 520 : 360,
     title,
     icon: path.join(__dirname, '..', 'assets', 'yah.ico'),
     frame: false,

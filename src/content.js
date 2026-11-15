@@ -207,7 +207,7 @@ function onWindowDragStart(event) {
   const target = event.target;
   if (!(target instanceof Element)) return;
   if (target.closest(DRAG_EXCLUDE)) return;
-  const viewer = target.closest('.code-viewer, .pdf-viewer');
+  const viewer = target.closest('.code-viewer, .pdf-viewer, .html-viewer');
   if (viewer && !target.closest('.viewer-head')) return;
   windowDrag = { x: event.screenX, y: event.screenY };
   api.dragStart({ x: event.screenX, y: event.screenY });
@@ -331,6 +331,156 @@ function openAnnotationPopover({
 }
 
 /* -------------------------------- code view ------------------------------- */
+
+const HTML_BASE_STYLE = `<style>
+@font-face { font-family: "YAH Rounded"; src: url("/assets/fonts/ResourceHanRoundedCN-Regular.ttf") format("truetype"); font-style: normal; font-weight: 400; font-display: swap; }
+@font-face { font-family: "YAH Rounded"; src: url("/assets/fonts/ResourceHanRoundedCN-Bold.ttf") format("truetype"); font-style: normal; font-weight: 700; font-display: swap; }
+:root {
+  color-scheme: light;
+  --background: #fbf6ef;
+  --surface-card: rgba(255, 252, 247, 0.56);
+  --surface-row: rgba(252, 246, 238, 0.40);
+  --text: #2b211a;
+  --text-soft: #4a3a2e;
+  --dim: #6f5d4f;
+  --faint: #9a8878;
+  --line: rgba(74, 54, 40, 0.14);
+  --hover: rgba(74, 54, 40, 0.06);
+  --selected: rgba(185, 111, 61, 0.14);
+  --accent: #b96f3d;
+  --accent-soft: #d28a55;
+  --accent-deep: #94522a;
+  --radius: 12px;
+  --font: "YAH Rounded", "Resource Han Rounded CN", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  --mono: "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  padding: 34px 38px 60px;
+  background: var(--background);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+h1, h2, h3, h4 {
+  margin: 1.2em 0 0.55em;
+  color: var(--text);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+h1 { font-size: 28px; font-weight: 700; }
+h2 { font-size: 22px; font-weight: 700; }
+h3 { font-size: 18px; font-weight: 700; }
+p { margin: 0.7em 0; }
+a {
+  color: var(--accent-deep);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(185, 111, 61, 0.3);
+}
+a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+strong { color: var(--text); }
+code, pre { font-family: var(--mono); }
+code {
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(74, 54, 40, 0.04);
+  font-size: 0.88em;
+}
+pre {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(74, 54, 40, 0.035);
+  line-height: 1.6;
+  overflow: auto;
+}
+pre code { padding: 0; border: 0; background: none; }
+blockquote {
+  margin: 1em 0;
+  padding: 0.2em 0 0.2em 16px;
+  border-left: 2px solid var(--accent-soft);
+  color: var(--dim);
+}
+table {
+  width: 100%;
+  margin: 1em 0;
+  border-collapse: collapse;
+  font-size: 0.94em;
+}
+th, td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background: rgba(74, 54, 40, 0.03);
+  color: var(--text-soft);
+  font-weight: 700;
+}
+hr { margin: 1.4em 0; border: 0; border-top: 1px solid var(--line); }
+img { max-width: 100%; height: auto; border-radius: 8px; }
+::selection { background: rgba(185, 111, 61, 0.24); }
+.yah-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+}
+.yah-muted { color: var(--faint); }
+</style>`;
+
+function sanitizeHtml(value) {
+  return String(value ?? '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(
+      /<meta[^>]+http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi,
+      ''
+    );
+}
+
+function buildHtmlDocument(value) {
+  const source = sanitizeHtml(value).trim();
+  const base = HTML_BASE_STYLE;
+  if (!source) {
+    return `<!doctype html><html><head><meta charset="utf-8">${base}</head><body><p class="yah-muted">Empty HTML</p></body></html>`;
+  }
+  if (/<\/head>/i.test(source)) {
+    return source.replace(/<\/head>/i, `${base}</head>`);
+  }
+  if (/<body[\s>]/i.test(source)) {
+    return source.replace(
+      /<body([^>]*)>/i,
+      `<head><meta charset="utf-8">${base}</head><body$1>`
+    );
+  }
+  if (/<html[\s>]/i.test(source)) {
+    return source.replace(
+      /<html([^>]*)>/i,
+      `<html$1><head><meta charset="utf-8">${base}</head>`
+    );
+  }
+  return `<!doctype html><html><head><meta charset="utf-8">${base}</head><body>${source}</body></html>`;
+}
+
+function renderHtmlViewer(payload) {
+  const title = String(payload?.title || 'HTML');
+  const viewer = el('div', 'viewer html-viewer');
+  const head = makeViewerHead(title, 'HTML');
+  const frame = document.createElement('iframe');
+  frame.className = 'html-frame';
+  frame.title = title;
+  frame.setAttribute('sandbox', 'allow-same-origin');
+  frame.setAttribute('referrerpolicy', 'no-referrer');
+  frame.srcdoc = buildHtmlDocument(payload?.html ?? payload?.text);
+  viewer.append(head, frame);
+  content.append(viewer);
+}
 
 function renderCodeViewer(payload) {
   const file = String(payload?.path || '');
@@ -905,6 +1055,11 @@ function render(payload) {
   if (currentKind === 'pdf') {
     content.classList.add('pdf-mode');
     void renderPdfViewer(payload);
+    return;
+  }
+  if (currentKind === 'html') {
+    content.classList.add('html-mode');
+    renderHtmlViewer(payload);
     return;
   }
 

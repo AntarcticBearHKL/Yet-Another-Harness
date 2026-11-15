@@ -752,6 +752,15 @@ const MODELS = fn(
   'Search available models.',
   { query: str('Text to search in model names and ids'), provider: str('Provider filter'), limit: num('Max results') }
 );
+const HTML_VIEW = fn(
+  'html_view',
+  'Create a standalone HTML presentation and open it in a separate viewer window. Use HTML and CSS only; scripts are disabled. The page gets YAH cream typography by default and can use CSS variables such as --background, --surface-card, --text, --dim, --faint, --line, --accent, --accent-deep, --radius, --font and --mono.',
+  {
+    html: str('HTML document or fragment to display'),
+    title: str('Window title; the same title reuses the same window'),
+  },
+  ['html']
+);
 const PDF_VIEW = fn(
   'pdf_view',
   'Open a separate PDF viewer window for a local PDF file. Optionally jump to a page and highlight a search query.',
@@ -897,6 +906,7 @@ const OPENCODE = [
   MOUSE,
   CODE_VIEW,
   PDF_VIEW,
+  HTML_VIEW,
   WORKTREE_LIST,
   WORKTREE_CREATE,
   WORKTREE_REMOVE,

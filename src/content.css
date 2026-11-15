@@ -686,3 +686,28 @@ body.maximized #content-app {
 .token.variable {
   color: #a66f74;
 }
+
+.content.html-mode {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.html-viewer {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  background: #fbf6ef;
+}
+
+.html-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: #fbf6ef;
+}
