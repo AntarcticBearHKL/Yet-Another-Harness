@@ -7,7 +7,7 @@ const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 3;
 const MIN_NODE_WIDTH = 220;
 const MAX_NODE_WIDTH = 900;
-const MIN_NODE_HEIGHT = 130;
+const MIN_NODE_HEIGHT = 40;
 const MAX_NODE_HEIGHT = 2000;
 
 function number(value, fallback) {

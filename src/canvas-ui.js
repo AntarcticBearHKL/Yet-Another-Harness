@@ -14,8 +14,8 @@ const canvasDom = {
   addWorkspace: document.getElementById('canvas-add-workspace'),
 };
 
-const CANVAS_GROUP_WIDTH = 320;
-const CANVAS_GROUP_HEIGHT = 180;
+const CANVAS_GROUP_WIDTH = 280;
+const CANVAS_GROUP_HEIGHT = 60;
 const CANVAS_MIN_ZOOM = 0.2;
 const CANVAS_MAX_ZOOM = 3;
 const CANVAS_WORKSPACE_COLORS = [
@@ -238,8 +238,8 @@ function ensureCanvasGroups() {
       const col = rootIndex % 3;
       const row = Math.floor(rootIndex / 3);
       node = canvasState.nodes[root.id] = {
-        x: 80 + col * 390,
-        y: 80 + row * 430,
+        x: 80 + col * 360,
+        y: 80 + row * 300,
         width: CANVAS_GROUP_WIDTH,
         height: CANVAS_GROUP_HEIGHT,
         parentSessionId: null,
@@ -265,8 +265,8 @@ function canvasGroupSessionIds(rootId) {
 function canvasGroupWidth(children, jobs) {
   return (
     CANVAS_GROUP_WIDTH +
-    Math.min(2, children.length) * 24 +
-    (jobs.length > 0 ? 12 : 0)
+    (children.length > 0 ? 16 : 0) +
+    (jobs.length > 0 ? 8 : 0)
   );
 }
 
@@ -350,56 +350,23 @@ async function loadCanvasBackground({ force = false } = {}) {
 
 /* -------------------------------- 组渲染 -------------------------------- */
 
-function buildCanvasStatusChip(session) {
-  const status = canvasConversationStatus(session);
-  return el('span', `canvas-status ${status.tone}`, status.label);
+function buildCanvasDot(tone) {
+  return el('span', `canvas-dot ${tone}`);
 }
 
 function buildCanvasChild(child, root) {
-  const childEl = el('article', 'canvas-child');
+  const childEl = el('div', 'canvas-child');
   childEl.dataset.sessionId = child.id;
-  childEl.style.setProperty(
-    '--canvas-workspace-color',
-    canvasWorkspaceColor(canvasWorkspaceFor(child))
-  );
   if (canvasState.selectedChildId === child.id) {
     childEl.classList.add('selected');
   }
-
-  const head = el('div', 'canvas-child-head');
-  head.append(el('span', 'canvas-child-dot'));
-  head.append(
+  childEl.append(buildCanvasDot(canvasConversationStatus(child).tone));
+  if (child.subagent) {
+    childEl.append(el('span', 'canvas-child-arrow', '↳'));
+  }
+  childEl.append(
     el('span', 'canvas-child-title', child.title || '未命名对话')
   );
-  head.append(buildCanvasStatusChip(child));
-  childEl.append(head);
-  childEl.append(
-    el('div', 'canvas-child-preview', canvasSessionPreview(child))
-  );
-
-  const foot = el('div', 'canvas-child-foot');
-  foot.append(el('span', 'canvas-child-agent', canvasAgentName(child)));
-  foot.append(el('span', '', '·'));
-  foot.append(
-    el(
-      'span',
-      '',
-      `${Array.isArray(child.msgs) ? child.msgs.length : 0} 条`
-    )
-  );
-  if (child.projectId !== root.projectId) {
-    foot.append(
-      el(
-        'span',
-        'canvas-child-workspace',
-        canvasWorkspaceFor(child)?.name || '其他工作区'
-      )
-    );
-  }
-  if (child.subagent) {
-    foot.append(el('span', 'canvas-child-kind', '子代理'));
-  }
-  childEl.append(foot);
   childEl.title = child.title || '未命名对话';
 
   childEl.addEventListener('click', (event) => {
@@ -423,20 +390,20 @@ function buildCanvasChild(child, root) {
 
 function buildCanvasTask(job) {
   const row = el('div', 'canvas-task');
-  const note = String(job?.note || '').trim();
+  const status =
+    job?.status === 'exited'
+      ? job?.exitCode === 0
+        ? 'done'
+        : 'blocked'
+      : job?.status === 'running'
+        ? 'running'
+        : job?.status === 'error' || job?.status === 'timeout'
+          ? 'blocked'
+          : 'idle';
+  row.append(buildCanvasDot(status));
+  const note = String(job?.note || job?.command || '后台任务').trim();
+  row.append(el('span', 'canvas-task-note', note));
   const command = String(job?.command || '').trim();
-  row.append(
-    el('span', `canvas-task-dot ${job?.status || 'running'}`)
-  );
-  const copy = el('div', 'canvas-task-copy');
-  copy.append(
-    el('span', 'canvas-task-note', note || command || '后台任务')
-  );
-  if (note && command && command !== note) {
-    copy.append(el('span', 'canvas-task-command', command));
-  }
-  row.append(copy);
-  const meta = el('div', 'canvas-task-meta');
   const statusLabel =
     job?.status === 'exited'
       ? job?.exitCode === 0
@@ -445,40 +412,31 @@ function buildCanvasTask(job) {
       : typeof backgroundStatusLabel === 'function'
         ? backgroundStatusLabel(job?.status)
         : job?.status || '运行中';
-  meta.append(el('span', '', statusLabel));
-  meta.append(
-    el(
-      'span',
-      'canvas-task-time',
-      typeof backgroundElapsed === 'function' ? backgroundElapsed(job) : ''
-    )
-  );
-  row.append(meta);
-  row.title = command || note;
+  const elapsed =
+    typeof backgroundElapsed === 'function' ? backgroundElapsed(job) : '';
+  row.title = [
+    note,
+    command && command !== note ? command : '',
+    statusLabel,
+    elapsed,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   return row;
 }
 
 function buildCanvasGroup(root, children, jobs, node) {
-  const project = canvasWorkspaceFor(root);
   const groupEl = el('article', 'canvas-group');
   groupEl.dataset.sessionId = root.id;
-  groupEl.style.setProperty(
-    '--canvas-workspace-color',
-    canvasWorkspaceColor(project)
-  );
-  if (children.length > 0 || jobs.length > 0) {
-    groupEl.classList.add('has-children');
-  }
   if (canvasState.selectedId === root.id) {
     groupEl.classList.add('selected');
   }
 
   const head = el('header', 'canvas-group-head');
-  head.append(el('span', 'canvas-group-dot'));
+  head.append(buildCanvasDot(canvasConversationStatus(root).tone));
   head.append(
-    el('span', 'canvas-group-workspace', project?.name || '未归属工作区')
+    el('span', 'canvas-group-title', root.title || '未命名对话')
   );
-  head.append(buildCanvasStatusChip(root));
   const add = el('button', 'canvas-group-add', '+');
   add.type = 'button';
   add.title = '在组内新建对话';
@@ -491,78 +449,21 @@ function buildCanvasGroup(root, children, jobs, node) {
   head.append(add);
   groupEl.append(head);
 
-  groupEl.append(
-    el('div', 'canvas-group-title', root.title || '未命名对话')
-  );
-  groupEl.append(
-    el('div', 'canvas-group-preview', canvasSessionPreview(root))
-  );
-
-  if (children.length > 0) {
-    const section = el('div', 'canvas-group-section');
-    const label = el('div', 'canvas-group-label');
-    label.append(el('span', '', `组内对话 · ${children.length}`));
-    const running = children.filter(
-      (child) => canvasConversationStatus(child).tone === 'running'
-    ).length;
-    if (running > 0) {
-      label.append(
-        el('span', 'canvas-group-label-running', `${running} 个运行中`)
-      );
-    }
-    section.append(label);
-    const list = el('div', 'canvas-group-children');
+  if (children.length > 0 || jobs.length > 0) {
+    const rows = el('div', 'canvas-group-rows');
     children.forEach((child) => {
-      list.append(buildCanvasChild(child, root));
+      rows.append(buildCanvasChild(child, root));
     });
-    section.append(list);
-    groupEl.append(section);
+    if (children.length > 0 && jobs.length > 0) {
+      rows.append(el('div', 'canvas-group-divider'));
+    }
+    jobs.forEach((job) => {
+      rows.append(buildCanvasTask(job));
+    });
+    groupEl.append(rows);
   }
 
-  if (jobs.length > 0) {
-    const section = el('div', 'canvas-group-tasks');
-    const label = el('div', 'canvas-group-label');
-    label.append(el('span', '', `后台任务 · ${jobs.length}`));
-    const running = jobs.filter((job) => job.status === 'running').length;
-    if (running > 0) {
-      label.append(
-        el('span', 'canvas-group-label-running', `${running} 个运行中`)
-      );
-    }
-    section.append(label);
-    jobs.slice(0, 3).forEach((job) => {
-      section.append(buildCanvasTask(job));
-    });
-    if (jobs.length > 3) {
-      section.append(
-        el(
-          'div',
-          'canvas-task-more',
-          `+${jobs.length - 3} 个后台任务`
-        )
-      );
-    }
-    groupEl.append(section);
-  }
-
-  const foot = el('footer', 'canvas-group-foot');
-  foot.append(el('span', 'canvas-group-agent', canvasAgentName(root)));
-  foot.append(el('span', '', '·'));
-  foot.append(
-    el(
-      'span',
-      '',
-      `${Array.isArray(root.msgs) ? root.msgs.length : 0} 条`
-    )
-  );
-  if (children.length > 0) {
-    foot.append(
-      el('span', 'canvas-group-count', `${children.length + 1} 个对话`)
-    );
-  }
-  groupEl.append(foot);
   groupEl.title = root.title || '未命名对话';
-
   groupEl.addEventListener('pointerdown', (event) => {
     startCanvasGroupDrag(event, root, groupEl, node);
   });
