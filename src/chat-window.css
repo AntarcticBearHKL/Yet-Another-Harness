@@ -64,9 +64,12 @@ body.chat-window #window-controls {
 }
 
 body.chat-window #messages {
-  padding-right: 96px;
   user-select: text;
   -webkit-user-select: text;
+}
+
+body.chat-window.chat-compact #messages {
+  padding-right: 96px;
 }
 
 body.chat-window:has(#composer.open) .chat-turn-nav {
@@ -93,7 +96,7 @@ body.chat-window:has(#composer.open) .chat-turn-nav {
   transition: opacity 150ms ease;
 }
 
-body.chat-window .chat-turn-nav {
+body.chat-window.chat-compact .chat-turn-nav {
   display: flex;
 }
 
