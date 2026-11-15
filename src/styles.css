@@ -7225,7 +7225,7 @@ textarea::placeholder {
 }
 
 .context-body-inner {
-  padding: 0 16px 14px 32px;
+  padding: 8px 16px 14px 32px;
 }
 
 .context-body-inner.empty {
@@ -7238,13 +7238,13 @@ textarea::placeholder {
 }
 
 .context-text {
-  max-height: calc(10 * 1.7em);
+  max-height: calc(10 * 1.8em);
   margin: 0;
   overflow: auto;
   color: var(--dim);
   font-family: inherit;
-  font-size: 13.25px;
-  line-height: 1.7;
+  font-size: 13.5px;
+  line-height: 1.8;
   white-space: pre-wrap;
 }
 
