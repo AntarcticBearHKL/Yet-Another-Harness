@@ -14,8 +14,8 @@ const canvasDom = {
   addWorkspace: document.getElementById('canvas-add-workspace'),
 };
 
-const CANVAS_GROUP_WIDTH = 280;
-const CANVAS_GROUP_HEIGHT = 60;
+const CANVAS_GROUP_WIDTH = 420;
+const CANVAS_GROUP_HEIGHT = 64;
 const CANVAS_MIN_ZOOM = 0.2;
 const CANVAS_MAX_ZOOM = 3;
 const CANVAS_WORKSPACE_COLORS = [
@@ -238,8 +238,8 @@ function ensureCanvasGroups() {
       const col = rootIndex % 3;
       const row = Math.floor(rootIndex / 3);
       node = canvasState.nodes[root.id] = {
-        x: 80 + col * 360,
-        y: 80 + row * 300,
+        x: 80 + col * 480,
+        y: 80 + row * 360,
         width: CANVAS_GROUP_WIDTH,
         height: CANVAS_GROUP_HEIGHT,
         parentSessionId: null,
@@ -260,14 +260,6 @@ function canvasGroupSessionIds(rootId) {
   return index.sessions
     .filter((session) => index.rootFor(session).id === rootId)
     .map((session) => session.id);
-}
-
-function canvasGroupWidth(children, jobs) {
-  return (
-    CANVAS_GROUP_WIDTH +
-    (children.length > 0 ? 16 : 0) +
-    (jobs.length > 0 ? 8 : 0)
-  );
 }
 
 function canvasGroupJobs(root, children) {
@@ -361,9 +353,6 @@ function buildCanvasChild(child, root) {
     childEl.classList.add('selected');
   }
   childEl.append(buildCanvasDot(canvasConversationStatus(child).tone));
-  if (child.subagent) {
-    childEl.append(el('span', 'canvas-child-arrow', '↳'));
-  }
   childEl.append(
     el('span', 'canvas-child-title', child.title || '未命名对话')
   );
@@ -412,6 +401,9 @@ function buildCanvasTask(job) {
       : typeof backgroundStatusLabel === 'function'
         ? backgroundStatusLabel(job?.status)
         : job?.status || '运行中';
+  if (statusLabel) {
+    row.append(el('span', 'canvas-task-status', statusLabel));
+  }
   const elapsed =
     typeof backgroundElapsed === 'function' ? backgroundElapsed(job) : '';
   row.title = [
@@ -425,6 +417,21 @@ function buildCanvasTask(job) {
   return row;
 }
 
+function buildCanvasColumn(title, rows) {
+  const column = el('section', 'canvas-column');
+  const head = el('div', 'canvas-column-head');
+  head.append(el('span', 'canvas-column-title', title));
+  head.append(el('span', 'canvas-column-count', String(rows.length)));
+  const list = el('div', 'canvas-column-list');
+  if (rows.length > 0) {
+    rows.forEach((row) => list.append(row));
+  } else {
+    list.append(el('div', 'canvas-column-empty', '无'));
+  }
+  column.append(head, list);
+  return column;
+}
+
 function buildCanvasGroup(root, children, jobs, node) {
   const groupEl = el('article', 'canvas-group');
   groupEl.dataset.sessionId = root.id;
@@ -432,38 +439,34 @@ function buildCanvasGroup(root, children, jobs, node) {
     groupEl.classList.add('selected');
   }
 
+  const workspace = canvasWorkspaceFor(root);
+  const workspaceName = workspace?.name || '未分组';
   const head = el('header', 'canvas-group-head');
   head.append(buildCanvasDot(canvasConversationStatus(root).tone));
-  head.append(
+  const heading = el('div', 'canvas-group-heading');
+  const workspaceEl = el('span', 'canvas-group-workspace', workspaceName);
+  workspaceEl.title = workspaceName;
+  heading.append(workspaceEl);
+  heading.append(
     el('span', 'canvas-group-title', root.title || '未命名对话')
   );
-  const add = el('button', 'canvas-group-add', '+');
-  add.type = 'button';
-  add.title = '在组内新建对话';
-  add.setAttribute('aria-label', '在组内新建对话');
-  add.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    createCanvasChildSession(root.id);
-  });
-  head.append(add);
+  head.append(heading);
   groupEl.append(head);
 
-  if (children.length > 0 || jobs.length > 0) {
-    const rows = el('div', 'canvas-group-rows');
-    children.forEach((child) => {
-      rows.append(buildCanvasChild(child, root));
-    });
-    if (children.length > 0 && jobs.length > 0) {
-      rows.append(el('div', 'canvas-group-divider'));
-    }
-    jobs.forEach((job) => {
-      rows.append(buildCanvasTask(job));
-    });
-    groupEl.append(rows);
-  }
+  const columns = el('div', 'canvas-group-columns');
+  columns.append(
+    buildCanvasColumn(
+      'SUBAGENTS',
+      children.map((child) => buildCanvasChild(child, root))
+    ),
+    buildCanvasColumn(
+      'BACKGROUND',
+      jobs.map((job) => buildCanvasTask(job))
+    )
+  );
+  groupEl.append(columns);
 
-  groupEl.title = root.title || '未命名对话';
+  groupEl.title = `${workspaceName} · ${root.title || '未命名对话'}`;
   groupEl.addEventListener('pointerdown', (event) => {
     startCanvasGroupDrag(event, root, groupEl, node);
   });
@@ -501,6 +504,7 @@ function renderCanvasNodes(index) {
   canvasDom.nodes.replaceChildren();
   const { roots, childrenByRoot } = index;
   let dirty = false;
+  let resized = false;
   const measured = [];
   for (const root of roots) {
     const node = canvasState.nodes[root.id];
@@ -510,7 +514,7 @@ function renderCanvasNodes(index) {
     const groupEl = buildCanvasGroup(root, children, jobs, node);
     groupEl.style.left = `${node.x}px`;
     groupEl.style.top = `${node.y}px`;
-    groupEl.style.width = `${canvasGroupWidth(children, jobs)}px`;
+    groupEl.style.width = `${CANVAS_GROUP_WIDTH}px`;
     canvasDom.nodes.append(groupEl);
     measured.push({ groupEl, node });
   }
@@ -521,6 +525,35 @@ function renderCanvasNodes(index) {
       item.node.width = width;
       item.node.height = height;
       dirty = true;
+      resized = true;
+    }
+  }
+
+  if (resized) {
+    const gap = 24;
+    const placed = [];
+    const ordered = measured
+      .slice()
+      .sort((left, right) => left.node.y - right.node.y || left.node.x - right.node.x);
+    for (const item of ordered) {
+      let moved = true;
+      while (moved) {
+        moved = false;
+        for (const other of placed) {
+          const overlapsX =
+            item.node.x < other.node.x + other.node.width &&
+            other.node.x < item.node.x + item.node.width;
+          const overlapsY =
+            item.node.y < other.node.y + other.node.height &&
+            other.node.y < item.node.y + item.node.height;
+          if (!overlapsX || !overlapsY) continue;
+          item.node.y = other.node.y + other.node.height + gap;
+          item.groupEl.style.top = `${item.node.y}px`;
+          moved = true;
+          dirty = true;
+        }
+      }
+      placed.push(item);
     }
   }
   if (dirty) scheduleCanvasSave();
@@ -706,12 +739,6 @@ function pointInStage(clientX, clientY) {
   );
 }
 
-function canvasGroupAtPoint(clientX, clientY) {
-  const target = document.elementFromPoint(clientX, clientY);
-  if (!(target instanceof Element)) return null;
-  return target.closest('.canvas-group');
-}
-
 function startWorkspaceDrag(event, project) {
   if (!canvasDom.stage) return;
   event.preventDefault();
@@ -724,7 +751,6 @@ function startWorkspaceDrag(event, project) {
     x: event.clientX,
     y: event.clientY,
     active: false,
-    targetGroupId: null,
     card: event.currentTarget,
     ghost: null,
   };
@@ -757,18 +783,7 @@ function updateWorkspaceDrag(event) {
     drag.ghost.style.left = `${drag.x}px`;
     drag.ghost.style.top = `${drag.y}px`;
   }
-  const group = canvasGroupAtPoint(drag.x, drag.y);
-  drag.targetGroupId = group?.dataset.sessionId || null;
-  for (const item of canvasDom.nodes.querySelectorAll('.canvas-group')) {
-    item.classList.toggle(
-      'drop-into',
-      item.dataset.sessionId === drag.targetGroupId
-    );
-  }
-  canvasDom.stage?.classList.toggle(
-    'drop-target',
-    !drag.targetGroupId && pointInStage(drag.x, drag.y)
-  );
+  canvasDom.stage?.classList.toggle('drop-target', pointInStage(drag.x, drag.y));
 }
 
 function endWorkspaceDrag() {
@@ -779,9 +794,6 @@ function endWorkspaceDrag() {
   drag.card?.classList.remove('dragging');
   canvasDom.page?.classList.remove('dragging');
   canvasDom.stage?.classList.remove('drop-target');
-  for (const item of canvasDom.nodes.querySelectorAll('.canvas-group')) {
-    item.classList.remove('drop-into');
-  }
 }
 
 function finishWorkspaceDrag() {
@@ -793,17 +805,11 @@ function finishWorkspaceDrag() {
           projectId: drag.projectId,
           x: drag.x,
           y: drag.y,
-          groupId: drag.targetGroupId,
         }
       : null;
   endWorkspaceDrag();
   if (drop) {
-    createCanvasConversationAt(
-      drop.projectId,
-      drop.x,
-      drop.y,
-      drop.groupId
-    );
+    createCanvasConversationAt(drop.projectId, drop.x, drop.y);
     hideWorkspacePage();
   }
 }
@@ -1018,63 +1024,7 @@ function createCanvasSession(projectId, parentSessionId = null) {
   return session;
 }
 
-function createCanvasChildSession(rootId, projectId = null) {
-  const root = state.sessions.find((session) => session.id === rootId);
-  if (!root) return null;
-  const session = createCanvasSession(
-    projectId || root.projectId,
-    root.id
-  );
-  if (!session) return null;
-  canvasState.selectedId = root.id;
-  canvasState.selectedChildId = session.id;
-  renderCanvas();
-  revealCanvasChild(session.id);
-  scheduleCanvasSave();
-  return session;
-}
-
-function revealCanvasChild(sessionId) {
-  const child = canvasDom.nodes?.querySelector(
-    `[data-session-id="${sessionId}"]`
-  );
-  const stage = canvasDom.stage;
-  if (!child || !stage) return;
-  const stageRect = stage.getBoundingClientRect();
-  const childRect = child.getBoundingClientRect();
-  const pad = 28;
-  let dx = 0;
-  let dy = 0;
-  if (childRect.right > stageRect.right - pad) {
-    dx = stageRect.right - pad - childRect.right;
-  } else if (childRect.left < stageRect.left + pad) {
-    dx = stageRect.left + pad - childRect.left;
-  }
-  if (childRect.bottom > stageRect.bottom - pad) {
-    dy = stageRect.bottom - pad - childRect.bottom;
-  } else if (childRect.top < stageRect.top + pad) {
-    dy = stageRect.top + pad - childRect.top;
-  }
-  if (dx !== 0 || dy !== 0) {
-    canvasState.view.x += dx;
-    canvasState.view.y += dy;
-    applyCanvasView();
-  }
-}
-
-function createCanvasConversationAt(
-  projectId,
-  clientX,
-  clientY,
-  groupId = null
-) {
-  if (groupId) {
-    const root = state.sessions.find((session) => session.id === groupId);
-    if (root) {
-      createCanvasChildSession(root.id, projectId);
-      return;
-    }
-  }
+function createCanvasConversationAt(projectId, clientX, clientY) {
   if (!canvasDom.stage) return;
   const rect = canvasDom.stage.getBoundingClientRect();
   const px = clientX - rect.left;
@@ -1134,13 +1084,6 @@ function openCanvasNodeMenu(sessionId, x, y) {
       action: () => openCanvasSession(session.id),
     },
   ];
-  if (isRoot) {
-    items.push({
-      label: '在组内新建对话',
-      icon: '<path d="M12 5v14M5 12h14"/>',
-      action: () => createCanvasChildSession(root.id),
-    });
-  }
   items.push({
     label: '改名',
     icon: RING_ICONS.rename,
