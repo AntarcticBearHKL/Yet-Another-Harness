@@ -7117,8 +7117,8 @@ textarea::placeholder {
   align-items: center;
   gap: 9px;
   width: 100%;
-  min-height: 40px;
-  padding: 0 14px;
+  min-height: 36px;
+  padding: 0 16px;
   border: 0;
   border-radius: var(--radius-card);
   background: transparent;
@@ -7225,7 +7225,7 @@ textarea::placeholder {
 }
 
 .context-body-inner {
-  padding: 2px 14px 12px;
+  padding: 0 16px 14px 32px;
 }
 
 .context-body-inner.empty {
@@ -7238,13 +7238,13 @@ textarea::placeholder {
 }
 
 .context-text {
-  max-height: 180px;
+  max-height: calc(10 * 1.7em);
   margin: 0;
   overflow: auto;
   color: var(--dim);
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: 10.5px;
-  line-height: 1.6;
+  font-family: inherit;
+  font-size: 13.25px;
+  line-height: 1.7;
   white-space: pre-wrap;
 }
 
