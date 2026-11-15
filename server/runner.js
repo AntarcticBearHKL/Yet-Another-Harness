@@ -79,7 +79,10 @@ function publishLive(sessionId, type, payload = {}) {
     payload,
     live: true,
   };
-  if (String(type).startsWith('background.')) {
+  if (
+    String(type).startsWith('background.') ||
+    String(type).startsWith('subagent.')
+  ) {
     publishBackground(event);
     return;
   }

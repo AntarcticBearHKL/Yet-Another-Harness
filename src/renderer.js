@@ -2708,18 +2708,35 @@ function handleBackgroundComplete(payload) {
   mergeBackgroundJob(payload);
 }
 
-function resumeBackgroundQueue(session) {
-  if (!session || state.streaming || session.frozen || session.subagent) return;
+async function resumeBackgroundQueue(session) {
+  if (!session || session.frozen || session.subagent) return;
   if (isCompacting(session)) return;
-  const queue = Array.isArray(session.pendingQueue)
-    ? session.pendingQueue
-    : [];
-  const first = queue[0];
+  if (
+    !Array.isArray(session.pendingQueue) ||
+    session.pendingQueue.length === 0
+  ) {
+    return;
+  }
+  if (session !== currentSession()) return;
+  if (state.streaming) {
+    let active = false;
+    try {
+      const data = await api.activeRun(session.id);
+      active = Boolean(data?.runId);
+    } catch {
+      active = false;
+    }
+    if (active) return;
+    state.streaming = false;
+    state.requestId = null;
+    state.streamMessage = null;
+    renderAll();
+  }
+  const first = session.pendingQueue[0];
   if (
     first &&
     typeof first === 'object' &&
-    (first.background === true || first.subagent === true) &&
-    session === currentSession()
+    (first.background === true || first.subagent === true)
   ) {
     processNextQueuedPrompt(session);
   }
@@ -2785,12 +2802,8 @@ function handleSubagentComplete(payload) {
   });
   saveChatsSoon();
   if (state.composerOpen) renderComposerContext();
-  if (
-    parent === currentSession() &&
-    !state.streaming &&
-    !isCompacting(parent)
-  ) {
-    processNextQueuedPrompt(parent);
+  if (parent === currentSession()) {
+    void resumeBackgroundQueue(parent);
   }
 }
 
@@ -4224,7 +4237,7 @@ function selectSession(index) {
   const session = currentSession();
   if (session) {
     if (session.subagent) closeComposer();
-    resumeBackgroundQueue(session);
+    void resumeBackgroundQueue(session);
     if (session.subagent) {
       void refreshChats(session.id);
     }
@@ -9406,7 +9419,7 @@ async function boot() {
   renderAll();
   const bootSession = currentSession();
   if (bootSession) {
-    resumeBackgroundQueue(bootSession);
+    void resumeBackgroundQueue(bootSession);
   }
   persistFoldState();
   updateSendState();
