@@ -6541,34 +6541,34 @@ function startActionMenuPress(event) {
   if (dom.questionDock && !dom.questionDock.classList.contains('hidden')) {
     return;
   }
-  const canvasOpen = Boolean(window.canvasOverlayOpen?.());
+  // 对话窗口不再有右键菜单；菜单只存在于画布
+  if (!window.canvasOverlayOpen?.()) return;
+  const target = event.target instanceof Element ? event.target : null;
+  const nodeTarget = target?.closest('.canvas-group, .canvas-child');
+  const workspaceTarget = target?.closest('.canvas-workspace');
   let canvasSessionId = null;
   let canvasWorkspaceId = null;
-  if (canvasOpen) {
-    const target = event.target instanceof Element ? event.target : null;
-    const nodeTarget = target?.closest('.canvas-group, .canvas-child');
-    const workspaceTarget = target?.closest('.canvas-workspace');
-    if (nodeTarget?.dataset.sessionId) {
-      canvasSessionId = nodeTarget.dataset.sessionId;
-    } else if (workspaceTarget?.dataset.projectId) {
-      canvasWorkspaceId = workspaceTarget.dataset.projectId;
-    } else {
-      return;
-    }
+  let canvasMainMenu = false;
+  if (nodeTarget?.dataset.sessionId) {
+    canvasSessionId = nodeTarget.dataset.sessionId;
+  } else if (workspaceTarget?.dataset.projectId) {
+    canvasWorkspaceId = workspaceTarget.dataset.projectId;
+  } else if (target?.closest('.canvas-workspaces-page')) {
+    return;
+  } else {
+    canvasMainMenu = true;
   }
   event.preventDefault();
   if (actionMenuPress) cancelActionMenuPress();
   if (state.ringOpen) closeActionMenu();
-  const switcherOpen =
-    state.switcherOpen || dom.switcher.classList.contains('open');
-  if (!canvasOpen && !switcherOpen && closeRightClickOverlay()) return;
   const press = {
-    target: event.target instanceof Element ? event.target : null,
+    target,
     x: event.clientX,
     y: event.clientY,
     timer: null,
     canvasSessionId,
     canvasWorkspaceId,
+    canvasMainMenu,
   };
   actionMenuPress = press;
   press.timer = setTimeout(() => {
@@ -6582,9 +6582,7 @@ function startActionMenuPress(event) {
         press.x,
         press.y
       );
-    } else if (switcherOpen) {
-      openSwitcherActionMenu(press.target, press.x, press.y);
-    } else {
+    } else if (press.canvasMainMenu) {
       openMainActionMenu(press.x, press.y);
     }
   }, ACTION_MENU_HOLD_MS);
