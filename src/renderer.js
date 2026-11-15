@@ -6507,12 +6507,6 @@ function openActionMenu({ x, y, items, usage = false }) {
       button.append(icon);
     }
     button.append(el('span', 'action-menu-label', item.label || ''));
-    button.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeActionMenu();
-      runActionMenuItem(item);
-    });
     column.append(button);
   });
   menu.append(column);
@@ -6537,7 +6531,6 @@ function onActionMenuMove(event) {
 
 function startActionMenuPress(event) {
   if (event.button !== 2) return;
-  if (window.canvasOverlayOpen?.()) return;
   if (
     event.target instanceof Element &&
     event.target.closest('#action-menu, .usage-card')
@@ -6547,24 +6540,52 @@ function startActionMenuPress(event) {
   if (dom.questionDock && !dom.questionDock.classList.contains('hidden')) {
     return;
   }
+  const canvasOpen = Boolean(window.canvasOverlayOpen?.());
+  let canvasSessionId = null;
+  let canvasWorkspaceId = null;
+  if (canvasOpen) {
+    const target = event.target instanceof Element ? event.target : null;
+    const nodeTarget = target?.closest('.canvas-group, .canvas-child');
+    const workspaceTarget = target?.closest('.canvas-workspace');
+    if (nodeTarget?.dataset.sessionId) {
+      canvasSessionId = nodeTarget.dataset.sessionId;
+    } else if (workspaceTarget?.dataset.projectId) {
+      canvasWorkspaceId = workspaceTarget.dataset.projectId;
+    } else {
+      return;
+    }
+  }
   event.preventDefault();
   if (actionMenuPress) cancelActionMenuPress();
   if (state.ringOpen) closeActionMenu();
   const switcherOpen =
     state.switcherOpen || dom.switcher.classList.contains('open');
-  if (!switcherOpen && closeRightClickOverlay()) return;
+  if (!canvasOpen && !switcherOpen && closeRightClickOverlay()) return;
   const press = {
     target: event.target instanceof Element ? event.target : null,
     x: event.clientX,
     y: event.clientY,
     timer: null,
+    canvasSessionId,
+    canvasWorkspaceId,
   };
   actionMenuPress = press;
   press.timer = setTimeout(() => {
     if (actionMenuPress !== press) return;
     press.timer = null;
-    if (switcherOpen) openSwitcherActionMenu(press.target, press.x, press.y);
-    else openMainActionMenu(press.x, press.y);
+    if (press.canvasSessionId) {
+      window.openCanvasNodeMenu?.(press.canvasSessionId, press.x, press.y);
+    } else if (press.canvasWorkspaceId) {
+      window.openCanvasWorkspaceMenu?.(
+        press.canvasWorkspaceId,
+        press.x,
+        press.y
+      );
+    } else if (switcherOpen) {
+      openSwitcherActionMenu(press.target, press.x, press.y);
+    } else {
+      openMainActionMenu(press.x, press.y);
+    }
   }, ACTION_MENU_HOLD_MS);
 }
 

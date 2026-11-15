@@ -6,19 +6,16 @@ const canvasDom = {
   grid: document.getElementById('canvas-grid'),
   world: document.getElementById('canvas-world'),
   zoomLayer: document.getElementById('canvas-zoom'),
-  wires: document.getElementById('canvas-wires'),
   nodes: document.getElementById('canvas-nodes'),
   empty: document.getElementById('canvas-empty'),
   zoomIndicator: document.getElementById('canvas-zoom-indicator'),
   page: document.getElementById('canvas-workspaces-page'),
   workspaces: document.getElementById('canvas-workspaces'),
   addWorkspace: document.getElementById('canvas-add-workspace'),
-  close: document.getElementById('canvas-close'),
 };
 
-const CANVAS_NODE_WIDTH = 280;
-const CANVAS_NODE_HEIGHT = 170;
-const CANVAS_GRID_SIZE = 24;
+const CANVAS_GROUP_WIDTH = 320;
+const CANVAS_GROUP_HEIGHT = 180;
 const CANVAS_MIN_ZOOM = 0.2;
 const CANVAS_MAX_ZOOM = 3;
 const CANVAS_WORKSPACE_COLORS = [
@@ -39,11 +36,13 @@ const canvasState = {
   pageOpen: false,
   view: { x: 0, y: 0, k: 1 },
   nodes: {},
-  wires: [],
   selectedId: null,
+  selectedChildId: null,
   drag: null,
   pan: null,
   workspaceDrag: null,
+  backgroundBySession: {},
+  backgroundFetched: {},
   saveTimer: null,
   pageTimer: null,
   zoomTimer: null,
@@ -94,10 +93,8 @@ function canvasAgentName(session) {
   return agent?.name || session?.agentId || 'Build';
 }
 
-function canvasSessionStatus(session) {
-  if (session.subagent) {
-    return { label: '子代理', tone: 'subagent' };
-  }
+function canvasConversationStatus(session) {
+  if (!session) return { label: '空白', tone: 'idle' };
   if (session === currentSession() && state.streaming) {
     return { label: '运行中', tone: 'running' };
   }
@@ -152,7 +149,547 @@ function canvasSessionPreview(session) {
   return canvasPreviewText(last?.text) || '还没有消息';
 }
 
-/* ------------------------------ 工作区管理页 ------------------------------ */
+/* ------------------------------- 分组模型 ------------------------------- */
+
+function canvasGroupIndex() {
+  const sessions = Array.isArray(state.sessions) ? state.sessions : [];
+  const byId = new Map(sessions.map((session) => [session.id, session]));
+  let dirty = false;
+  for (const session of sessions) {
+    if (session.parentSessionId) continue;
+    const storedParent = canvasState.nodes[session.id]?.parentSessionId;
+    if (storedParent && byId.has(storedParent)) {
+      session.parentSessionId = storedParent;
+      continue;
+    }
+    if (!session.subagent) continue;
+    const index = sessions.indexOf(session);
+    for (let i = index - 1; i >= 0; i -= 1) {
+      if (!sessions[i].subagent) {
+        session.parentSessionId = sessions[i].id;
+        dirty = true;
+        break;
+      }
+    }
+  }
+  const rootFor = (session) => {
+    let current = session;
+    const seen = new Set();
+    while (
+      current?.parentSessionId &&
+      byId.has(current.parentSessionId) &&
+      !seen.has(current.id)
+    ) {
+      seen.add(current.id);
+      current = byId.get(current.parentSessionId);
+    }
+    return current || session;
+  };
+  const roots = [];
+  const childrenByRoot = new Map();
+  for (const session of sessions) {
+    const root = rootFor(session);
+    if (root.id === session.id) {
+      roots.push(session);
+    } else {
+      let list = childrenByRoot.get(root.id);
+      if (!list) {
+        list = [];
+        childrenByRoot.set(root.id, list);
+      }
+      list.push(session);
+    }
+  }
+  return { sessions, roots, childrenByRoot, rootFor, dirty };
+}
+
+function ensureCanvasGroups() {
+  const index = canvasGroupIndex();
+  const { sessions, roots } = index;
+  const ids = new Set(sessions.map((session) => session.id));
+  let dirty = index.dirty;
+  for (const id of Object.keys(canvasState.nodes)) {
+    if (!ids.has(id)) {
+      delete canvasState.nodes[id];
+      dirty = true;
+    }
+  }
+  for (const session of sessions) {
+    if (!session.parentSessionId) continue;
+    let node = canvasState.nodes[session.id];
+    if (!node) {
+      node = canvasState.nodes[session.id] = {
+        x: 0,
+        y: 0,
+        width: CANVAS_GROUP_WIDTH,
+        height: CANVAS_GROUP_HEIGHT,
+        parentSessionId: session.parentSessionId,
+      };
+      dirty = true;
+    } else if (node.parentSessionId !== session.parentSessionId) {
+      node.parentSessionId = session.parentSessionId;
+      dirty = true;
+    }
+  }
+  let rootIndex = 0;
+  for (const root of roots) {
+    let node = canvasState.nodes[root.id];
+    if (!node) {
+      const col = rootIndex % 3;
+      const row = Math.floor(rootIndex / 3);
+      node = canvasState.nodes[root.id] = {
+        x: 80 + col * 390,
+        y: 80 + row * 430,
+        width: CANVAS_GROUP_WIDTH,
+        height: CANVAS_GROUP_HEIGHT,
+        parentSessionId: null,
+      };
+      dirty = true;
+    } else if (node.parentSessionId) {
+      node.parentSessionId = null;
+      dirty = true;
+    }
+    rootIndex += 1;
+  }
+  if (dirty) scheduleCanvasSave();
+  return index;
+}
+
+function canvasGroupSessionIds(rootId) {
+  const index = canvasGroupIndex();
+  return index.sessions
+    .filter((session) => index.rootFor(session).id === rootId)
+    .map((session) => session.id);
+}
+
+function canvasGroupWidth(children, jobs) {
+  return (
+    CANVAS_GROUP_WIDTH +
+    Math.min(2, children.length) * 24 +
+    (jobs.length > 0 ? 12 : 0)
+  );
+}
+
+function canvasGroupJobs(root, children) {
+  const jobs = [];
+  for (const session of [root, ...children]) {
+    const list = canvasState.backgroundBySession[session.id];
+    if (Array.isArray(list)) jobs.push(...list);
+  }
+  return jobs.sort((left, right) => {
+    const leftRunning = left.status === 'running' ? 0 : 1;
+    const rightRunning = right.status === 'running' ? 0 : 1;
+    if (leftRunning !== rightRunning) return leftRunning - rightRunning;
+    return (right.startedAt || 0) - (left.startedAt || 0);
+  });
+}
+
+/* ------------------------------- 后台任务 ------------------------------- */
+
+function canvasJobSummary(job) {
+  if (!job) return null;
+  return {
+    id: job.id,
+    sessionId: job.sessionId,
+    note: job.note,
+    command: job.command,
+    cwd: job.cwd,
+    status: job.status,
+    exitCode: job.exitCode,
+    startedAt: job.startedAt,
+    endedAt: job.endedAt,
+  };
+}
+
+function mergeCanvasBackgroundJob(job) {
+  const summary = canvasJobSummary(job);
+  const sessionId = String(summary?.sessionId || '');
+  if (!sessionId || !summary?.id) return;
+  const list = Array.isArray(canvasState.backgroundBySession[sessionId])
+    ? canvasState.backgroundBySession[sessionId]
+    : [];
+  const index = list.findIndex((item) => item.id === summary.id);
+  if (index >= 0) list[index] = { ...list[index], ...summary };
+  else list.push(summary);
+  canvasState.backgroundBySession[sessionId] = list;
+  canvasState.backgroundFetched[sessionId] = Date.now();
+}
+
+async function loadCanvasBackground({ force = false } = {}) {
+  if (!canvasOverlayOpen()) return;
+  const index = canvasGroupIndex();
+  const now = Date.now();
+  const targets = index.sessions
+    .map((session) => session.id)
+    .filter((id) => {
+      const list = canvasState.backgroundBySession[id];
+      if (!Array.isArray(list)) return true;
+      const fetchedAt = canvasState.backgroundFetched[id] || 0;
+      const running = list.some((job) => job.status === 'running');
+      return force || (running && now - fetchedAt > 3000);
+    });
+  if (targets.length === 0) return;
+  for (const id of targets) canvasState.backgroundFetched[id] = now;
+  await Promise.allSettled(
+    targets.map(async (id) => {
+      try {
+        const data = await api.loadBackground(id);
+        canvasState.backgroundBySession[id] = Array.isArray(data?.jobs)
+          ? data.jobs.map(canvasJobSummary).filter(Boolean)
+          : [];
+      } catch {
+        canvasState.backgroundBySession[id] =
+          canvasState.backgroundBySession[id] || [];
+      }
+    })
+  );
+  if (!canvasOverlayOpen()) return;
+  if (canvasState.drag || canvasState.workspaceDrag) return;
+  renderCanvas();
+}
+
+/* -------------------------------- 组渲染 -------------------------------- */
+
+function buildCanvasStatusChip(session) {
+  const status = canvasConversationStatus(session);
+  return el('span', `canvas-status ${status.tone}`, status.label);
+}
+
+function buildCanvasChild(child, root) {
+  const childEl = el('article', 'canvas-child');
+  childEl.dataset.sessionId = child.id;
+  childEl.style.setProperty(
+    '--canvas-workspace-color',
+    canvasWorkspaceColor(canvasWorkspaceFor(child))
+  );
+  if (canvasState.selectedChildId === child.id) {
+    childEl.classList.add('selected');
+  }
+
+  const head = el('div', 'canvas-child-head');
+  head.append(el('span', 'canvas-child-dot'));
+  head.append(
+    el('span', 'canvas-child-title', child.title || '未命名对话')
+  );
+  head.append(buildCanvasStatusChip(child));
+  childEl.append(head);
+  childEl.append(
+    el('div', 'canvas-child-preview', canvasSessionPreview(child))
+  );
+
+  const foot = el('div', 'canvas-child-foot');
+  foot.append(el('span', 'canvas-child-agent', canvasAgentName(child)));
+  foot.append(el('span', '', '·'));
+  foot.append(
+    el(
+      'span',
+      '',
+      `${Array.isArray(child.msgs) ? child.msgs.length : 0} 条`
+    )
+  );
+  if (child.projectId !== root.projectId) {
+    foot.append(
+      el(
+        'span',
+        'canvas-child-workspace',
+        canvasWorkspaceFor(child)?.name || '其他工作区'
+      )
+    );
+  }
+  if (child.subagent) {
+    foot.append(el('span', 'canvas-child-kind', '子代理'));
+  }
+  childEl.append(foot);
+  childEl.title = child.title || '未命名对话';
+
+  childEl.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (canvasState.suppressClick) {
+      canvasState.suppressClick = false;
+      return;
+    }
+    canvasSelectGroup(root.id, child.id);
+  });
+  childEl.addEventListener('dblclick', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openCanvasSession(child.id);
+  });
+  childEl.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+  });
+  return childEl;
+}
+
+function buildCanvasTask(job) {
+  const row = el('div', 'canvas-task');
+  const note = String(job?.note || '').trim();
+  const command = String(job?.command || '').trim();
+  row.append(
+    el('span', `canvas-task-dot ${job?.status || 'running'}`)
+  );
+  const copy = el('div', 'canvas-task-copy');
+  copy.append(
+    el('span', 'canvas-task-note', note || command || '后台任务')
+  );
+  if (note && command && command !== note) {
+    copy.append(el('span', 'canvas-task-command', command));
+  }
+  row.append(copy);
+  const meta = el('div', 'canvas-task-meta');
+  const statusLabel =
+    job?.status === 'exited'
+      ? job?.exitCode === 0
+        ? '完成'
+        : '失败'
+      : typeof backgroundStatusLabel === 'function'
+        ? backgroundStatusLabel(job?.status)
+        : job?.status || '运行中';
+  meta.append(el('span', '', statusLabel));
+  meta.append(
+    el(
+      'span',
+      'canvas-task-time',
+      typeof backgroundElapsed === 'function' ? backgroundElapsed(job) : ''
+    )
+  );
+  row.append(meta);
+  row.title = command || note;
+  return row;
+}
+
+function buildCanvasGroup(root, children, jobs, node) {
+  const project = canvasWorkspaceFor(root);
+  const groupEl = el('article', 'canvas-group');
+  groupEl.dataset.sessionId = root.id;
+  groupEl.style.setProperty(
+    '--canvas-workspace-color',
+    canvasWorkspaceColor(project)
+  );
+  if (children.length > 0 || jobs.length > 0) {
+    groupEl.classList.add('has-children');
+  }
+  if (canvasState.selectedId === root.id) {
+    groupEl.classList.add('selected');
+  }
+
+  const head = el('header', 'canvas-group-head');
+  head.append(el('span', 'canvas-group-dot'));
+  head.append(
+    el('span', 'canvas-group-workspace', project?.name || '未归属工作区')
+  );
+  head.append(buildCanvasStatusChip(root));
+  const add = el('button', 'canvas-group-add', '+');
+  add.type = 'button';
+  add.title = '在组内新建对话';
+  add.setAttribute('aria-label', '在组内新建对话');
+  add.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    createCanvasChildSession(root.id);
+  });
+  const grip = el('button', 'canvas-group-grip', '⠿');
+  grip.type = 'button';
+  grip.title = '拖动组';
+  grip.setAttribute('aria-label', '拖动组');
+  grip.addEventListener('pointerdown', (event) => {
+    startCanvasGroupDrag(event, root, groupEl, node);
+  });
+  grip.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  head.append(grip, add);
+  groupEl.append(head);
+
+  groupEl.append(
+    el('div', 'canvas-group-title', root.title || '未命名对话')
+  );
+  groupEl.append(
+    el('div', 'canvas-group-preview', canvasSessionPreview(root))
+  );
+
+  if (children.length > 0) {
+    const section = el('div', 'canvas-group-section');
+    const label = el('div', 'canvas-group-label');
+    label.append(el('span', '', `组内对话 · ${children.length}`));
+    const running = children.filter(
+      (child) => canvasConversationStatus(child).tone === 'running'
+    ).length;
+    if (running > 0) {
+      label.append(
+        el('span', 'canvas-group-label-running', `${running} 个运行中`)
+      );
+    }
+    section.append(label);
+    const list = el('div', 'canvas-group-children');
+    children.forEach((child) => {
+      list.append(buildCanvasChild(child, root));
+    });
+    section.append(list);
+    groupEl.append(section);
+  }
+
+  if (jobs.length > 0) {
+    const section = el('div', 'canvas-group-tasks');
+    const label = el('div', 'canvas-group-label');
+    label.append(el('span', '', `后台任务 · ${jobs.length}`));
+    const running = jobs.filter((job) => job.status === 'running').length;
+    if (running > 0) {
+      label.append(
+        el('span', 'canvas-group-label-running', `${running} 个运行中`)
+      );
+    }
+    section.append(label);
+    jobs.slice(0, 3).forEach((job) => {
+      section.append(buildCanvasTask(job));
+    });
+    if (jobs.length > 3) {
+      section.append(
+        el(
+          'div',
+          'canvas-task-more',
+          `+${jobs.length - 3} 个后台任务`
+        )
+      );
+    }
+    groupEl.append(section);
+  }
+
+  const foot = el('footer', 'canvas-group-foot');
+  foot.append(el('span', 'canvas-group-agent', canvasAgentName(root)));
+  foot.append(el('span', '', '·'));
+  foot.append(
+    el(
+      'span',
+      '',
+      `${Array.isArray(root.msgs) ? root.msgs.length : 0} 条`
+    )
+  );
+  if (children.length > 0) {
+    foot.append(
+      el('span', 'canvas-group-count', `${children.length + 1} 个对话`)
+    );
+  }
+  groupEl.append(foot);
+  groupEl.title = root.title || '未命名对话';
+
+  groupEl.addEventListener('click', (event) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest('.canvas-child, button')
+    ) {
+      return;
+    }
+    if (canvasState.suppressClick) {
+      canvasState.suppressClick = false;
+      return;
+    }
+    canvasSelectGroup(root.id, null);
+  });
+  groupEl.addEventListener('dblclick', (event) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest('.canvas-child, button')
+    ) {
+      return;
+    }
+    event.preventDefault();
+    openCanvasSession(root.id);
+  });
+  groupEl.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+  });
+  return groupEl;
+}
+
+function renderCanvasNodes(index) {
+  if (!canvasDom.nodes) return;
+  canvasDom.nodes.replaceChildren();
+  const { roots, childrenByRoot } = index;
+  let dirty = false;
+  const measured = [];
+  for (const root of roots) {
+    const node = canvasState.nodes[root.id];
+    if (!node) continue;
+    const children = childrenByRoot.get(root.id) || [];
+    const jobs = canvasGroupJobs(root, children);
+    const groupEl = buildCanvasGroup(root, children, jobs, node);
+    groupEl.style.left = `${node.x}px`;
+    groupEl.style.top = `${node.y}px`;
+    groupEl.style.width = `${canvasGroupWidth(children, jobs)}px`;
+    canvasDom.nodes.append(groupEl);
+    measured.push({ groupEl, node });
+  }
+  for (const item of measured) {
+    const width = item.groupEl.offsetWidth;
+    const height = item.groupEl.offsetHeight;
+    if (item.node.width !== width || item.node.height !== height) {
+      item.node.width = width;
+      item.node.height = height;
+      dirty = true;
+    }
+  }
+  if (dirty) scheduleCanvasSave();
+}
+
+function applyCanvasView() {
+  const view = canvasState.view;
+  const layoutZoom = view.k >= 1;
+  if (canvasDom.zoomLayer) {
+    canvasDom.zoomLayer.style.zoom = layoutZoom ? String(view.k) : '1';
+  }
+  if (canvasDom.world) {
+    const translate = `translate3d(${view.x}px, ${view.y}px, 0)`;
+    canvasDom.world.style.transform = layoutZoom
+      ? translate
+      : `${translate} scale(${view.k})`;
+  }
+  if (canvasDom.grid) {
+    canvasDom.grid.style.backgroundPosition = `${view.x}px ${view.y}px`;
+  }
+  if (canvasDom.zoomIndicator) {
+    canvasDom.zoomIndicator.textContent = `${Math.round(view.k * 100)}%`;
+  }
+}
+
+function renderCanvas() {
+  const index = ensureCanvasGroups();
+  renderCanvasNodes(index);
+  applyCanvasView();
+  if (canvasDom.empty) {
+    canvasDom.empty.classList.toggle('hidden', index.roots.length > 0);
+  }
+}
+
+function canvasSelectGroup(rootId, childId = null) {
+  canvasState.selectedId = rootId;
+  canvasState.selectedChildId = childId;
+  for (const group of canvasDom.nodes.querySelectorAll('.canvas-group')) {
+    group.classList.toggle(
+      'selected',
+      group.dataset.sessionId === rootId
+    );
+  }
+  for (const child of canvasDom.nodes.querySelectorAll('.canvas-child')) {
+    child.classList.toggle(
+      'selected',
+      child.dataset.sessionId === childId
+    );
+  }
+}
+
+function canvasClearSelection() {
+  canvasState.selectedId = null;
+  canvasState.selectedChildId = null;
+  for (const item of canvasDom.nodes.querySelectorAll(
+    '.canvas-group.selected, .canvas-child.selected'
+  )) {
+    item.classList.remove('selected');
+  }
+}
+
+/* ------------------------------- 工作区页 ------------------------------- */
 
 function renderWorkspacePage() {
   if (!canvasDom.workspaces) return;
@@ -164,7 +701,7 @@ function renderWorkspacePage() {
       el(
         'div',
         'canvas-workspaces-empty',
-        '还没有工作区。点右上角「+ 新建工作区」绑定一个开发目录。'
+        '还没有工作区。点右上角「+ 新建」绑定一个开发目录。'
       )
     );
     return;
@@ -182,24 +719,6 @@ function renderWorkspacePage() {
     head.append(
       el('span', 'canvas-workspace-name', project.name || '未命名工作区')
     );
-    const actions = el('div', 'canvas-workspace-actions');
-    const edit = el('button', 'canvas-workspace-action', '编辑');
-    edit.type = 'button';
-    edit.title = '编辑工作区';
-    edit.addEventListener('click', (event) => {
-      event.stopPropagation();
-      openProjectDialog('edit', project.id);
-    });
-    const remove = el('button', 'canvas-workspace-action danger', '×');
-    remove.type = 'button';
-    remove.title = '删除工作区';
-    remove.setAttribute('aria-label', `删除工作区 ${project.name || ''}`);
-    remove.addEventListener('click', (event) => {
-      event.stopPropagation();
-      confirmDeleteProject(project.id);
-    });
-    actions.append(edit, remove);
-    head.append(actions);
     card.append(head);
 
     const directories = Array.isArray(project.directories)
@@ -242,18 +761,12 @@ function renderWorkspacePage() {
 
     card.addEventListener('pointerdown', (event) => {
       if (event.button !== 0) return;
-      if (event.target instanceof Element && event.target.closest('button')) {
-        return;
-      }
       startWorkspaceDrag(event, project);
     });
-    card.addEventListener('dblclick', (event) => {
-      if (event.target instanceof Element && event.target.closest('button')) {
-        return;
-      }
-      openProjectDialog('edit', project.id);
+    card.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
     });
-
+    card.title = project.name || '未命名工作区';
     canvasDom.workspaces.append(card);
   });
 }
@@ -264,10 +777,9 @@ function showWorkspacePage() {
   canvasDom.page.classList.remove('hidden');
   canvasDom.page.classList.remove('dragging');
   canvasState.pageOpen = true;
-  requestAnimationFrame(() => {
-    if (!canvasState.pageOpen) return;
-    canvasDom.page.classList.add('open');
-  });
+  // 强制一次 reflow，避免后台窗口里 requestAnimationFrame 被节流导致页面一直透明
+  void canvasDom.page.offsetWidth;
+  canvasDom.page.classList.add('open');
 }
 
 function hideWorkspacePage() {
@@ -301,6 +813,12 @@ function pointInStage(clientX, clientY) {
   );
 }
 
+function canvasGroupAtPoint(clientX, clientY) {
+  const target = document.elementFromPoint(clientX, clientY);
+  if (!(target instanceof Element)) return null;
+  return target.closest('.canvas-group');
+}
+
 function startWorkspaceDrag(event, project) {
   if (!canvasDom.stage) return;
   event.preventDefault();
@@ -313,6 +831,7 @@ function startWorkspaceDrag(event, project) {
     x: event.clientX,
     y: event.clientY,
     active: false,
+    targetGroupId: null,
     card: event.currentTarget,
     ghost: null,
   };
@@ -345,9 +864,17 @@ function updateWorkspaceDrag(event) {
     drag.ghost.style.left = `${drag.x}px`;
     drag.ghost.style.top = `${drag.y}px`;
   }
+  const group = canvasGroupAtPoint(drag.x, drag.y);
+  drag.targetGroupId = group?.dataset.sessionId || null;
+  for (const item of canvasDom.nodes.querySelectorAll('.canvas-group')) {
+    item.classList.toggle(
+      'drop-into',
+      item.dataset.sessionId === drag.targetGroupId
+    );
+  }
   canvasDom.stage?.classList.toggle(
     'drop-target',
-    pointInStage(drag.x, drag.y)
+    !drag.targetGroupId && pointInStage(drag.x, drag.y)
   );
 }
 
@@ -359,6 +886,9 @@ function endWorkspaceDrag() {
   drag.card?.classList.remove('dragging');
   canvasDom.page?.classList.remove('dragging');
   canvasDom.stage?.classList.remove('drop-target');
+  for (const item of canvasDom.nodes.querySelectorAll('.canvas-group')) {
+    item.classList.remove('drop-into');
+  }
 }
 
 function finishWorkspaceDrag() {
@@ -366,11 +896,21 @@ function finishWorkspaceDrag() {
   if (!drag) return;
   const drop =
     drag.active && pointInStage(drag.x, drag.y)
-      ? { projectId: drag.projectId, x: drag.x, y: drag.y }
+      ? {
+          projectId: drag.projectId,
+          x: drag.x,
+          y: drag.y,
+          groupId: drag.targetGroupId,
+        }
       : null;
   endWorkspaceDrag();
   if (drop) {
-    createCanvasConversationAt(drop.projectId, drop.x, drop.y);
+    createCanvasConversationAt(
+      drop.projectId,
+      drop.x,
+      drop.y,
+      drop.groupId
+    );
     hideWorkspacePage();
   }
 }
@@ -387,302 +927,7 @@ function cancelCanvasPage() {
   hideWorkspacePage();
 }
 
-/* --------------------------------- 画布 --------------------------------- */
-
-function renderCanvasNodes() {
-  if (!canvasDom.nodes) return;
-  canvasDom.nodes.replaceChildren();
-  const sessions = Array.isArray(state.sessions) ? state.sessions : [];
-  for (const session of sessions) {
-    const node = canvasState.nodes[session.id];
-    if (!node) continue;
-    const project = canvasWorkspaceFor(session);
-    const nodeEl = el('div', 'canvas-node');
-    nodeEl.dataset.sessionId = session.id;
-    nodeEl.style.left = `${node.x}px`;
-    nodeEl.style.top = `${node.y}px`;
-    nodeEl.style.width = `${node.width}px`;
-    nodeEl.style.height = `${node.height}px`;
-    nodeEl.style.setProperty(
-      '--canvas-workspace-color',
-      canvasWorkspaceColor(project)
-    );
-    if (canvasState.selectedId === session.id) {
-      nodeEl.classList.add('selected');
-    }
-    const head = el('div', 'canvas-node-head');
-    head.append(el('span', 'canvas-node-dot'));
-    head.append(
-      el('span', 'canvas-node-workspace', project?.name || '未归属工作区')
-    );
-    const status = canvasSessionStatus(session);
-    head.append(
-      el('span', `canvas-node-status ${status.tone}`, status.label)
-    );
-    nodeEl.append(head);
-    nodeEl.append(
-      el('div', 'canvas-node-title', session.title || '未命名对话')
-    );
-    const body = el('div', 'canvas-node-body');
-    body.append(
-      el('span', 'canvas-node-preview', canvasSessionPreview(session))
-    );
-    nodeEl.append(body);
-    const foot = el('div', 'canvas-node-foot');
-    foot.append(el('span', 'canvas-node-agent', canvasAgentName(session)));
-    foot.append(el('span', '', '·'));
-    foot.append(
-      el(
-        'span',
-        '',
-        `${Array.isArray(session.msgs) ? session.msgs.length : 0} 条`
-      )
-    );
-    nodeEl.append(foot);
-    nodeEl.title = session.title || '未命名对话';
-
-    nodeEl.addEventListener('pointerdown', (event) => {
-      startCanvasNodeDrag(event, session, nodeEl, node);
-    });
-    nodeEl.addEventListener('click', (event) => {
-      if (event.target instanceof Element && event.target.closest('button')) {
-        return;
-      }
-      if (canvasState.suppressClick) {
-        canvasState.suppressClick = false;
-        return;
-      }
-      canvasState.selectedId = session.id;
-      for (const item of canvasDom.nodes.querySelectorAll(
-        '.canvas-node.selected'
-      )) {
-        item.classList.remove('selected');
-      }
-      nodeEl.classList.add('selected');
-    });
-    nodeEl.addEventListener('dblclick', (event) => {
-      event.preventDefault();
-      openCanvasSession(session.id);
-    });
-    nodeEl.addEventListener('contextmenu', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      canvasState.selectedId = session.id;
-      for (const item of canvasDom.nodes.querySelectorAll(
-        '.canvas-node.selected'
-      )) {
-        item.classList.remove('selected');
-      }
-      nodeEl.classList.add('selected');
-      openActionMenu({
-        x: event.clientX,
-        y: event.clientY,
-        items: [
-          {
-            label: '打开',
-            icon: '<path d="M5 12h14M13 6l6 6-6 6"/>',
-            action: () => openCanvasSession(session.id),
-          },
-          {
-            label: '改名',
-            icon: RING_ICONS.rename,
-            action: () => openRename('session', session.id),
-          },
-          {
-            label: '删除',
-            icon: RING_ICONS.trash,
-            danger: true,
-            action: () =>
-              openConfirm({
-                text: `删除对话「${
-                  session.title || '未命名'
-                }」？不可恢复。`,
-                action: () => deleteSessionById(session.id),
-              }),
-          },
-        ],
-      });
-    });
-    canvasDom.nodes.append(nodeEl);
-  }
-}
-
-function renderCanvasWires() {
-  if (!canvasDom.wires) return;
-  canvasDom.wires.replaceChildren();
-  const sessions = Array.isArray(state.sessions) ? state.sessions : [];
-  for (const session of sessions) {
-    if (!session.subagent) continue;
-    const node = canvasState.nodes[session.id];
-    const parentId = session.parentSessionId || node?.parentSessionId;
-    if (!node || !parentId) continue;
-    const parent = canvasState.nodes[parentId];
-    if (!parent) continue;
-    const x1 = parent.x + parent.width;
-    const y1 = parent.y + parent.height / 2;
-    const x2 = node.x;
-    const y2 = node.y + node.height / 2;
-    const bend = Math.max(48, Math.abs(x2 - x1) * 0.42);
-    const path = document.createElementNS(
-      'http://www.w3.org/2000/svg',
-      'path'
-    );
-    path.setAttribute(
-      'd',
-      `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`
-    );
-    path.setAttribute('class', 'subagent');
-    canvasDom.wires.append(path);
-  }
-}
-
-function applyCanvasView() {
-  const view = canvasState.view;
-  if (canvasDom.world) {
-    canvasDom.world.style.transform = `translate3d(${view.x}px, ${view.y}px, 0)`;
-  }
-  if (canvasDom.zoomLayer) {
-    canvasDom.zoomLayer.style.zoom = String(view.k);
-  }
-  if (canvasDom.grid) {
-    canvasDom.grid.style.backgroundPosition = `${view.x}px ${view.y}px`;
-  }
-  if (canvasDom.zoomIndicator) {
-    canvasDom.zoomIndicator.textContent = `${Math.round(view.k * 100)}%`;
-  }
-}
-
-function renderCanvas() {
-  renderCanvasNodes();
-  renderCanvasWires();
-  applyCanvasView();
-  if (canvasDom.empty) {
-    const hasNodes = (state.sessions || []).some(
-      (session) => canvasState.nodes[session.id]
-    );
-    canvasDom.empty.classList.toggle('hidden', hasNodes);
-  }
-}
-
-function ensureCanvasNodes() {
-  const sessions = Array.isArray(state.sessions) ? state.sessions : [];
-  const ids = new Set(sessions.map((session) => session.id));
-  let dirty = false;
-  for (const id of Object.keys(canvasState.nodes)) {
-    if (!ids.has(id)) {
-      delete canvasState.nodes[id];
-      dirty = true;
-    }
-  }
-  const projectOrder = new Map(
-    (state.projects || []).map((project, index) => [project.id, index])
-  );
-  const rowCounts = new Map();
-  for (const session of sessions) {
-    let node = canvasState.nodes[session.id];
-    if (!node) {
-      const parentId = session.parentSessionId;
-      const parent = parentId ? canvasState.nodes[parentId] : null;
-      if (parent) {
-        const childCount = Object.values(canvasState.nodes).filter(
-          (item) => item?.parentSessionId === parentId
-        ).length;
-        node = {
-          x: parent.x + 320,
-          y: parent.y + 60 + childCount * 190,
-          width: CANVAS_NODE_WIDTH,
-          height: CANVAS_NODE_HEIGHT,
-          parentSessionId: parentId,
-        };
-      } else {
-        const projectIndex = projectOrder.get(session.projectId) ?? 0;
-        const row = rowCounts.get(session.projectId) || 0;
-        rowCounts.set(session.projectId, row + 1);
-        node = {
-          x: 80 + projectIndex * 360,
-          y: 80 + row * 210,
-          width: CANVAS_NODE_WIDTH,
-          height: CANVAS_NODE_HEIGHT,
-          parentSessionId: null,
-        };
-      }
-      canvasState.nodes[session.id] = node;
-      dirty = true;
-    }
-    if (
-      session.subagent &&
-      !session.parentSessionId &&
-      !node.parentSessionId
-    ) {
-      const sessionIndex = sessions.indexOf(session);
-      for (let i = sessionIndex - 1; i >= 0; i -= 1) {
-        if (!sessions[i].subagent) {
-          session.parentSessionId = sessions[i].id;
-          node.parentSessionId = sessions[i].id;
-          dirty = true;
-          break;
-        }
-      }
-    }
-    if (
-      session.parentSessionId &&
-      node.parentSessionId !== session.parentSessionId
-    ) {
-      node.parentSessionId = session.parentSessionId;
-      dirty = true;
-    }
-    if (!session.parentSessionId && node.parentSessionId) {
-      session.parentSessionId = node.parentSessionId;
-    }
-  }
-  if (dirty) scheduleCanvasSave();
-}
-
-function scheduleCanvasSave() {
-  clearTimeout(canvasState.saveTimer);
-  canvasState.saveTimer = setTimeout(saveCanvasNow, 350);
-}
-
-async function saveCanvasNow() {
-  clearTimeout(canvasState.saveTimer);
-  canvasState.saveTimer = null;
-  if (!canvasState.loaded) return;
-  try {
-    await requestJson('/api/canvas', {
-      method: 'POST',
-      body: {
-        view: canvasState.view,
-        nodes: canvasState.nodes,
-        wires: canvasState.wires,
-      },
-    });
-  } catch (error) {
-    console.error('save canvas failed', error);
-  }
-}
-
-async function loadCanvas() {
-  const request = ++canvasState.request;
-  canvasState.loading = true;
-  let data = null;
-  try {
-    data = await requestJson('/api/canvas');
-  } catch (error) {
-    console.error('load canvas failed', error);
-  }
-  if (request !== canvasState.request) return;
-  canvasState.view = canvasNormalizeView(data?.view);
-  canvasState.nodes =
-    data?.nodes && typeof data.nodes === 'object'
-      ? { ...data.nodes }
-      : {};
-  canvasState.wires = Array.isArray(data?.wires) ? data.wires : [];
-  canvasState.loaded = true;
-  canvasState.loading = false;
-  ensureCanvasNodes();
-  renderCanvas();
-  if (canvasState.pageOpen) renderWorkspacePage();
-}
+/* --------------------------------- 缩放 --------------------------------- */
 
 function zoomCanvas(factor, clientX, clientY) {
   const rect = canvasDom.stage?.getBoundingClientRect();
@@ -709,16 +954,23 @@ function flashZoomIndicator() {
   clearTimeout(canvasState.zoomTimer);
   canvasState.zoomTimer = setTimeout(() => {
     canvasDom.zoomIndicator?.classList.remove('visible');
-  }, 520);
+  }, 480);
 }
 
-function startCanvasNodeDrag(event, session, nodeEl, node) {
+/* --------------------------------- 拖拽 --------------------------------- */
+
+function startCanvasGroupDrag(event, root, groupEl, node) {
   if (event.button !== 0) return;
-  if (event.target instanceof Element && event.target.closest('button')) return;
+  if (
+    event.target instanceof Element &&
+    event.target.closest('.canvas-child')
+  ) {
+    return;
+  }
   event.stopPropagation();
   canvasState.drag = {
-    sessionId: session.id,
-    nodeEl,
+    sessionId: root.id,
+    groupEl,
     node,
     startX: event.clientX,
     startY: event.clientY,
@@ -727,13 +979,9 @@ function startCanvasNodeDrag(event, session, nodeEl, node) {
     moved: false,
     pointerId: event.pointerId,
   };
-  canvasState.selectedId = session.id;
-  for (const item of canvasDom.nodes.querySelectorAll('.canvas-node.selected')) {
-    item.classList.remove('selected');
-  }
-  nodeEl.classList.add('selected');
+  canvasSelectGroup(root.id, null);
   try {
-    nodeEl.setPointerCapture(event.pointerId);
+    groupEl.setPointerCapture(event.pointerId);
   } catch {
     /* ignore */
   }
@@ -760,14 +1008,21 @@ function onCanvasPointerMove(event) {
     drag.moved = true;
     drag.node.x = drag.originX + dx;
     drag.node.y = drag.originY + dy;
-    drag.nodeEl.style.left = `${drag.node.x}px`;
-    drag.nodeEl.style.top = `${drag.node.y}px`;
-    renderCanvasWires();
+    drag.groupEl.style.left = `${drag.node.x}px`;
+    drag.groupEl.style.top = `${drag.node.y}px`;
     event.preventDefault();
     return;
   }
   if (canvasState.pan) {
     const pan = canvasState.pan;
+    if (
+      !pan.moved &&
+      Math.abs(event.clientX - pan.startX) +
+        Math.abs(event.clientY - pan.startY) >
+        3
+    ) {
+      pan.moved = true;
+    }
     canvasState.view.x = pan.viewX + (event.clientX - pan.startX);
     canvasState.view.y = pan.viewY + (event.clientY - pan.startY);
     applyCanvasView();
@@ -791,13 +1046,20 @@ function onCanvasPointerUp() {
       scheduleCanvasSave();
     }
     try {
-      drag.nodeEl.releasePointerCapture(drag.pointerId);
+      drag.groupEl.releasePointerCapture(drag.pointerId);
     } catch {
       /* ignore */
     }
     canvasState.drag = null;
   }
   if (canvasState.pan) {
+    const pan = canvasState.pan;
+    if (pan.moved) {
+      canvasState.suppressClick = true;
+      setTimeout(() => {
+        canvasState.suppressClick = false;
+      }, 80);
+    }
     canvasState.pan = null;
     canvasDom.stage?.classList.remove('panning');
     scheduleCanvasSave();
@@ -817,10 +1079,16 @@ function openCanvasSession(sessionId) {
   if (!session.subagent) openComposer();
 }
 
-function createCanvasSession(projectId) {
+function createCanvasSession(projectId, parentSessionId = null) {
   ensureProjects();
+  const parent = parentSessionId
+    ? state.sessions.find((session) => session.id === parentSessionId)
+    : null;
   const target =
     state.projects.find((project) => project.id === projectId) ||
+    (parent
+      ? state.projects.find((project) => project.id === parent.projectId)
+      : null) ||
     state.projects[0] ||
     null;
   if (!target) return null;
@@ -833,11 +1101,14 @@ function createCanvasSession(projectId) {
   const session = {
     id: makeId(),
     title: `Chat ${state.seq}`,
-    system: DEFAULT_SYSTEM_PROMPT,
-    agentsMd: null,
-    agentId: previous?.agentId || DEFAULT_AGENT_ID,
+    system: parent?.system || DEFAULT_SYSTEM_PROMPT,
+    agentsMd: parent?.agentsMd || null,
+    agentId: previous?.agentId || parent?.agentId || DEFAULT_AGENT_ID,
     projectId: target.id,
-    mcpDisabled: ['*'],
+    parentSessionId: parentSessionId || null,
+    mcpDisabled: Array.isArray(parent?.mcpDisabled)
+      ? [...parent.mcpDisabled]
+      : ['*'],
     foldState: null,
     pendingQueue: [],
     msgs: [],
@@ -848,7 +1119,63 @@ function createCanvasSession(projectId) {
   return session;
 }
 
-function createCanvasConversationAt(projectId, clientX, clientY) {
+function createCanvasChildSession(rootId, projectId = null) {
+  const root = state.sessions.find((session) => session.id === rootId);
+  if (!root) return null;
+  const session = createCanvasSession(
+    projectId || root.projectId,
+    root.id
+  );
+  if (!session) return null;
+  canvasState.selectedId = root.id;
+  canvasState.selectedChildId = session.id;
+  renderCanvas();
+  revealCanvasChild(session.id);
+  scheduleCanvasSave();
+  return session;
+}
+
+function revealCanvasChild(sessionId) {
+  const child = canvasDom.nodes?.querySelector(
+    `[data-session-id="${sessionId}"]`
+  );
+  const stage = canvasDom.stage;
+  if (!child || !stage) return;
+  const stageRect = stage.getBoundingClientRect();
+  const childRect = child.getBoundingClientRect();
+  const pad = 28;
+  let dx = 0;
+  let dy = 0;
+  if (childRect.right > stageRect.right - pad) {
+    dx = stageRect.right - pad - childRect.right;
+  } else if (childRect.left < stageRect.left + pad) {
+    dx = stageRect.left + pad - childRect.left;
+  }
+  if (childRect.bottom > stageRect.bottom - pad) {
+    dy = stageRect.bottom - pad - childRect.bottom;
+  } else if (childRect.top < stageRect.top + pad) {
+    dy = stageRect.top + pad - childRect.top;
+  }
+  if (dx !== 0 || dy !== 0) {
+    canvasState.view.x += dx;
+    canvasState.view.y += dy;
+    applyCanvasView();
+  }
+}
+
+function createCanvasConversationAt(
+  projectId,
+  clientX,
+  clientY,
+  groupId = null
+) {
+  if (groupId) {
+    const root = state.sessions.find((session) => session.id === groupId);
+    if (root) {
+      createCanvasChildSession(root.id, projectId);
+      return;
+    }
+  }
   if (!canvasDom.stage) return;
   const rect = canvasDom.stage.getBoundingClientRect();
   const px = clientX - rect.left;
@@ -858,15 +1185,111 @@ function createCanvasConversationAt(projectId, clientX, clientY) {
   const session = createCanvasSession(projectId);
   if (!session) return;
   canvasState.nodes[session.id] = {
-    x: Math.round(worldX - CANVAS_NODE_WIDTH / 2),
-    y: Math.round(worldY - CANVAS_NODE_HEIGHT / 2),
-    width: CANVAS_NODE_WIDTH,
-    height: CANVAS_NODE_HEIGHT,
+    x: Math.round(worldX - CANVAS_GROUP_WIDTH / 2),
+    y: Math.round(worldY - CANVAS_GROUP_HEIGHT / 2),
+    width: CANVAS_GROUP_WIDTH,
+    height: CANVAS_GROUP_HEIGHT,
     parentSessionId: null,
   };
   canvasState.selectedId = session.id;
+  canvasState.selectedChildId = null;
   renderCanvas();
+  const node = canvasState.nodes[session.id];
+  const groupEl = canvasDom.nodes.querySelector(
+    `[data-session-id="${session.id}"]`
+  );
+  if (node && groupEl) {
+    const offsetX = (groupEl.offsetWidth - CANVAS_GROUP_WIDTH) / 2;
+    const offsetY = (groupEl.offsetHeight - CANVAS_GROUP_HEIGHT) / 2;
+    if (offsetX !== 0 || offsetY !== 0) {
+      node.x -= offsetX;
+      node.y -= offsetY;
+      groupEl.style.left = `${node.x}px`;
+      groupEl.style.top = `${node.y}px`;
+    }
+  }
   scheduleCanvasSave();
+}
+
+function deleteCanvasGroup(rootId) {
+  const ids = canvasGroupSessionIds(rootId);
+  if (ids.length === 0) return;
+  const ordered = ids.filter((id) => id !== rootId).concat(rootId);
+  for (const id of ordered) {
+    deleteSessionById(id);
+  }
+  scheduleCanvasSave();
+}
+
+function openCanvasNodeMenu(sessionId, x, y) {
+  const session = state.sessions.find((item) => item.id === sessionId);
+  if (!session) return;
+  const index = canvasGroupIndex();
+  const root = index.rootFor(session);
+  const isRoot = root.id === session.id;
+  const groupIds = canvasGroupSessionIds(root.id);
+  const items = [
+    {
+      label: '打开',
+      icon: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+      action: () => openCanvasSession(session.id),
+    },
+  ];
+  if (isRoot) {
+    items.push({
+      label: '在组内新建对话',
+      icon: '<path d="M12 5v14M5 12h14"/>',
+      action: () => createCanvasChildSession(root.id),
+    });
+  }
+  items.push({
+    label: '改名',
+    icon: RING_ICONS.rename,
+    action: () => openRename('session', session.id),
+  });
+  items.push({
+    label: '删除',
+    icon: RING_ICONS.trash,
+    danger: true,
+    action: () => {
+      if (isRoot && groupIds.length > 1) {
+        openConfirm({
+          text: `删除这个组和里面的 ${groupIds.length} 个对话？不可恢复。`,
+          action: () => deleteCanvasGroup(root.id),
+        });
+        return;
+      }
+      openConfirm({
+        text: `删除对话「${
+          session.title || '未命名'
+        }」？不可恢复。`,
+        action: () => deleteSessionById(session.id),
+      });
+    },
+  });
+  openActionMenu({ x, y, items });
+}
+
+function openCanvasWorkspaceMenu(projectId, x, y) {
+  const project = state.projects.find((item) => item.id === projectId);
+  if (!project) return;
+  openActionMenu({
+    x,
+    y,
+    items: [
+      {
+        label: '编辑',
+        icon: RING_ICONS.rename,
+        action: () => openProjectDialog('edit', projectId),
+      },
+      {
+        label: '删除',
+        icon: RING_ICONS.trash,
+        danger: true,
+        action: () => confirmDeleteProject(projectId),
+      },
+    ],
+  });
 }
 
 function openCanvas() {
@@ -878,9 +1301,9 @@ function openCanvas() {
   if (!canvasState.loaded) {
     void loadCanvas();
   } else {
-    ensureCanvasNodes();
     renderCanvas();
   }
+  void loadCanvasBackground();
 }
 
 function openCanvasWorkspaces() {
@@ -915,23 +1338,61 @@ function canvasOverlayOpen() {
 
 function refreshCanvas() {
   if (!canvasOverlayOpen()) return;
-  ensureCanvasNodes();
+  if (canvasState.drag || canvasState.workspaceDrag) return;
   renderCanvas();
   if (canvasState.pageOpen) renderWorkspacePage();
+  void loadCanvasBackground();
+}
+
+/* --------------------------------- 存储 --------------------------------- */
+
+function scheduleCanvasSave() {
+  clearTimeout(canvasState.saveTimer);
+  canvasState.saveTimer = setTimeout(saveCanvasNow, 350);
+}
+
+async function saveCanvasNow() {
+  clearTimeout(canvasState.saveTimer);
+  canvasState.saveTimer = null;
+  if (!canvasState.loaded) return;
+  try {
+    await requestJson('/api/canvas', {
+      method: 'POST',
+      body: {
+        view: canvasState.view,
+        nodes: canvasState.nodes,
+        wires: [],
+      },
+    });
+  } catch (error) {
+    console.error('save canvas failed', error);
+  }
+}
+
+async function loadCanvas() {
+  const request = ++canvasState.request;
+  canvasState.loading = true;
+  let data = null;
+  try {
+    data = await requestJson('/api/canvas');
+  } catch (error) {
+    console.error('load canvas failed', error);
+  }
+  if (request !== canvasState.request) return;
+  canvasState.view = canvasNormalizeView(data?.view);
+  canvasState.nodes =
+    data?.nodes && typeof data.nodes === 'object'
+      ? { ...data.nodes }
+      : {};
+  canvasState.loaded = true;
+  canvasState.loading = false;
+  renderCanvas();
+  void loadCanvasBackground();
 }
 
 /* --------------------------------- 事件 --------------------------------- */
 
 function bindCanvasEvents() {
-  canvasDom.close?.addEventListener('click', closeCanvas);
-  document.getElementById('canvas-agile')?.addEventListener('click', () => {
-    closeCanvas();
-    window.openAgile?.();
-  });
-  document.getElementById('canvas-settings')?.addEventListener('click', () => {
-    closeCanvas();
-    openSettings();
-  });
   canvasDom.addWorkspace?.addEventListener('click', () => {
     openProjectDialog('new');
   });
@@ -946,25 +1407,14 @@ function bindCanvasEvents() {
     ) {
       return;
     }
-    if (
-      event.button === 0 &&
-      event.target instanceof Element &&
-      event.target.closest('.canvas-node')
-    ) {
-      return;
-    }
     canvasState.pan = {
       startX: event.clientX,
       startY: event.clientY,
       viewX: canvasState.view.x,
       viewY: canvasState.view.y,
+      moved: false,
     };
-    canvasState.selectedId = null;
-    for (const item of canvasDom.nodes.querySelectorAll(
-      '.canvas-node.selected'
-    )) {
-      item.classList.remove('selected');
-    }
+    canvasClearSelection();
     canvasDom.stage.classList.add('panning');
     try {
       canvasDom.stage.setPointerCapture(event.pointerId);
@@ -975,9 +1425,6 @@ function bindCanvasEvents() {
   });
 
   canvasDom.stage?.addEventListener('contextmenu', (event) => {
-    if (event.target instanceof Element && event.target.closest('.canvas-node')) {
-      return;
-    }
     event.preventDefault();
   });
 
@@ -1007,42 +1454,60 @@ window.canvasWorkspacePageOpen = canvasWorkspacePageOpen;
 window.canvasTabReleased = canvasTabReleased;
 window.cancelCanvasPage = cancelCanvasPage;
 window.refreshCanvas = refreshCanvas;
+window.openCanvasNodeMenu = openCanvasNodeMenu;
+window.openCanvasWorkspaceMenu = openCanvasWorkspaceMenu;
 
 bindCanvasEvents();
 
 api.onSubagentStarted((payload) => {
   if (!payload?.sessionId) return;
-  const parent = payload.parentSessionId
-    ? canvasState.nodes[payload.parentSessionId]
-    : null;
-  if (parent && !canvasState.nodes[payload.sessionId]) {
-    const childCount = Object.values(canvasState.nodes).filter(
-      (item) => item?.parentSessionId === payload.parentSessionId
-    ).length;
-    canvasState.nodes[payload.sessionId] = {
-      x: parent.x + 320,
-      y: parent.y + 60 + childCount * 190,
-      width: CANVAS_NODE_WIDTH,
-      height: CANVAS_NODE_HEIGHT,
-      parentSessionId: payload.parentSessionId,
-    };
-    scheduleCanvasSave();
-  }
   const session = state.sessions.find(
     (item) => item.id === payload.sessionId
   );
   if (session && payload.parentSessionId) {
     session.parentSessionId = payload.parentSessionId;
   }
-  if (canvasOverlayOpen()) {
-    ensureCanvasNodes();
+  if (
+    canvasOverlayOpen() &&
+    !canvasState.drag &&
+    !canvasState.workspaceDrag
+  ) {
     renderCanvas();
+    scheduleCanvasSave();
   }
 });
 
 api.onSubagentComplete(() => {
-  if (canvasOverlayOpen()) {
-    ensureCanvasNodes();
+  if (
+    canvasOverlayOpen() &&
+    !canvasState.drag &&
+    !canvasState.workspaceDrag
+  ) {
+    renderCanvas();
+    scheduleCanvasSave();
+  }
+});
+
+api.onBackgroundUpdate((payload) => {
+  if (!payload?.sessionId) return;
+  mergeCanvasBackgroundJob(payload);
+  if (
+    canvasOverlayOpen() &&
+    !canvasState.drag &&
+    !canvasState.workspaceDrag
+  ) {
+    renderCanvas();
+  }
+});
+
+api.onBackgroundComplete((payload) => {
+  if (!payload?.sessionId) return;
+  mergeCanvasBackgroundJob(payload);
+  if (
+    canvasOverlayOpen() &&
+    !canvasState.drag &&
+    !canvasState.workspaceDrag
+  ) {
     renderCanvas();
   }
 });

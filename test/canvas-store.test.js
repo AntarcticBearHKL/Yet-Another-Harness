@@ -43,5 +43,5 @@ test('canvas normalize clamps zoom and node size', () => {
   });
   assert.equal(canvas.view.k, 3);
   assert.equal(canvas.nodes.s1.width, 220);
-  assert.equal(canvas.nodes.s1.height, 360);
+  assert.equal(canvas.nodes.s1.height, 2000);
 });

@@ -900,11 +900,6 @@
         <div id="canvas-grid" class="canvas-grid" aria-hidden="true"></div>
         <div id="canvas-world" class="canvas-world">
           <div id="canvas-zoom" class="canvas-zoom">
-            <svg
-              id="canvas-wires"
-              class="canvas-wires"
-              aria-hidden="true"
-            ></svg>
             <div id="canvas-nodes" class="canvas-nodes"></div>
           </div>
         </div>
@@ -924,52 +919,16 @@
         >
           <div class="canvas-workspaces-panel">
             <header class="canvas-workspaces-head">
-              <div class="canvas-workspaces-title">
-                <span class="canvas-kicker">WORKSPACES</span>
-                <h2>工作区</h2>
-                <p>按住并拖拽工作区，松开 Tab 放到画布上</p>
-              </div>
-              <div class="canvas-workspaces-actions">
-                <button
-                  id="canvas-add-workspace"
-                  class="pill compact"
-                  type="button"
-                >
-                  + 新建工作区
-                </button>
-                <button
-                  id="canvas-close"
-                  class="canvas-icon-btn"
-                  type="button"
-                  aria-label="关闭画布"
-                  title="关闭画布"
-                >
-                  ×
-                </button>
-              </div>
+              <h2>工作区</h2>
+              <button
+                id="canvas-add-workspace"
+                class="pill compact"
+                type="button"
+              >
+                + 新建
+              </button>
             </header>
             <div id="canvas-workspaces" class="canvas-workspaces-grid"></div>
-            <footer class="canvas-workspaces-foot">
-              <span class="canvas-workspaces-hint">
-                松开 Tab 返回画布 · Esc 关闭画布
-              </span>
-              <div class="canvas-workspaces-links">
-                <button
-                  id="canvas-agile"
-                  class="canvas-page-link"
-                  type="button"
-                >
-                  Agile
-                </button>
-                <button
-                  id="canvas-settings"
-                  class="canvas-page-link"
-                  type="button"
-                >
-                  设置
-                </button>
-              </div>
-            </footer>
           </div>
         </div>
       </main>
