@@ -13,6 +13,7 @@ const agentTools = require('./tools/agent');
 const webTools = require('./tools/web');
 const systemTools = require('./tools/system-info');
 const mouseTools = require('./tools/mouse');
+const chromeTools = require('./tools/chrome');
 const viewerTools = require('./tools/viewer');
 const agileTools = require('./tools/agile');
 
@@ -151,6 +152,7 @@ async function execute(name, args, context = null) {
       SystemInfo: systemTools.systemInfoTool,
       system_info: systemTools.systemInfoTool,
       mouse: mouseTools.mouseTool,
+      chrome: chromeTools.chromeTool,
       code_view: viewerTools.codeViewTool,
       pdf_view: viewerTools.pdfViewTool,
       html_view: viewerTools.htmlViewTool,
@@ -216,6 +218,23 @@ function statusLabel(name, args) {
         ? ` ${value.x},${value.y}`
         : '';
     return `mouse: ${action}${coords}`;
+  }
+  if (name === 'chrome') {
+    const action = String(value.action || '').toLowerCase();
+    let detail = '';
+    if (value.url) {
+      try {
+        const url = new URL(String(value.url));
+        detail = url.host || String(value.url);
+      } catch {
+        detail = String(value.url).slice(0, 40);
+      }
+    } else if (value.selector) {
+      detail = String(value.selector).slice(0, 40);
+    } else if (value.text) {
+      detail = String(value.text).slice(0, 40);
+    }
+    return detail ? `chrome: ${action} ${detail}` : `chrome: ${action}`;
   }
   if (name === 'code_view' || name === 'pdf_view') {
     const filePath = String(value.path || '');

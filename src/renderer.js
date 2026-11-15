@@ -7487,6 +7487,11 @@ const TOOL_GROUPS = [
     pattern: /view|code|pdf/i,
   },
   {
+    id: 'browser',
+    label: '浏览器',
+    pattern: /chrome|browser|devtools|playwright/i,
+  },
+  {
     id: 'system',
     label: '系统',
     pattern: /shell|exec|command|process|terminal|system|bash/i,
@@ -7532,6 +7537,7 @@ const TOOL_GROUP_BY_NAME = new Map([
   ['code_view', 'view'],
   ['pdf_view', 'view'],
   ['html_view', 'view'],
+  ['chrome', 'browser'],
   ['background_start', 'background'],
   ['background_list', 'background'],
   ['background_stop', 'background'],

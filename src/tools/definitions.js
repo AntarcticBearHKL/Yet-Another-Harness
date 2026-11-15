@@ -807,6 +807,118 @@ const MOUSE = fn(
   },
   ['action']
 );
+const CHROME = fn(
+  'chrome',
+  'Control a real Chrome or Edge window over the DevTools Protocol, without Playwright. ' +
+    'Use launch/open to start a visible Chrome with a dedicated profile and remote debugging, then ' +
+    'tabs, activate, read, screenshot, click, type, press, eval, wait, console, network, devtools, ' +
+    'navigate, back, forward, reload, stop, close and status. ' +
+    'read extracts visible text, HTML, headings, links or form fields; click and type use real input events; ' +
+    'console and network show what the page is doing; devtools opens the DevTools frontend for the active tab. ' +
+    'Coordinates for click are CSS pixels in the page viewport. Chrome is visible by default; headless is optional.',
+  {
+    action: {
+      type: 'string',
+      enum: [
+        'launch',
+        'open',
+        'tabs',
+        'activate',
+        'read',
+        'screenshot',
+        'click',
+        'type',
+        'press',
+        'eval',
+        'wait',
+        'console',
+        'network',
+        'devtools',
+        'navigate',
+        'back',
+        'forward',
+        'reload',
+        'stop',
+        'close',
+        'status',
+      ],
+      description: 'What to do',
+    },
+    url: str('URL to open or navigate to; accepts http(s), file, localhost:port or a bare domain'),
+    tabId: str('Target tab id, id prefix, URL fragment or title fragment; defaults to the active tab'),
+    selector: str('CSS selector for read, click, type, screenshot or wait'),
+    text: str('Text to type, or text to wait for'),
+    expression: str('JavaScript expression for eval'),
+    x: num('Viewport X for click when no selector is given'),
+    y: num('Viewport Y for click when no selector is given'),
+    button: {
+      type: 'string',
+      enum: ['left', 'right', 'middle'],
+      description: 'Mouse button for click (default left)',
+    },
+    clickCount: num('Click count 1-3 (default 1)'),
+    key: str(
+      'Key for press: Enter, Tab, Escape, Backspace, Delete, arrows, PageUp, PageDown, Home, End, Space, F5, F12 or a single character'
+    ),
+    modifiers: arr('Modifier keys for press, e.g. ["ctrl","shift"]', { type: 'string' }),
+    mode: {
+      type: 'string',
+      enum: ['text', 'html', 'summary', 'links', 'forms'],
+      description: 'What read returns (default text)',
+    },
+    maxChars: num('Maximum characters returned by read or eval'),
+    format: {
+      type: 'string',
+      enum: ['png', 'jpeg'],
+      description: 'Screenshot format (default png)',
+    },
+    quality: num('JPEG quality 1-100 (default 82)'),
+    fullPage: bool('Capture the full scrollable page'),
+    path: str('Screenshot output path; defaults to a temp file'),
+    timeoutMs: num('Wait timeout for open, navigate or wait (default 10000 or 5000)'),
+    waitFor: {
+      type: 'string',
+      enum: ['selector', 'text', 'url'],
+      description: 'What wait should wait for',
+    },
+    state: {
+      type: 'string',
+      enum: ['attached', 'visible', 'hidden'],
+      description: 'Selector state for wait (default visible)',
+    },
+    level: {
+      type: 'string',
+      enum: ['all', 'error', 'warning', 'info', 'log'],
+      description: 'Console level filter',
+    },
+    limit: num('Maximum console entries or network requests (default 50, max 200)'),
+    filter: str('Only network requests whose URL contains this text'),
+    clear: bool('Clear captured console/network entries after reading, or clear the field before typing'),
+    target: {
+      type: 'string',
+      enum: ['tab', 'browser'],
+      description: 'What close should close (default tab)',
+    },
+    newWindow: bool('Open a new window instead of a new tab'),
+    devtools: bool('Open DevTools for the active tab, or auto-open them when launching'),
+    headless: bool('Launch Chrome headless (default false; visible Chrome is easier to debug)'),
+    port: num('Remote debugging port; defaults to 9222 or the next free port'),
+    profile: str('Chrome profile directory or short profile name; defaults to YAH chrome-profile'),
+    channel: {
+      type: 'string',
+      enum: ['chrome', 'edge'],
+      description: 'Browser to launch (default chrome)',
+    },
+    width: num('Launch window width'),
+    height: num('Launch window height'),
+    waitForLoad: bool('Wait for document readyState complete after open (default true)'),
+    ignoreCache: bool('Reload with a cache bypass'),
+    awaitPromise: bool('Await promises returned by eval (default true)'),
+    waitMs: num('Milliseconds to wait after click, type or press'),
+    submit: bool('Press Enter after typing'),
+  },
+  ['action']
+);
 const SYSTEM_INFO = fn(
   'SystemInfo',
   'Get a compact local system snapshot as plain text: date, time, approximate location, OS, shell, project working directory with its access rule, and system language. No network.',
@@ -907,6 +1019,7 @@ const OPENCODE = [
   CODE_VIEW,
   PDF_VIEW,
   HTML_VIEW,
+  CHROME,
   WORKTREE_LIST,
   WORKTREE_CREATE,
   WORKTREE_REMOVE,
