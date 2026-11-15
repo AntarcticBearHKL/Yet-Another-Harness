@@ -752,6 +752,30 @@ const MODELS = fn(
   'Search available models.',
   { query: str('Text to search in model names and ids'), provider: str('Provider filter'), limit: num('Max results') }
 );
+const MOUSE = fn(
+  'mouse',
+  'Control the real Windows mouse. Coordinates are physical screen pixels. Use position to read the cursor, move to place it, click or double-click, drag from one point to another, and scroll. This operates the actual desktop, not a browser page.',
+  {
+    action: {
+      type: 'string',
+      enum: ['position', 'move', 'click', 'drag', 'scroll'],
+      description: 'What to do with the mouse',
+    },
+    x: num('Screen X for move, click or drag start'),
+    y: num('Screen Y for move, click or drag start'),
+    to_x: num('Drag end X'),
+    to_y: num('Drag end Y'),
+    button: {
+      type: 'string',
+      enum: ['left', 'right', 'middle'],
+      description: 'Click button (default left)',
+    },
+    count: num('Click count, 1-3 (default 1)'),
+    duration_ms: num('Drag duration in milliseconds (default 350)'),
+    delta: num('Wheel delta; positive scrolls up, negative down (default 120)'),
+  },
+  ['action']
+);
 const SYSTEM_INFO = fn(
   'SystemInfo',
   'Get a compact local system snapshot as plain text: date, time, approximate location, OS, shell, project working directory with its access rule, and system language. No network.',
@@ -848,6 +872,7 @@ const OPENCODE = [
   SESSION_RENAME,
   MODELS,
   SYSTEM_INFO,
+  MOUSE,
   WORKTREE_LIST,
   WORKTREE_CREATE,
   WORKTREE_REMOVE,

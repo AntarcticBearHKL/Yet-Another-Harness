@@ -7343,6 +7343,7 @@ const TOOL_GROUP_BY_NAME = new Map([
   ['webfetch', 'search'],
   ['shell', 'system'],
   ['interactive_bash', 'system'],
+  ['mouse', 'system'],
   ['background_start', 'background'],
   ['background_list', 'background'],
   ['background_stop', 'background'],

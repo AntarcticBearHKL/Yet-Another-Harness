@@ -12,6 +12,7 @@ const stateTools = require('./tools/state');
 const agentTools = require('./tools/agent');
 const webTools = require('./tools/web');
 const systemTools = require('./tools/system-info');
+const mouseTools = require('./tools/mouse');
 const agileTools = require('./tools/agile');
 
 function configure(next = {}) {
@@ -148,6 +149,7 @@ async function execute(name, args, context = null) {
       models: agentTools.modelsTool,
       SystemInfo: systemTools.systemInfoTool,
       system_info: systemTools.systemInfoTool,
+      mouse: mouseTools.mouseTool,
       worktree_list: agentTools.worktreeList,
       worktree_create: agentTools.worktreeCreate,
       worktree_remove: agentTools.worktreeRemove,
@@ -202,6 +204,14 @@ function statusLabel(name, args) {
   if (name === 'shell' || name === 'interactive_bash') {
     const command = String(value.command ?? '').replace(/\s+/g, ' ').slice(0, 60);
     return command ? `${name}: ${command}` : name;
+  }
+  if (name === 'mouse') {
+    const action = String(value.action || 'move');
+    const coords =
+      value.x !== undefined && value.y !== undefined
+        ? ` ${value.x},${value.y}`
+        : '';
+    return `mouse: ${action}${coords}`;
   }
   if (name === 'background_start') {
     const note = String(
