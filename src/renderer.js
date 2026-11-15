@@ -6151,7 +6151,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, #web-content, .canvas-workspaces-page, .canvas-group';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, #web-content';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -6172,15 +6172,22 @@ async function syncMaximized() {
 
 function onWindowDragStart(event) {
   if (!api.isElectron) return;
-  if (event.button !== 0) return;
+  if (event.button !== 0 && event.button !== 1) return;
   const target = event.target;
   if (!(target instanceof Element)) return;
   if (target.closest(DRAG_EXCLUDE)) return;
   const canvasOverlay = target.closest('#canvas');
   const overlay = target.closest('.overlay');
   if (overlay && overlay !== dom.switcher && overlay !== canvasOverlay) return;
+  if (canvasOverlay) {
+    // 画布上：中键移动整个窗口，左键留给画布平移和 node 拖动
+    if (event.button !== 1) return;
+  } else if (event.button !== 0) {
+    return;
+  }
   if (!dom.settingsOverlay.classList.contains('hidden')) return;
   if (target instanceof HTMLElement && hitsScrollbar(target, event)) return;
+  if (event.button === 1) event.preventDefault();
 
   const isCardHead = Boolean(
     target.closest('.card-head')

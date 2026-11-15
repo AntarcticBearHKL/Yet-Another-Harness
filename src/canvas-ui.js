@@ -1291,15 +1291,13 @@ function bindCanvasEvents() {
   });
 
   canvasDom.stage?.addEventListener('pointerdown', (event) => {
-    // 中键拖拽平移画布视角；Electron 里左键留给窗口和 node 拖动
-    const allowPan = event.button === 1 || (event.button === 0 && !api.isElectron);
-    if (!allowPan) return;
+    // 左键拖拽平移画布视角；中键交给窗口拖动
+    if (event.button !== 0) return;
     if (
       event.target instanceof Element &&
-      (event.target.closest(
-        '.canvas-workspaces-page, .canvas-zoom-indicator'
-      ) ||
-        (event.button === 0 && event.target.closest('button')))
+      event.target.closest(
+        '.canvas-workspaces-page, .canvas-zoom-indicator, button'
+      )
     ) {
       return;
     }
