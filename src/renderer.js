@@ -2015,6 +2015,26 @@ function isRichTrace(steps) {
   );
 }
 
+function preambleTextIndexes(steps) {
+  const preamble = new Set();
+  steps.forEach((step, index) => {
+    if (step.kind !== 'text') return;
+    const hasCallInRound = steps
+      .slice(index + 1)
+      .some((next) => next.kind === 'call' && next.round === step.round);
+    if (hasCallInRound) preamble.add(index);
+  });
+  return preamble;
+}
+
+function finalTextIndex(steps, preamble = preambleTextIndexes(steps)) {
+  let last = -1;
+  steps.forEach((step, index) => {
+    if (step.kind === 'text' && !preamble.has(index)) last = index;
+  });
+  return last;
+}
+
 function lastCardKey(session) {
   if (!session || session.msgs.length === 0) return null;
   const index = session.msgs.length - 1;
@@ -2023,10 +2043,7 @@ function lastCardKey(session) {
 
   const steps = Array.isArray(msg.steps) ? msg.steps : [];
   if (isRichTrace(steps) && steps.length > 0) {
-    const lastTextIndex = steps.reduce(
-      (last, step, stepIndex) => (step.kind === 'text' ? stepIndex : last),
-      -1
-    );
+    const lastTextIndex = finalTextIndex(steps);
     if (lastTextIndex >= 0) return stepCardKey(index, lastTextIndex);
     const lastStep = lastRenderableStepIndex(steps);
     return stepCardKey(index, lastStep >= 0 ? lastStep : steps.length - 1);
@@ -2241,10 +2258,8 @@ function renderAgentMessage(msg, msgIndex, container) {
     return;
   }
 
-  const lastTextIndex = steps.reduce(
-    (last, step, index) => (step.kind === 'text' ? index : last),
-    -1
-  );
+  const preambleText = preambleTextIndexes(steps);
+  const lastTextIndex = finalTextIndex(steps, preambleText);
   const { resultForCall, pairedResults } = pairToolSteps(steps);
 
   const isVisibleProcessStep = (step, index) => {
@@ -2329,7 +2344,7 @@ function renderAgentMessage(msg, msgIndex, container) {
 
   const appendProcessStep = (step, index, target) => {
     if (step.kind === 'text' || step.kind === 'thinking') {
-      const thinking = step.kind === 'thinking';
+      const thinking = step.kind === 'thinking' || preambleText.has(index);
       const metrics = msg.usage?.rounds?.[step.round] || null;
       appendRow(
         textCard({
