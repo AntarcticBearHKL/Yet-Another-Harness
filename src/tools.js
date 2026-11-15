@@ -13,6 +13,7 @@ const agentTools = require('./tools/agent');
 const webTools = require('./tools/web');
 const systemTools = require('./tools/system-info');
 const mouseTools = require('./tools/mouse');
+const viewerTools = require('./tools/viewer');
 const agileTools = require('./tools/agile');
 
 function configure(next = {}) {
@@ -150,6 +151,8 @@ async function execute(name, args, context = null) {
       SystemInfo: systemTools.systemInfoTool,
       system_info: systemTools.systemInfoTool,
       mouse: mouseTools.mouseTool,
+      code_view: viewerTools.codeViewTool,
+      pdf_view: viewerTools.pdfViewTool,
       worktree_list: agentTools.worktreeList,
       worktree_create: agentTools.worktreeCreate,
       worktree_remove: agentTools.worktreeRemove,
@@ -212,6 +215,10 @@ function statusLabel(name, args) {
         ? ` ${value.x},${value.y}`
         : '';
     return `mouse: ${action}${coords}`;
+  }
+  if (name === 'code_view' || name === 'pdf_view') {
+    const filePath = String(value.path || '');
+    return filePath ? `${name}: ${path.basename(filePath)}` : name;
   }
   if (name === 'background_start') {
     const note = String(

@@ -87,11 +87,16 @@ const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.wasm': 'application/wasm',
+  '.bcmap': 'application/octet-stream',
   '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+  '.pfb': 'application/octet-stream',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
 };
@@ -1190,6 +1195,13 @@ function serveStatic(req, res, url) {
     const relative = pathname.slice('/assets/'.length);
     const candidate = path.resolve(ASSETS_DIR, relative);
     if (candidate.startsWith(`${ASSETS_DIR}${path.sep}`)) {
+      filePath = candidate;
+    }
+  } else if (pathname.startsWith('/vendor/')) {
+    const vendorRoot = path.join(STATIC_DIR, 'vendor');
+    const relative = pathname.slice('/vendor/'.length);
+    const candidate = path.resolve(vendorRoot, relative);
+    if (candidate.startsWith(`${vendorRoot}${path.sep}`)) {
       filePath = candidate;
     }
   }

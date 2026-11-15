@@ -489,6 +489,7 @@ const api = {
     ),
 
   openContent: (payload) => openWebContent(payload),
+  openContentViewer: (payload) => shell?.openContent?.(payload) ?? Promise.resolve(),
   updateContent: (payload) => updateWebContent(payload),
   onContentInit: (callback) => shell?.onContentInit?.(callback) ?? (() => {}),
   onContentUpdate: (callback) =>
@@ -7302,6 +7303,11 @@ const TOOL_GROUPS = [
     pattern: /file|read|write|edit|list|glob|grep|directory|path|patch/i,
   },
   {
+    id: 'view',
+    label: '查看',
+    pattern: /view|code|pdf/i,
+  },
+  {
     id: 'system',
     label: '系统',
     pattern: /shell|exec|command|process|terminal|system|bash/i,
@@ -7344,6 +7350,8 @@ const TOOL_GROUP_BY_NAME = new Map([
   ['shell', 'system'],
   ['interactive_bash', 'system'],
   ['mouse', 'system'],
+  ['code_view', 'view'],
+  ['pdf_view', 'view'],
   ['background_start', 'background'],
   ['background_list', 'background'],
   ['background_stop', 'background'],
@@ -9334,6 +9342,18 @@ function bindEvents() {
           : undefined,
       },
     });
+    if (name === 'code_view' || name === 'pdf_view') {
+      try {
+        const view = JSON.parse(String(output ?? ''));
+        if (view?.ok) {
+          Promise.resolve(api.openContentViewer?.(view)).catch((error) =>
+            console.error('open viewer failed', error)
+          );
+        }
+      } catch {
+        /* not a viewer payload */
+      }
+    }
     // The next model request starts right after a tool result. Show its
     // waiting thinking block immediately instead of leaving the tool card
     // as the last visible line until the first token arrives.

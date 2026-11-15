@@ -120,9 +120,47 @@ function saveBounds() {
   saveWindowState(mainWindow.getBounds());
 }
 
+function prepareContentPayload(payload) {
+  const next = { ...(payload || {}) };
+  const kind = String(next.kind || 'text');
+  if (kind !== 'code' && kind !== 'pdf') return next;
+  const filePath = path.resolve(String(next.path || ''));
+  next.path = filePath;
+  next.title = String(next.title || path.basename(filePath) || 'YAH');
+  next.key = String(next.key || `${kind}:${filePath}`);
+  try {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) throw new Error('not a file');
+    if (kind === 'code') {
+      if (stat.size > 4 * 1024 * 1024) {
+        throw new Error('code file is larger than 4 MB');
+      }
+      const buffer = fs.readFileSync(filePath);
+      if (buffer.subarray(0, 8192).includes(0)) {
+        throw new Error('code file looks binary');
+      }
+      next.text = buffer.toString('utf8');
+    } else {
+      if (stat.size > 80 * 1024 * 1024) {
+        throw new Error('PDF is larger than 80 MB');
+      }
+      const buffer = fs.readFileSync(filePath);
+      if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') {
+        throw new Error('file is not a PDF');
+      }
+      next.data = buffer.toString('base64');
+    }
+  } catch (error) {
+    next.error = error.message;
+  }
+  return next;
+}
+
 function openContentWindow(payload) {
+  payload = prepareContentPayload(payload);
   const key = String(payload?.key || '');
   const title = String(payload?.title || 'YAH - Content');
+  const kind = String(payload?.kind || 'text');
 
   if (key) {
     for (const entry of contentWindows.values()) {
@@ -139,10 +177,10 @@ function openContentWindow(payload) {
   }
 
   const win = new BrowserWindow({
-    width: 940,
-    height: 760,
-    minWidth: 520,
-    minHeight: 360,
+    width: kind === 'pdf' ? 1180 : kind === 'code' ? 1100 : 940,
+    height: kind === 'pdf' ? 900 : kind === 'code' ? 820 : 760,
+    minWidth: kind === 'pdf' || kind === 'code' ? 720 : 520,
+    minHeight: kind === 'pdf' || kind === 'code' ? 520 : 360,
     title,
     icon: path.join(__dirname, '..', 'assets', 'yah.ico'),
     frame: false,
@@ -167,7 +205,7 @@ function openContentWindow(payload) {
   const entry = { win, key, payload };
   contentWindows.set(webContentsId, entry);
 
-  win.loadFile(path.join(__dirname, 'content.html'));
+  win.loadURL(`${LOCAL_URL}/content.html?shell=electron`);
   win.once('ready-to-show', () => win.show());
   win.webContents.on('did-finish-load', () => {
     if (!win.isDestroyed()) win.webContents.send('content:init', entry.payload);

@@ -16,6 +16,8 @@
     "electron": "^45.3.0"
   },
   "dependencies": {
+    "pdfjs-dist": "^6.5.438",
+    "prismjs": "^1.30.0",
     "qrcode": "^1.5.4"
   }
 }

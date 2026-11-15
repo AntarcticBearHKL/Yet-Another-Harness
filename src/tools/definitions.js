@@ -752,6 +752,28 @@ const MODELS = fn(
   'Search available models.',
   { query: str('Text to search in model names and ids'), provider: str('Provider filter'), limit: num('Max results') }
 );
+const PDF_VIEW = fn(
+  'pdf_view',
+  'Open a separate PDF viewer window for a local PDF file. Optionally jump to a page and highlight a search query.',
+  {
+    path: str('PDF file path'),
+    page: num('Page number to focus (1-based)'),
+    query: str('Text to highlight on the page'),
+    title: str('Window title'),
+  },
+  ['path']
+);
+const CODE_VIEW = fn(
+  'code_view',
+  'Open a separate code viewer window for a local text file. Optionally focus and highlight a line range.',
+  {
+    path: str('Code file path'),
+    line: num('First line to focus (1-based)'),
+    end_line: num('Last line to focus'),
+    title: str('Window title'),
+  },
+  ['path']
+);
 const MOUSE = fn(
   'mouse',
   'Control the real Windows mouse. Coordinates are physical screen pixels. Use position to read the cursor, move to place it, click or double-click, drag from one point to another, and scroll. This operates the actual desktop, not a browser page.',
@@ -873,6 +895,8 @@ const OPENCODE = [
   MODELS,
   SYSTEM_INFO,
   MOUSE,
+  CODE_VIEW,
+  PDF_VIEW,
   WORKTREE_LIST,
   WORKTREE_CREATE,
   WORKTREE_REMOVE,
