@@ -46,7 +46,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - Tab 工作区保持极简：项目行只显示名称，对话行只显示标题；当前项目用左侧色条标记，当前对话用圆点标记
 - Tab 工作区：项目行悬停立即切换项目；对话行悬停只高亮，松开 Tab 才选中并收起面板；项目列表末尾的 `+` 行点击新建项目，悬停项目后按空格新建对话；设置 / 删除按钮只响应点击
 - 新对话还没有消息时，标题跟随输入框里的第一句；第一句发出后由 LLM 生成一个短标题
-- Tab 工作区的对话行后续可以展开查看 subagent；现在暂不展开
+- 子代理对话作为独立对话出现在 Tab 列表里，带「子代理」徽章，只读；`/fork` 出来的对话没有徽章，可以继续编辑
 - 项目、项目归属和对话一起持久化到 SQLite；工作区空白区域仍然可以按住左键拖动窗口
 - 所有菜单、浮层、工作区和表单共用同一套暖色表面：面板 18px、菜单 14px、卡片 12px、控件 9px 圆角；按钮、输入框、空状态、侧栏宽度和顶部间距统一，列表选中状态统一为暖色底（对话列表用圆点），不再在名字前加竖杠
 - 所有弹出框、菜单和工作区使用更透明的暖色磨砂背景，保留原有背景模糊效果；右键菜单、Agent 菜单、Skill 联想、设置 / 确认面板和工作区都使用同一套玻璃质感；文字和选中态保持清晰
@@ -64,7 +64,9 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 删除项目会一次性删除项目本身以及里面的所有对话记录；删除最后一个项目后保持无项目状态，不会自动创建默认项目，需要重新点 `+` 新建；删除对话、排队消息、MCP 服务器也都遵循同样的两步确认
 - 对话面板里按 Space 总是打开输入框（焦点在按钮 / 消息块上时也一样，不会触发折叠或按钮点击）；输入框为空或只有空格、且没有挂 Skill 时，再按 Space 关闭输入框；有文字或已挂 Skill 时 Space 才作为空格
 - 所有带确认按钮的弹窗按 Space 等于点击确认按钮：删除确认的 `Delete`、重命名的 `Save`、项目的 `Create / Save`、Goal 的 `Start Goal`、Skill 参数的 `Attach`、工具授权的 `允许一次`、设置的 `Done`、MCP 服务器表单的 `Save`；焦点在输入框 / 文本域 / 下拉框里时 Space 仍然是空格，项目目录拖放区这类自己处理 Space 的控件保持原行为
-- 后台任务：LLM 用 `background_start` 启动长任务并附 `note` 备注，工具立即返回 id、备注、命令和启动信息；对话右上角显示当前对话运行中的后台任务数量，点击打开面板查看每个任务的备注、命令、状态、耗时、输出并停止任务；`background_list` / `background_output` / `background_stop` 用于列出、读取和停止任务。任务自然结束后，输出会打包成一条后台完成提示排入当前对话队列，当前回合结束后自动作为提问运行，再继续下一轮 loop；工具面板里新增「后台」分类
+- 后台进程：LLM 用 `background_start` 启动长时间挂载的进程（dev server、watcher、`npm run dev` 等）并附 `note` 备注，工具立即返回 id、备注、命令和启动信息；进程会一直运行，让端口 / 服务持续可用，不用来执行任务拿结果。对话右上角显示当前对话运行中的后台任务数量，点击打开面板查看每个任务的备注、命令、状态、耗时、输出并停止任务；`background_list` / `background_output` / `background_stop` 用于列出、读取和停止任务；工具面板里是「后台」分类
+- 子代理：`subagent_start` 在独立只读对话里跑一个完整 Agent 任务（`fork: true` 可先分叉当前对话），工具立即返回；任务完成后把结果像后台完成提示一样排入当前对话队列，当前回合结束后自动继续。子代理对话命名 `#n-对话名`，在 Tab 列表里显示「子代理」徽章，只能看不能输入；`subagent_list` / `subagent_output` / `subagent_stop` 用于管理；工具面板里是「子代理」分类
+- `/fork` 系统 Skill：在当前工作目录把当前对话分叉成新的可编辑对话，命名 `#n-对话名`，原对话保持不变；在输入框输入 `/fork [名字]` 或从斜杠列表选择
 - Agile 工作区：从 Tab 工作区空白处的右键菜单打开；桌面端打开一个独立窗口（网页端回退为全屏页面），窗口位置和大小会记住。固定五列 Backlog / Human In The Loop / In Progress / Blocked / Finished；左侧分组和迭代，支持折叠、改名、新建、删除；卡片可以打开任务表单，Human In The Loop 可编辑标题和描述，其他列只读，备注在 In Progress 期间锁定；Finished 任务被加备注会自动回到 Backlog 并标记返工。支持任务搜索、WIP 上限、迭代日期/目标、显示更新时间和默认 OpenAgile Skill。看板数据存在 `%APPDATA%\yah\agile.json`；人只写备注，卡片移动由 Agent 工具完成
 - Agile 原生工具：工具面板新增「Agile」分类，`agile_*` 工具替代原 OpenAgile MCP 的看板、分组、迭代、任务、批量移动、备注消化、认领/释放、阻塞、WIP 设置、事件等待和技能接口；工具遵循固定五列、未消化备注不能开工、Finished 不能删除、只有每组最后一个迭代可以删除等规则
 - 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
@@ -139,6 +141,7 @@ LIVE_SEARCH=1 npm test   # 额外跑一条真实 DuckDuckGo 搜索
 server/index.js    本地后端：HTTP API、SSE、静态页面、远程 Basic Auth
 server/usage.js    OpenCode Go 额度查询（/api/usage，60 秒缓存）
 server/runner.js   agent 主循环、工具执行、消息/事件持久化
+server/subagents.js 子代理服务：新建/分叉只读对话、启动 run、完成后把结果排回父对话
 server/skills.js   Skill 发现（skills/ + %APPDATA%\yah\skills）与 MCP prompts 转 Skill
 server/agents.js   Agent 配置（%APPDATA%\yah\agents.json）：内置 Build + 自定义提示词与工具权限
 src/agent-defaults.js 内置 Build 的 id、名称和提示词
@@ -240,10 +243,10 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 
 - OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`SystemInfo`、`list_mcp_resources`、`read_mcp_resource`、`session_rename`、`models`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）、`skill`
-- OMO 常驻 / 条件工具：`session_list/read/search/info`、`task_create/get/list/update`、`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`interactive_bash`、`task/subagent/call_omo_agent/delegate_task`、`create_goal/update_goal/get_goal`、`skill_mcp`、`look_at`、`team_*`
+- OMO 常驻 / 条件工具：`session_list/read/search/info`、`task_create/get/list/update`、`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`subagent_start/list/output/stop`、`interactive_bash`、`task/subagent/call_omo_agent/delegate_task`、`create_goal/update_goal/get_goal`、`skill_mcp`、`look_at`、`team_*`
 - 兼容别名：`read_file`、`hashline_edit`；旧调用名 `web_search` 仍可执行，但不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
-- OMO 的 `team_*`、`background_*`、`monitor_*` 在 YAH 里是本地记录 / 进程管理版本；`task`/`subagent` 是单次子模型调用；`interactive_bash` 在 Windows 上退化为普通 shell
+- OMO 的 `team_*`、`background_*`、`monitor_*` 在 YAH 里是本地记录 / 进程管理版本；`background_*` 是长驻进程管理，不再把完成输出塞回对话；`task`/`subagent`/`call_omo_agent`/`delegate_task` 是单次子模型调用；`subagent_*` 是带只读对话、可 fork、完成后把结果塞回父对话的完整子代理；`interactive_bash` 在 Windows 上退化为普通 shell
 
 ## Tool calling
 

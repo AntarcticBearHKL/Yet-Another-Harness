@@ -88,6 +88,92 @@ test('saveStructure allows deleting every project', () => {
   });
 });
 
+test('forkSession copies messages and protects subagent sessions', () => {
+  withStoreDir(() => {
+    store.saveStructure({
+      projects: [
+        { id: 'p1', name: 'Project 1', directories: ['C:\\work'] },
+      ],
+      sessions: [
+        {
+          id: 's1',
+          title: 'Chat 1',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          frozen: false,
+          mcpDisabled: [],
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 1,
+    });
+    const userSeq = store.appendMessage('s1', 'User', 'hello', null);
+    store.updateMessage('s1', userSeq, {
+      role: 'User',
+      text: 'hello',
+      request: null,
+      steps: [],
+      requests: [],
+      usage: null,
+    });
+    const agentSeq = store.appendMessage('s1', 'Agent', 'hi', '');
+    store.updateMessage('s1', agentSeq, {
+      role: 'Agent',
+      text: 'hi',
+      request: '',
+      steps: [{ kind: 'text', text: 'hi', round: 0 }],
+      requests: [],
+      usage: { output: 2 },
+    });
+
+    const title = store.nextSessionTitle('Chat 1');
+    assert.equal(title, '#1-Chat 1');
+    const forked = store.forkSession('s1', {
+      title,
+      frozen: true,
+      subagent: true,
+    });
+    assert.equal(forked.title, '#1-Chat 1');
+    assert.equal(forked.frozen, true);
+    assert.equal(forked.subagent, true);
+    assert.equal(forked.msgs.length, 2);
+    assert.equal(forked.msgs[0].text, 'hello');
+    assert.equal(forked.msgs[1].steps[0].text, 'hi');
+    assert.equal(store.nextSessionTitle('Chat 1'), '#2-Chat 1');
+
+    store.saveStructure({
+      projects: [
+        { id: 'p1', name: 'Project 1', directories: ['C:\\work'] },
+      ],
+      sessions: [
+        {
+          id: 's1',
+          title: 'Chat 1',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          frozen: false,
+          mcpDisabled: [],
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 1,
+    });
+    const loaded = store.loadChats();
+    assert.ok(
+      loaded.sessions.some(
+        (session) => session.id === forked.id && session.subagent
+      )
+    );
+
+    store.deleteSession(forked.id);
+    assert.equal(store.loadChats().sessions.length, 1);
+  });
+});
+
 test('compact messages, frozen sessions and compact queue items round-trip', () => {
   withStoreDir(() => {
     const chats = store.defaultChats();

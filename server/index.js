@@ -18,6 +18,7 @@ const usage = require('./usage');
 const { McpManager } = require('./mcp/manager');
 const { createSkillService } = require('./skills');
 const { loadAgents, saveAgents, getAgent, BUILTIN_AGENT } = require('./agents');
+const { createSubagentService } = require('./subagents');
 const { ensureAgentsMd, readAgentsMd } = require('./context');
 const { normalizeGoal } = require('../src/goal');
 const { normalizeReasoningEffort } = require('../src/reasoning');
@@ -54,7 +55,10 @@ const skillService = createSkillService({
   dataDir: DATA_DIR,
   mcpManager,
 });
-tools.configure({ skillService, mcpManager });
+const subagentService = createSubagentService({
+  resolveAgent: (agentId) => getAgent(AGENTS_FILE, agentId) || BUILTIN_AGENT,
+});
+tools.configure({ skillService, mcpManager, subagentService });
 
 let pidWritten = false;
 
@@ -453,6 +457,45 @@ function handleApi(req, res, url) {
                 : 400;
         sendJson(res, status, { error: error.message, code: error.code });
       });
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname.startsWith('/api/sessions/')) {
+    const sessionId = decodeURIComponent(
+      pathname.slice('/api/sessions/'.length)
+    );
+    const session = sessionId ? store.getSession(sessionId) : null;
+    if (!session) {
+      sendJson(res, 404, { error: 'session not found' });
+      return true;
+    }
+    sendJson(res, 200, { session });
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/sessions/fork') {
+    readJson(req)
+      .then((body) => {
+        const sourceId = String(body?.sessionId || '');
+        const source = sourceId ? store.getSession(sourceId) : null;
+        if (!source) {
+          sendJson(res, 404, { error: 'session not found' });
+          return;
+        }
+        const title =
+          String(body?.title || '').trim() ||
+          store.nextSessionTitle(body?.name || source.title);
+        const session = store.forkSession(sourceId, {
+          title,
+          frozen: body?.frozen === true,
+          subagent: body?.subagent === true,
+          copyMessages: body?.copyMessages !== false,
+        });
+        sendJson(res, 200, { session });
+      })
+      .catch((error) =>
+        sendJson(res, error.status || 400, { error: error.message })
+      );
     return true;
   }
 

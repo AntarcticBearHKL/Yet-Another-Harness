@@ -39,6 +39,84 @@ async function subagentTool(args) {
   }
 }
 
+async function subagentStartTool(args = {}, context = null) {
+  const service = providers.subagentService;
+  if (!service) return 'tool error: subagent service is not configured';
+  const prompt = String(args.prompt || '').trim();
+  if (!prompt) return 'tool error: subagent_start requires "prompt"';
+  try {
+    const result = await service.start({
+      parentSessionId: context?.sessionId,
+      prompt,
+      name: args.name || args.description || '',
+      fork: args.fork === true,
+      agentId: args.agent || args.subagent_type || '',
+      note: args.note || '',
+    });
+    return [
+      `Started subagent ${result.title}`,
+      `session: ${result.sessionId}`,
+      `run: ${result.runId}`,
+      'It runs in a read-only conversation. When it finishes, its result will be queued as a follow-up prompt in this conversation.',
+      'Use subagent_list to see all subagents, subagent_output to read one, and subagent_stop to stop it.',
+    ].join('\n');
+  } catch (error) {
+    return `tool error: subagent_start failed: ${error.message}`;
+  }
+}
+
+function subagentListTool() {
+  const service = providers.subagentService;
+  if (!service) return 'tool error: subagent service is not configured';
+  const list = service.list();
+  if (list.length === 0) return 'No subagent conversations.';
+  return list
+    .map((item) => {
+      const preview = String(item.resultPreview || '')
+        .replace(/\s+/g, ' ')
+        .slice(0, 120);
+      return `${item.title}  ${item.status}  ${item.sessionId}${
+        preview ? `  ${preview}` : ''
+      }`;
+    })
+    .join('\n');
+}
+
+function subagentOutputTool(args = {}) {
+  const service = providers.subagentService;
+  if (!service) return 'tool error: subagent service is not configured';
+  const sessionId = String(args.sessionId || args.id || '').trim();
+  if (!sessionId) return 'tool error: subagent_output requires "sessionId"';
+  try {
+    const data = service.output(sessionId);
+    const lines = [
+      `Subagent ${data.title}`,
+      `session: ${data.sessionId}`,
+      `status: ${data.status}`,
+    ];
+    if (data.result) lines.push(`--- result ---\n${data.result}`);
+    else lines.push('(no result yet)');
+    return lines.join('\n');
+  } catch (error) {
+    return `tool error: subagent_output failed: ${error.message}`;
+  }
+}
+
+function subagentStopTool(args = {}) {
+  const service = providers.subagentService;
+  if (!service) return 'tool error: subagent service is not configured';
+  const sessionId = String(args.sessionId || args.id || '').trim();
+  if (!sessionId) return 'tool error: subagent_stop requires "sessionId"';
+  try {
+    const stopped = service.stop(sessionId);
+    return stopped
+      ? `Stopped subagent ${sessionId}.`
+      : `Subagent ${sessionId} is not running.`;
+  } catch (error) {
+    return `tool error: subagent_stop failed: ${error.message}`;
+  }
+}
+
 async function lookAtTool(args, context = null) {
   const raw = String(args.path || '').trim();
   if (!raw) return 'tool error: look_at requires "path"';
@@ -391,6 +469,10 @@ async function worktreeRemove(args) {
 module.exports = {
   configure,
   subagentTool,
+  subagentStartTool,
+  subagentListTool,
+  subagentOutputTool,
+  subagentStopTool,
   lookAtTool,
   questionTool,
   normalizeQuestions,

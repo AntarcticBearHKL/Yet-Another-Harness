@@ -239,7 +239,7 @@ async function backgroundStart(args, context = null) {
     `cwd: ${job.cwd}`,
     'status: running',
     'Use background_list to see all tasks, background_output to read it, and background_stop to stop it.',
-    'When it finishes, its output will be queued as a follow-up prompt in this conversation.',
+    'It keeps running in the background (dev servers, watchers). Use subagent_start when the result should come back to this conversation.',
   ].join('\n');
 }
 

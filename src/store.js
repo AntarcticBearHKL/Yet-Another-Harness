@@ -20,7 +20,7 @@ const {
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 13;
+const SCHEMA_VERSION = 14;
 
 let dataDir = null;
 let legacyDir = null;
@@ -226,7 +226,11 @@ function normalizePendingQueue(raw) {
     };
     if (item.kind === 'compact') entry.kind = 'compact';
     if (item.background === true) entry.background = true;
+    if (item.subagent === true) entry.subagent = true;
     if (item.jobId) entry.jobId = String(item.jobId);
+    if (item.subagentSessionId) {
+      entry.subagentSessionId = String(item.subagentSessionId);
+    }
     if (item.note) entry.note = String(item.note).slice(0, 300);
     out.push(entry);
   }
@@ -325,6 +329,7 @@ function normalizeChats(raw) {
         agentId: String(session.agentId || DEFAULT_AGENT_ID),
         projectId,
         frozen: session.frozen === true || session.frozen === 1,
+        subagent: session.subagent === true || session.subagent === 1,
         mcpDisabled: Array.isArray(session.mcpDisabled)
           ? session.mcpDisabled.map(String).filter(Boolean)
           : [],
@@ -438,6 +443,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   goal TEXT,
   compaction TEXT,
   frozen INTEGER NOT NULL DEFAULT 0,
+  subagent INTEGER NOT NULL DEFAULT 0,
   sort_order INTEGER NOT NULL,
   content_hash TEXT NOT NULL,
   updated_at INTEGER NOT NULL
@@ -615,6 +621,16 @@ function ensureSchema(database) {
       );
     }
 
+    // v13 -> v14: read-only subagent conversations.
+    const subagentColumns = database
+      .prepare('PRAGMA table_info(sessions)')
+      .all();
+    if (!subagentColumns.some((column) => column.name === 'subagent')) {
+      database.exec(
+        'ALTER TABLE sessions ADD COLUMN subagent INTEGER NOT NULL DEFAULT 0'
+      );
+    }
+
     const fallbackProject = database
       .prepare('SELECT id FROM projects ORDER BY sort_order ASC LIMIT 1')
       .get();
@@ -697,7 +713,7 @@ function readChats() {
 
   const sessionRows = database
     .prepare(
-      'SELECT id, title, system, agents_md, agent_id, project_id, frozen, mcp_disabled, fold_state, pending_queue, goal, compaction FROM sessions ORDER BY sort_order ASC'
+      'SELECT id, title, system, agents_md, agent_id, project_id, frozen, subagent, mcp_disabled, fold_state, pending_queue, goal, compaction FROM sessions ORDER BY sort_order ASC'
     )
     .all();
   if (sessionRows.length === 0) {
@@ -787,6 +803,7 @@ function readChats() {
             ? row.project_id
             : projects[0]?.id || null,
           frozen: Boolean(row.frozen),
+          subagent: Boolean(row.subagent),
           mcpDisabled,
           foldState,
           pendingQueue,
@@ -939,10 +956,16 @@ function writeChats(chats) {
       .all()
       .map((row) => [row.id, row.content_hash])
   );
+  const protectedSubagents = new Set(
+    database
+      .prepare('SELECT id FROM sessions WHERE subagent = 1')
+      .all()
+      .map((row) => row.id)
+  );
 
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, agents_md, agent_id, project_id, frozen, mcp_disabled, fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, agents_md, agent_id, project_id, frozen, subagent, mcp_disabled, fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
@@ -950,6 +973,7 @@ function writeChats(chats) {
        agent_id = excluded.agent_id,
        project_id = excluded.project_id,
        frozen = MAX(frozen, excluded.frozen),
+       subagent = MAX(subagent, excluded.subagent),
        mcp_disabled = excluded.mcp_disabled,
        fold_state = excluded.fold_state,
        pending_queue = excluded.pending_queue,
@@ -1022,6 +1046,7 @@ function writeChats(chats) {
         session.agentId || DEFAULT_AGENT_ID,
         session.projectId,
         session.frozen ? 1 : 0,
+        session.subagent ? 1 : 0,
         JSON.stringify(session.mcpDisabled || []),
         session.foldState ? JSON.stringify(session.foldState) : null,
         JSON.stringify(session.pendingQueue || []),
@@ -1074,7 +1099,9 @@ function writeChats(chats) {
     });
 
     for (const id of existing.keys()) {
-      if (!incoming.has(id)) deleteSession.run(id);
+      if (!incoming.has(id) && !protectedSubagents.has(id)) {
+        deleteSession.run(id);
+      }
     }
     for (const id of existingProjects) {
       if (!incomingProjects.has(id)) deleteProject.run(id);
@@ -1178,14 +1205,15 @@ function saveStructure(chats) {
        sort_order = excluded.sort_order`
   );
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, agent_id, project_id, frozen, mcp_disabled, fold_state, pending_queue, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, agent_id, project_id, frozen, subagent, mcp_disabled, fold_state, pending_queue, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
        agent_id = excluded.agent_id,
        project_id = excluded.project_id,
        frozen = MAX(frozen, excluded.frozen),
+       subagent = MAX(subagent, excluded.subagent),
        mcp_disabled = excluded.mcp_disabled,
        fold_state = excluded.fold_state,
        pending_queue = excluded.pending_queue,
@@ -1201,6 +1229,12 @@ function saveStructure(chats) {
   const existingSessions = new Set(
     database
       .prepare('SELECT id FROM sessions')
+      .all()
+      .map((row) => row.id)
+  );
+  const protectedSubagents = new Set(
+    database
+      .prepare('SELECT id FROM sessions WHERE subagent = 1')
       .all()
       .map((row) => row.id)
   );
@@ -1256,6 +1290,7 @@ function saveStructure(chats) {
         session.agentId || DEFAULT_AGENT_ID,
         session.projectId,
         session.frozen ? 1 : 0,
+        session.subagent ? 1 : 0,
         JSON.stringify(session.mcpDisabled || []),
         session.foldState ? JSON.stringify(session.foldState) : null,
         JSON.stringify(session.pendingQueue || []),
@@ -1266,7 +1301,9 @@ function saveStructure(chats) {
     });
 
     for (const id of existingSessions) {
-      if (!incomingSessions.has(id)) deleteSession.run(id);
+      if (!incomingSessions.has(id) && !protectedSubagents.has(id)) {
+        deleteSession.run(id);
+      }
     }
     for (const id of existingProjects) {
       if (!incomingProjects.has(id)) deleteProject.run(id);
@@ -1369,6 +1406,7 @@ function createSession(session) {
     : null;
   const pendingQueue = normalizePendingQueue(source.pendingQueue);
   const frozen = source.frozen === true || source.frozen === 1;
+  const subagent = source.subagent === true || source.subagent === 1;
   const hash = metadataHash({
     title: source.title,
     system: source.system,
@@ -1379,9 +1417,9 @@ function createSession(session) {
   database
     .prepare(
       `INSERT INTO sessions
-         (id, title, system, agents_md, agent_id, project_id, frozen, mcp_disabled,
+         (id, title, system, agents_md, agent_id, project_id, frozen, subagent, mcp_disabled,
           fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
@@ -1393,6 +1431,7 @@ function createSession(session) {
       String(source.agentId || DEFAULT_AGENT_ID),
       source.projectId || null,
       frozen ? 1 : 0,
+      subagent ? 1 : 0,
       JSON.stringify(mcpDisabled),
       null,
       JSON.stringify(pendingQueue),
@@ -1403,6 +1442,72 @@ function createSession(session) {
       Date.now()
     );
   return id;
+}
+
+function getSession(sessionId) {
+  const chats = loadChats();
+  return (
+    chats.sessions.find(
+      (session) => session.id === String(sessionId || '')
+    ) || null
+  );
+}
+
+function nextSessionTitle(base) {
+  const chats = loadChats();
+  let max = 0;
+  for (const session of chats.sessions) {
+    const match = String(session.title || '').match(/^#(\d+)-/);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  const cleaned = String(base || '')
+    .replace(/^#\d+-/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
+  return `#${max + 1}-${cleaned || 'Chat'}`;
+}
+
+function forkSession(sourceId, options = {}) {
+  const chats = loadChats();
+  const source = chats.sessions.find(
+    (session) => session.id === String(sourceId || '')
+  );
+  if (!source) {
+    const error = new Error('session not found');
+    error.status = 404;
+    throw error;
+  }
+  const id = crypto.randomUUID();
+  createSession({
+    id,
+    title: String(options.title || source.title || 'Chat'),
+    system: source.system,
+    agentsMd: source.agentsMd,
+    agentId: source.agentId,
+    projectId: options.projectId || source.projectId,
+    frozen: options.frozen === true,
+    subagent: options.subagent === true,
+    mcpDisabled: Array.isArray(options.mcpDisabled)
+      ? options.mcpDisabled
+      : source.mcpDisabled,
+    compaction: options.compaction === false ? null : source.compaction,
+    pendingQueue: [],
+  });
+  if (options.copyMessages !== false) {
+    let messages = source.msgs;
+    if (
+      options.dropTrailingAgent &&
+      messages[messages.length - 1]?.role === 'Agent'
+    ) {
+      messages = messages.slice(0, -1);
+    }
+    for (const msg of messages) {
+      const seq = appendMessage(id, msg.role, msg.text, msg.request, msg.usage);
+      updateMessage(id, seq, msg);
+    }
+  }
+  return getSession(id);
 }
 
 function setSessionFrozen(sessionId, frozen) {
@@ -1634,6 +1739,9 @@ module.exports = {
   deleteSession,
   appendMessage,
   createSession,
+  getSession,
+  nextSessionTitle,
+  forkSession,
   setSessionFrozen,
   setCurrentSession,
   updateSessionPendingQueue,

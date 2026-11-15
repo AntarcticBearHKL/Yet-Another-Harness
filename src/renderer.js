@@ -172,7 +172,6 @@ const state = {
     fetchedAt: 0,
   },
   backgroundPollTimer: null,
-  backgroundHandled: new Set(),
   systemInfo: {
     key: '',
     loading: false,
@@ -400,6 +399,13 @@ const api = {
   saveSettings: (settings) =>
     requestJson('/api/settings', { method: 'PUT', body: settings }),
   loadChats: () => requestJson('/api/chats'),
+  loadSession: (sessionId) =>
+    requestJson(`/api/sessions/${encodeURIComponent(sessionId)}`),
+  forkSession: (sessionId, options = {}) =>
+    requestJson('/api/sessions/fork', {
+      method: 'POST',
+      body: { sessionId, ...options },
+    }),
   saveChats: (chats) =>
     requestJson('/api/chats', { method: 'POST', body: chats }),
   loadAgents: () => requestJson('/api/agents'),
@@ -500,6 +506,10 @@ const api = {
     subscribeEvent('background.update', callback),
   onBackgroundComplete: (callback) =>
     subscribeEvent('background.complete', callback),
+  onSubagentStarted: (callback) =>
+    subscribeEvent('subagent.started', callback),
+  onSubagentComplete: (callback) =>
+    subscribeEvent('subagent.complete', callback),
   onGoalCheck: (callback) => subscribeEvent('goal.check', callback),
   onGoalUpdated: (callback) => subscribeEvent('goal.updated', callback),
   onCompaction: (callback) => subscribeEvent('compaction.done', callback),
@@ -567,6 +577,7 @@ function structurePayload() {
       agentId: session.agentId || DEFAULT_AGENT_ID,
       projectId: session.projectId,
       frozen: session.frozen === true,
+      subagent: session.subagent === true,
       mcpDisabled: Array.isArray(session.mcpDisabled)
         ? session.mcpDisabled
         : [],
@@ -2672,46 +2683,6 @@ async function stopBackgroundJob(job) {
   }
 }
 
-function enqueueBackgroundPrompt(payload) {
-  if (!payload?.id || !payload?.prompt) return;
-  const session = state.sessions.find(
-    (item) => item.id === payload.sessionId
-  );
-  if (!session || session.frozen) return;
-  if (state.backgroundHandled.has(payload.id)) return;
-  state.backgroundHandled.add(payload.id);
-  const queue = Array.isArray(session.pendingQueue)
-    ? session.pendingQueue
-    : (session.pendingQueue = []);
-  if (
-    queue.some(
-      (item) =>
-        item &&
-        typeof item === 'object' &&
-        item.jobId === payload.id
-    )
-  ) {
-    return;
-  }
-  queue.push({
-    text: payload.prompt,
-    skills: [],
-    agentId: session.agentId || DEFAULT_AGENT_ID,
-    background: true,
-    jobId: payload.id,
-    note: payload.note || '',
-  });
-  saveChatsSoon();
-  if (state.composerOpen) renderComposerContext();
-  if (
-    session === currentSession() &&
-    !state.streaming &&
-    !isCompacting(session)
-  ) {
-    processNextQueuedPrompt(session);
-  }
-}
-
 function handleBackgroundUpdate(payload) {
   if (!payload?.id) return;
   mergeBackgroundJob(payload);
@@ -2720,11 +2691,10 @@ function handleBackgroundUpdate(payload) {
 function handleBackgroundComplete(payload) {
   if (!payload?.id) return;
   mergeBackgroundJob(payload);
-  enqueueBackgroundPrompt(payload);
 }
 
 function resumeBackgroundQueue(session) {
-  if (!session || state.streaming || session.frozen) return;
+  if (!session || state.streaming || session.frozen || session.subagent) return;
   if (isCompacting(session)) return;
   const queue = Array.isArray(session.pendingQueue)
     ? session.pendingQueue
@@ -2733,10 +2703,79 @@ function resumeBackgroundQueue(session) {
   if (
     first &&
     typeof first === 'object' &&
-    first.background === true &&
+    (first.background === true || first.subagent === true) &&
     session === currentSession()
   ) {
     processNextQueuedPrompt(session);
+  }
+}
+
+function handleSubagentStarted(payload) {
+  if (!payload?.sessionId) return;
+  if (state.sessions.some((session) => session.id === payload.sessionId)) {
+    return;
+  }
+  const parent = state.sessions.find(
+    (session) => session.id === payload.parentSessionId
+  );
+  const session = {
+    id: payload.sessionId,
+    title: payload.title || 'Subagent',
+    system: parent?.system || DEFAULT_SYSTEM_PROMPT,
+    agentsMd: parent?.agentsMd || null,
+    agentId: parent?.agentId || DEFAULT_AGENT_ID,
+    projectId: parent?.projectId || null,
+    frozen: true,
+    subagent: true,
+    mcpDisabled: parent?.mcpDisabled || [],
+    foldState: null,
+    pendingQueue: [],
+    msgs: [],
+    subagentRunId: payload.runId || null,
+  };
+  const parentIndex = parent ? state.sessions.indexOf(parent) : -1;
+  const insertAt =
+    parentIndex >= 0 ? parentIndex + 1 : state.sessions.length;
+  state.sessions.splice(insertAt, 0, session);
+  if (insertAt <= state.current) state.current += 1;
+  saveChatsSoon();
+  if (state.switcherOpen) renderSwitcher();
+}
+
+function handleSubagentComplete(payload) {
+  if (!payload?.sessionId) return;
+  const parent = state.sessions.find(
+    (session) => session.id === payload.parentSessionId
+  );
+  if (!parent || parent.frozen || parent.subagent) return;
+  const item = payload.queueItem;
+  if (!item?.text) return;
+  const queue = Array.isArray(parent.pendingQueue)
+    ? parent.pendingQueue
+    : (parent.pendingQueue = []);
+  if (
+    queue.some(
+      (entry) => entry?.subagentSessionId === payload.sessionId
+    )
+  ) {
+    return;
+  }
+  queue.push({
+    text: item.text,
+    skills: [],
+    agentId: item.agentId || parent.agentId || DEFAULT_AGENT_ID,
+    subagent: true,
+    subagentSessionId: payload.sessionId,
+    note: item.note || payload.title || '',
+  });
+  saveChatsSoon();
+  if (state.composerOpen) renderComposerContext();
+  if (
+    parent === currentSession() &&
+    !state.streaming &&
+    !isCompacting(parent)
+  ) {
+    processNextQueuedPrompt(parent);
   }
 }
 
@@ -3023,7 +3062,15 @@ function renderMessages({ animate = true } = {}) {
     state.renderedOpenKeys = new Set();
     state.renderedSessionId = sessionId;
     dom.messages.append(
-      el('div', 'empty', session.frozen ? '对话已冻结' : '还没有消息')
+      el(
+        'div',
+        'empty',
+        session.subagent
+          ? '子代理对话 · 只读'
+          : session.frozen
+            ? '对话已冻结'
+            : '还没有消息'
+      )
     );
     return;
   }
@@ -3071,7 +3118,13 @@ function renderMessages({ animate = true } = {}) {
     dom.messages.append(turn);
   }
   if (session.frozen) {
-    dom.messages.append(el('div', 'frozen-note', '对话已冻结'));
+    dom.messages.append(
+      el(
+        'div',
+        'frozen-note',
+        session.subagent ? '子代理对话 · 只读' : '对话已冻结'
+      )
+    );
   }
 
   let autoKey = null;
@@ -3200,7 +3253,9 @@ function renderSwitcher() {
     const top = el('div', 'switch-top');
     top.append(el('span', 'switch-title', session.title || `Chat ${localIndex + 1}`));
     if (session.frozen) {
-      top.append(el('span', 'switch-frozen', '冻结'));
+      top.append(
+        el('span', 'switch-frozen', session.subagent ? '子代理' : '冻结')
+      );
     }
 
     card.dataset.index = String(localIndex);
@@ -3267,6 +3322,7 @@ function openComposer() {
     state.composerOpen ||
     !session ||
     session.frozen ||
+    session.subagent ||
     isCompacting(session)
   ) {
     return;
@@ -4152,7 +4208,11 @@ function selectSession(index) {
   renderAll();
   const session = currentSession();
   if (session) {
+    if (session.subagent) closeComposer();
     resumeBackgroundQueue(session);
+    if (session.subagent) {
+      void refreshChats(session.id);
+    }
   }
   persistFoldState();
 }
@@ -4194,6 +4254,7 @@ function updateSendState() {
   dom.send.disabled =
     !session ||
     session.frozen === true ||
+    session.subagent === true ||
     (dom.input.value.trim() === '' && state.attachedSkills.length === 0);
 }
 
@@ -4201,6 +4262,7 @@ function syncDraftTitle() {
   if (!state.composerOpen) return;
   const session = currentSession();
   if (!session || session.msgs.length > 0) return;
+  if (/^#\d+-/.test(String(session.title || ''))) return;
   const draft = dom.input.value.replace(/\s+/g, ' ').trim();
   const title = draft ? draft.slice(0, 60) : '';
   if (session.title === title) return;
@@ -4260,6 +4322,41 @@ function newSession(projectId) {
   }).catch(() => {});
   persistFoldState();
   openComposer();
+}
+
+async function forkCurrentSession(session, args = '') {
+  if (!session || session.frozen || session.subagent) return;
+  if (
+    state.streaming &&
+    state.streamMessage &&
+    session.msgs.includes(state.streamMessage)
+  ) {
+    return;
+  }
+  const name = String(args || '').trim();
+  try {
+    const data = await api.forkSession(session.id, { name });
+    const forked = data?.session;
+    if (!forked) return;
+    const sourceIndex = state.sessions.findIndex(
+      (item) => item.id === session.id
+    );
+    const insertAt =
+      sourceIndex >= 0 ? sourceIndex + 1 : state.sessions.length;
+    state.sessions.splice(insertAt, 0, forked);
+    state.current = insertAt;
+    state.seq += 1;
+    applyFoldState(forked);
+    resetComposerSkills();
+    state.forceScroll = true;
+    state.followBottom = true;
+    saveChatsSoon();
+    renderAll();
+    state.composerOpen = false;
+    openComposer();
+  } catch (error) {
+    console.error('fork session failed', error);
+  }
 }
 
 function deleteSessionById(sessionId) {
@@ -4325,7 +4422,7 @@ async function startPrompt(
   text,
   { clearInput = false, skills = [], agentId = '' } = {}
 ) {
-  if (!session || session.frozen || !text) return;
+  if (!session || session.frozen || session.subagent || !text) return;
   const effectiveAgentId = agentLocked(session)
     ? session.agentId || DEFAULT_AGENT_ID
     : agentId || session.agentId || DEFAULT_AGENT_ID;
@@ -4342,7 +4439,9 @@ async function startPrompt(
   state.followBottom = true;
   if (clearInput) dom.input.value = '';
   updateSendState();
-  if (firstMessage) requestSessionTitle(session, text);
+  if (firstMessage && !/^#\d+-/.test(String(session.title || ''))) {
+    requestSessionTitle(session, text);
+  }
 
   if (!state.settings.hasApiKey) {
     agent.text = NO_KEY_HINT;
@@ -4445,7 +4544,7 @@ async function queueOrRunCompact(session, agentId) {
 
 async function sendMessage() {
   const session = currentSession();
-  if (!session || session.frozen) return;
+  if (!session || session.frozen || session.subagent) return;
   const command = parseSlashCommand(dom.input.value);
   const agentId = session.agentId || DEFAULT_AGENT_ID;
   if (command) {
@@ -4465,6 +4564,15 @@ async function sendMessage() {
       renderSlashPopup();
       if (command.args) await startGoalFromObjective(session, command.args);
       else openGoalDialog();
+      return;
+    }
+    if (command.command === 'fork') {
+      dom.input.value = '';
+      state.slashDismissed = false;
+      updateSendState();
+      renderSlashPopup();
+      clearAttachedSkills();
+      await forkCurrentSession(session, command.args);
       return;
     }
     if (command.skill) {
@@ -5336,6 +5444,14 @@ function parseSlashCommand(value) {
       args: goal[1].trim(),
     };
   }
+  const fork = text.match(/^\/fork\b([\s\S]*)$/i);
+  if (fork) {
+    return {
+      command: 'fork',
+      skill: state.skills.find((skill) => skill.command === 'fork') || null,
+      args: fork[1].trim(),
+    };
+  }
   const match = matchSlashSkill(text);
   if (!match) return null;
   return {
@@ -5593,6 +5709,10 @@ function executeSystemSkill(skill, args = '') {
       return;
     }
     openGoalDialog();
+    return;
+  }
+  if (skill?.command === 'fork') {
+    void forkCurrentSession(session, args);
   }
 }
 
@@ -7124,6 +7244,11 @@ const TOOL_GROUPS = [
     pattern: /background|monitor/i,
   },
   {
+    id: 'subagent',
+    label: '子代理',
+    pattern: /^(subagent|delegate_task|call_omo_agent)/i,
+  },
+  {
     id: 'agent',
     label: '代理',
     hidden: true,
@@ -7159,12 +7284,16 @@ const TOOL_GROUP_BY_NAME = new Map([
   ['monitor_stop', 'background'],
   ['monitor_list', 'background'],
   ['monitor_output', 'background'],
+  ['subagent_start', 'subagent'],
+  ['subagent_list', 'subagent'],
+  ['subagent_output', 'subagent'],
+  ['subagent_stop', 'subagent'],
   ['skill', 'agent'],
   ['skill_mcp', 'agent'],
-  ['task', 'agent'],
-  ['subagent', 'agent'],
-  ['call_omo_agent', 'agent'],
-  ['delegate_task', 'agent'],
+  ['task', 'subagent'],
+  ['subagent', 'subagent'],
+  ['call_omo_agent', 'subagent'],
+  ['delegate_task', 'subagent'],
   ['task_create', 'agent'],
   ['task_get', 'agent'],
   ['task_list', 'agent'],
@@ -9170,6 +9299,8 @@ function bindEvents() {
 
   api.onBackgroundUpdate((payload) => handleBackgroundUpdate(payload));
   api.onBackgroundComplete((payload) => handleBackgroundComplete(payload));
+  api.onSubagentStarted((payload) => handleSubagentStarted(payload));
+  api.onSubagentComplete((payload) => handleSubagentComplete(payload));
 
   api.onChatDone(({ requestId, text, usage }) => {
     if (requestId !== state.requestId) {

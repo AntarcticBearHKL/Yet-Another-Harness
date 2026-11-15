@@ -50,6 +50,23 @@ const SYSTEM_SKILLS = [
       'separate goal check decides whether to continue, complete, or block. ' +
       'This instruction is built in and cannot be edited.',
   },
+  {
+    id: 'system:fork',
+    name: 'fork',
+    description:
+      '把当前对话分叉成一个新对话，命名 #n-对话名；原对话保持不变。',
+    keywords: ['fork', '分叉', '分支', '新对话', 'branch'],
+    category: '系统',
+    source: '系统',
+    sourceKind: 'system',
+    readOnly: true,
+    command: 'fork',
+    body:
+      '# System Skill · fork\n' +
+      'Fork the current conversation into a new editable conversation named ' +
+      '#n-<title>. The original conversation stays unchanged. This command ' +
+      'is built in and cannot be edited.',
+  },
 ];
 
 function parseKeywords(value) {

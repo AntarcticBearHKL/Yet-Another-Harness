@@ -86,51 +86,6 @@ function publishLive(sessionId, type, payload = {}) {
   publish(event);
 }
 
-function backgroundPrompt(job) {
-  const maxOutput = 20_000;
-  const output = String(job.output || '');
-  const stderr = String(job.stderr || '');
-  const lines = [
-    '[Background task completed]',
-    `Task: ${job.note || job.id}`,
-    `ID: ${job.id}`,
-    `Command: ${job.command}`,
-    `Working directory: ${job.cwd}`,
-    `Status: ${job.status}${
-      job.exitCode === null || job.exitCode === undefined
-        ? ''
-        : ` (exit ${job.exitCode})`
-    }`,
-  ];
-  const duration = Math.max(0, (job.endedAt || Date.now()) - job.startedAt);
-  lines.push(`Duration: ${Math.round(duration / 1000)}s`);
-  if (output.trim()) {
-    const shown =
-      output.length > maxOutput ? output.slice(-maxOutput) : output;
-    lines.push(`--- stdout ---\n${shown.trimEnd()}`);
-    if (output.length > maxOutput) {
-      lines.push(
-        `(stdout truncated to the last ${maxOutput} characters; use background_output for the full output)`
-      );
-    }
-  }
-  if (stderr.trim()) {
-    const shown =
-      stderr.length > maxOutput ? stderr.slice(-maxOutput) : stderr;
-    lines.push(`--- stderr ---\n${shown.trimEnd()}`);
-    if (stderr.length > maxOutput) {
-      lines.push(
-        `(stderr truncated to the last ${maxOutput} characters; use background_output for the full output)`
-      );
-    }
-  }
-  if (job.truncated) lines.push('(job output was truncated at the server limit)');
-  lines.push(
-    'Continue the task using this result. If it failed, diagnose the cause and decide the next step.'
-  );
-  return lines.join('\n');
-}
-
 function backgroundJobEventPayload(sessionId, job) {
   return {
     id: job.id,
@@ -161,16 +116,7 @@ function handleBackgroundComplete(sessionId, job) {
   if (!sessionId || !job) return;
   const payload = backgroundJobEventPayload(sessionId, job);
   publishLive(sessionId, 'background.update', payload);
-  if (
-    job.status === 'done' ||
-    job.status === 'error' ||
-    job.status === 'timeout'
-  ) {
-    publishLive(sessionId, 'background.complete', {
-      ...payload,
-      prompt: backgroundPrompt(job),
-    });
-  }
+  publishLive(sessionId, 'background.complete', payload);
 }
 
 function requestToolApproval(sessionId, runId, request) {
@@ -980,6 +926,7 @@ function cancelSessionRuns(sessionIds) {
 module.exports = {
   subscribe,
   subscribeBackground,
+  publishLive,
   startRun,
   cancelRun,
   cancelSessionRuns,

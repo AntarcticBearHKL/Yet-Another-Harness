@@ -225,7 +225,7 @@ const TASK_UPDATE = fn(
 
 const BACKGROUND_START = fn(
   'background_start',
-  'Start a long-running background process and return immediately with its id, note and startup info. The process keeps running after the tool call. When it finishes, its output is queued as a follow-up prompt in this conversation. Use background_list, background_output and background_stop to manage it.',
+  'Start a long-running background process (dev server, watcher, npm run dev, a server that must stay up) and return immediately with its id, note and startup info. The process keeps running so it can keep serving; it is not a way to run a task and get a result. Use subagent_start for tasks whose result should come back to the conversation. Manage it with background_list, background_output and background_stop.',
   {
     command: str('Shell command to run'),
     note: str('Short note describing what this background task is doing'),
@@ -585,7 +585,7 @@ const INTERACTIVE_BASH = fn(
 
 const TASK = fn(
   'task',
-  'Delegate a focused task to a subagent. The subagent runs one model request without tools and returns a concise result.',
+  'Quick one-shot subagent: runs one model request without tools and returns a concise result synchronously. Use subagent_start for a full subagent conversation with tools, a read-only transcript, and a result queued back into this conversation.',
   {
     description: str('A short 3-5 word description of the task'),
     prompt: str('The task for the subagent to perform'),
@@ -597,7 +597,7 @@ const TASK = fn(
 );
 const SUBAGENT = fn(
   'subagent',
-  'Run a focused subagent task. Alias of task with OpenCode-style arguments.',
+  'Quick one-shot subagent. Alias of task; use subagent_start for a full read-only subagent conversation with tools.',
   {
     agent: str('Agent label'),
     description: str('A short 3-5 word label for the task'),
@@ -631,6 +631,36 @@ const DELEGATE_TASK = fn(
     background: bool('Run in the background (currently synchronous)'),
   },
   ['description', 'prompt']
+);
+
+const SUBAGENT_START = fn(
+  'subagent_start',
+  'Start a subagent in its own read-only conversation and return immediately. The subagent runs the full agent loop with tools; when it finishes, its result is queued back into this conversation as a follow-up prompt. Use fork=true to copy the current conversation into the subagent first; otherwise it starts a fresh conversation. Use this for tasks whose result should come back here. Use background_start for long-running processes that should keep running.',
+  {
+    prompt: str('The task for the subagent'),
+    name: str('Short name for the subagent conversation'),
+    fork: bool('Fork the current conversation into the subagent conversation'),
+    agent: str('Agent id or label for the subagent'),
+    note: str('Short note shown in the result'),
+  },
+  ['prompt']
+);
+const SUBAGENT_LIST = fn(
+  'subagent_list',
+  'List subagent conversations with their status and result preview.',
+  {}
+);
+const SUBAGENT_OUTPUT = fn(
+  'subagent_output',
+  'Read a subagent conversation’s final result and status.',
+  { sessionId: str('Subagent session id') },
+  ['sessionId']
+);
+const SUBAGENT_STOP = fn(
+  'subagent_stop',
+  'Stop a running subagent.',
+  { sessionId: str('Subagent session id') },
+  ['sessionId']
 );
 
 const CREATE_GOAL = fn(
@@ -891,6 +921,10 @@ const OMO = [
   TASK,
   CALL_OMO_AGENT,
   DELEGATE_TASK,
+  SUBAGENT_START,
+  SUBAGENT_LIST,
+  SUBAGENT_OUTPUT,
+  SUBAGENT_STOP,
   CREATE_GOAL,
   UPDATE_GOAL,
   GET_GOAL,
