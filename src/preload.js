@@ -11,6 +11,7 @@ function subscribe(channel, callback) {
 contextBridge.exposeInMainWorld('yah', {
   openContent: (payload) => ipcRenderer.invoke('content:open', payload),
   openAgileWindow: () => ipcRenderer.invoke('agile:open'),
+  openChatWindow: (sessionId) => ipcRenderer.invoke('chat:open', sessionId),
   updateContent: (payload) => ipcRenderer.send('content:update', payload),
   onContentInit: (callback) => subscribe('content:init', callback),
   onContentUpdate: (callback) => subscribe('content:update', callback),

@@ -127,6 +127,13 @@ const state = {
   collapsedProcessKeys: new Set(),
   contextCollapsed: new Set(['system', 'safety', 'agents']),
   viewMode: null,
+  chatWindow: false,
+  chatCompact: false,
+  chatBarTitle: null,
+  chatBarMode: null,
+  chatNav: null,
+  chatNavSignature: '',
+  chatNavTimer: null,
   foldRestored: false,
   foldSessionId: null,
   renderVersion: 0,
@@ -389,6 +396,7 @@ const api = {
   dragEnd: () => shell?.dragEnd?.(),
   isMaximized: () => shell?.isMaximized?.() ?? Promise.resolve(false),
   openAgileWindow: () => shell?.openAgileWindow?.(),
+  openChatWindow: (sessionId) => shell?.openChatWindow?.(sessionId),
   getPathForFile: (file) =>
     shell?.getPathForFile?.(file) || String(file?.path || ''),
   pickDirectories: () => shell?.pickDirectories?.() ?? Promise.resolve([]),
@@ -3060,7 +3068,172 @@ function refreshContextBlocks() {
   existing.replaceWith(buildContextStack(session));
 }
 
+function setupChatWindow() {
+  if (!state.chatWindow || state.chatNav) return;
+  document.body.classList.add('chat-window');
+  const bar = el('header', 'chat-window-bar');
+  const title = el(
+    'div',
+    'chat-window-title',
+    currentSession()?.title || '对话'
+  );
+  const mode = el('button', 'chat-window-mode', '详细');
+  mode.type = 'button';
+  mode.title = 'Tab 切换详细 / 精简';
+  mode.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setChatCompact(!state.chatCompact);
+  });
+  const close = el('button', 'chat-window-close', '×');
+  close.type = 'button';
+  close.setAttribute('aria-label', '关闭对话窗口');
+  close.title = '关闭';
+  close.addEventListener('click', (event) => {
+    event.stopPropagation();
+    api.close();
+  });
+  bar.append(title, mode, close);
+  document.body.prepend(bar);
+  const nav = el('nav', 'chat-turn-nav');
+  nav.setAttribute('aria-label', '对话跳转');
+  document.body.append(nav);
+  state.chatBarTitle = title;
+  state.chatBarMode = mode;
+  state.chatNav = nav;
+  dom.messages.addEventListener(
+    'scroll',
+    () => {
+      if (!state.chatWindow) return;
+      requestAnimationFrame(updateChatTurnActive);
+    },
+    { passive: true }
+  );
+  setChatCompact(false);
+}
+
+function setChatCompact(compact) {
+  if (!state.chatWindow) return;
+  state.chatCompact = Boolean(compact);
+  document.body.classList.toggle('chat-compact', state.chatCompact);
+  if (state.chatBarMode) {
+    state.chatBarMode.textContent = state.chatCompact ? '精简' : '详细';
+  }
+  for (const card of dom.messages.querySelectorAll(
+    '.message-card.prompt-card, .message-card.answer-card'
+  )) {
+    const wrap = card.querySelector('.card-body-wrap');
+    if (!wrap) continue;
+    wrap.inert = state.chatCompact
+      ? false
+      : card.classList.contains('collapsed');
+  }
+  requestAnimationFrame(updateChatTurnActive);
+}
+
+function scheduleChatTurnNav() {
+  if (!state.chatWindow) return;
+  clearTimeout(state.chatNavTimer);
+  state.chatNavTimer = setTimeout(() => {
+    state.chatNavTimer = null;
+    renderChatTurnNav();
+  }, 60);
+}
+
+function renderChatTurnNav() {
+  if (!state.chatWindow || !state.chatNav) return;
+  const session = currentSession();
+  if (state.chatBarTitle) {
+    state.chatBarTitle.textContent = session?.title || '对话';
+  }
+  if (state.chatBarMode) {
+    state.chatBarMode.textContent = state.chatCompact ? '精简' : '详细';
+  }
+  document.title = `YAH - ${session?.title || 'Chat'}`;
+
+  const turns = [...dom.messages.querySelectorAll('.turn')].filter((turn) =>
+    turn.querySelector('.prompt-card')
+  );
+  const signature = turns
+    .map((turn) =>
+      String(
+        turn.querySelector('.prompt-card .card-text')?.textContent || ''
+      ).trim()
+    )
+    .join('\u0000');
+  if (signature !== state.chatNavSignature) {
+    state.chatNavSignature = signature;
+    state.chatNav.replaceChildren();
+    state.chatNav.classList.toggle('empty', turns.length === 0);
+    if (turns.length > 0) {
+      const texts = turns.map((turn) =>
+        String(turn.querySelector('.prompt-card .card-text')?.textContent || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+      );
+      const longest = Math.max(1, ...texts.map((text) => text.length));
+      const count = el('span', 'chat-turn-count', `${turns.length} 轮`);
+      count.title = `共 ${turns.length} 轮对话`;
+      state.chatNav.append(count);
+      turns.forEach((turn, index) => {
+        const text = texts[index];
+        const bar = el('button', 'chat-turn-bar');
+        bar.type = 'button';
+        bar.title = `第 ${index + 1} 轮 · ${text.slice(0, 90)}`;
+        bar.setAttribute(
+          'aria-label',
+          `跳到第 ${index + 1} 轮对话`
+        );
+        const width =
+          24 +
+          Math.round(
+            (Math.log1p(text.length) / Math.log1p(longest)) * 30
+          );
+        bar.style.setProperty('--bar-width', `${width}px`);
+        bar.addEventListener('click', () => scrollChatTurn(index));
+        state.chatNav.append(bar);
+      });
+    }
+  }
+  updateChatTurnActive();
+}
+
+function updateChatTurnActive() {
+  if (!state.chatWindow || !state.chatNav) return;
+  const turns = [...dom.messages.querySelectorAll('.turn')].filter((turn) =>
+    turn.querySelector('.prompt-card')
+  );
+  const bars = [...state.chatNav.querySelectorAll('.chat-turn-bar')];
+  if (turns.length === 0 || bars.length === 0) return;
+  const top = dom.messages.getBoundingClientRect().top;
+  let active = 0;
+  turns.forEach((turn, index) => {
+    const turnTop = turn.getBoundingClientRect().top - top;
+    if (turnTop <= 84) active = index;
+  });
+  bars.forEach((bar, index) => {
+    bar.classList.toggle('active', index === active);
+  });
+}
+
+function scrollChatTurn(index) {
+  const turns = [...dom.messages.querySelectorAll('.turn')].filter((turn) =>
+    turn.querySelector('.prompt-card')
+  );
+  const turn = turns[index];
+  if (!turn) return;
+  const container = dom.messages;
+  const top =
+    turn.getBoundingClientRect().top -
+    container.getBoundingClientRect().top +
+    container.scrollTop;
+  state.followBottom = false;
+  state.forceScroll = false;
+  container.scrollTop = Math.max(0, top - 18);
+  updateChatTurnActive();
+}
+
 function renderMessages({ animate = true } = {}) {
+  if (state.chatWindow) scheduleChatTurnNav();
   const session = currentSession();
   const sessionId = session ? session.id : null;
   const version = ++state.renderVersion;
@@ -6177,6 +6350,12 @@ function onWindowDragStart(event) {
   const target = event.target;
   if (!(target instanceof Element)) return;
   if (target.closest(DRAG_EXCLUDE)) return;
+  if (
+    document.body.classList.contains('chat-window') &&
+    !target.closest('.chat-window-bar')
+  ) {
+    return;
+  }
   const canvasOverlay = target.closest('#canvas');
   const overlay = target.closest('.overlay');
   if (overlay && overlay !== dom.switcher && overlay !== canvasOverlay) return;
@@ -8303,7 +8482,8 @@ function bindEvents() {
     const target = event.target;
     if (
       target instanceof Element &&
-      target.closest('input, textarea, #web-content')
+      (target.closest('input, textarea, #web-content') ||
+        (state.chatWindow && target.closest('#messages')))
     ) {
       return;
     }
@@ -8723,6 +8903,28 @@ function bindEvents() {
 
   document.addEventListener('keydown', (event) => {
     if (handleDialogConfirmSpace(event)) return;
+    if (state.chatWindow) {
+      if (
+        event.key === 'Tab' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        if (!event.repeat) setChatCompact(!state.chatCompact);
+        return;
+      }
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        api.close();
+        return;
+      }
+      if (event.code === 'Space' || event.key === ' ') {
+        event.preventDefault();
+      }
+      return;
+    }
     if (state.agentMenuOpen && event.key === 'Escape' && !event.isComposing) {
       event.preventDefault();
       closeAgentMenu();
@@ -9505,6 +9707,17 @@ async function boot() {
     if (!session.agentId) session.agentId = DEFAULT_AGENT_ID;
   });
   ensureProjects();
+  const params = new URLSearchParams(location.search);
+  if (params.get('chat') === '1') {
+    state.chatWindow = true;
+    document.body.classList.add('chat-window');
+    const sessionId = params.get('sessionId') || '';
+    const index = state.sessions.findIndex(
+      (session) => session.id === sessionId
+    );
+    if (index >= 0) state.current = index;
+    setupChatWindow();
+  }
   applyFoldState(currentSession());
 
   bindEvents();

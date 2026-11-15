@@ -967,6 +967,12 @@ function openCanvasSession(sessionId) {
   );
   if (index < 0) return;
   const session = state.sessions[index];
+  if (api.isElectron && api.openChatWindow) {
+    Promise.resolve(api.openChatWindow(session.id)).catch((error) =>
+      console.error('open chat window failed', error)
+    );
+    return;
+  }
   closeCanvas();
   selectSession(index);
   if (!session.subagent) openComposer();

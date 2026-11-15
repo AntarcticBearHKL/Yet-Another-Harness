@@ -73,6 +73,7 @@ const STATIC_FILES = new Map([
   ['/agile-window.js', 'agile-window.js'],
   ['/canvas.css', 'canvas.css'],
   ['/canvas-ui.js', 'canvas-ui.js'],
+  ['/chat-window.css', 'chat-window.css'],
   ['/resize.css', 'resize.css'],
   ['/resize.js', 'resize.js'],
   ['/renderer.js', 'renderer.js'],

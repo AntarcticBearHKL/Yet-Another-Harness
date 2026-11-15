@@ -49,6 +49,7 @@ let backendProcess = null;
 let saveBoundsTimer = null;
 let saveAgileBoundsTimer = null;
 const contentWindows = new Map();
+const chatWindows = new Map();
 let dragState = null;
 let resizeState = null;
 
@@ -221,6 +222,62 @@ function openContentWindow(payload) {
   });
   win.on('closed', () => {
     contentWindows.delete(webContentsId);
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event) => {
+    event.preventDefault();
+  });
+  return win.id;
+}
+
+function openChatWindow(sessionId) {
+  const id = String(sessionId || '').trim();
+  if (!id) return null;
+  const existing = chatWindows.get(id);
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore();
+    existing.show();
+    existing.focus();
+    return existing.id;
+  }
+
+  const win = new BrowserWindow({
+    width: 1040,
+    height: 840,
+    minWidth: 640,
+    minHeight: 480,
+    title: 'YAH - Chat',
+    icon: path.join(__dirname, '..', 'assets', 'yah.ico'),
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    roundedCorners: false,
+    thickFrame: true,
+    hasShadow: true,
+    show: false,
+    resizable: true,
+    center: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      spellcheck: false,
+    },
+  });
+
+  chatWindows.set(id, win);
+  win.loadURL(
+    `${LOCAL_URL}/?chat=1&sessionId=${encodeURIComponent(id)}&shell=electron`
+  );
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed()) win.show();
+  });
+  win.on('closed', () => {
+    if (chatWindows.get(id) === win) chatWindows.delete(id);
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) shell.openExternal(url);
@@ -457,6 +514,9 @@ if (gotLock) {
       openContentWindow(payload)
     );
     ipcMain.handle('agile:open', () => openAgileWindow());
+    ipcMain.handle('chat:open', (_event, sessionId) =>
+      openChatWindow(sessionId)
+    );
     ipcMain.on('content:update', (_event, payload) => {
       const key = String(payload?.key || '');
       if (!key) return;
