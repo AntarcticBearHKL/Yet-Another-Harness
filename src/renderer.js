@@ -6752,12 +6752,16 @@ function startActionMenuPress(event) {
   // 对话窗口不再有右键菜单；菜单只存在于画布
   if (!window.canvasOverlayOpen?.()) return;
   const target = event.target instanceof Element ? event.target : null;
+  const frameTarget = target?.closest('.canvas-frame');
   const nodeTarget = target?.closest('.canvas-group, .canvas-child');
   const workspaceTarget = target?.closest('.canvas-workspace');
   let canvasSessionId = null;
   let canvasWorkspaceId = null;
+  let canvasFrameId = null;
   let canvasMainMenu = false;
-  if (nodeTarget?.dataset.sessionId) {
+  if (frameTarget?.dataset.frameId) {
+    canvasFrameId = frameTarget.dataset.frameId;
+  } else if (nodeTarget?.dataset.sessionId) {
     canvasSessionId = nodeTarget.dataset.sessionId;
   } else if (workspaceTarget?.dataset.projectId) {
     canvasWorkspaceId = workspaceTarget.dataset.projectId;
@@ -6776,13 +6780,16 @@ function startActionMenuPress(event) {
     timer: null,
     canvasSessionId,
     canvasWorkspaceId,
+    canvasFrameId,
     canvasMainMenu,
   };
   actionMenuPress = press;
   press.timer = setTimeout(() => {
     if (actionMenuPress !== press) return;
     press.timer = null;
-    if (press.canvasSessionId) {
+    if (press.canvasFrameId) {
+      window.openCanvasFrameMenu?.(press.canvasFrameId, press.x, press.y);
+    } else if (press.canvasSessionId) {
       window.openCanvasNodeMenu?.(press.canvasSessionId, press.x, press.y);
     } else if (press.canvasWorkspaceId) {
       window.openCanvasWorkspaceMenu?.(

@@ -6,6 +6,7 @@ const canvasDom = {
   grid: document.getElementById('canvas-grid'),
   world: document.getElementById('canvas-world'),
   zoomLayer: document.getElementById('canvas-zoom'),
+  frames: document.getElementById('canvas-frames'),
   nodes: document.getElementById('canvas-nodes'),
   empty: document.getElementById('canvas-empty'),
   zoomIndicator: document.getElementById('canvas-zoom-indicator'),
@@ -16,6 +17,7 @@ const canvasDom = {
 
 const CANVAS_GROUP_WIDTH = 420;
 const CANVAS_GROUP_HEIGHT = 64;
+const CANVAS_FRAME_PADDING = 28;
 const CANVAS_MIN_ZOOM = 0.2;
 const CANVAS_MAX_ZOOM = 3;
 const CANVAS_WORKSPACE_COLORS = [
@@ -36,9 +38,12 @@ const canvasState = {
   pageOpen: false,
   view: { x: 0, y: 0, k: 1 },
   nodes: {},
+  frames: [],
   selectedId: null,
   selectedChildId: null,
+  selectedIds: new Set(),
   drag: null,
+  frameDrag: null,
   pan: null,
   workspaceDrag: null,
   backgroundBySession: {},
@@ -276,6 +281,206 @@ function canvasGroupJobs(root, children) {
   });
 }
 
+/* -------------------------------- 分组框 -------------------------------- */
+
+function canvasFrameBounds(frame) {
+  const nodes = frame.nodeIds
+    .map((id) => canvasState.nodes[id])
+    .filter(Boolean);
+  if (nodes.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const node of nodes) {
+    minX = Math.min(minX, node.x);
+    minY = Math.min(minY, node.y);
+    maxX = Math.max(maxX, node.x + node.width);
+    maxY = Math.max(maxY, node.y + node.height);
+  }
+  return {
+    x: minX - CANVAS_FRAME_PADDING,
+    y: minY - CANVAS_FRAME_PADDING,
+    width: maxX - minX + CANVAS_FRAME_PADDING * 2,
+    height: maxY - minY + CANVAS_FRAME_PADDING * 2,
+  };
+}
+
+function buildCanvasFrame(frame) {
+  const bounds = canvasFrameBounds(frame);
+  if (!bounds) return null;
+  const frameEl = el('div', 'canvas-frame');
+  frameEl.dataset.frameId = frame.id;
+  frameEl.style.left = `${bounds.x}px`;
+  frameEl.style.top = `${bounds.y}px`;
+  frameEl.style.width = `${bounds.width}px`;
+  frameEl.style.height = `${bounds.height}px`;
+
+  const label = el('div', 'canvas-frame-label');
+  label.append(el('span', 'canvas-frame-dot'));
+  label.append(el('span', 'canvas-frame-title', 'GROUP'));
+  label.append(el('span', 'canvas-frame-count', String(frame.nodeIds.length)));
+  frameEl.append(label);
+
+  frameEl.addEventListener('pointerdown', (event) =>
+    startCanvasFrameDrag(event, frame, frameEl)
+  );
+  frameEl.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+  });
+  return frameEl;
+}
+
+function renderCanvasFrames() {
+  if (!canvasDom.frames) return;
+  const valid = new Set(
+    [...canvasDom.nodes.querySelectorAll('.canvas-group')]
+      .map((group) => group.dataset.sessionId)
+      .filter(Boolean)
+  );
+  let changed = false;
+  const next = [];
+  for (const frame of canvasState.frames) {
+    const nodeIds = frame.nodeIds.filter((id) => valid.has(id));
+    if (nodeIds.length !== frame.nodeIds.length) changed = true;
+    if (nodeIds.length === 0) {
+      changed = true;
+      continue;
+    }
+    frame.nodeIds = nodeIds;
+    next.push(frame);
+  }
+  canvasState.frames = next;
+  canvasDom.frames.replaceChildren();
+  for (const frame of canvasState.frames) {
+    const frameEl = buildCanvasFrame(frame);
+    if (frameEl) canvasDom.frames.append(frameEl);
+  }
+  if (changed) scheduleCanvasSave();
+}
+
+function updateCanvasFrameElements() {
+  if (!canvasDom.frames) return;
+  for (const frame of canvasState.frames) {
+    const frameEl = canvasDom.frames.querySelector(
+      `[data-frame-id="${frame.id}"]`
+    );
+    if (!frameEl) continue;
+    const bounds = canvasFrameBounds(frame);
+    if (!bounds) continue;
+    frameEl.style.left = `${bounds.x}px`;
+    frameEl.style.top = `${bounds.y}px`;
+    frameEl.style.width = `${bounds.width}px`;
+    frameEl.style.height = `${bounds.height}px`;
+  }
+}
+
+function createCanvasFrameFromSelection() {
+  const ids = new Set(canvasSelectedNodeIds());
+  if (ids.size < 2) return;
+  let frame = { nodeIds: [...ids] };
+  let bounds = canvasFrameBounds(frame);
+  if (!bounds) return;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const root of canvasGroupIndex().roots) {
+      if (ids.has(root.id)) continue;
+      const node = canvasState.nodes[root.id];
+      if (!node) continue;
+      const centerX = node.x + node.width / 2;
+      const centerY = node.y + node.height / 2;
+      if (
+        centerX >= bounds.x &&
+        centerX <= bounds.x + bounds.width &&
+        centerY >= bounds.y &&
+        centerY <= bounds.y + bounds.height
+      ) {
+        ids.add(root.id);
+        changed = true;
+      }
+    }
+    if (changed) {
+      frame = { nodeIds: [...ids] };
+      bounds = canvasFrameBounds(frame);
+    }
+  }
+  for (const existing of canvasState.frames) {
+    existing.nodeIds = existing.nodeIds.filter((id) => !ids.has(id));
+  }
+  canvasState.frames = canvasState.frames.filter(
+    (existing) => existing.nodeIds.length > 0
+  );
+  const id = `frame-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 7)}`;
+  canvasState.frames.push({ id, nodeIds: [...ids] });
+  renderCanvasFrames();
+  scheduleCanvasSave();
+  canvasClearSelection();
+}
+
+function removeCanvasFrame(frameId) {
+  const next = canvasState.frames.filter((frame) => frame.id !== frameId);
+  if (next.length === canvasState.frames.length) return;
+  canvasState.frames = next;
+  renderCanvasFrames();
+  scheduleCanvasSave();
+}
+
+function openCanvasFrameMenu(frameId, x, y) {
+  const frame = canvasState.frames.find((item) => item.id === frameId);
+  if (!frame) return;
+  openActionMenu({
+    x,
+    y,
+    items: [
+      {
+        label: 'Ungroup',
+        icon: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 8l8 8M16 8l-8 8"/>',
+        action: () => removeCanvasFrame(frameId),
+      },
+    ],
+  });
+}
+
+function startCanvasFrameDrag(event, frame, frameEl) {
+  if (event.button !== 0) return;
+  event.stopPropagation();
+  const nodes = [];
+  for (const id of frame.nodeIds) {
+    const node = canvasState.nodes[id];
+    if (!node) continue;
+    const groupEl = canvasDom.nodes.querySelector(
+      `.canvas-group[data-session-id="${CSS.escape(id)}"]`
+    );
+    if (!groupEl) continue;
+    nodes.push({
+      node,
+      groupEl,
+      originX: node.x,
+      originY: node.y,
+    });
+  }
+  if (nodes.length === 0) return;
+  canvasState.frameDrag = {
+    frame,
+    frameEl,
+    nodes,
+    startX: event.clientX,
+    startY: event.clientY,
+    moved: false,
+    pointerId: event.pointerId,
+  };
+  frameEl.classList.add('dragging');
+  try {
+    frameEl.setPointerCapture(event.pointerId);
+  } catch {
+    /* ignore */
+  }
+  event.preventDefault();
+}
+
 /* ------------------------------- 后台任务 ------------------------------- */
 
 function canvasJobSummary(job) {
@@ -336,7 +541,7 @@ async function loadCanvasBackground({ force = false } = {}) {
     })
   );
   if (!canvasOverlayOpen()) return;
-  if (canvasState.drag || canvasState.workspaceDrag) return;
+  if (canvasState.drag || canvasState.frameDrag || canvasState.workspaceDrag) return;
   renderCanvas();
 }
 
@@ -349,7 +554,10 @@ function buildCanvasDot(tone) {
 function buildCanvasChild(child, root) {
   const childEl = el('div', 'canvas-child');
   childEl.dataset.sessionId = child.id;
-  if (canvasState.selectedChildId === child.id) {
+  if (
+    canvasState.selectedIds.size <= 1 &&
+    canvasState.selectedChildId === child.id
+  ) {
     childEl.classList.add('selected');
   }
   childEl.append(buildCanvasDot(canvasConversationStatus(child).tone));
@@ -362,6 +570,10 @@ function buildCanvasChild(child, root) {
     event.stopPropagation();
     if (canvasState.suppressClick) {
       canvasState.suppressClick = false;
+      return;
+    }
+    if (event.shiftKey) {
+      canvasToggleGroupSelection(root.id);
       return;
     }
     canvasSelectGroup(root.id, child.id);
@@ -435,7 +647,7 @@ function buildCanvasColumn(title, rows) {
 function buildCanvasGroup(root, children, jobs, node) {
   const groupEl = el('article', 'canvas-group');
   groupEl.dataset.sessionId = root.id;
-  if (canvasState.selectedId === root.id) {
+  if (canvasState.selectedIds.has(root.id)) {
     groupEl.classList.add('selected');
   }
 
@@ -479,6 +691,10 @@ function buildCanvasGroup(root, children, jobs, node) {
     }
     if (canvasState.suppressClick) {
       canvasState.suppressClick = false;
+      return;
+    }
+    if (event.shiftKey) {
+      canvasToggleGroupSelection(root.id);
       return;
     }
     canvasSelectGroup(root.id, null);
@@ -582,32 +798,60 @@ function applyCanvasView() {
 function renderCanvas() {
   const index = ensureCanvasGroups();
   renderCanvasNodes(index);
+  renderCanvasFrames();
   applyCanvasView();
   if (canvasDom.empty) {
     canvasDom.empty.classList.toggle('hidden', index.roots.length > 0);
   }
 }
 
-function canvasSelectGroup(rootId, childId = null) {
-  canvasState.selectedId = rootId;
-  canvasState.selectedChildId = childId;
+function canvasApplySelection() {
+  const ids = canvasState.selectedIds;
   for (const group of canvasDom.nodes.querySelectorAll('.canvas-group')) {
     group.classList.toggle(
       'selected',
-      group.dataset.sessionId === rootId
+      ids.has(group.dataset.sessionId)
     );
   }
   for (const child of canvasDom.nodes.querySelectorAll('.canvas-child')) {
     child.classList.toggle(
       'selected',
-      child.dataset.sessionId === childId
+      ids.size <= 1 &&
+        child.dataset.sessionId === canvasState.selectedChildId
     );
   }
+}
+
+function canvasSelectGroup(rootId, childId = null) {
+  canvasState.selectedId = rootId;
+  canvasState.selectedChildId = childId;
+  canvasState.selectedIds = new Set(rootId ? [rootId] : []);
+  canvasApplySelection();
+}
+
+function canvasToggleGroupSelection(rootId) {
+  const ids = new Set(canvasState.selectedIds);
+  if (ids.size === 0 && canvasState.selectedId) {
+    ids.add(canvasState.selectedId);
+  }
+  if (ids.has(rootId)) ids.delete(rootId);
+  else ids.add(rootId);
+  canvasState.selectedIds = ids;
+  canvasState.selectedId = ids.size === 1 ? [...ids][0] : null;
+  canvasState.selectedChildId = null;
+  canvasApplySelection();
+}
+
+function canvasSelectedNodeIds() {
+  return [...canvasState.selectedIds].filter((id) =>
+    Boolean(canvasState.nodes[id])
+  );
 }
 
 function canvasClearSelection() {
   canvasState.selectedId = null;
   canvasState.selectedChildId = null;
+  canvasState.selectedIds = new Set();
   for (const item of canvasDom.nodes.querySelectorAll(
     '.canvas-group.selected, .canvas-child.selected'
   )) {
@@ -878,7 +1122,9 @@ function startCanvasGroupDrag(event, root, groupEl, node) {
     moved: false,
     pointerId: event.pointerId,
   };
-  canvasSelectGroup(root.id, null);
+  if (!event.shiftKey) {
+    canvasSelectGroup(root.id, null);
+  }
   try {
     groupEl.setPointerCapture(event.pointerId);
   } catch {
@@ -889,6 +1135,29 @@ function startCanvasGroupDrag(event, root, groupEl, node) {
 function onCanvasPointerMove(event) {
   if (canvasState.workspaceDrag) {
     updateWorkspaceDrag(event);
+    event.preventDefault();
+    return;
+  }
+  if (canvasState.frameDrag) {
+    const drag = canvasState.frameDrag;
+    const dx = (event.clientX - drag.startX) / canvasState.view.k;
+    const dy = (event.clientY - drag.startY) / canvasState.view.k;
+    if (
+      !drag.moved &&
+      Math.abs(event.clientX - drag.startX) +
+        Math.abs(event.clientY - drag.startY) <
+        4
+    ) {
+      return;
+    }
+    drag.moved = true;
+    for (const item of drag.nodes) {
+      item.node.x = item.originX + dx;
+      item.node.y = item.originY + dy;
+      item.groupEl.style.left = `${item.node.x}px`;
+      item.groupEl.style.top = `${item.node.y}px`;
+    }
+    updateCanvasFrameElements();
     event.preventDefault();
     return;
   }
@@ -909,6 +1178,7 @@ function onCanvasPointerMove(event) {
     drag.node.y = drag.originY + dy;
     drag.groupEl.style.left = `${drag.node.x}px`;
     drag.groupEl.style.top = `${drag.node.y}px`;
+    updateCanvasFrameElements();
     event.preventDefault();
     return;
   }
@@ -934,6 +1204,23 @@ function onCanvasPointerUp() {
   if (canvasState.workspaceDrag) {
     finishWorkspaceDrag();
     return;
+  }
+  if (canvasState.frameDrag) {
+    const drag = canvasState.frameDrag;
+    if (drag.moved) {
+      canvasState.suppressClick = true;
+      setTimeout(() => {
+        canvasState.suppressClick = false;
+      }, 80);
+      scheduleCanvasSave();
+    }
+    try {
+      drag.frameEl.releasePointerCapture(drag.pointerId);
+    } catch {
+      /* ignore */
+    }
+    drag.frameEl.classList.remove('dragging');
+    canvasState.frameDrag = null;
   }
   if (canvasState.drag) {
     const drag = canvasState.drag;
@@ -1042,6 +1329,7 @@ function createCanvasConversationAt(projectId, clientX, clientY) {
   };
   canvasState.selectedId = session.id;
   canvasState.selectedChildId = null;
+  canvasState.selectedIds = new Set([session.id]);
   renderCanvas();
   const node = canvasState.nodes[session.id];
   const groupEl = canvasDom.nodes.querySelector(
@@ -1077,6 +1365,23 @@ function openCanvasNodeMenu(sessionId, x, y) {
   const root = index.rootFor(session);
   const isRoot = root.id === session.id;
   const groupIds = canvasGroupSessionIds(root.id);
+  if (
+    canvasState.selectedIds.size > 1 &&
+    canvasState.selectedIds.has(root.id)
+  ) {
+    openActionMenu({
+      x,
+      y,
+      items: [
+        {
+          label: 'Group',
+          icon: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 8h3v3H8zM13 13h3v3h-3z"/>',
+          action: () => createCanvasFrameFromSelection(),
+        },
+      ],
+    });
+    return;
+  }
   const items = [
     {
       label: '打开',
@@ -1164,7 +1469,11 @@ function closeCanvas() {
   canvasDom.overlay.classList.add('hidden');
   canvasDom.overlay.setAttribute('aria-hidden', 'true');
   canvasState.drag = null;
+  canvasState.frameDrag = null;
   canvasState.pan = null;
+  canvasDom.frames
+    ?.querySelectorAll('.canvas-frame.dragging')
+    .forEach((frame) => frame.classList.remove('dragging'));
   canvasDom.stage?.classList.remove('panning');
   canvasDom.stage?.classList.remove('drop-target');
   void saveCanvasNow();
@@ -1180,7 +1489,7 @@ function canvasOverlayOpen() {
 
 function refreshCanvas() {
   if (!canvasOverlayOpen()) return;
-  if (canvasState.drag || canvasState.workspaceDrag) return;
+  if (canvasState.drag || canvasState.frameDrag || canvasState.workspaceDrag) return;
   renderCanvas();
   if (canvasState.pageOpen) renderWorkspacePage();
   void loadCanvasBackground();
@@ -1203,6 +1512,7 @@ async function saveCanvasNow() {
       body: {
         view: canvasState.view,
         nodes: canvasState.nodes,
+        frames: canvasState.frames,
         wires: [],
       },
     });
@@ -1226,6 +1536,18 @@ async function loadCanvas() {
     data?.nodes && typeof data.nodes === 'object'
       ? { ...data.nodes }
       : {};
+  canvasState.frames = Array.isArray(data?.frames)
+    ? data.frames
+        .map((frame) => {
+          if (!frame || typeof frame !== 'object') return null;
+          const id = String(frame.id || '').trim();
+          const nodeIds = Array.isArray(frame.nodeIds)
+            ? [...new Set(frame.nodeIds.map(String).filter(Boolean))]
+            : [];
+          return id && nodeIds.length > 0 ? { id, nodeIds } : null;
+        })
+        .filter(Boolean)
+    : [];
   canvasState.loaded = true;
   canvasState.loading = false;
   renderCanvas();
@@ -1245,7 +1567,7 @@ function bindCanvasEvents() {
     if (
       event.target instanceof Element &&
       event.target.closest(
-        '.canvas-workspaces-page, .canvas-zoom-indicator, button'
+        '.canvas-workspaces-page, .canvas-zoom-indicator, .canvas-frame, button'
       )
     ) {
       return;
@@ -1274,7 +1596,7 @@ function bindCanvasEvents() {
   canvasDom.stage?.addEventListener('click', (event) => {
     if (
       event.target instanceof Element &&
-      event.target.closest('.canvas-group, .canvas-workspaces-page, button')
+      event.target.closest('.canvas-group, .canvas-frame, .canvas-workspaces-page, button')
     ) {
       return;
     }
@@ -1308,6 +1630,7 @@ window.canvasTabReleased = canvasTabReleased;
 window.cancelCanvasPage = cancelCanvasPage;
 window.refreshCanvas = refreshCanvas;
 window.openCanvasNodeMenu = openCanvasNodeMenu;
+window.openCanvasFrameMenu = openCanvasFrameMenu;
 window.openCanvasWorkspaceMenu = openCanvasWorkspaceMenu;
 
 bindCanvasEvents();
@@ -1323,6 +1646,7 @@ api.onSubagentStarted((payload) => {
   if (
     canvasOverlayOpen() &&
     !canvasState.drag &&
+    !canvasState.frameDrag &&
     !canvasState.workspaceDrag
   ) {
     renderCanvas();
@@ -1334,6 +1658,7 @@ api.onSubagentComplete(() => {
   if (
     canvasOverlayOpen() &&
     !canvasState.drag &&
+    !canvasState.frameDrag &&
     !canvasState.workspaceDrag
   ) {
     renderCanvas();
@@ -1347,6 +1672,7 @@ api.onBackgroundUpdate((payload) => {
   if (
     canvasOverlayOpen() &&
     !canvasState.drag &&
+    !canvasState.frameDrag &&
     !canvasState.workspaceDrag
   ) {
     renderCanvas();
@@ -1359,6 +1685,7 @@ api.onBackgroundComplete((payload) => {
   if (
     canvasOverlayOpen() &&
     !canvasState.drag &&
+    !canvasState.frameDrag &&
     !canvasState.workspaceDrag
   ) {
     renderCanvas();

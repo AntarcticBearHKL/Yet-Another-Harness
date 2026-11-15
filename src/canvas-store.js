@@ -68,6 +68,21 @@ function normalizeWires(raw) {
     .slice(0, 1000);
 }
 
+function normalizeFrame(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const id = String(source.id || '').trim();
+  const nodeIds = Array.isArray(source.nodeIds)
+    ? [...new Set(source.nodeIds.map(String).filter(Boolean))].slice(0, 500)
+    : [];
+  if (!id || nodeIds.length === 0) return null;
+  return { id, nodeIds };
+}
+
+function normalizeFrames(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(normalizeFrame).filter(Boolean).slice(0, 200);
+}
+
 function normalizeCanvas(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
   const nodes = {};
@@ -82,6 +97,7 @@ function normalizeCanvas(raw) {
     version: 1,
     view: normalizeView(source.view),
     nodes,
+    frames: normalizeFrames(source.frames),
     wires: normalizeWires(source.wires),
   };
 }
@@ -98,6 +114,7 @@ function createCanvasStore(file) {
       version: 1,
       view: { x: 0, y: 0, k: 1 },
       nodes: {},
+      frames: [],
       wires: [],
     };
   }
@@ -140,4 +157,6 @@ module.exports = {
   normalizeCanvas,
   normalizeView,
   normalizeNode,
+  normalizeFrame,
+  normalizeFrames,
 };
