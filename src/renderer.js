@@ -2759,6 +2759,7 @@ function handleSubagentStarted(payload) {
     projectId: parent?.projectId || null,
     frozen: true,
     subagent: true,
+    parentSessionId: payload.parentSessionId || null,
     mcpDisabled: parent?.mcpDisabled || [],
     foldState: null,
     pendingQueue: [],
@@ -2772,6 +2773,7 @@ function handleSubagentStarted(payload) {
   if (insertAt <= state.current) state.current += 1;
   saveChatsSoon();
   if (state.switcherOpen) renderSwitcher();
+  window.refreshCanvas?.();
 }
 
 function handleSubagentComplete(payload) {
@@ -2805,6 +2807,7 @@ function handleSubagentComplete(payload) {
   if (parent === currentSession()) {
     void resumeBackgroundQueue(parent);
   }
+  window.refreshCanvas?.();
 }
 
 function buildMcpSummary(session, onClick) {
@@ -4275,6 +4278,7 @@ function renderAll() {
     void loadBackgroundJobs(session.id, true);
   }
   connectChatEvents(currentSession()?.id || null);
+  window.refreshCanvas?.();
 }
 
 function updateSendState() {
@@ -6526,6 +6530,7 @@ function onActionMenuMove(event) {
 
 function startActionMenuPress(event) {
   if (event.button !== 2) return;
+  if (window.canvasOverlayOpen?.()) return;
   if (
     event.target instanceof Element &&
     event.target.closest('#action-menu, .usage-card')
@@ -7125,6 +7130,7 @@ function openSwitcherRingMenu(event) {
 
 function onRightMouseDown(event) {
   if (event.button !== 2) return;
+  if (window.canvasOverlayOpen?.()) return;
   closeAgentMenu();
   if (dom.approvalOverlay && !dom.approvalOverlay.classList.contains('hidden')) {
     state.ringSuppress = true;
@@ -8822,6 +8828,14 @@ function bindEvents() {
       return;
     }
 
+    if (window.canvasOverlayOpen?.()) {
+      if (event.key === 'Tab' || (event.key === 'Escape' && !event.isComposing)) {
+        event.preventDefault();
+        window.closeCanvas?.();
+      }
+      return;
+    }
+
     if (state.composerOpen) {
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
@@ -8860,11 +8874,8 @@ function bindEvents() {
       if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
         return;
       }
-      if (state.switcherOpen) return;
-      if (event.repeat || state.tabHeld) return;
-
-      state.tabHeld = true;
-      openSwitcher();
+      if (event.repeat) return;
+      window.openCanvas?.();
       return;
     }
 
@@ -9011,6 +9022,7 @@ function bindEvents() {
             !dom.backgroundOverlay.classList.contains('hidden')
         ) ||
         Boolean(window.agileOverlayOpen?.()) ||
+        Boolean(window.canvasOverlayOpen?.()) ||
         state.switcherOpen ||
         state.composerOpen ||
         state.catalogOpen ||

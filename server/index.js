@@ -12,6 +12,7 @@ const tools = require('../src/tools');
 const processTools = require('../src/tools/process');
 const agileTools = require('../src/tools/agile');
 const { createAgileStore } = require('../src/agile-store');
+const { createCanvasStore } = require('../src/canvas-store');
 const deepseek = require('../src/deepseek');
 const runner = require('./runner');
 const usage = require('./usage');
@@ -34,6 +35,7 @@ const ASSETS_DIR = path.join(ROOT, 'assets');
 const AGENTS_FILE = path.join(DATA_DIR, 'agents.json');
 const agileStore = createAgileStore(path.join(DATA_DIR, 'agile.json'));
 agileTools.configure(agileStore);
+const canvasStore = createCanvasStore(path.join(DATA_DIR, 'canvas.json'));
 const HOST = '127.0.0.1';
 const LOCAL_PORT = Number(process.env.YAH_LOCAL_PORT) || 3789;
 const REMOTE_PORT = Number(process.env.YAH_REMOTE_PORT) || 3790;
@@ -69,6 +71,8 @@ const STATIC_FILES = new Map([
   ['/agile.css', 'agile.css'],
   ['/agile.html', 'agile.html'],
   ['/agile-window.js', 'agile-window.js'],
+  ['/canvas.css', 'canvas.css'],
+  ['/canvas-ui.js', 'canvas-ui.js'],
   ['/resize.css', 'resize.css'],
   ['/resize.js', 'resize.js'],
   ['/renderer.js', 'renderer.js'],
@@ -846,6 +850,20 @@ function handleApi(req, res, url) {
     }
 
     sendJson(res, 404, { error: 'not found' });
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/canvas') {
+    sendJson(res, 200, canvasStore.state());
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/canvas') {
+    readJson(req)
+      .then((body) => {
+        sendJson(res, 200, { ok: true, canvas: canvasStore.save(body) });
+      })
+      .catch((error) => sendJson(res, 400, { error: error.message }));
     return true;
   }
 
