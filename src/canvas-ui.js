@@ -488,18 +488,7 @@ function buildCanvasGroup(root, children, jobs, node) {
     event.stopPropagation();
     createCanvasChildSession(root.id);
   });
-  const grip = el('button', 'canvas-group-grip', '⠿');
-  grip.type = 'button';
-  grip.title = '拖动组';
-  grip.setAttribute('aria-label', '拖动组');
-  grip.addEventListener('pointerdown', (event) => {
-    startCanvasGroupDrag(event, root, groupEl, node);
-  });
-  grip.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  });
-  head.append(grip, add);
+  head.append(add);
   groupEl.append(head);
 
   groupEl.append(
@@ -574,6 +563,9 @@ function buildCanvasGroup(root, children, jobs, node) {
   groupEl.append(foot);
   groupEl.title = root.title || '未命名对话';
 
+  groupEl.addEventListener('pointerdown', (event) => {
+    startCanvasGroupDrag(event, root, groupEl, node);
+  });
   groupEl.addEventListener('click', (event) => {
     if (
       event.target instanceof Element &&
@@ -963,7 +955,7 @@ function startCanvasGroupDrag(event, root, groupEl, node) {
   if (event.button !== 0) return;
   if (
     event.target instanceof Element &&
-    event.target.closest('.canvas-child')
+    event.target.closest('button')
   ) {
     return;
   }
@@ -1398,12 +1390,15 @@ function bindCanvasEvents() {
   });
 
   canvasDom.stage?.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 && event.button !== 1) return;
+    // 中键拖拽平移画布视角；Electron 里左键留给窗口和 node 拖动
+    const allowPan = event.button === 1 || (event.button === 0 && !api.isElectron);
+    if (!allowPan) return;
     if (
       event.target instanceof Element &&
-      event.target.closest(
-        '.canvas-workspaces-page, .canvas-zoom-indicator, button'
-      )
+      (event.target.closest(
+        '.canvas-workspaces-page, .canvas-zoom-indicator'
+      ) ||
+        (event.button === 0 && event.target.closest('button')))
     ) {
       return;
     }
@@ -1426,6 +1421,16 @@ function bindCanvasEvents() {
 
   canvasDom.stage?.addEventListener('contextmenu', (event) => {
     event.preventDefault();
+  });
+
+  canvasDom.stage?.addEventListener('click', (event) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest('.canvas-group, .canvas-workspaces-page, button')
+    ) {
+      return;
+    }
+    canvasClearSelection();
   });
 
   canvasDom.stage?.addEventListener(

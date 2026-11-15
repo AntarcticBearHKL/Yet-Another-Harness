@@ -6151,7 +6151,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, #web-content';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, #web-content, .canvas-workspaces-page, .canvas-group';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -6176,8 +6176,9 @@ function onWindowDragStart(event) {
   const target = event.target;
   if (!(target instanceof Element)) return;
   if (target.closest(DRAG_EXCLUDE)) return;
+  const canvasOverlay = target.closest('#canvas');
   const overlay = target.closest('.overlay');
-  if (overlay && overlay !== dom.switcher) return;
+  if (overlay && overlay !== dom.switcher && overlay !== canvasOverlay) return;
   if (!dom.settingsOverlay.classList.contains('hidden')) return;
   if (target instanceof HTMLElement && hitsScrollbar(target, event)) return;
 

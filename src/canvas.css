@@ -242,45 +242,6 @@ body:has(#canvas:not(.hidden)) #confirm-overlay {
   color: var(--text);
 }
 
-.canvas-group-grip {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  flex: none;
-  margin-left: 1px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--faint);
-  font-size: 10px;
-  line-height: 1;
-  letter-spacing: 0.08em;
-  opacity: 0.3;
-  cursor: grab;
-  transition:
-    opacity 120ms ease,
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
-}
-
-.canvas-group:hover .canvas-group-grip,
-.canvas-group.selected .canvas-group-grip,
-.canvas-group:focus-within .canvas-group-grip {
-  opacity: 0.8;
-}
-
-.canvas-group-grip:hover {
-  border-color: var(--line);
-  background: var(--surface-card);
-  color: var(--text);
-}
-
-.canvas-group-grip:active {
-  cursor: grabbing;
-}
-
 .canvas-group-title {
   flex: none;
   padding: 6px 14px 0;
