@@ -129,8 +129,6 @@ const state = {
   viewMode: null,
   chatWindow: false,
   chatCompact: false,
-  chatBarTitle: null,
-  chatBarMode: null,
   chatNav: null,
   chatNavSignature: '',
   chatNavTimer: null,
@@ -1217,6 +1215,13 @@ function makeCard(opts) {
 
   const bodyWrap = el('div', 'card-body-wrap');
   bodyWrap.inert = !opts.alwaysOpen;
+  if (
+    state.chatWindow &&
+    state.chatCompact &&
+    (opts.kind === 'user' || opts.primary)
+  ) {
+    bodyWrap.inert = false;
+  }
   const body = el('div', 'card-body');
   const inner = el('div', 'card-body-inner');
   body.append(inner);
@@ -3071,19 +3076,6 @@ function refreshContextBlocks() {
 function setupChatWindow() {
   if (!state.chatWindow || state.chatNav) return;
   document.body.classList.add('chat-window');
-  const bar = el('header', 'chat-window-bar');
-  const title = el(
-    'div',
-    'chat-window-title',
-    currentSession()?.title || '对话'
-  );
-  const mode = el('button', 'chat-window-mode', '详细');
-  mode.type = 'button';
-  mode.title = 'Tab 切换详细 / 精简';
-  mode.addEventListener('click', (event) => {
-    event.stopPropagation();
-    setChatCompact(!state.chatCompact);
-  });
   const close = el('button', 'chat-window-close', '×');
   close.type = 'button';
   close.setAttribute('aria-label', '关闭对话窗口');
@@ -3092,13 +3084,10 @@ function setupChatWindow() {
     event.stopPropagation();
     api.close();
   });
-  bar.append(title, mode, close);
-  document.body.prepend(bar);
+  document.body.append(close);
   const nav = el('nav', 'chat-turn-nav');
   nav.setAttribute('aria-label', '对话跳转');
   document.body.append(nav);
-  state.chatBarTitle = title;
-  state.chatBarMode = mode;
   state.chatNav = nav;
   dom.messages.addEventListener(
     'scroll',
@@ -3108,6 +3097,9 @@ function setupChatWindow() {
     },
     { passive: true }
   );
+  dom.webContent?.addEventListener('click', (event) => {
+    if (event.target === dom.webContent) closeWebContent();
+  });
   setChatCompact(false);
 }
 
@@ -3115,9 +3107,6 @@ function setChatCompact(compact) {
   if (!state.chatWindow) return;
   state.chatCompact = Boolean(compact);
   document.body.classList.toggle('chat-compact', state.chatCompact);
-  if (state.chatBarMode) {
-    state.chatBarMode.textContent = state.chatCompact ? '精简' : '详细';
-  }
   for (const card of dom.messages.querySelectorAll(
     '.message-card.prompt-card, .message-card.answer-card'
   )) {
@@ -3142,12 +3131,6 @@ function scheduleChatTurnNav() {
 function renderChatTurnNav() {
   if (!state.chatWindow || !state.chatNav) return;
   const session = currentSession();
-  if (state.chatBarTitle) {
-    state.chatBarTitle.textContent = session?.title || '对话';
-  }
-  if (state.chatBarMode) {
-    state.chatBarMode.textContent = state.chatCompact ? '精简' : '详细';
-  }
   document.title = `YAH - ${session?.title || 'Chat'}`;
 
   const turns = [...dom.messages.querySelectorAll('.turn')].filter((turn) =>
@@ -3171,9 +3154,6 @@ function renderChatTurnNav() {
           .trim()
       );
       const longest = Math.max(1, ...texts.map((text) => text.length));
-      const count = el('span', 'chat-turn-count', `${turns.length} 轮`);
-      count.title = `共 ${turns.length} 轮对话`;
-      state.chatNav.append(count);
       turns.forEach((turn, index) => {
         const text = texts[index];
         const bar = el('button', 'chat-turn-bar');
@@ -3184,9 +3164,9 @@ function renderChatTurnNav() {
           `跳到第 ${index + 1} 轮对话`
         );
         const width =
-          24 +
+          18 +
           Math.round(
-            (Math.log1p(text.length) / Math.log1p(longest)) * 30
+            (Math.log1p(text.length) / Math.log1p(longest)) * 20
           );
         bar.style.setProperty('--bar-width', `${width}px`);
         bar.addEventListener('click', () => scrollChatTurn(index));
@@ -3206,10 +3186,19 @@ function updateChatTurnActive() {
   if (turns.length === 0 || bars.length === 0) return;
   const top = dom.messages.getBoundingClientRect().top;
   let active = 0;
-  turns.forEach((turn, index) => {
-    const turnTop = turn.getBoundingClientRect().top - top;
-    if (turnTop <= 84) active = index;
-  });
+  const atBottom =
+    dom.messages.scrollHeight -
+      dom.messages.scrollTop -
+      dom.messages.clientHeight <
+    32;
+  if (atBottom) {
+    active = turns.length - 1;
+  } else {
+    turns.forEach((turn, index) => {
+      const turnTop = turn.getBoundingClientRect().top - top;
+      if (turnTop <= 84) active = index;
+    });
+  }
   bars.forEach((bar, index) => {
     bar.classList.toggle('active', index === active);
   });
@@ -6350,12 +6339,6 @@ function onWindowDragStart(event) {
   const target = event.target;
   if (!(target instanceof Element)) return;
   if (target.closest(DRAG_EXCLUDE)) return;
-  if (
-    document.body.classList.contains('chat-window') &&
-    !target.closest('.chat-window-bar')
-  ) {
-    return;
-  }
   const canvasOverlay = target.closest('#canvas');
   const overlay = target.closest('.overlay');
   if (overlay && overlay !== dom.switcher && overlay !== canvasOverlay) return;
@@ -8910,6 +8893,20 @@ function bindEvents() {
   document.addEventListener('keydown', (event) => {
     if (handleDialogConfirmSpace(event)) return;
     if (state.chatWindow) {
+      const webOpen =
+        dom.webContent && !dom.webContent.classList.contains('hidden');
+      if (webOpen) {
+        if (event.key === 'Escape' && !event.isComposing) {
+          event.preventDefault();
+          closeWebContent();
+          return;
+        }
+        if (event.key === 'Tab') {
+          event.preventDefault();
+          return;
+        }
+        return;
+      }
       if (
         event.key === 'Tab' &&
         !event.shiftKey &&
@@ -8923,13 +8920,29 @@ function bindEvents() {
       }
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
-        api.close();
+        if (state.composerOpen) closeComposer();
+        else api.close();
         return;
       }
       if (event.code === 'Space' || event.key === ' ') {
-        event.preventDefault();
+        const target = event.target;
+        if (
+          target instanceof Element &&
+          target.closest('button, a')
+        ) {
+          return;
+        }
+        if (!state.composerOpen) {
+          event.preventDefault();
+          openComposer();
+          return;
+        }
+        // With the composer open, let the normal Space handling below run.
+      } else if (state.composerOpen) {
+        return;
+      } else {
+        return;
       }
-      return;
     }
     if (state.agentMenuOpen && event.key === 'Escape' && !event.isComposing) {
       event.preventDefault();
