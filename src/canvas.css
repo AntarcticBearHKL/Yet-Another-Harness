@@ -37,12 +37,8 @@ body:has(#canvas:not(.hidden)) #confirm-overlay {
   min-height: 0;
   overflow: hidden;
   background: var(--surface-workspace);
-  cursor: grab;
+  cursor: default;
   touch-action: none;
-}
-
-.canvas-stage.panning {
-  cursor: grabbing;
 }
 
 .canvas-stage.drop-target {
@@ -110,7 +106,7 @@ body:has(#canvas:not(.hidden)) #confirm-overlay {
   border-radius: 12px;
   background: var(--surface-card);
   color: var(--text-soft);
-  cursor: grab;
+  cursor: default;
   user-select: none;
   transition:
     background 120ms ease,
@@ -230,7 +226,7 @@ body:has(#canvas:not(.hidden)) #confirm-overlay {
 }
 
 .canvas-child {
-  cursor: pointer;
+  cursor: default;
   transition: background 120ms ease;
 }
 
