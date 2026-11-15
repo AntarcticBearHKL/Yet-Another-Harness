@@ -389,6 +389,7 @@ const api = {
   dragMove: (point) => shell?.dragMove?.(point),
   dragEnd: () => shell?.dragEnd?.(),
   isMaximized: () => shell?.isMaximized?.() ?? Promise.resolve(false),
+  openAgileWindow: () => shell?.openAgileWindow?.(),
   getPathForFile: (file) =>
     shell?.getPathForFile?.(file) || String(file?.path || ''),
   pickDirectories: () => shell?.pickDirectories?.() ?? Promise.resolve([]),
@@ -6498,7 +6499,11 @@ function openSwitcherActionMenu(target, x, y) {
       icon: RING_ICONS.agile,
       action: () => {
         closeSwitcher();
-        window.openAgile?.();
+        if (api.isElectron && api.openAgileWindow) {
+          api.openAgileWindow();
+        } else {
+          window.openAgile?.();
+        }
       },
     },
     {
@@ -6931,7 +6936,11 @@ function openSwitcherRingMenu(event) {
       icon: RING_ICONS.agile,
       action: () => {
         closeSwitcher();
-        window.openAgile?.();
+        if (api.isElectron && api.openAgileWindow) {
+          api.openAgileWindow();
+        } else {
+          window.openAgile?.();
+        }
       },
     },
     {

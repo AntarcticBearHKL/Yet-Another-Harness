@@ -867,3 +867,57 @@ body:has(#agile:not(.hidden)) #confirm-overlay {
     width: 150px;
   }
 }
+
+/* Standalone Agile window: the page is the window, so the shell owns the frame. */
+body.agile-window {
+  background: transparent;
+}
+
+body.agile-window .agile {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--solid);
+  overflow: hidden;
+}
+
+body.agile-window.maximized .agile {
+  border: 0;
+  border-radius: 0;
+}
+
+.agile-window-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: none;
+  margin-left: 2px;
+}
+
+.agile-win-btn {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 13px;
+  line-height: 1;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.agile-win-btn:hover {
+  border-color: var(--line);
+  background: var(--hover);
+  color: var(--text);
+}
+
+.agile-win-btn.close:hover {
+  border-color: rgba(176, 74, 60, 0.24);
+  background: rgba(176, 74, 60, 0.1);
+  color: #b04a3c;
+}

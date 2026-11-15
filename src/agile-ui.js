@@ -672,6 +672,10 @@ function openAgile() {
 
 function closeAgile() {
   if (!agileDom.overlay) return;
+  if (document.body.classList.contains('agile-window') && window.yah?.close) {
+    window.yah.close();
+    return;
+  }
   closeAgileTask();
   closeAgileBoardDetails();
   closeAgileSettings();
@@ -811,9 +815,32 @@ function bindAgileEvents() {
   });
 }
 
+function anyAgileModalOpen() {
+  return [agileDom.taskModal, agileDom.boardModal, agileDom.settingsModal].some(
+    (modal) => modal && !modal.classList.contains('hidden')
+  );
+}
+
+async function refreshAgileIfChanged() {
+  if (!agileState.data || document.hidden || agileState.loading) return;
+  if (anyAgileModalOpen()) return;
+  if (agileState.groupCreating || agileState.groupRename) return;
+  const confirm = document.getElementById('confirm-overlay');
+  if (confirm && !confirm.classList.contains('hidden')) return;
+  try {
+    const data = await requestJson('/api/agile');
+    if (!data || data.seq === agileState.data.seq) return;
+    agileState.data = data;
+    renderAgile();
+  } catch {
+    /* ignore */
+  }
+}
+
 window.openAgile = openAgile;
 window.closeAgile = closeAgile;
 window.agileOverlayOpen = agileOverlayOpen;
 window.handleAgileEscape = handleAgileEscape;
+window.refreshAgileIfChanged = refreshAgileIfChanged;
 
 bindAgileEvents();

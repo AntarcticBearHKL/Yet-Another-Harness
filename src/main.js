@@ -41,10 +41,13 @@ if (!gotLock) {
 const LOCAL_PORT = Number(process.env.YAH_LOCAL_PORT) || 3789;
 const LOCAL_URL = `http://127.0.0.1:${LOCAL_PORT}`;
 const WINDOW_STATE_FILE = path.join(userData, 'window.json');
+const AGILE_WINDOW_STATE_FILE = path.join(userData, 'agile-window.json');
 
 let mainWindow = null;
+let agileWindow = null;
 let backendProcess = null;
 let saveBoundsTimer = null;
+let saveAgileBoundsTimer = null;
 const contentWindows = new Map();
 let dragState = null;
 let resizeState = null;
@@ -70,7 +73,7 @@ function saveWindowState(bounds) {
   }
 }
 
-function clampBounds(bounds) {
+function clampBounds(bounds, options = {}) {
   const display = bounds
     ? screen.getDisplayMatching({
         x: bounds.x,
@@ -81,15 +84,15 @@ function clampBounds(bounds) {
     : screen.getPrimaryDisplay();
   const area = display.workArea;
 
-  const minWidth = Math.min(900, area.width);
-  const minHeight = Math.min(520, area.height);
+  const minWidth = Math.min(options.minWidth || 900, area.width);
+  const minHeight = Math.min(options.minHeight || 520, area.height);
   const width = Math.max(
     minWidth,
-    Math.min(area.width, Number(bounds?.width) || 1120)
+    Math.min(area.width, Number(bounds?.width) || options.width || 1120)
   );
   const height = Math.max(
     minHeight,
-    Math.min(area.height, Number(bounds?.height) || 740)
+    Math.min(area.height, Number(bounds?.height) || options.height || 740)
   );
 
   const requestedX =
@@ -182,6 +185,97 @@ function openContentWindow(payload) {
   return win.id;
 }
 
+function loadAgileWindowState() {
+  try {
+    return JSON.parse(fs.readFileSync(AGILE_WINDOW_STATE_FILE, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function saveAgileWindowState(bounds) {
+  try {
+    fs.mkdirSync(path.dirname(AGILE_WINDOW_STATE_FILE), { recursive: true });
+    fs.writeFileSync(
+      AGILE_WINDOW_STATE_FILE,
+      `${JSON.stringify(bounds, null, 2)}\n`,
+      'utf8'
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function scheduleAgileBoundsSave() {
+  clearTimeout(saveAgileBoundsTimer);
+  saveAgileBoundsTimer = setTimeout(saveAgileBounds, 300);
+}
+
+function saveAgileBounds() {
+  if (!agileWindow || agileWindow.isDestroyed()) return;
+  saveAgileWindowState(agileWindow.getBounds());
+}
+
+function openAgileWindow() {
+  if (agileWindow && !agileWindow.isDestroyed()) {
+    if (agileWindow.isMinimized()) agileWindow.restore();
+    agileWindow.show();
+    agileWindow.focus();
+    return agileWindow.id;
+  }
+
+  const bounds = clampBounds(loadAgileWindowState(), {
+    width: 1440,
+    height: 900,
+    minWidth: 900,
+    minHeight: 560,
+  });
+
+  agileWindow = new BrowserWindow({
+    ...bounds,
+    minWidth: 900,
+    minHeight: 560,
+    title: 'YAH - Agile',
+    icon: path.join(__dirname, '..', 'assets', 'yah.ico'),
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    roundedCorners: false,
+    thickFrame: true,
+    hasShadow: true,
+    show: false,
+    resizable: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      spellcheck: false,
+    },
+  });
+
+  agileWindow.loadURL(`${LOCAL_URL}/agile.html?shell=electron`);
+  agileWindow.once('ready-to-show', () => {
+    if (agileWindow && !agileWindow.isDestroyed()) agileWindow.show();
+  });
+  agileWindow.on('resize', scheduleAgileBoundsSave);
+  agileWindow.on('move', scheduleAgileBoundsSave);
+  agileWindow.on('resized', saveAgileBounds);
+  agileWindow.on('moved', saveAgileBounds);
+  agileWindow.on('close', saveAgileBounds);
+  agileWindow.on('closed', () => {
+    agileWindow = null;
+  });
+  agileWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  agileWindow.webContents.on('will-navigate', (event) => {
+    event.preventDefault();
+  });
+  return agileWindow.id;
+}
+
 async function backendHealthy() {
   try {
     const controller = new AbortController();
@@ -262,6 +356,8 @@ function createWindow() {
   mainWindow.on('close', saveBounds);
   mainWindow.on('closed', () => {
     mainWindow = null;
+    if (agileWindow && !agileWindow.isDestroyed()) agileWindow.close();
+    agileWindow = null;
     for (const entry of [...contentWindows.values()]) {
       if (!entry.win.isDestroyed()) entry.win.close();
     }
@@ -295,11 +391,16 @@ if (gotLock) {
 
     createWindow();
 
-    ipcMain.on('window:minimize', () => mainWindow?.minimize());
-    ipcMain.on('window:maximize', () => {
-      if (!mainWindow) return;
-      if (mainWindow.isMaximized()) mainWindow.unmaximize();
-      else mainWindow.maximize();
+    ipcMain.on('window:minimize', (event) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      (win || mainWindow)?.minimize();
+    });
+    ipcMain.on('window:maximize', (event) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const target = win || mainWindow;
+      if (!target) return;
+      if (target.isMaximized()) target.unmaximize();
+      else target.maximize();
     });
     ipcMain.on('window:close', (event) => {
       const win = BrowserWindow.fromWebContents(event.sender);
@@ -308,6 +409,7 @@ if (gotLock) {
     ipcMain.handle('content:open', (_event, payload) =>
       openContentWindow(payload)
     );
+    ipcMain.handle('agile:open', () => openAgileWindow());
     ipcMain.on('content:update', (_event, payload) => {
       const key = String(payload?.key || '');
       if (!key) return;
@@ -446,6 +548,8 @@ if (gotLock) {
 
   app.on('before-quit', () => {
     clearTimeout(saveBoundsTimer);
+    clearTimeout(saveAgileBoundsTimer);
     saveBounds();
+    saveAgileBounds();
   });
 }
