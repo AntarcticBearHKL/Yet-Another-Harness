@@ -896,88 +896,81 @@
     </div>
 
     <div id="canvas" class="overlay canvas-overlay hidden" aria-hidden="true">
-      <aside class="canvas-sidebar">
-        <header class="canvas-sidebar-head">
-          <span class="canvas-sidebar-title">工作区</span>
-          <div class="canvas-sidebar-actions">
-            <button
-              id="canvas-add-workspace"
-              class="canvas-icon-btn"
-              type="button"
-              aria-label="新建工作区"
-              title="新建工作区"
-            >
-              +
-            </button>
-            <button
-              id="canvas-close"
-              class="canvas-icon-btn"
-              type="button"
-              aria-label="关闭画布"
-              title="关闭画布"
-            >
-              ×
-            </button>
-          </div>
-        </header>
-        <div id="canvas-workspaces" class="canvas-workspaces"></div>
-        <footer class="canvas-sidebar-foot">
-          <div class="canvas-sidebar-hint">
-            拖动工作区到画布，开始一段对话
-          </div>
-          <div class="canvas-sidebar-links">
-            <button
-              id="canvas-agile"
-              class="canvas-sidebar-link"
-              type="button"
-            >
-              Agile
-            </button>
-            <button
-              id="canvas-settings"
-              class="canvas-sidebar-link"
-              type="button"
-            >
-              设置
-            </button>
-          </div>
-        </footer>
-      </aside>
       <main id="canvas-stage" class="canvas-stage">
         <div id="canvas-grid" class="canvas-grid" aria-hidden="true"></div>
         <div id="canvas-world" class="canvas-world">
-          <svg
-            id="canvas-wires"
-            class="canvas-wires"
-            aria-hidden="true"
-          ></svg>
-          <div id="canvas-nodes" class="canvas-nodes"></div>
+          <div id="canvas-zoom" class="canvas-zoom">
+            <svg
+              id="canvas-wires"
+              class="canvas-wires"
+              aria-hidden="true"
+            ></svg>
+            <div id="canvas-nodes" class="canvas-nodes"></div>
+          </div>
         </div>
         <div id="canvas-empty" class="canvas-empty">
-          拖动左侧工作区到画布，开始一段对话
+          按住 Tab 打开工作区，拖拽到画布上
         </div>
-        <div class="canvas-dock">
-          <button
-            id="canvas-zoom-out"
-            class="canvas-dock-btn"
-            type="button"
-            aria-label="缩小"
-          >
-            −
-          </button>
-          <span id="canvas-zoom-label" class="canvas-dock-label">100%</span>
-          <button
-            id="canvas-zoom-in"
-            class="canvas-dock-btn"
-            type="button"
-            aria-label="放大"
-          >
-            +
-          </button>
-          <span class="canvas-dock-sep" aria-hidden="true"></span>
-          <button id="canvas-fit" class="canvas-dock-btn wide" type="button">
-            适应
-          </button>
+        <div
+          id="canvas-zoom-indicator"
+          class="canvas-zoom-indicator"
+          aria-hidden="true"
+        >
+          100%
+        </div>
+        <div
+          id="canvas-workspaces-page"
+          class="canvas-workspaces-page hidden"
+        >
+          <div class="canvas-workspaces-panel">
+            <header class="canvas-workspaces-head">
+              <div class="canvas-workspaces-title">
+                <span class="canvas-kicker">WORKSPACES</span>
+                <h2>工作区</h2>
+                <p>按住并拖拽工作区，松开 Tab 放到画布上</p>
+              </div>
+              <div class="canvas-workspaces-actions">
+                <button
+                  id="canvas-add-workspace"
+                  class="pill compact"
+                  type="button"
+                >
+                  + 新建工作区
+                </button>
+                <button
+                  id="canvas-close"
+                  class="canvas-icon-btn"
+                  type="button"
+                  aria-label="关闭画布"
+                  title="关闭画布"
+                >
+                  ×
+                </button>
+              </div>
+            </header>
+            <div id="canvas-workspaces" class="canvas-workspaces-grid"></div>
+            <footer class="canvas-workspaces-foot">
+              <span class="canvas-workspaces-hint">
+                松开 Tab 返回画布 · Esc 关闭画布
+              </span>
+              <div class="canvas-workspaces-links">
+                <button
+                  id="canvas-agile"
+                  class="canvas-page-link"
+                  type="button"
+                >
+                  Agile
+                </button>
+                <button
+                  id="canvas-settings"
+                  class="canvas-page-link"
+                  type="button"
+                >
+                  设置
+                </button>
+              </div>
+            </footer>
+          </div>
         </div>
       </main>
     </div>

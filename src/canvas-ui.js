@@ -2,19 +2,18 @@
 
 const canvasDom = {
   overlay: document.getElementById('canvas'),
-  workspaces: document.getElementById('canvas-workspaces'),
-  addWorkspace: document.getElementById('canvas-add-workspace'),
-  close: document.getElementById('canvas-close'),
   stage: document.getElementById('canvas-stage'),
   grid: document.getElementById('canvas-grid'),
   world: document.getElementById('canvas-world'),
+  zoomLayer: document.getElementById('canvas-zoom'),
   wires: document.getElementById('canvas-wires'),
   nodes: document.getElementById('canvas-nodes'),
   empty: document.getElementById('canvas-empty'),
-  zoomIn: document.getElementById('canvas-zoom-in'),
-  zoomOut: document.getElementById('canvas-zoom-out'),
-  zoomLabel: document.getElementById('canvas-zoom-label'),
-  fit: document.getElementById('canvas-fit'),
+  zoomIndicator: document.getElementById('canvas-zoom-indicator'),
+  page: document.getElementById('canvas-workspaces-page'),
+  workspaces: document.getElementById('canvas-workspaces'),
+  addWorkspace: document.getElementById('canvas-add-workspace'),
+  close: document.getElementById('canvas-close'),
 };
 
 const CANVAS_NODE_WIDTH = 280;
@@ -30,19 +29,24 @@ const CANVAS_WORKSPACE_COLORS = [
   '#b08a4a',
   '#a66f74',
 ];
+const CANVAS_FOLDER_ICON =
+  '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>';
 
 const canvasState = {
   open: false,
   loaded: false,
   loading: false,
+  pageOpen: false,
   view: { x: 0, y: 0, k: 1 },
   nodes: {},
   wires: [],
   selectedId: null,
-  selectedProjectId: null,
   drag: null,
   pan: null,
+  workspaceDrag: null,
   saveTimer: null,
+  pageTimer: null,
+  zoomTimer: null,
   request: 0,
   suppressClick: false,
 };
@@ -72,9 +76,7 @@ function canvasWorkspaceFor(session) {
 }
 
 function canvasWorkspaceColor(project) {
-  const index = state.projects.findIndex(
-    (item) => item.id === project?.id
-  );
+  const index = state.projects.findIndex((item) => item.id === project?.id);
   return CANVAS_WORKSPACE_COLORS[
     Math.max(0, index) % CANVAS_WORKSPACE_COLORS.length
   ];
@@ -150,48 +152,40 @@ function canvasSessionPreview(session) {
   return canvasPreviewText(last?.text) || '还没有消息';
 }
 
-function renderCanvasSidebar() {
+/* ------------------------------ 工作区管理页 ------------------------------ */
+
+function renderWorkspacePage() {
   if (!canvasDom.workspaces) return;
+  if (canvasState.workspaceDrag?.active) return;
   canvasDom.workspaces.replaceChildren();
   const projects = Array.isArray(state.projects) ? state.projects : [];
   if (projects.length === 0) {
     canvasDom.workspaces.append(
-      el('div', 'canvas-sidebar-empty', '还没有工作区，点 + 新建一个。')
+      el(
+        'div',
+        'canvas-workspaces-empty',
+        '还没有工作区。点右上角「+ 新建工作区」绑定一个开发目录。'
+      )
     );
     return;
   }
   projects.forEach((project) => {
-    const row = el('div', 'canvas-workspace');
-    row.draggable = true;
-    row.dataset.projectId = project.id;
-    row.style.setProperty(
+    const card = el('article', 'canvas-workspace');
+    card.dataset.projectId = project.id;
+    card.style.setProperty(
       '--canvas-workspace-color',
       canvasWorkspaceColor(project)
     );
-    if (canvasState.selectedProjectId === project.id) {
-      row.classList.add('selected');
-    }
-    row.append(el('span', 'canvas-workspace-dot'));
-    const copy = el('div', 'canvas-workspace-copy');
-    copy.append(
+
+    const head = el('header', 'canvas-workspace-head');
+    head.append(el('span', 'canvas-workspace-dot'));
+    head.append(
       el('span', 'canvas-workspace-name', project.name || '未命名工作区')
     );
-    const directoryCount = Array.isArray(project.directories)
-      ? project.directories.length
-      : 0;
-    copy.append(
-      el(
-        'span',
-        'canvas-workspace-meta',
-        `${directoryCount} 个目录 · ${canvasWorkspaceSessionCount(
-          project.id
-        )} 个对话`
-      )
-    );
-    row.append(copy);
     const actions = el('div', 'canvas-workspace-actions');
     const edit = el('button', 'canvas-workspace-action', '编辑');
     edit.type = 'button';
+    edit.title = '编辑工作区';
     edit.addEventListener('click', (event) => {
       event.stopPropagation();
       openProjectDialog('edit', project.id);
@@ -202,36 +196,198 @@ function renderCanvasSidebar() {
     remove.setAttribute('aria-label', `删除工作区 ${project.name || ''}`);
     remove.addEventListener('click', (event) => {
       event.stopPropagation();
-      openConfirm({
-        text: `删除工作区「${project.name || '未命名'}」以及里面的 ${canvasWorkspaceSessionCount(
-          project.id
-        )} 个对话？不可恢复。`,
-        action: () => deleteProject(project.id),
-      });
+      confirmDeleteProject(project.id);
     });
     actions.append(edit, remove);
-    row.append(actions);
-    row.addEventListener('click', (event) => {
+    head.append(actions);
+    card.append(head);
+
+    const directories = Array.isArray(project.directories)
+      ? project.directories
+      : [];
+    card.append(
+      el(
+        'div',
+        'canvas-workspace-meta',
+        `${directories.length} 个目录 · ${canvasWorkspaceSessionCount(
+          project.id
+        )} 个对话`
+      )
+    );
+
+    const dirs = el('div', 'canvas-workspace-dirs');
+    directories.slice(0, 2).forEach((directory) => {
+      const row = el('div', 'canvas-workspace-dir');
+      const icon = el('span', 'canvas-workspace-dir-icon');
+      icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${CANVAS_FOLDER_ICON}</svg>`;
+      row.append(icon, el('span', '', directory));
+      row.title = directory;
+      dirs.append(row);
+    });
+    if (directories.length > 2) {
+      dirs.append(
+        el(
+          'div',
+          'canvas-workspace-dir-more',
+          `+${directories.length - 2} 个目录`
+        )
+      );
+    }
+    card.append(dirs);
+
+    const foot = el('footer', 'canvas-workspace-foot');
+    foot.append(el('span', '', '拖到画布开始对话'));
+    foot.append(el('span', 'canvas-workspace-grip', '⠿'));
+    card.append(foot);
+
+    card.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
       if (event.target instanceof Element && event.target.closest('button')) {
         return;
       }
-      canvasState.selectedProjectId =
-        canvasState.selectedProjectId === project.id ? null : project.id;
-      renderCanvas();
+      startWorkspaceDrag(event, project);
     });
-    row.addEventListener('dragstart', (event) => {
-      if (!event.dataTransfer) return;
-      event.dataTransfer.effectAllowed = 'copy';
-      event.dataTransfer.setData('text/plain', project.id);
-      event.dataTransfer.setData('application/x-yah-workspace', project.id);
-      row.classList.add('dragging');
+    card.addEventListener('dblclick', (event) => {
+      if (event.target instanceof Element && event.target.closest('button')) {
+        return;
+      }
+      openProjectDialog('edit', project.id);
     });
-    row.addEventListener('dragend', () => {
-      row.classList.remove('dragging');
-    });
-    canvasDom.workspaces.append(row);
+
+    canvasDom.workspaces.append(card);
   });
 }
+
+function showWorkspacePage() {
+  if (!canvasDom.page) return;
+  renderWorkspacePage();
+  canvasDom.page.classList.remove('hidden');
+  canvasDom.page.classList.remove('dragging');
+  canvasState.pageOpen = true;
+  requestAnimationFrame(() => {
+    if (!canvasState.pageOpen) return;
+    canvasDom.page.classList.add('open');
+  });
+}
+
+function hideWorkspacePage() {
+  if (!canvasDom.page) return;
+  canvasState.pageOpen = false;
+  canvasDom.page.classList.remove('open');
+  clearTimeout(canvasState.pageTimer);
+  canvasState.pageTimer = setTimeout(() => {
+    if (canvasState.pageOpen) return;
+    canvasDom.page.classList.add('hidden');
+    canvasDom.page.classList.remove('dragging');
+  }, 200);
+}
+
+function canvasWorkspacePageOpen() {
+  return Boolean(
+    canvasState.pageOpen &&
+      canvasDom.page &&
+      !canvasDom.page.classList.contains('hidden')
+  );
+}
+
+function pointInStage(clientX, clientY) {
+  const rect = canvasDom.stage?.getBoundingClientRect();
+  if (!rect) return false;
+  return (
+    clientX >= rect.left &&
+    clientX <= rect.right &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom
+  );
+}
+
+function startWorkspaceDrag(event, project) {
+  if (!canvasDom.stage) return;
+  event.preventDefault();
+  canvasState.workspaceDrag = {
+    projectId: project.id,
+    projectName: project.name || '未命名工作区',
+    color: canvasWorkspaceColor(project),
+    startX: event.clientX,
+    startY: event.clientY,
+    x: event.clientX,
+    y: event.clientY,
+    active: false,
+    card: event.currentTarget,
+    ghost: null,
+  };
+}
+
+function updateWorkspaceDrag(event) {
+  const drag = canvasState.workspaceDrag;
+  if (!drag) return;
+  drag.x = event.clientX;
+  drag.y = event.clientY;
+  if (!drag.active) {
+    const distance =
+      Math.abs(event.clientX - drag.startX) +
+      Math.abs(event.clientY - drag.startY);
+    if (distance < 5) return;
+    drag.active = true;
+    canvasDom.page?.classList.add('dragging');
+    drag.card?.classList.add('dragging');
+    const ghost = el('div', 'canvas-drag-ghost');
+    ghost.style.setProperty('--canvas-workspace-color', drag.color);
+    ghost.append(el('span', 'canvas-drag-ghost-dot'));
+    const copy = el('div', 'canvas-drag-ghost-copy');
+    copy.append(el('span', 'canvas-drag-ghost-name', drag.projectName));
+    copy.append(el('span', 'canvas-drag-ghost-hint', '松开放到画布'));
+    ghost.append(copy);
+    document.body.append(ghost);
+    drag.ghost = ghost;
+  }
+  if (drag.ghost) {
+    drag.ghost.style.left = `${drag.x}px`;
+    drag.ghost.style.top = `${drag.y}px`;
+  }
+  canvasDom.stage?.classList.toggle(
+    'drop-target',
+    pointInStage(drag.x, drag.y)
+  );
+}
+
+function endWorkspaceDrag() {
+  const drag = canvasState.workspaceDrag;
+  canvasState.workspaceDrag = null;
+  if (!drag) return;
+  drag.ghost?.remove();
+  drag.card?.classList.remove('dragging');
+  canvasDom.page?.classList.remove('dragging');
+  canvasDom.stage?.classList.remove('drop-target');
+}
+
+function finishWorkspaceDrag() {
+  const drag = canvasState.workspaceDrag;
+  if (!drag) return;
+  const drop =
+    drag.active && pointInStage(drag.x, drag.y)
+      ? { projectId: drag.projectId, x: drag.x, y: drag.y }
+      : null;
+  endWorkspaceDrag();
+  if (drop) {
+    createCanvasConversationAt(drop.projectId, drop.x, drop.y);
+    hideWorkspacePage();
+  }
+}
+
+function canvasTabReleased() {
+  if (canvasState.workspaceDrag) {
+    finishWorkspaceDrag();
+  }
+  hideWorkspacePage();
+}
+
+function cancelCanvasPage() {
+  endWorkspaceDrag();
+  hideWorkspacePage();
+}
+
+/* --------------------------------- 画布 --------------------------------- */
 
 function renderCanvasNodes() {
   if (!canvasDom.nodes) return;
@@ -254,20 +410,10 @@ function renderCanvasNodes() {
     if (canvasState.selectedId === session.id) {
       nodeEl.classList.add('selected');
     }
-    if (
-      canvasState.selectedProjectId &&
-      session.projectId !== canvasState.selectedProjectId
-    ) {
-      nodeEl.classList.add('dimmed');
-    }
     const head = el('div', 'canvas-node-head');
     head.append(el('span', 'canvas-node-dot'));
     head.append(
-      el(
-        'span',
-        'canvas-node-workspace',
-        project?.name || '未归属工作区'
-      )
+      el('span', 'canvas-node-workspace', project?.name || '未归属工作区')
     );
     const status = canvasSessionStatus(session);
     head.append(
@@ -294,6 +440,7 @@ function renderCanvasNodes() {
     );
     nodeEl.append(foot);
     nodeEl.title = session.title || '未命名对话';
+
     nodeEl.addEventListener('pointerdown', (event) => {
       startCanvasNodeDrag(event, session, nodeEl, node);
     });
@@ -316,6 +463,45 @@ function renderCanvasNodes() {
     nodeEl.addEventListener('dblclick', (event) => {
       event.preventDefault();
       openCanvasSession(session.id);
+    });
+    nodeEl.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      canvasState.selectedId = session.id;
+      for (const item of canvasDom.nodes.querySelectorAll(
+        '.canvas-node.selected'
+      )) {
+        item.classList.remove('selected');
+      }
+      nodeEl.classList.add('selected');
+      openActionMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [
+          {
+            label: '打开',
+            icon: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+            action: () => openCanvasSession(session.id),
+          },
+          {
+            label: '改名',
+            icon: RING_ICONS.rename,
+            action: () => openRename('session', session.id),
+          },
+          {
+            label: '删除',
+            icon: RING_ICONS.trash,
+            danger: true,
+            action: () =>
+              openConfirm({
+                text: `删除对话「${
+                  session.title || '未命名'
+                }」？不可恢复。`,
+                action: () => deleteSessionById(session.id),
+              }),
+          },
+        ],
+      });
     });
     canvasDom.nodes.append(nodeEl);
   }
@@ -353,20 +539,20 @@ function renderCanvasWires() {
 function applyCanvasView() {
   const view = canvasState.view;
   if (canvasDom.world) {
-    canvasDom.world.style.transform = `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.k})`;
+    canvasDom.world.style.transform = `translate3d(${view.x}px, ${view.y}px, 0)`;
+  }
+  if (canvasDom.zoomLayer) {
+    canvasDom.zoomLayer.style.zoom = String(view.k);
   }
   if (canvasDom.grid) {
-    const size = CANVAS_GRID_SIZE * view.k;
-    canvasDom.grid.style.backgroundSize = `${size}px ${size}px`;
     canvasDom.grid.style.backgroundPosition = `${view.x}px ${view.y}px`;
   }
-  if (canvasDom.zoomLabel) {
-    canvasDom.zoomLabel.textContent = `${Math.round(view.k * 100)}%`;
+  if (canvasDom.zoomIndicator) {
+    canvasDom.zoomIndicator.textContent = `${Math.round(view.k * 100)}%`;
   }
 }
 
 function renderCanvas() {
-  renderCanvasSidebar();
   renderCanvasNodes();
   renderCanvasWires();
   applyCanvasView();
@@ -491,51 +677,11 @@ async function loadCanvas() {
       ? { ...data.nodes }
       : {};
   canvasState.wires = Array.isArray(data?.wires) ? data.wires : [];
-  const hadNodes = Object.keys(canvasState.nodes).length > 0;
   canvasState.loaded = true;
   canvasState.loading = false;
   ensureCanvasNodes();
   renderCanvas();
-  if (!hadNodes) {
-    fitCanvas({ save: false });
-    scheduleCanvasSave();
-  }
-}
-
-function fitCanvas({ save = true } = {}) {
-  const sessions = Array.isArray(state.sessions) ? state.sessions : [];
-  const nodes = sessions
-    .map((session) => canvasState.nodes[session.id])
-    .filter(Boolean);
-  if (nodes.length === 0) {
-    canvasState.view = { x: 0, y: 0, k: 1 };
-    applyCanvasView();
-    if (save) scheduleCanvasSave();
-    return;
-  }
-  const minX = Math.min(...nodes.map((node) => node.x));
-  const minY = Math.min(...nodes.map((node) => node.y));
-  const maxX = Math.max(...nodes.map((node) => node.x + node.width));
-  const maxY = Math.max(...nodes.map((node) => node.y + node.height));
-  const rect = canvasDom.stage?.getBoundingClientRect();
-  const width = Math.max(1, rect?.width || 800);
-  const height = Math.max(1, rect?.height || 600);
-  const pad = 80;
-  const k = canvasClamp(
-    Math.min(
-      (width - pad * 2) / Math.max(1, maxX - minX),
-      (height - pad * 2) / Math.max(1, maxY - minY)
-    ),
-    CANVAS_MIN_ZOOM,
-    1.4
-  );
-  canvasState.view = {
-    k,
-    x: (width - (maxX - minX) * k) / 2 - minX * k,
-    y: (height - (maxY - minY) * k) / 2 - minY * k,
-  };
-  applyCanvasView();
-  if (save) scheduleCanvasSave();
+  if (canvasState.pageOpen) renderWorkspacePage();
 }
 
 function zoomCanvas(factor, clientX, clientY) {
@@ -552,6 +698,18 @@ function zoomCanvas(factor, clientX, clientY) {
   view.y = py - worldY * next;
   applyCanvasView();
   scheduleCanvasSave();
+}
+
+function flashZoomIndicator() {
+  if (!canvasDom.zoomIndicator) return;
+  canvasDom.zoomIndicator.textContent = `${Math.round(
+    canvasState.view.k * 100
+  )}%`;
+  canvasDom.zoomIndicator.classList.add('visible');
+  clearTimeout(canvasState.zoomTimer);
+  canvasState.zoomTimer = setTimeout(() => {
+    canvasDom.zoomIndicator?.classList.remove('visible');
+  }, 520);
 }
 
 function startCanvasNodeDrag(event, session, nodeEl, node) {
@@ -582,6 +740,11 @@ function startCanvasNodeDrag(event, session, nodeEl, node) {
 }
 
 function onCanvasPointerMove(event) {
+  if (canvasState.workspaceDrag) {
+    updateWorkspaceDrag(event);
+    event.preventDefault();
+    return;
+  }
   if (canvasState.drag) {
     const drag = canvasState.drag;
     const dx = (event.clientX - drag.startX) / canvasState.view.k;
@@ -614,6 +777,10 @@ function onCanvasPointerMove(event) {
 }
 
 function onCanvasPointerUp() {
+  if (canvasState.workspaceDrag) {
+    finishWorkspaceDrag();
+    return;
+  }
   if (canvasState.drag) {
     const drag = canvasState.drag;
     if (drag.moved) {
@@ -637,21 +804,69 @@ function onCanvasPointerUp() {
   }
 }
 
+/* ------------------------------- 会话与开关 ------------------------------- */
+
 function openCanvasSession(sessionId) {
   const index = state.sessions.findIndex(
     (session) => session.id === sessionId
   );
   if (index < 0) return;
+  const session = state.sessions[index];
   closeCanvas();
   selectSession(index);
-  openComposer();
+  if (!session.subagent) openComposer();
 }
 
-function createCanvasConversation(projectId) {
-  const project = state.projects.find((item) => item.id === projectId);
-  if (!project) return;
-  closeCanvas();
-  newSession(project.id);
+function createCanvasSession(projectId) {
+  ensureProjects();
+  const target =
+    state.projects.find((project) => project.id === projectId) ||
+    state.projects[0] ||
+    null;
+  if (!target) return null;
+  if (state.sessions.length === 0) state.seq = 0;
+  state.seq += 1;
+  const siblings = state.sessions.filter(
+    (session) => session.projectId === target.id
+  );
+  const previous = siblings[siblings.length - 1];
+  const session = {
+    id: makeId(),
+    title: `Chat ${state.seq}`,
+    system: DEFAULT_SYSTEM_PROMPT,
+    agentsMd: null,
+    agentId: previous?.agentId || DEFAULT_AGENT_ID,
+    projectId: target.id,
+    mcpDisabled: ['*'],
+    foldState: null,
+    pendingQueue: [],
+    msgs: [],
+  };
+  state.sessions.push(session);
+  state.switcherProjectId = target.id;
+  saveChatsSoon();
+  return session;
+}
+
+function createCanvasConversationAt(projectId, clientX, clientY) {
+  if (!canvasDom.stage) return;
+  const rect = canvasDom.stage.getBoundingClientRect();
+  const px = clientX - rect.left;
+  const py = clientY - rect.top;
+  const worldX = (px - canvasState.view.x) / canvasState.view.k;
+  const worldY = (py - canvasState.view.y) / canvasState.view.k;
+  const session = createCanvasSession(projectId);
+  if (!session) return;
+  canvasState.nodes[session.id] = {
+    x: Math.round(worldX - CANVAS_NODE_WIDTH / 2),
+    y: Math.round(worldY - CANVAS_NODE_HEIGHT / 2),
+    width: CANVAS_NODE_WIDTH,
+    height: CANVAS_NODE_HEIGHT,
+    parentSessionId: null,
+  };
+  canvasState.selectedId = session.id;
+  renderCanvas();
+  scheduleCanvasSave();
 }
 
 function openCanvas() {
@@ -668,9 +883,19 @@ function openCanvas() {
   }
 }
 
+function openCanvasWorkspaces() {
+  openCanvas();
+  showWorkspacePage();
+}
+
 function closeCanvas() {
   if (!canvasDom.overlay) return;
   canvasState.open = false;
+  canvasState.pageOpen = false;
+  endWorkspaceDrag();
+  clearTimeout(canvasState.pageTimer);
+  canvasDom.page?.classList.add('hidden');
+  canvasDom.page?.classList.remove('open');
   canvasDom.overlay.classList.add('hidden');
   canvasDom.overlay.setAttribute('aria-hidden', 'true');
   canvasState.drag = null;
@@ -692,7 +917,10 @@ function refreshCanvas() {
   if (!canvasOverlayOpen()) return;
   ensureCanvasNodes();
   renderCanvas();
+  if (canvasState.pageOpen) renderWorkspacePage();
 }
+
+/* --------------------------------- 事件 --------------------------------- */
 
 function bindCanvasEvents() {
   canvasDom.close?.addEventListener('click', closeCanvas);
@@ -707,15 +935,21 @@ function bindCanvasEvents() {
   canvasDom.addWorkspace?.addEventListener('click', () => {
     openProjectDialog('new');
   });
-  canvasDom.zoomIn?.addEventListener('click', () => zoomCanvas(1.2));
-  canvasDom.zoomOut?.addEventListener('click', () => zoomCanvas(1 / 1.2));
-  canvasDom.fit?.addEventListener('click', () => fitCanvas());
 
   canvasDom.stage?.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 && event.button !== 1) return;
     if (
       event.target instanceof Element &&
-      event.target.closest('.canvas-node, .canvas-dock, button')
+      event.target.closest(
+        '.canvas-workspaces-page, .canvas-zoom-indicator, button'
+      )
+    ) {
+      return;
+    }
+    if (
+      event.button === 0 &&
+      event.target instanceof Element &&
+      event.target.closest('.canvas-node')
     ) {
       return;
     }
@@ -740,40 +974,25 @@ function bindCanvasEvents() {
     event.preventDefault();
   });
 
+  canvasDom.stage?.addEventListener('contextmenu', (event) => {
+    if (event.target instanceof Element && event.target.closest('.canvas-node')) {
+      return;
+    }
+    event.preventDefault();
+  });
+
   canvasDom.stage?.addEventListener(
     'wheel',
     (event) => {
+      if (canvasState.pageOpen) return;
       event.preventDefault();
       const rect = canvasDom.stage.getBoundingClientRect();
       const factor = Math.exp(-event.deltaY * 0.0015);
       zoomCanvas(factor, event.clientX - rect.left, event.clientY - rect.top);
+      flashZoomIndicator();
     },
     { passive: false }
   );
-
-  canvasDom.stage?.addEventListener('dragover', (event) => {
-    if (!event.dataTransfer) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
-    canvasDom.stage.classList.add('drop-target');
-  });
-  canvasDom.stage?.addEventListener('dragleave', (event) => {
-    if (
-      event.relatedTarget instanceof Node &&
-      canvasDom.stage.contains(event.relatedTarget)
-    ) {
-      return;
-    }
-    canvasDom.stage.classList.remove('drop-target');
-  });
-  canvasDom.stage?.addEventListener('drop', (event) => {
-    event.preventDefault();
-    canvasDom.stage.classList.remove('drop-target');
-    const projectId =
-      event.dataTransfer?.getData('application/x-yah-workspace') ||
-      event.dataTransfer?.getData('text/plain');
-    if (projectId) createCanvasConversation(projectId);
-  });
 
   document.addEventListener('pointermove', onCanvasPointerMove, true);
   document.addEventListener('pointerup', onCanvasPointerUp, true);
@@ -781,8 +1000,12 @@ function bindCanvasEvents() {
 }
 
 window.openCanvas = openCanvas;
+window.openCanvasWorkspaces = openCanvasWorkspaces;
 window.closeCanvas = closeCanvas;
 window.canvasOverlayOpen = canvasOverlayOpen;
+window.canvasWorkspacePageOpen = canvasWorkspacePageOpen;
+window.canvasTabReleased = canvasTabReleased;
+window.cancelCanvasPage = cancelCanvasPage;
 window.refreshCanvas = refreshCanvas;
 
 bindCanvasEvents();
@@ -823,4 +1046,3 @@ api.onSubagentComplete(() => {
     renderCanvas();
   }
 });
-

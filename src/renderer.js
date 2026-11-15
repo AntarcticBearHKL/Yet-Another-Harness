@@ -3473,6 +3473,7 @@ function saveRename() {
   saveChatsSoon();
   closeRename();
   if (state.switcherOpen) renderSwitcher();
+  window.refreshCanvas?.();
 }
 
 function projectDirectories(project) {
@@ -6506,6 +6507,12 @@ function openActionMenu({ x, y, items, usage = false }) {
       button.append(icon);
     }
     button.append(el('span', 'action-menu-label', item.label || ''));
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeActionMenu();
+      runActionMenuItem(item);
+    });
     column.append(button);
   });
   menu.append(column);
@@ -8829,10 +8836,33 @@ function bindEvents() {
     }
 
     if (window.canvasOverlayOpen?.()) {
-      if (event.key === 'Tab' || (event.key === 'Escape' && !event.isComposing)) {
+      if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
         window.closeCanvas?.();
+        return;
       }
+      if (
+        event.key === 'Tab' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        if (!event.repeat) window.openCanvasWorkspaces?.();
+        return;
+      }
+      return;
+    }
+
+    if (event.key === 'Tab') {
+      if (!dom.settingsOverlay.classList.contains('hidden')) return;
+      event.preventDefault();
+      if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      if (event.repeat) return;
+      window.openCanvasWorkspaces?.();
       return;
     }
 
@@ -8865,17 +8895,6 @@ function bindEvents() {
         dom.input.focus();
         return;
       }
-      return;
-    }
-
-    if (event.key === 'Tab') {
-      if (!dom.settingsOverlay.classList.contains('hidden')) return;
-      event.preventDefault();
-      if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
-        return;
-      }
-      if (event.repeat) return;
-      window.openCanvas?.();
       return;
     }
 
@@ -8982,6 +9001,20 @@ function bindEvents() {
   });
 
   document.addEventListener('keyup', (event) => {
+    if (event.key === 'Tab' && window.canvasOverlayOpen?.()) {
+      const dialogOpen =
+        !dom.settingsOverlay.classList.contains('hidden') ||
+        (dom.projectOverlay &&
+          !dom.projectOverlay.classList.contains('hidden')) ||
+        (dom.renameOverlay &&
+          !dom.renameOverlay.classList.contains('hidden')) ||
+        (dom.confirmOverlay &&
+          !dom.confirmOverlay.classList.contains('hidden'));
+      if (dialogOpen) return;
+      event.preventDefault();
+      window.canvasTabReleased?.();
+      return;
+    }
     if (event.key === 'Tab') {
       if (!state.tabHeld) return;
       cancelTabHold();
@@ -8998,6 +9031,7 @@ function bindEvents() {
   window.addEventListener('blur', () => {
     cancelTabHold();
     if (state.switcherOpen) closeSwitcher();
+    if (window.canvasOverlayOpen?.()) window.cancelCanvasPage?.();
   });
 
   document.addEventListener(
