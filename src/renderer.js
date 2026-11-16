@@ -9448,9 +9448,6 @@ function bindEvents() {
 
   $('close-settings')?.addEventListener('click', closeSettings);
   $('done-settings').addEventListener('click', closeSettings);
-  $('home-workspace')?.addEventListener('click', () => {
-    window.openCanvasWorkspaces?.();
-  });
   $('close-raw')?.addEventListener('click', closeRawRequest);
   dom.catalogClose?.addEventListener('click', closeCatalog);
   dom.webContentClose?.addEventListener('click', closeWebContent);
@@ -10115,7 +10112,11 @@ function bindEvents() {
     if (window.canvasOverlayOpen?.()) {
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
-        window.closeCanvas?.();
+        if (window.canvasWorkspacePageOpen?.()) {
+          window.cancelCanvasPage?.();
+        } else {
+          window.closeCanvas?.();
+        }
         return;
       }
       if (

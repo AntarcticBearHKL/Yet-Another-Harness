@@ -286,61 +286,12 @@ body.ring-open #window-controls {
   background: transparent;
 }
 
-/* Home window: no conversation is rendered here; every chat opens in its own window. */
-#home {
-  display: none;
-}
-
+/* Home window: no conversation is rendered here; the canvas is the home view. */
 body.home-window #messages,
 body.home-window #composer,
 body.home-window #background-badge,
 body.home-window #main > .edge-blur {
   display: none !important;
-}
-
-body.home-window #home {
-  position: relative;
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-  padding: 32px;
-}
-
-body.home-window:has(#canvas:not(.hidden)) #home {
-  display: none;
-}
-
-.home-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  max-width: 420px;
-  text-align: center;
-}
-
-.home-brand {
-  color: var(--text);
-  font-size: 46px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1;
-}
-
-.home-sub {
-  color: var(--dim);
-  font-size: 13px;
-}
-
-.home-hint {
-  color: var(--faint);
-  font-size: 11.5px;
-}
-
-body.home-window #home-workspace {
-  margin-top: 8px;
 }
 
 /* ---------------------------------------------------------------- controls */

@@ -1585,6 +1585,7 @@ function openCanvasWorkspaces() {
 }
 
 function closeCanvas() {
+  if (state.homeWindow) return;
   if (!canvasDom.overlay) return;
   canvasState.open = false;
   canvasState.pageOpen = false;
