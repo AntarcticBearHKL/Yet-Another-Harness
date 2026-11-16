@@ -153,8 +153,14 @@ body.chat-window.chat-compact .message-card.answer-card .card-text {
   overflow: hidden;
 }
 
+body.chat-window.chat-compact .message-card.prompt-card {
+  margin-top: 0;
+  border-radius: 12px;
+  background: rgba(238, 198, 160, 0.38);
+}
+
 body.chat-window.chat-compact .message-card.answer-card {
   margin-top: 9px;
   border-radius: 12px;
-  background: rgba(185, 111, 61, 0.08);
+  background: rgba(111, 138, 92, 0.14);
 }
