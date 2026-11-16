@@ -94,6 +94,7 @@ const dom = {
   webContentBody: $('web-content-body'),
   webContentClose: $('web-content-close'),
   composerEffortRail: $('composer-effort-rail'),
+  composerEffortLevels: $('composer-effort-levels'),
   modelPicker: $('model-picker'),
   modelPickerButton: $('model-picker-button'),
   modelMenu: $('model-menu'),
@@ -693,6 +694,15 @@ function currentEffort() {
   return normalizeEffort(state.settings.reasoningEffort);
 }
 
+function renderComposerEffortLevels(effort) {
+  if (!dom.composerEffortLevels) return;
+  for (const item of dom.composerEffortLevels.querySelectorAll(
+    '[data-effort]'
+  )) {
+    item.classList.toggle('active', item.dataset.effort === effort);
+  }
+}
+
 function renderComposerEffort() {
   if (!dom.composerEffortRail) return;
   const effort = currentEffort();
@@ -701,6 +711,7 @@ function renderComposerEffort() {
   dom.composerEffortRail.style.setProperty('--effort-ratio', String(ratio));
   dom.composerEffortRail.setAttribute('aria-valuenow', String(index));
   dom.composerEffortRail.setAttribute('aria-valuetext', effort);
+  renderComposerEffortLevels(effort);
 }
 
 function setComposerEffort(value) {
@@ -736,6 +747,7 @@ function previewComposerEffort(event) {
   const effort = EFFORT_LEVELS[index];
   rail.setAttribute('aria-valuenow', String(index));
   rail.setAttribute('aria-valuetext', effort);
+  renderComposerEffortLevels(effort);
   if (currentEffort() !== effort) {
     state.settings.reasoningEffort = effort;
     saveSettingsSoon();
