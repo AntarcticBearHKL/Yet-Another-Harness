@@ -926,9 +926,3 @@ body.agile-window.maximized .agile {
   background: var(--hover);
   color: var(--text);
 }
-
-.agile-win-btn.close:hover {
-  border-color: rgba(176, 74, 60, 0.24);
-  background: rgba(176, 74, 60, 0.1);
-  color: #b04a3c;
-}

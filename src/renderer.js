@@ -3115,15 +3115,6 @@ function refreshContextBlocks() {
 function setupChatWindow() {
   if (!state.chatWindow || state.chatNav) return;
   document.body.classList.add('chat-window');
-  const close = el('button', 'chat-window-close', '×');
-  close.type = 'button';
-  close.setAttribute('aria-label', '关闭对话窗口');
-  close.title = '关闭';
-  close.addEventListener('click', (event) => {
-    event.stopPropagation();
-    api.close();
-  });
-  document.body.append(close);
   const nav = el('nav', 'chat-turn-nav');
   nav.setAttribute('aria-label', '对话跳转');
   document.body.append(nav);

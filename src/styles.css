@@ -3207,29 +3207,6 @@ body.ring-open #background-badge {
   letter-spacing: 0.08em;
 }
 
-.background-close {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: var(--faint);
-  font-size: 18px;
-  line-height: 1;
-  transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
-}
-
-.background-close:hover {
-  border-color: var(--line);
-  background: var(--hover);
-  color: var(--text);
-}
-
 .background-list {
   display: flex;
   flex-direction: column;
@@ -7643,29 +7620,6 @@ body:has(#action-menu:not(.hidden)) #window-controls {
 .question-progress-dot.current {
   width: 18px;
   background: var(--accent);
-}
-
-.question-dock-close {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: var(--faint);
-  font-size: 18px;
-  line-height: 1;
-  transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
-}
-
-.question-dock-close:hover {
-  border-color: var(--line);
-  background: var(--hover);
-  color: var(--text);
 }
 
 .question-dock-body {
