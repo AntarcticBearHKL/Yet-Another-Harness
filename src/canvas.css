@@ -295,14 +295,6 @@ body.canvas-space .canvas-stage.panning {
   text-transform: uppercase;
 }
 
-.canvas-column-count {
-  margin-left: auto;
-  color: var(--faint);
-  font-size: 8.5px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
 .canvas-column-list {
   display: flex;
   flex-direction: column;

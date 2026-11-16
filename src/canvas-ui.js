@@ -730,7 +730,6 @@ function buildCanvasColumn(title, rows) {
   const column = el('section', 'canvas-column');
   const head = el('div', 'canvas-column-head');
   head.append(el('span', 'canvas-column-title', title));
-  head.append(el('span', 'canvas-column-count', String(rows.length)));
   const list = el('div', 'canvas-column-list');
   if (rows.length > 0) {
     rows.forEach((row) => list.append(row));
