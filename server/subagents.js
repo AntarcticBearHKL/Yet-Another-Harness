@@ -115,6 +115,7 @@ function createSubagentService({ resolveAgent } = {}) {
         title,
         frozen: true,
         subagent: true,
+        parentSessionId: parent.id,
         dropTrailingAgent: true,
         compaction: false,
       });
@@ -129,6 +130,7 @@ function createSubagentService({ resolveAgent } = {}) {
         projectId: parent.projectId,
         frozen: true,
         subagent: true,
+        parentSessionId: parent.id,
         mcpDisabled: parent.mcpDisabled,
       });
       session = store.getSession(id);

@@ -21,7 +21,7 @@ const {
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 15;
+const SCHEMA_VERSION = 16;
 
 let dataDir = null;
 let legacyDir = null;
@@ -336,6 +336,9 @@ function normalizeChats(raw) {
         projectId,
         frozen: session.frozen === true || session.frozen === 1,
         subagent: session.subagent === true || session.subagent === 1,
+        parentSessionId: session.parentSessionId
+          ? String(session.parentSessionId)
+          : null,
         mcpDisabled: Array.isArray(session.mcpDisabled)
           ? session.mcpDisabled.map(String).filter(Boolean)
           : [],
@@ -450,6 +453,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   compaction TEXT,
   frozen INTEGER NOT NULL DEFAULT 0,
   subagent INTEGER NOT NULL DEFAULT 0,
+  parent_session_id TEXT,
   sort_order INTEGER NOT NULL,
   content_hash TEXT NOT NULL,
   updated_at INTEGER NOT NULL
@@ -643,6 +647,14 @@ function ensureSchema(database) {
       );
     }
 
+    // v15 -> v16: stable parent links for subagent canvas groups.
+    const parentColumns = database
+      .prepare('PRAGMA table_info(sessions)')
+      .all();
+    if (!parentColumns.some((column) => column.name === 'parent_session_id')) {
+      database.exec('ALTER TABLE sessions ADD COLUMN parent_session_id TEXT');
+    }
+
     const fallbackProject = database
       .prepare('SELECT id FROM projects ORDER BY sort_order ASC LIMIT 1')
       .get();
@@ -666,6 +678,35 @@ function ensureSchema(database) {
   database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
 }
 
+function backfillParentSessionIds(database) {
+  try {
+    const canvasFile = file('canvas.json');
+    if (!fs.existsSync(canvasFile)) return;
+    const canvas = JSON.parse(fs.readFileSync(canvasFile, 'utf8'));
+    const nodes = canvas && canvas.nodes;
+    if (!nodes || typeof nodes !== 'object') return;
+    const ids = new Set(
+      database
+        .prepare('SELECT id FROM sessions')
+        .all()
+        .map((row) => row.id)
+    );
+    const update = database.prepare(
+      "UPDATE sessions SET parent_session_id = ? WHERE id = ? AND subagent = 1 AND (parent_session_id IS NULL OR parent_session_id = '')"
+    );
+    for (const [id, node] of Object.entries(nodes)) {
+      const parent = node && node.parentSessionId
+        ? String(node.parentSessionId)
+        : '';
+      if (!parent || parent === id) continue;
+      if (!ids.has(parent) || !ids.has(String(id))) continue;
+      update.run(parent, String(id));
+    }
+  } catch {
+    /* canvas links are optional */
+  }
+}
+
 function openDb() {
   if (db) return db;
   const database = new DatabaseSync(file(CHATS_DB));
@@ -675,6 +716,7 @@ function openDb() {
     database.exec('PRAGMA foreign_keys = ON;');
     database.exec('PRAGMA busy_timeout = 5000;');
     ensureSchema(database);
+    backfillParentSessionIds(database);
     db = database;
     return db;
   } catch (error) {
@@ -700,6 +742,8 @@ function hashSession(session) {
         system: session.system,
         agentId: session.agentId || DEFAULT_AGENT_ID,
         projectId: session.projectId,
+        subagent: session.subagent === true,
+        parentSessionId: session.parentSessionId || null,
         mcpDisabled: session.mcpDisabled || [],
         msgs: session.msgs,
       })
@@ -725,7 +769,7 @@ function readChats() {
 
   const sessionRows = database
     .prepare(
-      'SELECT id, title, system, agents_md, agent_id, project_id, frozen, subagent, mcp_disabled, fold_state, pending_queue, goal, compaction FROM sessions ORDER BY sort_order ASC'
+      'SELECT id, title, system, agents_md, agent_id, project_id, frozen, subagent, parent_session_id, mcp_disabled, fold_state, pending_queue, goal, compaction FROM sessions ORDER BY sort_order ASC'
     )
     .all();
   if (sessionRows.length === 0) {
@@ -816,6 +860,9 @@ function readChats() {
             : projects[0]?.id || null,
           frozen: Boolean(row.frozen),
           subagent: Boolean(row.subagent),
+          parentSessionId: row.parent_session_id
+            ? String(row.parent_session_id)
+            : null,
           mcpDisabled,
           foldState,
           pendingQueue,
@@ -985,8 +1032,8 @@ function writeChats(chats) {
   );
 
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, agents_md, agent_id, project_id, frozen, subagent, mcp_disabled, fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, agents_md, agent_id, project_id, frozen, subagent, parent_session_id, mcp_disabled, fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
@@ -995,6 +1042,7 @@ function writeChats(chats) {
        project_id = excluded.project_id,
        frozen = MAX(frozen, excluded.frozen),
        subagent = MAX(subagent, excluded.subagent),
+       parent_session_id = excluded.parent_session_id,
        mcp_disabled = excluded.mcp_disabled,
        fold_state = excluded.fold_state,
        pending_queue = excluded.pending_queue,
@@ -1068,6 +1116,7 @@ function writeChats(chats) {
         session.projectId,
         session.frozen ? 1 : 0,
         session.subagent ? 1 : 0,
+        session.parentSessionId || null,
         JSON.stringify(session.mcpDisabled || []),
         session.foldState ? JSON.stringify(session.foldState) : null,
         JSON.stringify(session.pendingQueue || []),
@@ -1206,6 +1255,8 @@ function metadataHash(session) {
         system: session.system,
         agentId: session.agentId || DEFAULT_AGENT_ID,
         projectId: session.projectId,
+        subagent: session.subagent === true,
+        parentSessionId: session.parentSessionId || null,
         mcpDisabled: session.mcpDisabled || [],
       })
     )
@@ -1217,6 +1268,7 @@ function metadataHash(session) {
  * 消息由 agent runner 增量写入，避免多个客户端用整份状态互相覆盖。
  */
 function saveStructure(chats) {
+  const preserveCurrent = Boolean(chats && chats.preserveCurrent);
   const normalized = normalizeChats(chats);
   const database = openDb();
 
@@ -1229,8 +1281,8 @@ function saveStructure(chats) {
        sort_order = excluded.sort_order`
   );
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, agent_id, project_id, frozen, subagent, mcp_disabled, fold_state, pending_queue, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, agent_id, project_id, frozen, subagent, parent_session_id, mcp_disabled, fold_state, pending_queue, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
@@ -1238,6 +1290,7 @@ function saveStructure(chats) {
        project_id = excluded.project_id,
        frozen = MAX(frozen, excluded.frozen),
        subagent = MAX(subagent, excluded.subagent),
+       parent_session_id = excluded.parent_session_id,
        mcp_disabled = excluded.mcp_disabled,
        fold_state = excluded.fold_state,
        pending_queue = excluded.pending_queue,
@@ -1247,6 +1300,9 @@ function saveStructure(chats) {
   );
   const updateState = database.prepare(
     'UPDATE app_state SET current_session_id = ?, title_seq = ? WHERE id = 1'
+  );
+  const updateSeq = database.prepare(
+    'UPDATE app_state SET title_seq = ? WHERE id = 1'
   );
   const deleteSession = database.prepare('DELETE FROM sessions WHERE id = ?');
   const deleteProject = database.prepare('DELETE FROM projects WHERE id = ?');
@@ -1315,6 +1371,7 @@ function saveStructure(chats) {
         session.projectId,
         session.frozen ? 1 : 0,
         session.subagent ? 1 : 0,
+        session.parentSessionId || null,
         JSON.stringify(session.mcpDisabled || []),
         session.foldState ? JSON.stringify(session.foldState) : null,
         JSON.stringify(session.pendingQueue || []),
@@ -1334,7 +1391,11 @@ function saveStructure(chats) {
     }
 
     const current = normalized.sessions[normalized.current];
-    updateState.run(current ? current.id : null, normalized.seq);
+    if (preserveCurrent) {
+      updateSeq.run(normalized.seq);
+    } else {
+      updateState.run(current ? current.id : null, normalized.seq);
+    }
     database.exec('COMMIT');
   } catch (error) {
     try {
@@ -1438,14 +1499,16 @@ function createSession(session) {
     system: source.system,
     agentId: source.agentId,
     projectId: source.projectId,
+    subagent,
+    parentSessionId: source.parentSessionId || null,
     mcpDisabled,
   });
   database
     .prepare(
       `INSERT INTO sessions
-         (id, title, system, agents_md, agent_id, project_id, frozen, subagent, mcp_disabled,
+         (id, title, system, agents_md, agent_id, project_id, frozen, subagent, parent_session_id, mcp_disabled,
           fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
@@ -1458,6 +1521,7 @@ function createSession(session) {
       source.projectId || null,
       frozen ? 1 : 0,
       subagent ? 1 : 0,
+      source.parentSessionId || null,
       JSON.stringify(mcpDisabled),
       null,
       JSON.stringify(pendingQueue),
@@ -1514,6 +1578,10 @@ function forkSession(sourceId, options = {}) {
     projectId: options.projectId || source.projectId,
     frozen: options.frozen === true,
     subagent: options.subagent === true,
+    parentSessionId:
+      options.parentSessionId !== undefined
+        ? options.parentSessionId
+        : source.parentSessionId || null,
     mcpDisabled: Array.isArray(options.mcpDisabled)
       ? options.mcpDisabled
       : source.mcpDisabled,

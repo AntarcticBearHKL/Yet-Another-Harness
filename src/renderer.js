@@ -132,6 +132,7 @@ const state = {
   contextGroupCollapsed: false,
   viewMode: null,
   chatWindow: false,
+  homeWindow: false,
   chatCompact: false,
   chatNav: null,
   chatNavSignature: '',
@@ -424,7 +425,8 @@ const api = {
   dragEnd: () => shell?.dragEnd?.(),
   isMaximized: () => shell?.isMaximized?.() ?? Promise.resolve(false),
   openAgileWindow: () => shell?.openAgileWindow?.(),
-  openChatWindow: (sessionId) => shell?.openChatWindow?.(sessionId),
+  openChatWindow: (sessionId, options) =>
+    shell?.openChatWindow?.(sessionId, options),
   getPathForFile: (file) =>
     shell?.getPathForFile?.(file) || String(file?.path || ''),
   pickDirectories: () => shell?.pickDirectories?.() ?? Promise.resolve([]),
@@ -531,6 +533,7 @@ const api = {
   onContentUpdate: (callback) =>
     shell?.onContentUpdate?.(callback) ?? (() => {}),
   onViewerAsk: (callback) => shell?.onViewerAsk?.(callback) ?? (() => {}),
+  onChatCompose: (callback) => shell?.onChatCompose?.(callback) ?? (() => {}),
 
   onChatDelta: (callback) => subscribeEvent('assistant.delta', callback),
   onChatRequest: (callback) => subscribeEvent('request.body', callback),
@@ -578,6 +581,20 @@ function currentSession() {
   return state.sessions[state.current];
 }
 
+function openSessionWindow(sessionId, options = {}) {
+  const id = String(sessionId || '').trim();
+  if (!id) return false;
+  if (api.isElectron && api.openChatWindow) {
+    Promise.resolve(api.openChatWindow(id, options)).catch((error) =>
+      console.error('open chat window failed', error)
+    );
+    return true;
+  }
+  const index = state.sessions.findIndex((session) => session.id === id);
+  if (index >= 0) selectSession(index);
+  return false;
+}
+
 function ensureProjects() {
   if (!Array.isArray(state.projects)) state.projects = [];
   const ids = new Set(state.projects.map((project) => project.id));
@@ -618,6 +635,7 @@ function structurePayload() {
       projectId: session.projectId,
       frozen: session.frozen === true,
       subagent: session.subagent === true,
+      parentSessionId: session.parentSessionId || null,
       mcpDisabled: Array.isArray(session.mcpDisabled)
         ? session.mcpDisabled
         : [],
@@ -629,6 +647,7 @@ function structurePayload() {
     })),
     current: state.current,
     seq: state.seq,
+    preserveCurrent: state.chatWindow === true,
   };
 }
 
@@ -921,6 +940,7 @@ function captureFoldState() {
 }
 
 function persistFoldState() {
+  if (state.homeWindow) return;
   const session = currentSession();
   if (!session) return;
   if (state.foldSessionId && state.foldSessionId !== session.id) return;
@@ -2918,7 +2938,7 @@ function handleSubagentComplete(payload) {
   });
   saveChatsSoon();
   if (state.composerOpen) renderComposerContext();
-  if (parent === currentSession()) {
+  if (!state.homeWindow && parent === currentSession()) {
     void resumeBackgroundQueue(parent);
   }
   window.refreshCanvas?.();
@@ -3645,6 +3665,7 @@ function navigateTurn(direction) {
 }
 
 function openComposer() {
+  if (state.homeWindow) return;
   const session = currentSession();
   if (
     state.composerOpen ||
@@ -4515,6 +4536,11 @@ function commitSwitcherSelection() {
     closeSwitcher();
     return;
   }
+  if (state.homeWindow && api.isElectron && api.openChatWindow) {
+    closeSwitcher();
+    openSessionWindow(session.id);
+    return;
+  }
   if (session === currentSession()) {
     closeSwitcher();
     return;
@@ -4524,6 +4550,11 @@ function commitSwitcherSelection() {
 
 function selectSession(index) {
   if (index < 0 || index >= state.sessions.length) return;
+  if (state.homeWindow && api.isElectron && api.openChatWindow) {
+    closeSwitcher();
+    openSessionWindow(state.sessions[index].id);
+    return;
+  }
   if (state.activeQuestion || state.questionQueue.length) cancelQuestionDock();
   closeAgentMenu();
   state.current = index;
@@ -4564,6 +4595,11 @@ function newProject() {
 }
 
 function renderAll() {
+  if (state.homeWindow) {
+    if (state.switcherOpen) renderSwitcher();
+    window.refreshCanvas?.();
+    return;
+  }
   if (state.switcherOpen) renderSwitcher();
   renderMessages();
   if (state.composerOpen) {
@@ -4650,12 +4686,27 @@ function newSession(projectId) {
   };
   state.sessions.push(session);
   state.current = state.sessions.length - 1;
-  applyFoldState(session);
+  if (!state.homeWindow) applyFoldState(session);
   resetComposerSkills();
   state.forceScroll = true;
   state.followBottom = true;
   state.switcherProjectId = targetProjectId;
   dom.input.value = '';
+  if (state.homeWindow) {
+    saveChatsNow()
+      .then(() => openSessionWindow(session.id, { compose: true }))
+      .catch((error) => console.error('open new chat failed', error));
+    void api
+      .loadProjectAgentsMd(targetProjectId)
+      .then((data) => {
+        if (!state.sessions.includes(session)) return;
+        session.agentsMd = String(data?.text || '');
+        saveChatsSoon();
+      })
+      .catch(() => {});
+    renderAll();
+    return;
+  }
   updateSendState();
   saveChatsSoon();
   renderAll();
@@ -7322,6 +7373,13 @@ function openActionMenu({ x, y, items, usage = false }) {
       button.append(icon);
     }
     button.append(el('span', 'action-menu-label', item.label || ''));
+    button.addEventListener('mousedown', (event) => event.preventDefault());
+    button.addEventListener('click', () => {
+      const targetItem = actionMenuItems[index];
+      closeActionMenu();
+      lastActionMenuAt = Date.now();
+      if (targetItem) runActionMenuItem(targetItem);
+    });
     column.append(button);
   });
   menu.append(column);
@@ -7355,26 +7413,38 @@ function startActionMenuPress(event) {
   if (dom.questionDock && !dom.questionDock.classList.contains('hidden')) {
     return;
   }
-  // 对话窗口不再有右键菜单；菜单只存在于画布
-  if (!window.canvasOverlayOpen?.()) return;
+  if (closeRightClickOverlay()) {
+    lastActionMenuAt = Date.now();
+    return;
+  }
   const target = event.target instanceof Element ? event.target : null;
-  const frameTarget = target?.closest('.canvas-frame');
-  const nodeTarget = target?.closest('.canvas-group, .canvas-child');
-  const workspaceTarget = target?.closest('.canvas-workspace');
+  const canvasOpen = Boolean(window.canvasOverlayOpen?.());
+  const switcherOpen =
+    state.switcherOpen || dom.switcher.classList.contains('open');
+  const frameTarget = canvasOpen ? target?.closest('.canvas-frame') : null;
+  const nodeTarget = canvasOpen
+    ? target?.closest('.canvas-group, .canvas-child')
+    : null;
+  const workspaceTarget = canvasOpen
+    ? target?.closest('.canvas-workspace')
+    : null;
+  let menuKind = 'main';
   let canvasSessionId = null;
   let canvasWorkspaceId = null;
   let canvasFrameId = null;
-  let canvasMainMenu = false;
   if (frameTarget?.dataset.frameId) {
+    menuKind = 'canvas-frame';
     canvasFrameId = frameTarget.dataset.frameId;
   } else if (nodeTarget?.dataset.sessionId) {
+    menuKind = 'canvas-node';
     canvasSessionId = nodeTarget.dataset.sessionId;
   } else if (workspaceTarget?.dataset.projectId) {
+    menuKind = 'canvas-workspace';
     canvasWorkspaceId = workspaceTarget.dataset.projectId;
-  } else if (target?.closest('.canvas-workspaces-page')) {
-    return;
-  } else {
-    canvasMainMenu = true;
+  } else if (canvasOpen && target?.closest('.canvas-workspaces-page')) {
+    menuKind = 'window';
+  } else if (!canvasOpen && switcherOpen) {
+    menuKind = 'switcher';
   }
   event.preventDefault();
   if (actionMenuPress) cancelActionMenuPress();
@@ -7384,29 +7454,42 @@ function startActionMenuPress(event) {
     x: event.clientX,
     y: event.clientY,
     timer: null,
+    menuKind,
     canvasSessionId,
     canvasWorkspaceId,
     canvasFrameId,
-    canvasMainMenu,
   };
   actionMenuPress = press;
   press.timer = setTimeout(() => {
     if (actionMenuPress !== press) return;
     press.timer = null;
-    if (press.canvasFrameId) {
-      window.openCanvasFrameMenu?.(press.canvasFrameId, press.x, press.y);
-    } else if (press.canvasSessionId) {
-      window.openCanvasNodeMenu?.(press.canvasSessionId, press.x, press.y);
-    } else if (press.canvasWorkspaceId) {
-      window.openCanvasWorkspaceMenu?.(
-        press.canvasWorkspaceId,
-        press.x,
-        press.y
-      );
-    } else if (press.canvasMainMenu) {
-      openMainActionMenu(press.x, press.y);
-    }
+    openActionMenuForPress(press);
   }, ACTION_MENU_HOLD_MS);
+}
+
+function openActionMenuForPress(press) {
+  if (!press) return;
+  if (press.menuKind === 'canvas-frame' && press.canvasFrameId) {
+    window.openCanvasFrameMenu?.(press.canvasFrameId, press.x, press.y);
+    return;
+  }
+  if (press.menuKind === 'canvas-node' && press.canvasSessionId) {
+    window.openCanvasNodeMenu?.(press.canvasSessionId, press.x, press.y);
+    return;
+  }
+  if (press.menuKind === 'canvas-workspace' && press.canvasWorkspaceId) {
+    window.openCanvasWorkspaceMenu?.(
+      press.canvasWorkspaceId,
+      press.x,
+      press.y
+    );
+    return;
+  }
+  if (press.menuKind === 'window' || press.menuKind === 'switcher') {
+    openSwitcherActionMenu(press.target, press.x, press.y);
+    return;
+  }
+  openMainActionMenu(press.x, press.y);
 }
 
 function endActionMenuPress(event) {
@@ -7415,7 +7498,15 @@ function endActionMenuPress(event) {
   if (!press) return;
   if (press.timer) clearTimeout(press.timer);
   actionMenuPress = null;
-  if (!state.ringOpen) return;
+  if (!state.ringOpen) {
+    openActionMenuForPress({
+      ...press,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    lastActionMenuAt = Date.now();
+    return;
+  }
   const hovered = document.elementFromPoint(event.clientX, event.clientY);
   const active =
     hovered instanceof Element
@@ -7424,15 +7515,25 @@ function endActionMenuPress(event) {
   const index = active ? Number(active.dataset.actionIndex) : -1;
   const item = index >= 0 ? actionMenuItems[index] : null;
   closeActionMenu();
+  lastActionMenuAt = Date.now();
   if (item) runActionMenuItem(item);
 }
 
 function openMainActionMenu(x, y) {
+  const items = [...RING_ITEMS];
+  if (state.chatWindow && api.isElectron) {
+    items.push({
+      label: '关闭窗口',
+      icon: RING_ICONS.close,
+      action: () => api.close(),
+      danger: true,
+    });
+  }
   openActionMenu({
     x,
     y,
     usage: true,
-    items: RING_ITEMS,
+    items,
   });
 }
 
@@ -7544,11 +7645,11 @@ function handleContextMenu(event) {
 }
 
 function handleRightClickBack() {
+  if (Date.now() - lastActionMenuAt < 450) return;
   if (state.ringOpen) {
     closeActionMenu();
     return;
   }
-  if (Date.now() - lastActionMenuAt < 450) return;
 
   if (dom.questionDock && !dom.questionDock.classList.contains('hidden')) {
     void dismissQuestion();
@@ -7556,14 +7657,6 @@ function handleRightClickBack() {
   }
   if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
     closeWebContent();
-    return;
-  }
-  if (state.chatWindow) {
-    if (state.composerOpen) {
-      closeComposer();
-      return;
-    }
-    api.close();
     return;
   }
   if (state.composerOpen) {
@@ -9291,6 +9384,8 @@ function bindEvents() {
     document.body.classList.remove('canvas-space');
   });
   window.canvasSpaceHeld = () => canvasSpaceHeld;
+  window.openSessionWindow = openSessionWindow;
+  window.flushChats = saveChatsNow;
 
   window.addEventListener('resize', syncMaximized);
   syncMaximized();
@@ -9329,6 +9424,9 @@ function bindEvents() {
 
   $('close-settings')?.addEventListener('click', closeSettings);
   $('done-settings').addEventListener('click', closeSettings);
+  $('home-workspace')?.addEventListener('click', () => {
+    window.openCanvasWorkspaces?.();
+  });
   $('close-raw')?.addEventListener('click', closeRawRequest);
   dom.catalogClose?.addEventListener('click', closeCatalog);
   dom.webContentClose?.addEventListener('click', closeWebContent);
@@ -10428,6 +10526,9 @@ function bindEvents() {
   });
 
   api.onViewerAsk(handleViewerAsk);
+  api.onChatCompose(() => {
+    if (state.chatWindow) openComposer();
+  });
 
   api.onChatToolResult(({ requestId, name, output, ok, round, startedAt, durationMs }) => {
     if (requestId !== state.requestId || !state.streamMessage) return;
@@ -10623,22 +10724,33 @@ async function boot() {
     );
     if (index >= 0) state.current = index;
     setupChatWindow();
+  } else if (api.isElectron) {
+    state.homeWindow = true;
+    document.body.classList.add('home-window');
   }
-  applyFoldState(currentSession());
+  if (state.chatWindow) applyFoldState(currentSession());
 
   bindEvents();
   connectBackgroundEvents();
   applySettings();
   await loadAgents();
   renderAll();
-  const bootSession = currentSession();
-  if (bootSession) {
-    void resumeBackgroundQueue(bootSession);
+  if (state.chatWindow && params.get('compose') === '1') {
+    openComposer();
   }
-  persistFoldState();
+  if (state.chatWindow) {
+    const bootSession = currentSession();
+    if (bootSession) {
+      void resumeBackgroundQueue(bootSession);
+    }
+    persistFoldState();
+  }
   updateSendState();
   void loadUsage();
   void loadMcpServers();
+  if (state.homeWindow) {
+    setTimeout(() => window.openCanvas?.(), 0);
+  }
 }
 
 boot();

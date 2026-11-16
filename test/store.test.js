@@ -134,10 +134,12 @@ test('forkSession copies messages and protects subagent sessions', () => {
       title,
       frozen: true,
       subagent: true,
+      parentSessionId: 's1',
     });
     assert.equal(forked.title, '#1-Chat 1');
     assert.equal(forked.frozen, true);
     assert.equal(forked.subagent, true);
+    assert.equal(forked.parentSessionId, 's1');
     assert.equal(forked.msgs.length, 2);
     assert.equal(forked.msgs[0].text, 'hello');
     assert.equal(forked.msgs[1].steps[0].text, 'hi');
@@ -165,7 +167,10 @@ test('forkSession copies messages and protects subagent sessions', () => {
     const loaded = store.loadChats();
     assert.ok(
       loaded.sessions.some(
-        (session) => session.id === forked.id && session.subagent
+        (session) =>
+          session.id === forked.id &&
+          session.subagent &&
+          session.parentSessionId === 's1'
       )
     );
 
@@ -237,6 +242,7 @@ test('createSession stores compaction, pending queue and frozen state', () => {
       system: 'sys',
       agentId: 'basic',
       projectId: null,
+      parentSessionId: 'parent-1',
       compaction: { summary: 's', recent: 'r', through: 1 },
       pendingQueue: [
         {
@@ -270,6 +276,122 @@ test('createSession stores compaction, pending queue and frozen state', () => {
     assert.equal(session.msgs[0].usage.afterTokens, 2);
     assert.equal(session.pendingQueue[0].kind, 'compact');
     assert.equal(session.compaction.through, 1);
+    assert.equal(session.parentSessionId, 'parent-1');
+  });
+});
+
+test('subagent parent links backfill from canvas nodes', () => {
+  withStoreDir((dir) => {
+    store.saveStructure({
+      projects: [
+        { id: 'p1', name: 'Project 1', directories: ['C:\\work'] },
+      ],
+      sessions: [
+        {
+          id: 'root-1',
+          title: 'Root',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          frozen: false,
+          subagent: false,
+          mcpDisabled: [],
+          msgs: [],
+        },
+        {
+          id: 'child-1',
+          title: '#1-Root',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          frozen: true,
+          subagent: true,
+          parentSessionId: null,
+          mcpDisabled: [],
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 1,
+    });
+    fs.writeFileSync(
+      path.join(dir, 'canvas.json'),
+      JSON.stringify({
+        version: 1,
+        nodes: {
+          'root-1': { x: 0, y: 0, width: 420, height: 134 },
+          'child-1': {
+            x: 500,
+            y: 0,
+            width: 280,
+            height: 170,
+            parentSessionId: 'root-1',
+          },
+        },
+      })
+    );
+    store.close();
+    store.init({
+      getPath(name) {
+        return name === 'userData' ? dir : path.dirname(dir);
+      },
+    });
+    const child = store
+      .loadChats()
+      .sessions.find((session) => session.id === 'child-1');
+    assert.equal(child.parentSessionId, 'root-1');
+  });
+});
+
+test('structure saves from a chat window preserve the main current session', () => {
+  withStoreDir(() => {
+    const base = {
+      projects: [
+        { id: 'p1', name: 'Project 1', directories: ['C:\\work'] },
+      ],
+      sessions: [
+        {
+          id: 'main-1',
+          title: 'Main',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          frozen: false,
+          subagent: false,
+          mcpDisabled: [],
+          msgs: [],
+        },
+        {
+          id: 'child-1',
+          title: '#1-Main',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          frozen: true,
+          subagent: true,
+          parentSessionId: 'main-1',
+          mcpDisabled: [],
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 1,
+    };
+    store.saveStructure(base);
+    store.saveStructure({
+      ...base,
+      current: 1,
+      preserveCurrent: true,
+    });
+    let chats = store.loadChats();
+    assert.equal(chats.sessions[chats.current].id, 'main-1');
+
+    store.saveStructure({
+      ...base,
+      current: 1,
+    });
+    chats = store.loadChats();
+    assert.equal(chats.sessions[chats.current].id, 'child-1');
   });
 });
 

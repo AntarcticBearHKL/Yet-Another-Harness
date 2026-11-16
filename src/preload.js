@@ -12,11 +12,13 @@ contextBridge.exposeInMainWorld('yah', {
   openContent: (payload) => ipcRenderer.invoke('content:open', payload),
   askViewer: (payload) => ipcRenderer.invoke('viewer:ask', payload),
   openAgileWindow: () => ipcRenderer.invoke('agile:open'),
-  openChatWindow: (sessionId) => ipcRenderer.invoke('chat:open', sessionId),
+  openChatWindow: (sessionId, options) =>
+    ipcRenderer.invoke('chat:open', sessionId, options),
   updateContent: (payload) => ipcRenderer.send('content:update', payload),
   onContentInit: (callback) => subscribe('content:init', callback),
   onContentUpdate: (callback) => subscribe('content:update', callback),
   onViewerAsk: (callback) => subscribe('viewer:ask', callback),
+  onChatCompose: (callback) => subscribe('chat:compose', callback),
 
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),

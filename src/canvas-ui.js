@@ -1233,15 +1233,11 @@ function startCanvasGroupDrag(event, root, groupEl, node) {
     originX: node.x,
     originY: node.y,
     moved: false,
+    captured: false,
     pointerId: event.pointerId,
   };
   if (!event.shiftKey) {
     canvasSelectGroup(root.id, null);
-  }
-  try {
-    groupEl.setPointerCapture(event.pointerId);
-  } catch {
-    /* ignore */
   }
 }
 
@@ -1287,6 +1283,14 @@ function onCanvasPointerMove(event) {
       return;
     }
     drag.moved = true;
+    if (!drag.captured) {
+      drag.captured = true;
+      try {
+        drag.groupEl.setPointerCapture(drag.pointerId);
+      } catch {
+        /* ignore */
+      }
+    }
     drag.node.x = drag.originX + dx;
     drag.node.y = drag.originY + dy;
     drag.groupEl.style.left = `${drag.node.x}px`;
@@ -1349,7 +1353,9 @@ function onCanvasPointerUp() {
       scheduleCanvasSave();
     }
     try {
-      drag.groupEl.releasePointerCapture(drag.pointerId);
+      if (drag.captured) {
+        drag.groupEl.releasePointerCapture(drag.pointerId);
+      }
     } catch {
       /* ignore */
     }
@@ -1466,6 +1472,12 @@ function createCanvasConversationAt(projectId, clientX, clientY) {
     }
   }
   scheduleCanvasSave();
+  if (api.isElectron && api.openChatWindow) {
+    const ready = window.flushChats ? window.flushChats() : Promise.resolve();
+    Promise.resolve(ready)
+      .then(() => window.openSessionWindow?.(session.id, { compose: true }))
+      .catch((error) => console.error('open new chat failed', error));
+  }
 }
 
 function deleteCanvasGroup(rootId) {

@@ -233,14 +233,27 @@ function openContentWindow(payload) {
   return win.id;
 }
 
-function openChatWindow(sessionId) {
+function openChatWindow(sessionId, options = {}) {
   const id = String(sessionId || '').trim();
   if (!id) return null;
+  const compose = options && options.compose === true;
   const existing = chatWindows.get(id);
   if (existing && !existing.isDestroyed()) {
     if (existing.isMinimized()) existing.restore();
     existing.show();
     existing.focus();
+    if (compose) {
+      const send = () => {
+        if (!existing.isDestroyed()) {
+          existing.webContents.send('chat:compose');
+        }
+      };
+      if (existing.webContents.isLoading()) {
+        existing.webContents.once('did-finish-load', send);
+      } else {
+        send();
+      }
+    }
     return existing.id;
   }
 
@@ -271,7 +284,9 @@ function openChatWindow(sessionId) {
 
   chatWindows.set(id, win);
   win.loadURL(
-    `${LOCAL_URL}/?chat=1&sessionId=${encodeURIComponent(id)}&shell=electron`
+    `${LOCAL_URL}/?chat=1&sessionId=${encodeURIComponent(id)}&shell=electron${
+      compose ? '&compose=1' : ''
+    }`
   );
   win.once('ready-to-show', () => {
     if (!win.isDestroyed()) win.show();
@@ -514,6 +529,25 @@ if (gotLock) {
       openContentWindow(payload)
     );
     ipcMain.handle('viewer:ask', (_event, payload) => {
+      const sessionId = String(payload?.sessionId || '').trim();
+      if (sessionId) {
+        openChatWindow(sessionId);
+        const win = chatWindows.get(sessionId);
+        if (win && !win.isDestroyed()) {
+          const send = () => {
+            if (!win.isDestroyed()) win.webContents.send('viewer:ask', payload);
+          };
+          if (win.webContents.isLoading()) {
+            win.webContents.once('did-finish-load', send);
+          } else {
+            send();
+          }
+          if (win.isMinimized()) win.restore();
+          win.show();
+          win.focus();
+          return true;
+        }
+      }
       const win = mainWindow;
       if (!win || win.isDestroyed()) return false;
       if (win.isMinimized()) win.restore();
@@ -523,8 +557,8 @@ if (gotLock) {
       return true;
     });
     ipcMain.handle('agile:open', () => openAgileWindow());
-    ipcMain.handle('chat:open', (_event, sessionId) =>
-      openChatWindow(sessionId)
+    ipcMain.handle('chat:open', (_event, sessionId, options) =>
+      openChatWindow(sessionId, options)
     );
     ipcMain.on('content:update', (_event, payload) => {
       const key = String(payload?.key || '');
