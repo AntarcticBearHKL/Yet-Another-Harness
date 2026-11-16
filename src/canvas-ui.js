@@ -672,6 +672,11 @@ function buildCanvasChild(child, root) {
   childEl.append(
     el('span', 'canvas-child-title', child.title || '未命名对话')
   );
+  const arrow = el('span', 'canvas-child-arrow');
+  arrow.setAttribute('aria-hidden', 'true');
+  arrow.innerHTML =
+    '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>';
+  childEl.append(arrow);
   childEl.title = child.title || '未命名对话';
 
   childEl.addEventListener('click', (event) => {
@@ -699,6 +704,17 @@ function buildCanvasChild(child, root) {
 
 function buildCanvasTask(job) {
   const row = el('div', 'canvas-task');
+  const status =
+    job?.status === 'exited'
+      ? job?.exitCode === 0
+        ? 'done'
+        : 'blocked'
+      : job?.status === 'running'
+        ? 'running'
+        : job?.status === 'error' || job?.status === 'timeout'
+          ? 'blocked'
+          : 'idle';
+  row.classList.add(status);
   const note = String(job?.note || job?.command || '后台任务').trim();
   row.append(el('span', 'canvas-task-note', note));
   const command = String(job?.command || '').trim();
@@ -711,7 +727,7 @@ function buildCanvasTask(job) {
         ? backgroundStatusLabel(job?.status)
         : job?.status || '运行中';
   if (statusLabel) {
-    row.append(el('span', 'canvas-task-status', statusLabel));
+    row.append(el('span', `canvas-task-status ${status}`, statusLabel));
   }
   const elapsed =
     typeof backgroundElapsed === 'function' ? backgroundElapsed(job) : '';
