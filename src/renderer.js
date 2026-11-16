@@ -94,7 +94,6 @@ const dom = {
   webContentBody: $('web-content-body'),
   webContentClose: $('web-content-close'),
   composerEffortRail: $('composer-effort-rail'),
-  composerEffortValue: $('composer-effort-value'),
   modelPicker: $('model-picker'),
   modelPickerButton: $('model-picker-button'),
   modelMenu: $('model-menu'),
@@ -698,13 +697,10 @@ function renderComposerEffort() {
   if (!dom.composerEffortRail) return;
   const effort = currentEffort();
   const index = EFFORT_LEVELS.indexOf(effort);
-  const ratio = index / (EFFORT_LEVELS.length - 1);
+  const ratio = (index + 1) / EFFORT_LEVELS.length;
   dom.composerEffortRail.style.setProperty('--effort-ratio', String(ratio));
   dom.composerEffortRail.setAttribute('aria-valuenow', String(index));
   dom.composerEffortRail.setAttribute('aria-valuetext', effort);
-  if (dom.composerEffortValue) {
-    dom.composerEffortValue.textContent = effort;
-  }
 }
 
 function setComposerEffort(value) {
@@ -720,11 +716,10 @@ function composerEffortRatioFromPointer(event) {
   const rail = dom.composerEffortRail;
   if (!rail) return 0.5;
   const rect = rail.getBoundingClientRect();
-  const inset = 7;
-  const travel = Math.max(1, rect.width - inset * 2);
+  const travel = Math.max(1, rect.width);
   return Math.min(
     1,
-    Math.max(0, (event.clientX - rect.left - inset) / travel)
+    Math.max(0, (event.clientX - rect.left) / travel)
   );
 }
 
@@ -734,7 +729,10 @@ function previewComposerEffort(event) {
   const ratio = composerEffortRatioFromPointer(event);
   rail.classList.add('dragging');
   rail.style.setProperty('--effort-ratio', String(ratio));
-  const index = Math.round(ratio * (EFFORT_LEVELS.length - 1));
+  const index = Math.min(
+    EFFORT_LEVELS.length - 1,
+    Math.floor(ratio * EFFORT_LEVELS.length)
+  );
   const effort = EFFORT_LEVELS[index];
   rail.setAttribute('aria-valuenow', String(index));
   rail.setAttribute('aria-valuetext', effort);

@@ -2846,6 +2846,7 @@ body.home-window #home-workspace {
   color: var(--dim);
   font: inherit;
   font-size: 11.5px;
+  font-weight: 500;
   cursor: pointer;
   transition:
     background 120ms ease,
@@ -2927,7 +2928,6 @@ body.home-window #home-workspace {
 }
 
 .composer-effort {
-  --effort-inset: 7px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2939,90 +2939,44 @@ body.home-window #home-workspace {
 
 .effort-label {
   flex: none;
-  color: var(--faint);
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  opacity: 0.78;
-}
-
-.effort-value {
-  flex: none;
-  min-width: 30px;
   color: var(--dim);
-  font-size: 10.5px;
-  letter-spacing: 0.01em;
-  text-align: right;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 1;
 }
 
 .effort-rail {
-  --effort-ratio: 0.5;
+  --effort-ratio: 0.6667;
   position: relative;
   flex: 1;
   min-width: 80px;
-  height: 20px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  box-shadow: none;
-  cursor: pointer;
-  touch-action: none;
-  outline: none;
-}
-
-.effort-rail::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
   height: 8px;
-  transform: translateY(-50%);
+  border: 0;
   border-radius: 999px;
   background: rgba(74, 54, 40, 0.075);
   box-shadow: inset 0 1px 1px rgba(74, 54, 40, 0.05);
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+  overflow: hidden;
 }
 
 .effort-rail-fill {
   position: absolute;
-  top: 50%;
-  left: var(--effort-inset);
-  width: calc(
-    (100% - 2 * var(--effort-inset)) * var(--effort-ratio)
-  );
-  height: 8px;
-  transform: translateY(-50%);
+  inset: 0;
+  width: calc(100% * var(--effort-ratio));
   border-radius: 999px;
   background: var(--accent);
   transition: width 90ms ease;
 }
 
-.effort-rail-knob {
-  position: absolute;
-  top: 50%;
-  left: calc(
-    var(--effort-inset) +
-      (100% - 2 * var(--effort-inset)) * var(--effort-ratio)
-  );
-  width: 14px;
-  height: 14px;
-  transform: translate(-50%, -50%);
-  border: 2px solid #fffdf9;
-  border-radius: 50%;
-  background: var(--accent);
-  pointer-events: none;
-  transition:
-    left 90ms ease,
-    transform 120ms ease;
+.effort-rail:hover .effort-rail-fill {
+  background: var(--accent-soft);
 }
 
-.effort-rail:hover .effort-rail-knob {
-  transform: translate(-50%, -50%) scale(1.08);
-}
-
-.effort-rail.dragging .effort-rail-fill,
-.effort-rail.dragging .effort-rail-knob {
+.effort-rail.dragging .effort-rail-fill {
   transition: none;
 }
 
@@ -3032,8 +2986,7 @@ body.home-window #home-workspace {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .effort-rail-fill,
-  .effort-rail-knob {
+  .effort-rail-fill {
     transition: none;
   }
 }
@@ -3093,7 +3046,7 @@ body.home-window #home-workspace {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--text-soft);
+  color: var(--dim);
   font: inherit;
   font-size: 11.5px;
   font-weight: 500;
@@ -3130,14 +3083,14 @@ body.home-window #home-workspace {
 
 .agent-picker.locked .agent-picker-button,
 .agent-picker.locked .agent-picker-button:disabled {
-  opacity: 0.72;
-  color: var(--accent-deep);
+  opacity: 1;
+  color: var(--dim);
   cursor: default;
 }
 
 .agent-picker.locked .agent-picker-button:hover {
   background: transparent;
-  color: var(--accent-deep);
+  color: var(--dim);
 }
 
 .agent-picker-value {
