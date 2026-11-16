@@ -2865,7 +2865,8 @@ body.ring-open #window-controls {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
+  flex: 1;
+  width: auto;
   min-width: 0;
   padding: 0;
 }
@@ -2974,10 +2975,10 @@ body.ring-open #window-controls {
 .composer-foot {
   position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 18px;
   flex: none;
-  min-height: 0;
+  min-height: 48px;
   padding: 10px 20px 12px;
   box-sizing: border-box;
 }
@@ -2992,28 +2993,21 @@ body.ring-open #window-controls {
   background: rgba(74, 54, 40, 0.08);
 }
 
-.composer-foot-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 26px;
-}
-
 .composer-controls {
   display: flex;
   align-items: center;
   gap: 2px;
+  flex: none;
   min-width: 0;
 }
 
 @media (max-width: 700px) {
-  .composer-foot-row {
-    flex-wrap: wrap;
+  .composer-foot {
+    gap: 12px;
   }
 
-  .composer-send-hint {
-    margin-left: auto;
+  .effort-label {
+    display: none;
   }
 }
 
@@ -3208,46 +3202,6 @@ body.ring-open #window-controls {
 #input::placeholder {
   color: var(--faint);
   opacity: 0.9;
-}
-
-.composer-send-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--faint);
-  font-size: 10px;
-  white-space: nowrap;
-  opacity: 0.72;
-  transition:
-    color 160ms ease,
-    opacity 160ms ease;
-}
-
-.composer-send-hint kbd {
-  padding: 2px 5px;
-  border: 1px solid rgba(74, 54, 40, 0.12);
-  border-bottom-color: rgba(74, 54, 40, 0.2);
-  border-radius: 5px;
-  background: rgba(251, 246, 239, 0.8);
-  color: var(--dim);
-  font: inherit;
-  font-size: 9px;
-  letter-spacing: 0.02em;
-  transition:
-    color 160ms ease,
-    border-color 160ms ease,
-    background 160ms ease;
-}
-
-.composer-box.ready .composer-send-hint {
-  color: var(--accent-deep);
-  opacity: 1;
-}
-
-.composer-box.ready .composer-send-hint kbd {
-  border-color: rgba(185, 111, 61, 0.28);
-  background: rgba(185, 111, 61, 0.08);
-  color: var(--accent-deep);
 }
 
 /* ---------------------------------------------------------------- overlays */

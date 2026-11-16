@@ -9564,25 +9564,9 @@ function bindEvents() {
       removeAttachedSkill(state.attachedSkills.length - 1);
       return;
     }
-    if (
-      (event.code === 'Space' || event.key === ' ') &&
-      !event.shiftKey &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.altKey
-    ) {
-      if (state.slashOpen) return;
+    if (event.key === 'Enter' && !event.shiftKey) {
       if (event.repeat) {
         event.preventDefault();
-        return;
-      }
-      if (
-        !dom.input.value.trim() &&
-        state.attachedSkills.length === 0 &&
-        state.attachedImages.length === 0
-      ) {
-        event.preventDefault();
-        closeComposer();
         return;
       }
       if (!composerCanSend()) return;
@@ -10042,17 +10026,6 @@ function bindEvents() {
           target instanceof Element &&
           target.closest('button, a, .composer-image')
         ) {
-          return;
-        }
-        if (
-          state.composerOpen &&
-          target === dom.input &&
-          state.attachedSkills.length === 0 &&
-          state.attachedImages.length === 0 &&
-          dom.input.value.trim() === ''
-        ) {
-          event.preventDefault();
-          closeComposer();
           return;
         }
         if (
