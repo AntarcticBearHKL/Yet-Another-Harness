@@ -133,6 +133,7 @@ const state = {
   chatWindow: false,
   homeWindow: false,
   chatCompact: false,
+  chatTurnIndex: -1,
   chatNav: null,
   chatNavSignature: '',
   chatNavTimer: null,
@@ -3213,11 +3214,14 @@ function setupChatWindow() {
     if (document.body.classList.contains('canvas-window-dragging')) return;
     if (event.target === dom.webContent) closeWebContent();
   });
-  setChatCompact(false);
+  setChatCompact(true, { preserveTurn: false });
 }
 
-function setChatCompact(compact) {
+function setChatCompact(compact, { preserveTurn = true } = {}) {
   if (!state.chatWindow) return;
+  const activeTurn = Number.isInteger(state.chatTurnIndex)
+    ? state.chatTurnIndex
+    : -1;
   state.chatCompact = Boolean(compact);
   document.body.classList.toggle('chat-compact', state.chatCompact);
   for (const card of dom.messages.querySelectorAll(
@@ -3229,7 +3233,10 @@ function setChatCompact(compact) {
       ? false
       : card.classList.contains('collapsed');
   }
-  requestAnimationFrame(updateChatTurnActive);
+  requestAnimationFrame(() => {
+    updateChatTurnActive();
+    if (preserveTurn && activeTurn >= 0) pinChatTurn(activeTurn);
+  });
 }
 
 const CHAT_TURN_BASE_WIDTH = 26;
@@ -3293,7 +3300,10 @@ function updateChatTurnActive() {
     turn.querySelector('.prompt-card')
   );
   const bars = [...state.chatNav.querySelectorAll('.chat-turn-bar')];
-  if (turns.length === 0 || bars.length === 0) return;
+  if (turns.length === 0 || bars.length === 0) {
+    state.chatTurnIndex = -1;
+    return;
+  }
   const top = dom.messages.getBoundingClientRect().top;
   let active = 0;
   const atBottom =
@@ -3309,6 +3319,7 @@ function updateChatTurnActive() {
       if (turnTop <= 84) active = index;
     });
   }
+  state.chatTurnIndex = active;
   bars.forEach((bar, index) => {
     const distance = Math.abs(index - active);
     const factor = Math.exp(
@@ -3338,6 +3349,17 @@ function scrollChatTurn(index) {
   state.forceScroll = false;
   container.scrollTop = Math.max(0, top - 18);
   updateChatTurnActive();
+}
+
+function pinChatTurn(index, duration = 360) {
+  const started = performance.now();
+  const step = () => {
+    scrollChatTurn(index);
+    if (performance.now() - started < duration) {
+      requestAnimationFrame(step);
+    }
+  };
+  requestAnimationFrame(step);
 }
 
 function renderMessages({ animate = true } = {}) {
