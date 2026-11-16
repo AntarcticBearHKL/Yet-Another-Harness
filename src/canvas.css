@@ -108,8 +108,8 @@ body.canvas-space .canvas-stage.panning {
 }
 
 /*
- * 放大时用 CSS zoom 按实际字号重排；缩小时改用 transform 缩放，
- * 避免 zoom < 1 时文字和边框被压成模糊的半像素。
+ * 始终使用 CSS zoom 缩放画布内容，让文字和边框按布局尺寸重新绘制，
+ * 避免 transform: scale() 缩小时把整层栅格化后发虚。
  */
 .canvas-zoom {
   position: absolute;

@@ -888,15 +888,11 @@ function renderCanvasNodes(index) {
 
 function applyCanvasView() {
   const view = canvasState.view;
-  const layoutZoom = view.k >= 1;
   if (canvasDom.zoomLayer) {
-    canvasDom.zoomLayer.style.zoom = layoutZoom ? String(view.k) : '1';
+    canvasDom.zoomLayer.style.zoom = String(view.k);
   }
   if (canvasDom.world) {
-    const translate = `translate3d(${view.x}px, ${view.y}px, 0)`;
-    canvasDom.world.style.transform = layoutZoom
-      ? translate
-      : `${translate} scale(${view.k})`;
+    canvasDom.world.style.transform = `translate3d(${view.x}px, ${view.y}px, 0)`;
   }
   if (canvasDom.grid) {
     canvasDom.grid.style.backgroundPosition = `${view.x}px ${view.y}px`;
