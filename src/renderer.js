@@ -6991,26 +6991,47 @@ async function syncMaximized() {
   document.body.classList.toggle('maximized', maximized);
 }
 
+function isWebContentTextTarget(target) {
+  if (!(target instanceof Element)) return false;
+  if (
+    target.closest(
+      'img, figure, .web-content-image-wrap, .web-content-image'
+    )
+  ) {
+    return false;
+  }
+  const textRoot = target.closest(
+    '.md-body, .text-block, .code-line, .code-text, pre, code, table, blockquote, .web-content-image-caption'
+  );
+  return Boolean(textRoot && String(textRoot.textContent || '').trim());
+}
+
 function onWindowDragStart(event) {
   if (!api.isElectron) return;
   if (event.button !== 0 && event.button !== 1) return;
   const target = event.target;
   if (!(target instanceof Element)) return;
   const webContentTarget = target.closest('#web-content');
-  const spaceDrag = Boolean(webContentTarget && canvasSpaceHeld);
-  if (target.closest(DRAG_EXCLUDE) && !spaceDrag) return;
-  if (
-    spaceDrag &&
-    target.closest(
-      'button, a, input, textarea, select, [contenteditable="true"]'
-    )
-  ) {
+  const webContentText = webContentTarget
+    ? isWebContentTextTarget(target)
+    : false;
+  const webContentDrag = Boolean(webContentTarget && !webContentText);
+  if (webContentDrag) {
+    if (
+      target.closest(
+        'button, a, input, textarea, select, [contenteditable="true"]'
+      )
+    ) {
+      return;
+    }
+    if (event.button !== 0) return;
+    event.preventDefault();
+  } else if (target.closest(DRAG_EXCLUDE)) {
     return;
   }
   const canvasOverlay = target.closest('#canvas');
   const overlay = target.closest('.overlay');
   if (overlay && overlay !== dom.switcher && overlay !== canvasOverlay) return;
-  let isSpaceDrag = false;
   if (canvasOverlay) {
     // 首页画布不再用空格 + 左键移动窗口；只有 Tab 工作区页空白处可以左键拖动窗口。
     if (!target.closest('.canvas-workspaces-page')) return;
@@ -7022,9 +7043,6 @@ function onWindowDragStart(event) {
     ) {
       return;
     }
-  } else if (spaceDrag) {
-    isSpaceDrag = true;
-    event.preventDefault();
   } else if (event.button !== 0) {
     return;
   }
@@ -7040,7 +7058,7 @@ function onWindowDragStart(event) {
       target.closest('#composer') &&
       !target.closest('.composer-box')
   );
-  const needsThreshold = isCardHead || isComposerScrim;
+  const needsThreshold = isCardHead || isComposerScrim || webContentDrag;
   suppressNextCardClick = false;
   windowDrag = {
     x: event.screenX,
@@ -7048,7 +7066,7 @@ function onWindowDragStart(event) {
     started: !needsThreshold,
     isCardHead,
     isComposerScrim,
-    isSpaceDrag,
+    isWebContentDrag: webContentDrag,
   };
   dragFromComposer = Boolean(
     state.composerOpen && target.closest('#composer')
@@ -7091,7 +7109,7 @@ function onWindowDragEnd() {
   if (!windowDrag) return;
   const wasCardHead = windowDrag.isCardHead;
   const wasComposerScrim = windowDrag.isComposerScrim;
-  const wasSpaceDrag = windowDrag.isSpaceDrag;
+  const wasWebContentDrag = windowDrag.isWebContentDrag;
   const started = windowDrag.started;
   const refocusComposer =
     dragFromComposer && state.composerOpen && started;
@@ -7102,7 +7120,7 @@ function onWindowDragEnd() {
   dragFrame = 0;
   document.body.classList.remove('window-dragging');
   if (started) api.dragEnd();
-  if (wasSpaceDrag && started) {
+  if (wasWebContentDrag && started) {
     document.body.classList.add('canvas-window-dragging');
     setTimeout(() => {
       document.body.classList.remove('canvas-window-dragging');
@@ -9303,11 +9321,11 @@ function bindEvents() {
   // 整体禁用鼠标右键菜单与框选；有弹窗时右键等于关闭
   document.addEventListener('contextmenu', handleContextMenu, true);
   document.addEventListener('selectstart', (event) => {
-    const target = event.target;
-    if (
-      target instanceof Element &&
-      target.closest('input, textarea, #web-content')
-    ) {
+    const target =
+      event.target instanceof Element
+        ? event.target
+        : event.target?.parentElement;
+    if (target && target.closest('input, textarea, #web-content')) {
       return;
     }
     event.preventDefault();
