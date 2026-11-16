@@ -10158,6 +10158,15 @@ function bindEvents() {
         ) {
           return;
         }
+        const empty =
+          !dom.input.value.trim() &&
+          state.attachedSkills.length === 0 &&
+          state.attachedImages.length === 0;
+        if (empty) {
+          event.preventDefault();
+          closeComposer();
+          return;
+        }
         if (
           target instanceof Element &&
           target.closest('input, textarea, [contenteditable="true"]')
