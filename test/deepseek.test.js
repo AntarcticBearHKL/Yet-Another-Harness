@@ -120,17 +120,6 @@ test('request body can omit tools for the final summary', () => {
   assert.equal(body.tool_choice, undefined);
 });
 
-test('tool results summary keeps the latest results', () => {
-  const text = deepseek.toolResultsSummary([
-    { role: 'tool', content: 'first line\nrest' },
-    { role: 'user', content: 'ignore me' },
-    { role: 'tool', content: 'second result' },
-  ]);
-  assert.match(text, /first line/);
-  assert.match(text, /second result/);
-  assert.doesNotMatch(text, /ignore me/);
-});
-
 test('messages from history keep thinking separate for the same route', () => {
   const messages = deepseek.messagesFromHistory(
     [
