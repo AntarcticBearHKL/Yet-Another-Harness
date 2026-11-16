@@ -8,6 +8,7 @@ const canvasDom = {
   zoomLayer: document.getElementById('canvas-zoom'),
   frames: document.getElementById('canvas-frames'),
   nodes: document.getElementById('canvas-nodes'),
+  marquee: document.getElementById('canvas-marquee'),
   empty: document.getElementById('canvas-empty'),
   zoomIndicator: document.getElementById('canvas-zoom-indicator'),
   page: document.getElementById('canvas-workspaces-page'),
@@ -44,6 +45,7 @@ const canvasState = {
   selectedIds: new Set(),
   drag: null,
   frameDrag: null,
+  marquee: null,
   pan: null,
   workspaceDrag: null,
   backgroundBySession: {},
@@ -481,6 +483,110 @@ function startCanvasFrameDrag(event, frame, frameEl) {
   event.preventDefault();
 }
 
+/* -------------------------------- 框选 ---------------------------------- */
+
+function renderCanvasMarquee(marquee) {
+  if (!canvasDom.marquee) return;
+  const left = Math.min(marquee.startX, marquee.currentX);
+  const top = Math.min(marquee.startY, marquee.currentY);
+  const width = Math.abs(marquee.currentX - marquee.startX);
+  const height = Math.abs(marquee.currentY - marquee.startY);
+  canvasDom.marquee.style.left = `${left}px`;
+  canvasDom.marquee.style.top = `${top}px`;
+  canvasDom.marquee.style.width = `${width}px`;
+  canvasDom.marquee.style.height = `${height}px`;
+  canvasDom.marquee.classList.remove('hidden');
+}
+
+function updateCanvasMarqueeSelection(marquee) {
+  if (!canvasDom.stage) return;
+  const stageRect = canvasDom.stage.getBoundingClientRect();
+  const left = stageRect.left + Math.min(marquee.startX, marquee.currentX);
+  const top = stageRect.top + Math.min(marquee.startY, marquee.currentY);
+  const right = stageRect.left + Math.max(marquee.startX, marquee.currentX);
+  const bottom = stageRect.top + Math.max(marquee.startY, marquee.currentY);
+  const selected = new Set(marquee.additive ? marquee.base : []);
+  for (const group of canvasDom.nodes.querySelectorAll('.canvas-group')) {
+    const rect = group.getBoundingClientRect();
+    const intersects =
+      rect.left < right &&
+      rect.right > left &&
+      rect.top < bottom &&
+      rect.bottom > top;
+    if (intersects && group.dataset.sessionId) {
+      selected.add(group.dataset.sessionId);
+    }
+  }
+  canvasState.selectedIds = selected;
+  canvasState.selectedId = selected.size === 1 ? [...selected][0] : null;
+  canvasState.selectedChildId = null;
+  canvasApplySelection();
+}
+
+function startCanvasMarquee(event) {
+  if (!canvasDom.stage) return;
+  const rect = canvasDom.stage.getBoundingClientRect();
+  const startX = event.clientX - rect.left;
+  const startY = event.clientY - rect.top;
+  canvasState.marquee = {
+    startX,
+    startY,
+    currentX: startX,
+    currentY: startY,
+    moved: false,
+    pointerId: event.pointerId,
+    additive: event.shiftKey,
+    base: event.shiftKey ? new Set(canvasState.selectedIds) : new Set(),
+  };
+  if (!event.shiftKey) canvasClearSelection();
+  canvasDom.stage.classList.add('marquee');
+  try {
+    canvasDom.stage.setPointerCapture(event.pointerId);
+  } catch {
+    /* ignore */
+  }
+  event.preventDefault();
+}
+
+function updateCanvasMarquee(event) {
+  const marquee = canvasState.marquee;
+  if (!marquee || !canvasDom.stage) return;
+  const rect = canvasDom.stage.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  if (
+    !marquee.moved &&
+    Math.abs(x - marquee.startX) + Math.abs(y - marquee.startY) < 3
+  ) {
+    return;
+  }
+  marquee.moved = true;
+  marquee.currentX = x;
+  marquee.currentY = y;
+  renderCanvasMarquee(marquee);
+  updateCanvasMarqueeSelection(marquee);
+  event.preventDefault();
+}
+
+function finishCanvasMarquee() {
+  const marquee = canvasState.marquee;
+  if (!marquee) return;
+  if (marquee.moved) {
+    canvasState.suppressClick = true;
+    setTimeout(() => {
+      canvasState.suppressClick = false;
+    }, 80);
+  }
+  canvasState.marquee = null;
+  canvasDom.marquee?.classList.add('hidden');
+  canvasDom.stage?.classList.remove('marquee');
+  try {
+    canvasDom.stage?.releasePointerCapture(marquee.pointerId);
+  } catch {
+    /* ignore */
+  }
+}
+
 /* ------------------------------- 后台任务 ------------------------------- */
 
 function canvasJobSummary(job) {
@@ -541,7 +647,14 @@ async function loadCanvasBackground({ force = false } = {}) {
     })
   );
   if (!canvasOverlayOpen()) return;
-  if (canvasState.drag || canvasState.frameDrag || canvasState.workspaceDrag) return;
+  if (
+    canvasState.drag ||
+    canvasState.frameDrag ||
+    canvasState.marquee ||
+    canvasState.workspaceDrag
+  ) {
+    return;
+  }
   renderCanvas();
 }
 
@@ -1182,6 +1295,10 @@ function onCanvasPointerMove(event) {
     event.preventDefault();
     return;
   }
+  if (canvasState.marquee) {
+    updateCanvasMarquee(event);
+    return;
+  }
   if (canvasState.pan) {
     const pan = canvasState.pan;
     if (
@@ -1237,6 +1354,9 @@ function onCanvasPointerUp() {
       /* ignore */
     }
     canvasState.drag = null;
+  }
+  if (canvasState.marquee) {
+    finishCanvasMarquee();
   }
   if (canvasState.pan) {
     const pan = canvasState.pan;
@@ -1470,11 +1590,16 @@ function closeCanvas() {
   canvasDom.overlay.setAttribute('aria-hidden', 'true');
   canvasState.drag = null;
   canvasState.frameDrag = null;
+  canvasState.marquee = null;
   canvasState.pan = null;
+  canvasDom.marquee?.classList.add('hidden');
   canvasDom.frames
     ?.querySelectorAll('.canvas-frame.dragging')
     .forEach((frame) => frame.classList.remove('dragging'));
+  canvasDom.stage?.classList.remove('marquee');
   canvasDom.stage?.classList.remove('panning');
+  document.body.classList.remove('canvas-space');
+  document.body.classList.remove('canvas-window-dragging');
   canvasDom.stage?.classList.remove('drop-target');
   void saveCanvasNow();
 }
@@ -1489,7 +1614,14 @@ function canvasOverlayOpen() {
 
 function refreshCanvas() {
   if (!canvasOverlayOpen()) return;
-  if (canvasState.drag || canvasState.frameDrag || canvasState.workspaceDrag) return;
+  if (
+    canvasState.drag ||
+    canvasState.frameDrag ||
+    canvasState.marquee ||
+    canvasState.workspaceDrag
+  ) {
+    return;
+  }
   renderCanvas();
   if (canvasState.pageOpen) renderWorkspacePage();
   void loadCanvasBackground();
@@ -1562,31 +1694,42 @@ function bindCanvasEvents() {
   });
 
   canvasDom.stage?.addEventListener('pointerdown', (event) => {
-    // 左键拖拽平移画布视角；中键交给窗口拖动
+    if (event.button === 1) {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          '.canvas-workspaces-page, .canvas-zoom-indicator, button'
+        )
+      ) {
+        return;
+      }
+      canvasState.pan = {
+        startX: event.clientX,
+        startY: event.clientY,
+        viewX: canvasState.view.x,
+        viewY: canvasState.view.y,
+        moved: false,
+      };
+      canvasDom.stage.classList.add('panning');
+      try {
+        canvasDom.stage.setPointerCapture(event.pointerId);
+      } catch {
+        /* ignore */
+      }
+      event.preventDefault();
+      return;
+    }
     if (event.button !== 0) return;
+    if (window.canvasSpaceHeld?.()) return;
     if (
       event.target instanceof Element &&
       event.target.closest(
-        '.canvas-workspaces-page, .canvas-zoom-indicator, .canvas-frame, button'
+        '.canvas-group, .canvas-frame, .canvas-workspaces-page, .canvas-zoom-indicator, button'
       )
     ) {
       return;
     }
-    canvasState.pan = {
-      startX: event.clientX,
-      startY: event.clientY,
-      viewX: canvasState.view.x,
-      viewY: canvasState.view.y,
-      moved: false,
-    };
-    canvasClearSelection();
-    canvasDom.stage.classList.add('panning');
-    try {
-      canvasDom.stage.setPointerCapture(event.pointerId);
-    } catch {
-      /* ignore */
-    }
-    event.preventDefault();
+    startCanvasMarquee(event);
   });
 
   canvasDom.stage?.addEventListener('contextmenu', (event) => {
@@ -1594,6 +1737,14 @@ function bindCanvasEvents() {
   });
 
   canvasDom.stage?.addEventListener('click', (event) => {
+    if (event.button !== 0) return;
+    if (canvasState.suppressClick) {
+      canvasState.suppressClick = false;
+      return;
+    }
+    if (document.body.classList.contains('canvas-window-dragging')) {
+      return;
+    }
     if (
       event.target instanceof Element &&
       event.target.closest('.canvas-group, .canvas-frame, .canvas-workspaces-page, button')
@@ -1647,6 +1798,7 @@ api.onSubagentStarted((payload) => {
     canvasOverlayOpen() &&
     !canvasState.drag &&
     !canvasState.frameDrag &&
+    !canvasState.marquee &&
     !canvasState.workspaceDrag
   ) {
     renderCanvas();
@@ -1659,6 +1811,7 @@ api.onSubagentComplete(() => {
     canvasOverlayOpen() &&
     !canvasState.drag &&
     !canvasState.frameDrag &&
+    !canvasState.marquee &&
     !canvasState.workspaceDrag
   ) {
     renderCanvas();
@@ -1673,6 +1826,7 @@ api.onBackgroundUpdate((payload) => {
     canvasOverlayOpen() &&
     !canvasState.drag &&
     !canvasState.frameDrag &&
+    !canvasState.marquee &&
     !canvasState.workspaceDrag
   ) {
     renderCanvas();
@@ -1686,6 +1840,7 @@ api.onBackgroundComplete((payload) => {
     canvasOverlayOpen() &&
     !canvasState.drag &&
     !canvasState.frameDrag &&
+    !canvasState.marquee &&
     !canvasState.workspaceDrag
   ) {
     renderCanvas();

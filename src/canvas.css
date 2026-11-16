@@ -41,6 +41,41 @@ body:has(#canvas:not(.hidden)) #confirm-overlay {
   touch-action: none;
 }
 
+.canvas-stage.panning {
+  cursor: grabbing;
+}
+
+.canvas-stage.marquee {
+  cursor: crosshair;
+}
+
+body.canvas-space .canvas-stage {
+  cursor: grab;
+}
+
+body.canvas-space .canvas-stage.panning {
+  cursor: grabbing;
+}
+
+.canvas-stage.panning .canvas-group,
+.canvas-stage.panning .canvas-frame,
+.canvas-stage.panning .canvas-child {
+  cursor: grabbing;
+}
+
+.canvas-marquee {
+  position: absolute;
+  z-index: 7;
+  border: 1px solid rgba(185, 111, 61, 0.62);
+  border-radius: 6px;
+  background: rgba(185, 111, 61, 0.08);
+  pointer-events: none;
+}
+
+.canvas-marquee.hidden {
+  display: none;
+}
+
 .canvas-stage.drop-target {
   background:
     radial-gradient(

@@ -534,6 +534,7 @@ let windowDrag = null;
 let dragPoint = null;
 let dragFrame = 0;
 let dragFromComposer = false;
+let canvasSpaceHeld = false;
 let suppressNextCardClick = false;
 let turnFlashTimer = 0;
 let cardAnchorFrame = 0;
@@ -6380,9 +6381,19 @@ function onWindowDragStart(event) {
   const canvasOverlay = target.closest('#canvas');
   const overlay = target.closest('.overlay');
   if (overlay && overlay !== dom.switcher && overlay !== canvasOverlay) return;
+  let isCanvasSpace = false;
   if (canvasOverlay) {
-    // 画布上：中键移动整个窗口，左键留给画布平移和 node 拖动
-    if (event.button !== 1) return;
+    // 画布上：空格 + 左键空白处拖动窗口；中键用于平移画布
+    if (event.button !== 0 || !canvasSpaceHeld) return;
+    if (
+      target.closest(
+        '.canvas-group, .canvas-child, .canvas-frame, .canvas-workspaces-page, .canvas-zoom-indicator, button, input, textarea, [contenteditable="true"]'
+      )
+    ) {
+      return;
+    }
+    isCanvasSpace = true;
+    event.preventDefault();
   } else if (event.button !== 0) {
     return;
   }
@@ -6406,6 +6417,7 @@ function onWindowDragStart(event) {
     started: !needsThreshold,
     isCardHead,
     isComposerScrim,
+    isCanvasSpace,
   };
   dragFromComposer = Boolean(
     state.composerOpen && target.closest('#composer')
@@ -6444,6 +6456,7 @@ function onWindowDragEnd() {
   if (!windowDrag) return;
   const wasCardHead = windowDrag.isCardHead;
   const wasComposerScrim = windowDrag.isComposerScrim;
+  const wasCanvasSpace = windowDrag.isCanvasSpace;
   const started = windowDrag.started;
   const refocusComposer =
     dragFromComposer && state.composerOpen && started;
@@ -6453,6 +6466,12 @@ function onWindowDragEnd() {
   cancelAnimationFrame(dragFrame);
   dragFrame = 0;
   if (started) api.dragEnd();
+  if (wasCanvasSpace && started) {
+    document.body.classList.add('canvas-window-dragging');
+    setTimeout(() => {
+      document.body.classList.remove('canvas-window-dragging');
+    }, 150);
+  }
   if (wasCardHead && started) {
     setTimeout(() => {
       suppressNextCardClick = false;
@@ -8531,6 +8550,61 @@ function bindEvents() {
   document.addEventListener('mousemove', onWindowDragMove);
   document.addEventListener('mouseup', onWindowDragEnd);
   window.addEventListener('blur', onWindowDragEnd);
+
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.code !== 'Space' && event.key !== ' ') return;
+      if (!window.canvasOverlayOpen?.()) return;
+      if (event.repeat || event.isComposing) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(
+          'button, input, textarea, select, [contenteditable="true"]'
+        )
+      ) {
+        return;
+      }
+      if (
+        dialogConfirmButton() ||
+        state.switcherOpen ||
+        state.catalogOpen ||
+        state.ringOpen ||
+        state.composerOpen ||
+        !dom.rawOverlay.classList.contains('hidden') ||
+        !dom.webContent.classList.contains('hidden') ||
+        !dom.questionDock.classList.contains('hidden') ||
+        (dom.backgroundOverlay &&
+          !dom.backgroundOverlay.classList.contains('hidden')) ||
+        (dom.mcpConfig && !dom.mcpConfig.classList.contains('hidden'))
+      ) {
+        return;
+      }
+      event.preventDefault();
+      canvasSpaceHeld = true;
+      document.body.classList.add('canvas-space');
+    },
+    true
+  );
+
+  document.addEventListener(
+    'keyup',
+    (event) => {
+      if (event.code !== 'Space' && event.key !== ' ') return;
+      canvasSpaceHeld = false;
+      document.body.classList.remove('canvas-space');
+    },
+    true
+  );
+
+  window.addEventListener('blur', () => {
+    canvasSpaceHeld = false;
+    document.body.classList.remove('canvas-space');
+  });
+  window.canvasSpaceHeld = () => canvasSpaceHeld;
+
   window.addEventListener('resize', syncMaximized);
   syncMaximized();
 
