@@ -822,7 +822,12 @@ function setCardExpanded(card, expanded) {
   if (card.classList.contains('always-open')) expanded = true;
   card.classList.toggle('collapsed', !expanded);
   const body = card.querySelector('.card-body-wrap');
-  if (body) body.inert = !expanded;
+  const compactOpen =
+    state.chatWindow &&
+    state.chatCompact &&
+    (card.classList.contains('prompt-card') ||
+      card.classList.contains('answer-card'));
+  if (body) body.inert = compactOpen ? false : !expanded;
   const head = card.querySelector('.card-head');
   if (head) head.setAttribute('aria-expanded', String(expanded));
   requestAnimationFrame(() => updateCardClip(card));
