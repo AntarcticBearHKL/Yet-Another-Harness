@@ -3150,6 +3150,10 @@ function setChatCompact(compact) {
   requestAnimationFrame(updateChatTurnActive);
 }
 
+const CHAT_TURN_BASE_WIDTH = 26;
+const CHAT_TURN_PEAK_EXTRA = 24;
+const CHAT_TURN_BUMP_SIGMA = 1.15;
+
 function scheduleChatTurnNav() {
   if (!state.chatWindow) return;
   clearTimeout(state.chatNavTimer);
@@ -3184,7 +3188,6 @@ function renderChatTurnNav() {
           .replace(/\s+/g, ' ')
           .trim()
       );
-      const longest = Math.max(1, ...texts.map((text) => text.length));
       turns.forEach((turn, index) => {
         const text = texts[index];
         const bar = el('button', 'chat-turn-bar');
@@ -3194,12 +3197,7 @@ function renderChatTurnNav() {
           'aria-label',
           `跳到第 ${index + 1} 轮对话`
         );
-        const width =
-          18 +
-          Math.round(
-            (Math.log1p(text.length) / Math.log1p(longest)) * 20
-          );
-        bar.style.setProperty('--bar-width', `${width}px`);
+        bar.style.setProperty('--bar-width', `${CHAT_TURN_BASE_WIDTH}px`);
         bar.addEventListener('click', () => scrollChatTurn(index));
         state.chatNav.append(bar);
       });
@@ -3231,6 +3229,15 @@ function updateChatTurnActive() {
     });
   }
   bars.forEach((bar, index) => {
+    const distance = Math.abs(index - active);
+    const factor = Math.exp(
+      -(distance * distance) /
+        (2 * CHAT_TURN_BUMP_SIGMA * CHAT_TURN_BUMP_SIGMA)
+    );
+    const width = Math.round(
+      CHAT_TURN_BASE_WIDTH + CHAT_TURN_PEAK_EXTRA * factor
+    );
+    bar.style.setProperty('--bar-width', `${width}px`);
     bar.classList.toggle('active', index === active);
   });
 }

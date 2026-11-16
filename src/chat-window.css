@@ -65,14 +65,14 @@ body.chat-window.chat-compact .chat-turn-nav {
 .chat-turn-bar {
   position: relative;
   display: block;
-  width: var(--bar-width, 24px);
+  width: var(--bar-width, 26px);
   height: 9px;
   flex: none;
   padding: 0;
   border: 0;
   background: transparent;
   cursor: pointer;
-  transition: width 150ms ease;
+  transition: width 220ms cubic-bezier(0.22, 0.9, 0.32, 1);
 }
 
 .chat-turn-bar::before {
@@ -88,16 +88,8 @@ body.chat-window.chat-compact .chat-turn-nav {
   transition: background 150ms ease;
 }
 
-.chat-turn-bar:hover {
-  width: calc(var(--bar-width, 24px) + 6px);
-}
-
 .chat-turn-bar:hover::before {
   background: rgba(74, 54, 40, 0.38);
-}
-
-.chat-turn-bar.active {
-  width: calc(var(--bar-width, 24px) + 6px);
 }
 
 .chat-turn-bar.active::before {
