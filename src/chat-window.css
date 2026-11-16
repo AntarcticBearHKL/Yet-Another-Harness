@@ -17,6 +17,12 @@ body.chat-window #window-controls {
   display: none !important;
 }
 
+/* Keep one arrow cursor over every piece of chat content. Window resize
+   handles live outside #app and keep their own resize cursors. */
+body.chat-window *:not(#resize-layer):not(#resize-layer *) {
+  cursor: default !important;
+}
+
 body.chat-window #messages {
   user-select: text;
   -webkit-user-select: text;
