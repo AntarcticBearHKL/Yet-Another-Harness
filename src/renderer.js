@@ -94,7 +94,7 @@ const dom = {
   webContentBody: $('web-content-body'),
   webContentClose: $('web-content-close'),
   composerEffortRail: $('composer-effort-rail'),
-  composerEffortLevels: $('composer-effort-levels'),
+  composerEffortLevel: $('composer-effort-level'),
   modelPicker: $('model-picker'),
   modelPickerButton: $('model-picker-button'),
   modelMenu: $('model-menu'),
@@ -571,6 +571,7 @@ let composerDragDepth = 0;
 let canvasSpaceHeld = false;
 let suppressNextCardClick = false;
 let turnFlashTimer = 0;
+let effortLabelTimer = 0;
 let cardAnchorFrame = 0;
 let toolTimer = 0;
 let renameTarget = null;
@@ -694,24 +695,28 @@ function currentEffort() {
   return normalizeEffort(state.settings.reasoningEffort);
 }
 
-function renderComposerEffortLevels(effort) {
-  if (!dom.composerEffortLevels) return;
-  for (const item of dom.composerEffortLevels.querySelectorAll(
-    '[data-effort]'
-  )) {
-    item.classList.toggle('active', item.dataset.effort === effort);
-  }
+function setComposerEffortLabel(effort) {
+  const node = dom.composerEffortLevel;
+  if (!node) return;
+  const text = String(effort || '').toUpperCase();
+  if (node.textContent === text) return;
+  node.classList.add('changing');
+  clearTimeout(effortLabelTimer);
+  effortLabelTimer = setTimeout(() => {
+    node.textContent = text;
+    node.classList.remove('changing');
+  }, 90);
 }
 
 function renderComposerEffort() {
   if (!dom.composerEffortRail) return;
   const effort = currentEffort();
   const index = EFFORT_LEVELS.indexOf(effort);
-  const ratio = (index + 1) / EFFORT_LEVELS.length;
+  const ratio = index / (EFFORT_LEVELS.length - 1);
   dom.composerEffortRail.style.setProperty('--effort-ratio', String(ratio));
   dom.composerEffortRail.setAttribute('aria-valuenow', String(index));
   dom.composerEffortRail.setAttribute('aria-valuetext', effort);
-  renderComposerEffortLevels(effort);
+  setComposerEffortLabel(effort);
 }
 
 function setComposerEffort(value) {
@@ -742,12 +747,12 @@ function previewComposerEffort(event) {
   rail.style.setProperty('--effort-ratio', String(ratio));
   const index = Math.min(
     EFFORT_LEVELS.length - 1,
-    Math.floor(ratio * EFFORT_LEVELS.length)
+    Math.round(ratio * (EFFORT_LEVELS.length - 1))
   );
   const effort = EFFORT_LEVELS[index];
   rail.setAttribute('aria-valuenow', String(index));
   rail.setAttribute('aria-valuetext', effort);
-  renderComposerEffortLevels(effort);
+  setComposerEffortLabel(effort);
   if (currentEffort() !== effort) {
     state.settings.reasoningEffort = effort;
     saveSettingsSoon();

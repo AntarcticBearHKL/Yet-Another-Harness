@@ -2081,7 +2081,9 @@ body.home-window #main > .edge-blur {
   max-height: min(78vh, 640px);
   border: 1px solid rgba(74, 54, 40, 0.16);
   border-radius: 14px;
-  background: #fffdf9;
+  background: var(--glass-panel);
+  -webkit-backdrop-filter: blur(18px) saturate(1.04);
+  backdrop-filter: blur(18px) saturate(1.04);
   box-shadow: none;
   transform: translateY(8px);
   transition:
@@ -2101,7 +2103,7 @@ body.home-window #main > .edge-blur {
 .composer-box.drag-over,
 #composer.open .composer-box.drag-over {
   border-color: var(--accent);
-  background: #fffdf9;
+  background: rgba(255, 252, 247, 0.72);
   box-shadow: none;
   transform: translateY(0);
 }
@@ -2920,7 +2922,7 @@ body.home-window #main > .edge-blur {
   width: calc(100% * var(--effort-ratio));
   border-radius: 999px;
   background: var(--accent);
-  transition: width 90ms ease;
+  transition: width 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .effort-rail:hover .effort-rail-fill {
@@ -2936,30 +2938,28 @@ body.home-window #main > .edge-blur {
   outline-offset: 3px;
 }
 
-.effort-levels {
-  display: flex;
-  align-items: center;
-  gap: 7px;
+.effort-level {
   flex: none;
-  color: var(--faint);
-  font-size: 8.5px;
+  min-width: 32px;
+  color: var(--text);
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.05em;
   line-height: 1;
+  text-align: right;
+  transition:
+    opacity 90ms ease,
+    transform 90ms ease;
 }
 
-.effort-levels span {
-  transition: color 120ms ease;
-}
-
-.effort-levels span.active {
-  color: var(--text);
-  font-weight: 700;
+.effort-level.changing {
+  opacity: 0;
+  transform: translateY(-2px);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .effort-rail-fill,
-  .effort-levels span {
+  .effort-level {
     transition: none;
   }
 }
