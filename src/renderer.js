@@ -17,7 +17,6 @@ const dom = {
   messages: $('messages'),
   composer: $('composer'),
   input: $('input'),
-  send: $('send'),
   agentPicker: $('agent-picker'),
   agentPickerButton: $('agent-picker-button'),
   agentPickerValue: $('agent-picker-value'),
@@ -92,6 +91,7 @@ const dom = {
   webContentBody: $('web-content-body'),
   webContentClose: $('web-content-close'),
   composerEffortRail: $('composer-effort-rail'),
+  composerEffortValue: $('composer-effort-value'),
   modelPicker: $('model-picker'),
   modelPickerButton: $('model-picker-button'),
   modelMenu: $('model-menu'),
@@ -652,6 +652,9 @@ function renderComposerEffort() {
   dom.composerEffortRail.style.setProperty('--effort-ratio', String(ratio));
   dom.composerEffortRail.setAttribute('aria-valuenow', String(index));
   dom.composerEffortRail.setAttribute('aria-valuetext', effort);
+  if (dom.composerEffortValue) {
+    dom.composerEffortValue.textContent = effort;
+  }
 }
 
 function setComposerEffort(value) {
@@ -712,7 +715,7 @@ function updateControls() {
   }
 
   dom.input.disabled = false;
-  dom.input.placeholder = state.streaming ? '输入排队消息…' : '';
+  dom.input.placeholder = state.streaming ? '输入排队消息…' : '输入消息…';
   updateSendState();
 }
 
@@ -3568,9 +3571,10 @@ function openComposer() {
   dom.composer.inert = false;
   dom.composer.setAttribute('aria-hidden', 'false');
   dom.composer.classList.add('open');
-  dom.input.placeholder = state.streaming ? '输入排队消息…' : '';
+  dom.input.placeholder = state.streaming ? '输入排队消息…' : '输入消息…';
   renderComposerContext();
   renderComposerSkills();
+  updateSendState();
   void loadSkills(true);
   void loadAgents(true);
   requestAnimationFrame(() => {
@@ -4483,13 +4487,18 @@ function renderAll() {
   window.refreshCanvas?.();
 }
 
-function updateSendState() {
+function composerCanSend() {
   const session = currentSession();
-  dom.send.disabled =
-    !session ||
-    session.frozen === true ||
-    session.subagent === true ||
-    (dom.input.value.trim() === '' && state.attachedSkills.length === 0);
+  return Boolean(
+    session &&
+      session.frozen !== true &&
+      session.subagent !== true &&
+      (dom.input.value.trim() !== '' || state.attachedSkills.length > 0)
+  );
+}
+
+function updateSendState() {
+  dom.composerBox?.classList.toggle('ready', composerCanSend());
 }
 
 function syncDraftTitle() {
@@ -8899,7 +8908,6 @@ function bindEvents() {
   });
 
   $('mobile-compose')?.addEventListener('click', openComposer);
-  dom.send.addEventListener('click', sendMessage);
 
   if (dom.composerEffortRail) {
     dom.composerEffortRail.addEventListener('pointerdown', (event) => {
@@ -8992,9 +9000,26 @@ function bindEvents() {
       removeAttachedSkill(state.attachedSkills.length - 1);
       return;
     }
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (
+      (event.code === 'Space' || event.key === ' ') &&
+      !event.shiftKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      if (state.slashOpen) return;
+      if (event.repeat) {
+        event.preventDefault();
+        return;
+      }
+      if (!dom.input.value.trim() && state.attachedSkills.length === 0) {
+        event.preventDefault();
+        closeComposer();
+        return;
+      }
+      if (!composerCanSend()) return;
       event.preventDefault();
-      sendMessage();
+      void sendMessage();
     }
   });
 
@@ -9167,7 +9192,7 @@ function bindEvents() {
         }
         if (!state.composerOpen) {
           event.preventDefault();
-          openComposer();
+          if (!event.repeat) openComposer();
           return;
         }
         // With the composer open, let the normal Space handling below run.
@@ -9366,6 +9391,12 @@ function bindEvents() {
       if (event.code === 'Space' || event.key === ' ') {
         if (event.repeat || event.isComposing) return;
         const target = event.target;
+        if (
+          target instanceof Element &&
+          target.closest('button, a')
+        ) {
+          return;
+        }
         if (
           state.composerOpen &&
           target === dom.input &&

@@ -1943,10 +1943,10 @@ body.ring-open #window-controls {
   z-index: 15;
   display: flex;
   justify-content: center;
-  padding: clamp(40px, 10vh, 120px) 32px 32px;
-  background: rgba(251, 246, 239, 0.1);
-  -webkit-backdrop-filter: blur(18px) saturate(1.06);
-  backdrop-filter: blur(18px) saturate(1.06);
+  padding: clamp(48px, 11vh, 132px) 32px 40px;
+  background: rgba(251, 246, 239, 0.16);
+  -webkit-backdrop-filter: blur(20px) saturate(1.05);
+  backdrop-filter: blur(20px) saturate(1.05);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -1966,8 +1966,8 @@ body.ring-open #window-controls {
 .composer-stack {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: min(760px, 100%);
+  gap: 12px;
+  width: min(720px, 100%);
   max-height: 100%;
   min-height: 0;
   margin: auto 0;
@@ -1978,18 +1978,22 @@ body.ring-open #window-controls {
   display: flex;
   flex-direction: column;
   width: 100%;
-  min-height: clamp(170px, 32vh, 260px);
-  max-height: min(76vh, 600px);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: rgba(251, 246, 239, 0.60);
-  -webkit-backdrop-filter: blur(14px) saturate(1.04);
-  backdrop-filter: blur(14px) saturate(1.04);
-  transform: translateY(10px) scale(0.985);
+  min-height: 0;
+  max-height: min(78vh, 640px);
+  border: 0;
+  border-radius: 20px;
+  background: rgba(255, 252, 247, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(74, 54, 40, 0.06),
+    0 0 0 1px rgba(74, 54, 40, 0.08),
+    0 2px 4px -1px rgba(74, 54, 40, 0.06),
+    0 14px 30px -10px rgba(74, 54, 40, 0.16),
+    0 36px 72px -28px rgba(74, 54, 40, 0.22);
+  transform: translateY(12px) scale(0.985);
   transition:
-    transform 180ms ease,
-    border-color 120ms ease,
-    background 120ms ease;
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 160ms ease;
 }
 
 #composer.open .composer-box {
@@ -1997,7 +2001,13 @@ body.ring-open #window-controls {
 }
 
 .composer-box:focus-within {
-  border-color: var(--accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 0 0 1px rgba(185, 111, 61, 0.34),
+    0 0 0 3px rgba(185, 111, 61, 0.08),
+    0 2px 4px -1px rgba(74, 54, 40, 0.06),
+    0 16px 34px -10px rgba(74, 54, 40, 0.18),
+    0 40px 80px -30px rgba(74, 54, 40, 0.24);
 }
 
 .composer-context {
@@ -2021,7 +2031,7 @@ body.ring-open #window-controls {
   flex-wrap: wrap;
   gap: 6px;
   flex: none;
-  padding: 12px 16px 0;
+  padding: 14px 20px 0;
 }
 
 .composer-tokens.hidden {
@@ -2032,13 +2042,13 @@ body.ring-open #window-controls {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 24px;
-  padding: 0 9px;
-  border: 1px solid var(--accent);
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid rgba(185, 111, 61, 0.26);
   border-radius: 999px;
-  background: rgba(185, 111, 61, 0.14);
+  background: rgba(185, 111, 61, 0.08);
   color: var(--accent-deep);
-  font-size: 11px;
+  font-size: 10.5px;
   line-height: 1;
 }
 
@@ -2387,14 +2397,18 @@ body.ring-open #window-controls {
   align-items: center;
   gap: 5px;
   max-width: 240px;
-  padding: 4px 7px;
+  height: 26px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
   color: var(--dim);
   font: inherit;
-  font-size: 12px;
+  font-size: 11.5px;
   cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .model-picker-button:hover {
@@ -2475,17 +2489,35 @@ body.ring-open #window-controls {
   --effort-inset: 5px;
   display: flex;
   align-items: center;
-  flex: 1;
-  min-width: 140px;
-  max-width: 360px;
+  gap: 7px;
+  flex: none;
+  min-width: 0;
   padding: 0;
+}
+
+.effort-label {
+  color: var(--faint);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+
+.effort-value {
+  min-width: 26px;
+  color: var(--dim);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  text-align: left;
 }
 
 .effort-rail {
   --effort-ratio: 0.5;
   position: relative;
-  flex: 1;
-  height: 22px;
+  flex: none;
+  width: 72px;
+  height: 18px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2555,27 +2587,57 @@ body.ring-open #window-controls {
   }
 }
 
+.composer-foot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: none;
+  min-height: 48px;
+  padding: 8px 22px 10px 12px;
+  box-sizing: border-box;
+}
+
+.composer-foot::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: rgba(74, 54, 40, 0.08);
+}
+
+.composer-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.composer-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+}
+
 @media (max-width: 700px) {
   .composer-foot {
     flex-wrap: wrap;
+    align-items: flex-start;
   }
 
-  .composer-effort {
-    flex-basis: 100%;
-    max-width: none;
-    order: 4;
+  .composer-controls {
+    width: 100%;
   }
-}
 
-.composer-foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
-  flex: none;
-  min-height: 54px;
-  padding: 0 16px 10px 22px;
-  box-sizing: border-box;
+  .composer-meta {
+    width: 100%;
+    justify-content: space-between;
+    padding-top: 2px;
+  }
 }
 
 .agent-picker {
@@ -2587,33 +2649,41 @@ body.ring-open #window-controls {
 .agent-picker-button {
   display: inline-flex;
   align-items: center;
-  gap: 0;
-  min-height: 0;
-  padding: 0;
+  gap: 7px;
+  height: 26px;
+  padding: 0 9px;
   margin: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: 8px;
   background: transparent;
-  color: var(--accent-deep);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
   cursor: pointer;
-  text-decoration: underline;
-  text-decoration-color: transparent;
-  text-underline-offset: 3px;
   transition:
-    color 120ms ease,
-    text-decoration-color 120ms ease;
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.agent-picker-button::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.85;
 }
 
 .agent-picker-button:hover {
-  background: transparent;
-  color: var(--accent);
-  text-decoration-color: currentColor;
+  background: var(--hover);
+  color: var(--text);
 }
 
 .agent-picker-button:focus-visible {
-  outline: none;
-  color: var(--accent);
-  text-decoration-color: currentColor;
+  outline: 1px solid rgba(185, 111, 61, 0.35);
+  outline-offset: 1px;
 }
 
 .agent-picker-button:disabled {
@@ -2626,26 +2696,21 @@ body.ring-open #window-controls {
   opacity: 0.72;
   color: var(--accent-deep);
   cursor: default;
-  text-decoration-color: transparent;
 }
 
 .agent-picker.locked .agent-picker-button:hover {
+  background: transparent;
   color: var(--accent-deep);
-  text-decoration-color: transparent;
 }
 
 .agent-picker-value {
   max-width: 190px;
   overflow: hidden;
   color: inherit;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: inherit;
+  font-weight: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.agent-picker-button:hover .agent-picker-value {
-  color: inherit;
 }
 
 .agent-menu {
@@ -2746,54 +2811,66 @@ body.ring-open #window-controls {
 
 #input {
   flex: 1;
-  min-height: 96px;
+  min-height: 104px;
+  max-height: 42vh;
   width: 100%;
-  padding: 16px 22px 20px 22px;
+  padding: 20px 22px 14px;
   border: 0;
   outline: 0;
   resize: none;
+  field-sizing: content;
   background: transparent;
   color: var(--text);
-  font-size: 15px;
-  line-height: 1.6;
+  font: inherit;
+  font-size: 14.5px;
+  line-height: 1.65;
+  caret-color: var(--accent);
+  scrollbar-width: thin;
 }
 
 #input::placeholder {
+  color: var(--faint);
+  opacity: 0.9;
+}
+
+.composer-send-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--faint);
+  font-size: 10px;
+  white-space: nowrap;
+  opacity: 0.72;
+  transition:
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.composer-send-hint kbd {
+  padding: 2px 5px;
+  border: 1px solid rgba(74, 54, 40, 0.12);
+  border-bottom-color: rgba(74, 54, 40, 0.2);
+  border-radius: 5px;
+  background: rgba(251, 246, 239, 0.8);
   color: var(--dim);
-  opacity: 0.75;
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
 }
 
-.send-btn {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 30px;
-  height: 30px;
-  margin-left: auto;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--dim);
-  cursor: pointer;
+.composer-box.ready .composer-send-hint {
+  color: var(--accent-deep);
+  opacity: 1;
 }
 
-.send-btn svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.send-btn:hover {
-  background: var(--hover);
-  color: var(--accent);
-}
-
-.send-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
+.composer-box.ready .composer-send-hint kbd {
+  border-color: rgba(185, 111, 61, 0.28);
+  background: rgba(185, 111, 61, 0.08);
+  color: var(--accent-deep);
 }
 
 /* ---------------------------------------------------------------- overlays */
