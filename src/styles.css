@@ -103,6 +103,12 @@ textarea {
   -webkit-user-select: text;
 }
 
+body.window-dragging,
+body.window-dragging * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 body {
   font-family: var(--font);
   font-size: 13.5px;

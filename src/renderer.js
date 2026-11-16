@@ -7054,6 +7054,8 @@ function onWindowDragStart(event) {
     state.composerOpen && target.closest('#composer')
   );
   if (!needsThreshold) {
+    document.body.classList.add('window-dragging');
+    window.getSelection()?.removeAllRanges();
     api.dragStart({ x: event.screenX, y: event.screenY });
   }
 }
@@ -7071,6 +7073,8 @@ function onWindowDragMove(event) {
     if (Math.hypot(dx, dy) < 4) return;
     windowDrag.started = true;
     if (windowDrag.isCardHead) suppressNextCardClick = true;
+    document.body.classList.add('window-dragging');
+    window.getSelection()?.removeAllRanges();
     api.dragStart({ x: windowDrag.x, y: windowDrag.y });
   }
 
@@ -7096,6 +7100,7 @@ function onWindowDragEnd() {
   dragPoint = null;
   cancelAnimationFrame(dragFrame);
   dragFrame = 0;
+  document.body.classList.remove('window-dragging');
   if (started) api.dragEnd();
   if (wasSpaceDrag && started) {
     document.body.classList.add('canvas-window-dragging');
@@ -9301,8 +9306,7 @@ function bindEvents() {
     const target = event.target;
     if (
       target instanceof Element &&
-      (target.closest('input, textarea, #web-content') ||
-        (state.chatWindow && target.closest('#messages')))
+      target.closest('input, textarea, #web-content')
     ) {
       return;
     }

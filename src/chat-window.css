@@ -23,11 +23,6 @@ body.chat-window *:not(#resize-layer):not(#resize-layer *) {
   cursor: default !important;
 }
 
-body.chat-window #messages {
-  user-select: text;
-  -webkit-user-select: text;
-}
-
 body.chat-window.chat-compact #messages {
   padding-right: 96px;
 }
