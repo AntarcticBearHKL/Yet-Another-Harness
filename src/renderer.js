@@ -34,6 +34,9 @@ const dom = {
   composerContext: $('composer-context'),
   composerBox: $('composer-box'),
   composerTokens: $('composer-tokens'),
+  composerImages: $('composer-images'),
+  composerDrop: $('composer-drop'),
+  composerNotice: $('composer-notice'),
   skillPopup: $('skill-popup'),
   skillArgsOverlay: $('skill-args-overlay'),
   skillArgsDesc: $('skill-args-desc'),
@@ -148,6 +151,7 @@ const state = {
   queueDeleteTimer: null,
   saveTimer: null,
   settingsTimer: null,
+  composerNoticeTimer: null,
   forceScroll: true,
   followBottom: true,
   autoScrolling: false,
@@ -199,6 +203,7 @@ const state = {
   agentMenuOpen: false,
   agentMenuIndex: -1,
   attachedSkills: [],
+  attachedImages: [],
   skillArgsTarget: null,
   slashOpen: false,
   slashIndex: 0,
@@ -325,6 +330,28 @@ let webContentKind = 'text';
 function renderWebContent(payload) {
   if (!dom.webContentBody) return;
   dom.webContentBody.replaceChildren();
+  if (webContentKind === 'image') {
+    const figure = el('figure', 'web-content-image-wrap');
+    const image = document.createElement('img');
+    image.className = 'web-content-image';
+    image.src = String(payload?.dataUrl || '');
+    image.alt = String(payload?.name || '图片');
+    image.draggable = false;
+    figure.append(image);
+    const width = Number(payload?.width) || 0;
+    const height = Number(payload?.height) || 0;
+    const caption = [
+      String(payload?.name || '').trim(),
+      width && height ? `${width} × ${height}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    if (caption) {
+      figure.append(el('figcaption', 'web-content-image-caption', caption));
+    }
+    dom.webContentBody.append(figure);
+    return;
+  }
   if (webContentKind === 'tool' || payload?.json != null) {
     const pre = el('pre', 'tool-text');
     pre.textContent =
@@ -351,6 +378,7 @@ function openWebContent(payload) {
   webContentKind = payload?.kind || 'text';
   renderWebContent(payload);
   dom.webContentBody.scrollTop = 0;
+  dom.webContent.classList.toggle('image-mode', webContentKind === 'image');
   dom.webContent.classList.remove('hidden');
   dom.webContent.setAttribute('aria-hidden', 'false');
   return Promise.resolve();
@@ -379,6 +407,7 @@ function closeWebContent() {
   closeRingMenu();
   state.ringSuppress = false;
   webContentKey = null;
+  dom.webContent.classList.remove('image-mode');
   dom.webContent.classList.add('hidden');
   dom.webContent.setAttribute('aria-hidden', 'true');
 }
@@ -534,6 +563,7 @@ let windowDrag = null;
 let dragPoint = null;
 let dragFrame = 0;
 let dragFromComposer = false;
+let composerDragDepth = 0;
 let canvasSpaceHeld = false;
 let suppressNextCardClick = false;
 let turnFlashTimer = 0;
@@ -715,7 +745,7 @@ function updateControls() {
   }
 
   dom.input.disabled = false;
-  dom.input.placeholder = state.streaming ? '输入排队消息…' : '输入消息…';
+  dom.input.placeholder = state.streaming ? '输入排队消息…' : '输入消息，拖入或粘贴图片…';
   updateSendState();
 }
 
@@ -1676,7 +1706,32 @@ function textCard({
   return card;
 }
 
-function promptCard({ key, text, onInspect }) {
+function promptImages(images) {
+  const row = el('div', 'prompt-images');
+  for (const image of Array.isArray(images) ? images : []) {
+    const source = image?.url || image?.dataUrl;
+    if (!source) continue;
+    const button = el('button', 'prompt-image');
+    button.type = 'button';
+    button.title = image.name || '图片';
+    button.setAttribute('aria-label', `查看图片 ${image.name || ''}`.trim());
+    const node = document.createElement('img');
+    node.src = source;
+    node.alt = image.name || '图片';
+    node.loading = 'lazy';
+    node.draggable = false;
+    button.append(node);
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      openImagePreview(image);
+    });
+    row.append(button);
+  }
+  return row;
+}
+
+function promptCard({ key, text, images = [], onInspect }) {
+  const imageList = Array.isArray(images) ? images : [];
   const { card, body } = makeCard({
     key,
     kind: 'user',
@@ -1689,13 +1744,50 @@ function promptCard({ key, text, onInspect }) {
         key,
         title: '提问',
         kind: 'text',
-        text: textFromCard(card),
+        text:
+          textFromCard(card) ||
+          (imageList.length ? `${imageList.length} 张图片` : ''),
       }),
   });
   card.classList.add('prompt-card');
-  const textNode = el('div', 'card-text prompt-text');
-  renderTextContent(textNode, text);
-  body.append(textNode);
+  if (imageList.length > 0) {
+    const head = card.querySelector('.card-head');
+    if (head) {
+      const thumbs = el('span', 'card-image-thumbs');
+      imageList.slice(0, 3).forEach((image) => {
+        const source = image?.url || image?.dataUrl;
+        if (!source) return;
+        const thumb = document.createElement('img');
+        thumb.className = 'card-image-thumb';
+        thumb.src = source;
+        thumb.alt = image.name || '图片';
+        thumb.title = image.name || '图片';
+        thumb.addEventListener('click', (event) => {
+          event.stopPropagation();
+          openImagePreview(image);
+        });
+        thumbs.append(thumb);
+      });
+      if (imageList.length > 3) {
+        thumbs.append(
+          el('span', 'card-image-more', `+${imageList.length - 3}`)
+        );
+      }
+      const preview = head.querySelector('.card-preview-inline');
+      if (preview) preview.after(thumbs);
+      else {
+        const tail = head.querySelector('.card-tail');
+        if (tail) tail.before(thumbs);
+        else head.append(thumbs);
+      }
+    }
+    body.append(promptImages(imageList));
+  }
+  if (String(text ?? '').trim()) {
+    const textNode = el('div', 'card-text prompt-text');
+    renderTextContent(textNode, text);
+    body.append(textNode);
+  }
   return card;
 }
 
@@ -3174,23 +3266,22 @@ function renderChatTurnNav() {
   const turns = [...dom.messages.querySelectorAll('.turn')].filter((turn) =>
     turn.querySelector('.prompt-card')
   );
-  const signature = turns
-    .map((turn) =>
-      String(
-        turn.querySelector('.prompt-card .card-text')?.textContent || ''
-      ).trim()
-    )
-    .join('\u0000');
+  const turnText = (turn) => {
+    const card = turn.querySelector('.prompt-card');
+    const text = String(card?.querySelector('.card-text')?.textContent || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text) return text;
+    const count = card?.querySelectorAll('.prompt-image').length || 0;
+    return count ? `${count} 张图片` : '';
+  };
+  const signature = turns.map(turnText).join('\u0000');
   if (signature !== state.chatNavSignature) {
     state.chatNavSignature = signature;
     state.chatNav.replaceChildren();
     state.chatNav.classList.toggle('empty', turns.length === 0);
     if (turns.length > 0) {
-      const texts = turns.map((turn) =>
-        String(turn.querySelector('.prompt-card .card-text')?.textContent || '')
-          .replace(/\s+/g, ' ')
-          .trim()
-      );
+      const texts = turns.map(turnText);
       turns.forEach((turn, index) => {
         const text = texts[index];
         const bar = el('button', 'chat-turn-bar');
@@ -3326,6 +3417,7 @@ function renderMessages({ animate = true } = {}) {
         promptCard({
           key: messageCardKey(index),
           text: msg.text,
+          images: msg.images,
           onInspect: () => inspectUserMessage(msg),
         }),
         {},
@@ -3571,7 +3663,8 @@ function openComposer() {
   dom.composer.inert = false;
   dom.composer.setAttribute('aria-hidden', 'false');
   dom.composer.classList.add('open');
-  dom.input.placeholder = state.streaming ? '输入排队消息…' : '输入消息…';
+  dom.input.placeholder = state.streaming ? '输入排队消息…' : '输入消息，拖入或粘贴图片…';
+  renderComposerImages();
   renderComposerContext();
   renderComposerSkills();
   updateSendState();
@@ -4473,6 +4566,7 @@ function renderAll() {
   if (state.switcherOpen) renderSwitcher();
   renderMessages();
   if (state.composerOpen) {
+    renderComposerImages();
     renderComposerContext();
     renderComposerSkills();
   }
@@ -4489,11 +4583,17 @@ function renderAll() {
 
 function composerCanSend() {
   const session = currentSession();
+  const imagesReady = state.attachedImages.every(
+    (image) => !image.uploading && Boolean(image.url)
+  );
   return Boolean(
     session &&
       session.frozen !== true &&
       session.subagent !== true &&
-      (dom.input.value.trim() !== '' || state.attachedSkills.length > 0)
+      imagesReady &&
+      (dom.input.value.trim() !== '' ||
+        state.attachedSkills.length > 0 ||
+        state.attachedImages.length > 0)
   );
 }
 
@@ -4663,9 +4763,17 @@ async function requestSessionTitle(session, text) {
 async function startPrompt(
   session,
   text,
-  { clearInput = false, skills = [], agentId = '' } = {}
+  { clearInput = false, skills = [], agentId = '', images = [] } = {}
 ) {
-  if (!session || session.frozen || session.subagent || !text) return;
+  const imageList = Array.isArray(images) ? images : [];
+  if (
+    !session ||
+    session.frozen ||
+    session.subagent ||
+    (!text && imageList.length === 0)
+  ) {
+    return;
+  }
   const effectiveAgentId = agentLocked(session)
     ? session.agentId || DEFAULT_AGENT_ID
     : agentId || session.agentId || DEFAULT_AGENT_ID;
@@ -4673,7 +4781,13 @@ async function startPrompt(
   state.foldRestored = false;
   state.foldSessionId = session.id;
   const firstMessage = session.msgs.length === 0;
-  session.msgs.push({ role: 'User', text, request: null, steps: [] });
+  session.msgs.push({
+    role: 'User',
+    text,
+    images: imageList,
+    request: null,
+    steps: [],
+  });
   const agent = { role: 'Agent', text: '', request: '', steps: [], requests: [] };
   session.msgs.push(agent);
 
@@ -4682,7 +4796,7 @@ async function startPrompt(
   state.followBottom = true;
   if (clearInput) dom.input.value = '';
   updateSendState();
-  if (firstMessage && !/^#\d+-/.test(String(session.title || ''))) {
+  if (firstMessage && text && !/^#\d+-/.test(String(session.title || ''))) {
     requestSessionTitle(session, text);
   }
 
@@ -4713,6 +4827,7 @@ async function startPrompt(
       requestId,
       chatId: session.id,
       text,
+      images: imageList,
       skills,
       agentId: effectiveAgentId,
       reasoningEffort: currentEffort(),
@@ -4846,6 +4961,7 @@ async function sendMessage() {
     arguments: { ...(skill.arguments || {}) },
     command: skill.command || '',
   }));
+  const images = composerImagesForSend();
   if (
     skills.some(
       (skill) => skill.command === 'compact' || skill.id === 'system:compact'
@@ -4860,17 +4976,18 @@ async function sendMessage() {
   const inputText = dom.input.value.trim();
   const text =
     inputText || (skills.length ? `/${skills[0].name}` : '');
-  if (!text) return;
+  if (!text && images.length === 0) return;
 
   const busy = await sessionBusy(session);
   const queue = Array.isArray(session.pendingQueue)
     ? session.pendingQueue
     : (session.pendingQueue = []);
   if (busy || queue.length > 0) {
-    queue.push({ text, skills, agentId });
+    queue.push({ text, images, skills, agentId });
     dom.input.value = '';
     state.slashDismissed = false;
     clearAttachedSkills();
+    clearAttachedImages();
     updateSendState();
     saveChatsSoon();
     if (state.composerOpen) renderComposerContext();
@@ -4881,7 +4998,13 @@ async function sendMessage() {
   closeComposer();
   state.slashDismissed = false;
   clearAttachedSkills();
-  await startPrompt(session, text, { clearInput: true, skills, agentId });
+  clearAttachedImages();
+  await startPrompt(session, text, {
+    clearInput: true,
+    skills,
+    agentId,
+    images,
+  });
 }
 
 function queueActionButton(kind, label, svg, onClick) {
@@ -4902,6 +5025,10 @@ function renderQueueRow(session, item, index) {
     item && typeof item === 'object' && Array.isArray(item.skills)
       ? item.skills
       : [];
+  const images =
+    item && typeof item === 'object' && Array.isArray(item.images)
+      ? item.images
+      : [];
   const row = el('div', 'queue-row');
   row.draggable = true;
 
@@ -4909,7 +5036,12 @@ function renderQueueRow(session, item, index) {
   handle.innerHTML =
     '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="4" r="1.2"/><circle cx="11" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="11" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/><circle cx="11" cy="12" r="1.2"/></svg>';
   row.append(handle);
-  row.append(el('span', 'queue-text', text));
+  row.append(
+    el('span', 'queue-text', text || (images.length ? '图片消息' : ''))
+  );
+  if (images.length) {
+    row.append(el('span', 'queue-image-count', `图片 ${images.length}`));
+  }
   if (skills.length) {
     row.append(
       el(
@@ -5380,6 +5512,379 @@ function renderComposerTokens() {
   });
 }
 
+const MAX_COMPOSER_IMAGES = 8;
+const MAX_IMAGE_FILE_BYTES = 24 * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 1600;
+const MAX_IMAGE_DATA_BYTES = 5 * 1024 * 1024;
+const SUPPORTED_IMAGE_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+]);
+const IMAGE_EXTENSION_TYPES = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+};
+
+function imageMime(file) {
+  const type = String(file?.type || '').toLowerCase();
+  if (SUPPORTED_IMAGE_TYPES.has(type)) return type;
+  const ext = String(file?.name || '')
+    .split('.')
+    .pop()
+    .toLowerCase();
+  return IMAGE_EXTENSION_TYPES[ext] || '';
+}
+
+function isSupportedImageFile(file) {
+  return Boolean(file && imageMime(file));
+}
+
+function hasFileDrag(event) {
+  return Array.from(event?.dataTransfer?.types || []).includes('Files');
+}
+
+function imageBytesFromDataUrl(dataUrl) {
+  const comma = String(dataUrl || '').indexOf(',');
+  if (comma < 0) return 0;
+  const base64 = String(dataUrl).slice(comma + 1).replace(/\s+/g, '');
+  return Math.round((base64.length * 3) / 4);
+}
+
+function formatImageBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('读取图片失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function decodeImageFile(file) {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(file, {
+        imageOrientation: 'from-image',
+      });
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        close: () => bitmap.close?.(),
+      };
+    } catch {
+      /* fall back to an <img> decode */
+    }
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const node = new Image();
+      node.onload = () => resolve(node);
+      node.onerror = () => reject(new Error('无法解码这张图片'));
+      node.src = url;
+    });
+    return {
+      source: image,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      close: () => URL.revokeObjectURL(url),
+    };
+  } catch (error) {
+    URL.revokeObjectURL(url);
+    throw error;
+  }
+}
+
+async function prepareImageFile(file) {
+  const mime = imageMime(file);
+  if (!mime) {
+    throw new Error('只支持 PNG / JPG / WebP / GIF 图片');
+  }
+  if (file.size > MAX_IMAGE_FILE_BYTES) {
+    throw new Error('图片太大，单张最大 24MB');
+  }
+  const decoded = await decodeImageFile(file);
+  try {
+    if (!decoded.width || !decoded.height) {
+      throw new Error('无法解码这张图片');
+    }
+    const scale = Math.min(
+      1,
+      MAX_IMAGE_DIMENSION / Math.max(decoded.width, decoded.height)
+    );
+    const width = Math.max(1, Math.round(decoded.width * scale));
+    const height = Math.max(1, Math.round(decoded.height * scale));
+
+    if (scale === 1 && mime !== 'image/gif') {
+      const original = await readFileAsDataUrl(file);
+      if (imageBytesFromDataUrl(original) <= MAX_IMAGE_DATA_BYTES) {
+        return { dataUrl: original, mime, width, height, size: file.size };
+      }
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('无法处理这张图片');
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(decoded.source, 0, 0, width, height);
+
+    let outputMime = mime === 'image/png' ? 'image/png' : 'image/jpeg';
+    let flattened = false;
+    const flattenForJpeg = () => {
+      if (flattened) return;
+      flattened = true;
+      context.save();
+      context.globalCompositeOperation = 'destination-over';
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, width, height);
+      context.restore();
+    };
+    if (outputMime === 'image/jpeg') flattenForJpeg();
+    let dataUrl = canvas.toDataURL(
+      outputMime,
+      outputMime === 'image/jpeg' ? 0.88 : undefined
+    );
+    if (
+      outputMime === 'image/png' &&
+      imageBytesFromDataUrl(dataUrl) > MAX_IMAGE_DATA_BYTES
+    ) {
+      outputMime = 'image/jpeg';
+      flattenForJpeg();
+      dataUrl = canvas.toDataURL(outputMime, 0.9);
+    }
+    if (imageBytesFromDataUrl(dataUrl) > MAX_IMAGE_DATA_BYTES) {
+      outputMime = 'image/jpeg';
+      flattenForJpeg();
+      dataUrl = canvas.toDataURL(outputMime, 0.72);
+    }
+    const size = imageBytesFromDataUrl(dataUrl);
+    if (size > MAX_IMAGE_DATA_BYTES) {
+      throw new Error('图片压缩后仍然太大');
+    }
+    return { dataUrl, mime: outputMime, width, height, size };
+  } finally {
+    decoded.close?.();
+  }
+}
+
+async function uploadComposerImage(prepared, file) {
+  const saved = await requestJson('/api/attachments', {
+    method: 'POST',
+    body: {
+      dataUrl: prepared.dataUrl,
+      name: file.name || 'image',
+      mime: prepared.mime,
+      width: prepared.width,
+      height: prepared.height,
+    },
+  });
+  if (!saved?.id || !saved?.url) throw new Error('图片上传失败');
+  return {
+    id: saved.id,
+    url: saved.url,
+    mime: saved.mime || prepared.mime,
+    name: saved.name || file.name || 'image',
+    width: saved.width || prepared.width,
+    height: saved.height || prepared.height,
+    size: saved.size || prepared.size,
+  };
+}
+
+function renderComposerImages() {
+  if (!dom.composerImages) return;
+  const images = state.attachedImages;
+  dom.composerImages.replaceChildren();
+  dom.composerImages.classList.toggle('hidden', images.length === 0);
+  images.forEach((image) => {
+    const tile = el('div', 'composer-image');
+    if (image.uploading) tile.classList.add('uploading');
+    tile.tabIndex = 0;
+    tile.setAttribute('role', 'button');
+    tile.setAttribute(
+      'aria-label',
+      `${image.name}${image.size ? ` · ${formatImageBytes(image.size)}` : ''}`
+    );
+    tile.title = `${image.name}${image.size ? ` · ${formatImageBytes(image.size)}` : ''}`;
+
+    const source = image.previewUrl || image.url || image.dataUrl;
+    if (source) {
+      const node = document.createElement('img');
+      node.src = source;
+      node.alt = image.name;
+      node.draggable = false;
+      tile.append(node);
+    } else {
+      tile.append(el('span', 'composer-image-placeholder'));
+    }
+
+    if (image.uploading) {
+      tile.append(el('span', 'composer-image-spinner'));
+    }
+
+    const remove = el('button', 'composer-image-remove');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', `移除 ${image.name}`);
+    remove.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    remove.addEventListener('click', (event) => {
+      event.stopPropagation();
+      removeComposerImage(image);
+    });
+    tile.append(remove);
+
+    const open = () => {
+      if (image.uploading) return;
+      openImagePreview(image);
+    };
+    tile.addEventListener('click', (event) => {
+      if (event.target.closest('.composer-image-remove')) return;
+      open();
+    });
+    tile.addEventListener('keydown', (event) => {
+      if (event.target.closest('.composer-image-remove')) return;
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      open();
+    });
+    dom.composerImages.append(tile);
+  });
+}
+
+async function addComposerImages(files) {
+  const incoming = [...(files || [])].filter(Boolean);
+  if (incoming.length === 0) return;
+
+  const room = MAX_COMPOSER_IMAGES - state.attachedImages.length;
+  if (room <= 0) {
+    showComposerNotice(`最多 ${MAX_COMPOSER_IMAGES} 张图片`);
+    return;
+  }
+
+  const supported = incoming.filter(isSupportedImageFile);
+  if (supported.length === 0) {
+    showComposerNotice('只支持 PNG / JPG / WebP / GIF 图片');
+    return;
+  }
+  if (supported.length < incoming.length) {
+    showComposerNotice('已忽略非图片文件');
+  }
+  if (supported.length > room) {
+    showComposerNotice(`最多 ${MAX_COMPOSER_IMAGES} 张图片`);
+  }
+
+  for (const file of supported.slice(0, room)) {
+    const temp = {
+      id: makeId(),
+      name: file.name || 'image',
+      mime: imageMime(file),
+      width: 0,
+      height: 0,
+      size: file.size,
+      previewUrl: '',
+      uploading: true,
+      cancelled: false,
+    };
+    state.attachedImages.push(temp);
+    renderComposerImages();
+    updateSendState();
+
+    try {
+      const prepared = await prepareImageFile(file);
+      if (temp.cancelled) continue;
+      temp.previewUrl = prepared.dataUrl;
+      temp.mime = prepared.mime;
+      temp.width = prepared.width;
+      temp.height = prepared.height;
+      temp.size = prepared.size;
+      renderComposerImages();
+
+      const saved = await uploadComposerImage(prepared, file);
+      if (temp.cancelled) continue;
+      Object.assign(temp, saved);
+      temp.uploading = false;
+      delete temp.previewUrl;
+    } catch (error) {
+      if (!temp.cancelled) {
+        state.attachedImages = state.attachedImages.filter(
+          (image) => image !== temp
+        );
+        showComposerNotice(error.message || '添加图片失败');
+      }
+    }
+    renderComposerImages();
+    updateSendState();
+  }
+}
+
+function removeComposerImage(image) {
+  image.cancelled = true;
+  state.attachedImages = state.attachedImages.filter((item) => item !== image);
+  renderComposerImages();
+  updateSendState();
+}
+
+function clearAttachedImages() {
+  if (state.attachedImages.length === 0) return;
+  state.attachedImages.forEach((image) => {
+    image.cancelled = true;
+  });
+  state.attachedImages = [];
+  renderComposerImages();
+  updateSendState();
+}
+
+function composerImagesForSend() {
+  return state.attachedImages
+    .filter((image) => !image.uploading && image.url)
+    .map((image) => ({
+      id: image.id || '',
+      url: image.url,
+      mime: image.mime,
+      name: image.name,
+      width: image.width,
+      height: image.height,
+      size: image.size,
+    }));
+}
+
+function showComposerNotice(message) {
+  if (!dom.composerNotice) return;
+  dom.composerNotice.textContent = String(message || '');
+  dom.composerNotice.classList.add('show');
+  clearTimeout(state.composerNoticeTimer);
+  state.composerNoticeTimer = setTimeout(() => {
+    dom.composerNotice.classList.remove('show');
+  }, 2800);
+}
+
+function openImagePreview(image) {
+  const source = image?.previewUrl || image?.url || image?.dataUrl;
+  if (!source) return;
+  openWebContent({
+    key: `image:${image.id || image.name || 'image'}`,
+    kind: 'image',
+    name: image.name || '图片',
+    dataUrl: source,
+    width: image.width || 0,
+    height: image.height || 0,
+  });
+}
+
 function caretPointInTextarea(textarea) {
   const style = window.getComputedStyle(textarea);
   const mirror = document.createElement('div');
@@ -5584,6 +6089,7 @@ function clearAttachedSkills() {
 
 function resetComposerSkills() {
   state.attachedSkills = [];
+  state.attachedImages = [];
   state.skills = [];
   state.skillsSessionId = null;
   state.skillsFetchedAt = 0;
@@ -5593,6 +6099,7 @@ function resetComposerSkills() {
   state.slashDismissed = false;
   state.pendingQueueDelete = null;
   clearTimeout(state.queueDeleteTimer);
+  renderComposerImages();
   renderComposerSkills();
   updateSendState();
 }
@@ -6064,6 +6571,8 @@ function editQueuedPrompt(session, index) {
   if (!state.composerOpen) openComposer();
   if (item && typeof item === 'object' && item.kind === 'compact') {
     const skill = compactSkillDescriptor();
+    state.attachedImages = [];
+    renderComposerImages();
     state.attachedSkills = [
       {
         id: skill.id,
@@ -6089,6 +6598,15 @@ function editQueuedPrompt(session, index) {
     item && typeof item === 'object' && Array.isArray(item.skills)
       ? item.skills
       : [];
+  const images =
+    item && typeof item === 'object' && Array.isArray(item.images)
+      ? item.images
+      : [];
+  state.attachedImages = images.map((image) => ({
+    ...image,
+    uploading: false,
+  }));
+  renderComposerImages();
   state.attachedSkills = skills.map((skill) => {
     const known = state.skills.find((entry) => entry.id === skill.id);
     return {
@@ -6137,10 +6655,15 @@ async function sendQueuedPrompt(session, index) {
     item && typeof item === 'object' && Array.isArray(item.skills)
       ? item.skills
       : [];
+  const images =
+    item && typeof item === 'object' && Array.isArray(item.images)
+      ? item.images
+      : [];
   saveChatsSoon();
   if (state.composerOpen) renderComposerContext();
   void startPrompt(session, text, {
     skills,
+    images,
     agentId: item.agentId || session.agentId || DEFAULT_AGENT_ID,
   });
 }
@@ -6180,10 +6703,15 @@ function processNextQueuedPrompt(session) {
     item && typeof item === 'object' && Array.isArray(item.skills)
       ? item.skills
       : [];
+  const images =
+    item && typeof item === 'object' && Array.isArray(item.images)
+      ? item.images
+      : [];
   saveChatsSoon();
   if (state.composerOpen) renderComposerContext();
   void startPrompt(session, text, {
     skills,
+    images,
     agentId: item.agentId || session.agentId || DEFAULT_AGENT_ID,
   });
 }
@@ -9012,7 +9540,11 @@ function bindEvents() {
         event.preventDefault();
         return;
       }
-      if (!dom.input.value.trim() && state.attachedSkills.length === 0) {
+      if (
+        !dom.input.value.trim() &&
+        state.attachedSkills.length === 0 &&
+        state.attachedImages.length === 0
+      ) {
         event.preventDefault();
         closeComposer();
         return;
@@ -9031,6 +9563,85 @@ function bindEvents() {
   dom.input.addEventListener('select', repositionSlashPopup);
   dom.input.addEventListener('scroll', repositionSlashPopup);
   window.addEventListener('resize', repositionSlashPopup);
+
+  const clearComposerDrag = () => {
+    composerDragDepth = 0;
+    dom.composerBox?.classList.remove('drag-over');
+    dom.composerDrop?.setAttribute('aria-hidden', 'true');
+  };
+
+  dom.composer?.addEventListener('dragenter', (event) => {
+    if (!state.composerOpen || !hasFileDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    composerDragDepth += 1;
+    dom.composerBox?.classList.add('drag-over');
+    dom.composerDrop?.setAttribute('aria-hidden', 'false');
+  });
+
+  dom.composer?.addEventListener('dragover', (event) => {
+    if (!state.composerOpen || !hasFileDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    dom.composerBox?.classList.add('drag-over');
+    dom.composerDrop?.setAttribute('aria-hidden', 'false');
+  });
+
+  dom.composer?.addEventListener('dragleave', (event) => {
+    if (!state.composerOpen || !hasFileDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    composerDragDepth = Math.max(0, composerDragDepth - 1);
+    if (composerDragDepth === 0) clearComposerDrag();
+  });
+
+  dom.composer?.addEventListener('drop', (event) => {
+    if (!state.composerOpen || !hasFileDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    clearComposerDrag();
+    const files = [...(event.dataTransfer?.files || [])];
+    void addComposerImages(files);
+  });
+
+  dom.composer?.addEventListener('dragend', clearComposerDrag);
+
+  document.addEventListener('dragover', (event) => {
+    if (state.composerOpen && hasFileDrag(event)) event.preventDefault();
+  });
+
+  document.addEventListener('drop', (event) => {
+    if (state.composerOpen && hasFileDrag(event)) {
+      event.preventDefault();
+      clearComposerDrag();
+    }
+  });
+
+  document.addEventListener('dragend', clearComposerDrag);
+  window.addEventListener('blur', clearComposerDrag);
+
+  document.addEventListener('paste', (event) => {
+    if (!state.composerOpen) return;
+    if (dom.webContent && !dom.webContent.classList.contains('hidden')) return;
+    const data = event.clipboardData;
+    if (!data) return;
+    const files = [];
+    for (const item of Array.from(data.items || [])) {
+      if (item.kind !== 'file') continue;
+      const file = item.getAsFile();
+      if (file && isSupportedImageFile(file)) files.push(file);
+    }
+    if (files.length === 0) {
+      for (const file of Array.from(data.files || [])) {
+        if (isSupportedImageFile(file)) files.push(file);
+      }
+    }
+    if (files.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void addComposerImages(files);
+  });
 
   dom.agentPickerButton?.addEventListener('click', () => {
     if (state.agentMenuOpen) closeAgentMenu();
@@ -9186,7 +9797,7 @@ function bindEvents() {
         const target = event.target;
         if (
           target instanceof Element &&
-          target.closest('button, a')
+          target.closest('button, a, .composer-image')
         ) {
           return;
         }
@@ -9393,7 +10004,7 @@ function bindEvents() {
         const target = event.target;
         if (
           target instanceof Element &&
-          target.closest('button, a')
+          target.closest('button, a, .composer-image')
         ) {
           return;
         }
@@ -9401,6 +10012,7 @@ function bindEvents() {
           state.composerOpen &&
           target === dom.input &&
           state.attachedSkills.length === 0 &&
+          state.attachedImages.length === 0 &&
           dom.input.value.trim() === ''
         ) {
           event.preventDefault();

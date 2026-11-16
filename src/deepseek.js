@@ -5,6 +5,7 @@
 // 执行工具、把结果塞回下一轮。
 
 const tools = require('./tools');
+const attachments = require('./attachments');
 const { normalizeReasoningEffort } = require('./reasoning');
 const {
   buildSummaryPrompt,
@@ -85,6 +86,22 @@ function finalAnswerText(msg) {
   return text.trim() ? text : String(msg?.text ?? '');
 }
 
+function userMessageContent(msg, resolveImage = attachments.toDataUrl) {
+  const text = String(msg?.text ?? '');
+  const images = Array.isArray(msg?.images) ? msg.images : [];
+  if (images.length === 0) return text;
+  const parts = [];
+  if (text) parts.push({ type: 'text', text });
+  for (const image of images) {
+    const url = resolveImage ? resolveImage(image) : '';
+    if (!url) continue;
+    parts.push({ type: 'image_url', image_url: { url } });
+  }
+  if (parts.length === 0) return text;
+  if (parts.length === 1 && parts[0].type === 'text') return parts[0].text;
+  return parts;
+}
+
 /**
  * Replay the exact messages of the previous turn's last tool-bearing request.
  * That request already contains the system prompt, tool calls, tool results and
@@ -93,6 +110,16 @@ function finalAnswerText(msg) {
 function replayStoredHistory(history, system, route, compaction) {
   if (normalizeCompaction(compaction)) return null;
   const source = Array.isArray(history) ? history : [];
+  if (
+    source.some(
+      (msg) =>
+        (msg?.role === 'User' || msg?.role === 'user') &&
+        Array.isArray(msg.images) &&
+        msg.images.length > 0
+    )
+  ) {
+    return null;
+  }
   let agentIndex = -1;
   for (let i = source.length - 1; i >= 0; i -= 1) {
     const msg = source[i];
@@ -138,7 +165,10 @@ function replayStoredHistory(history, system, route, compaction) {
   for (const msg of source.slice(agentIndex + 1)) {
     if (!msg || msg.role === 'Compact') continue;
     if (msg.role === 'User' || msg.role === 'user') {
-      messages.push({ role: 'user', content: String(msg.text ?? '') });
+      messages.push({
+        role: 'user',
+        content: userMessageContent(msg),
+      });
     }
   }
   return messages;
@@ -177,7 +207,10 @@ function messagesFromHistory(
 
   for (const msg of usable.slice(start)) {
     if (msg.role === 'User' || msg.role === 'user') {
-      messages.push({ role: 'user', content: String(msg.text ?? '') });
+      messages.push({
+        role: 'user',
+        content: userMessageContent(msg),
+      });
       continue;
     }
 
@@ -947,6 +980,7 @@ module.exports = {
   thinkingText,
   messageRoute,
   sameRoute,
+  userMessageContent,
   messagesFromHistory,
   requestBody,
   tokenUsage,

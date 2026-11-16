@@ -53,6 +53,34 @@ test('compact messages are not sent as chat history', () => {
   assert.equal(messages[1].content, 'hi');
 });
 
+test('user images become multimodal content parts', () => {
+  const content = deepseek.userMessageContent(
+    {
+      role: 'User',
+      text: 'look at this',
+      images: [
+        {
+          id: 'a.png',
+          url: '/api/attachments/a.png',
+          mime: 'image/png',
+        },
+      ],
+    },
+    (image) => `data:${image.mime};base64,AAAA`
+  );
+  assert.deepEqual(content, [
+    { type: 'text', text: 'look at this' },
+    {
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,AAAA' },
+    },
+  ]);
+  assert.equal(
+    deepseek.userMessageContent({ role: 'User', text: 'plain' }),
+    'plain'
+  );
+});
+
 test('request body includes tools and streaming', () => {
   const body = deepseek.requestBody([{ role: 'user', content: 'hi' }]);
   assert.equal(body.stream, true);

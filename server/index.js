@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 const QRCode = require('qrcode');
 
 const store = require('../src/store');
+const attachments = require('../src/attachments');
 const tools = require('../src/tools');
 const processTools = require('../src/tools/process');
 const agileTools = require('../src/tools/agile');
@@ -33,6 +34,7 @@ const DATA_DIR = path.resolve(
 const STATIC_DIR = path.resolve(process.env.YAH_STATIC_DIR || path.join(ROOT, 'src'));
 const ASSETS_DIR = path.join(ROOT, 'assets');
 const AGENTS_FILE = path.join(DATA_DIR, 'agents.json');
+attachments.init(path.join(DATA_DIR, 'attachments'));
 const agileStore = createAgileStore(path.join(DATA_DIR, 'agile.json'));
 agileTools.configure(agileStore);
 const canvasStore = createCanvasStore(path.join(DATA_DIR, 'canvas.json'));
@@ -323,6 +325,49 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'POST' && pathname === '/api/attachments') {
+    readJson(req)
+      .then((body) => {
+        const saved = attachments.saveDataUrl(body?.dataUrl, {
+          name: body?.name,
+          width: body?.width,
+          height: body?.height,
+        });
+        sendJson(res, 200, saved);
+      })
+      .catch((error) =>
+        sendJson(res, error.status || 400, { error: error.message })
+      );
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname.startsWith('/api/attachments/')) {
+    let id = '';
+    try {
+      id = decodeURIComponent(pathname.slice('/api/attachments/'.length));
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('bad attachment id');
+      return true;
+    }
+    try {
+      const { data, mime } = attachments.read(id);
+      res.writeHead(200, {
+        'Content-Type': mime,
+        'Content-Length': data.length,
+        'Cache-Control': 'private, max-age=31536000, immutable',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      res.end(data);
+    } catch (error) {
+      res.writeHead(error.status || 404, {
+        'Content-Type': 'text/plain; charset=utf-8',
+      });
+      res.end('attachment not found');
+    }
+    return true;
+  }
+
   if (req.method === 'GET' && pathname === '/api/settings') {
     sendJson(res, 200, settingsView());
     return true;
@@ -572,6 +617,7 @@ function handleApi(req, res, url) {
         const result = runner.startRun({
           sessionId,
           text: String(body?.text || ''),
+          images: Array.isArray(body?.images) ? body.images : [],
           runId: String(body?.requestId || ''),
           skillsText: resolved.text,
           agentConfig: agent,

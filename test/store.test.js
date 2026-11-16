@@ -860,3 +860,51 @@ test('sessions always default to the built-in agent', () => {
     assert.equal(loaded.sessions[0].agentId, 'basic');
   });
 });
+
+test('image references round-trip through messages and the pending queue', () => {
+  withStoreDir(() => {
+    const image = {
+      id: 'a.png',
+      url: '/api/attachments/a.png',
+      mime: 'image/png',
+      name: 'a.png',
+      width: 10,
+      height: 20,
+      size: 30,
+    };
+    store.saveStructure({
+      projects: [
+        { id: 'p1', name: 'Project 1', directories: ['C:\\work'] },
+      ],
+      sessions: [
+        {
+          id: 's1',
+          title: 'Chat 1',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          frozen: false,
+          mcpDisabled: [],
+          pendingQueue: [{ text: '', images: [image], skills: [], agentId: '' }],
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 1,
+    });
+    const loaded = store.loadChats();
+    assert.deepEqual(loaded.sessions[0].pendingQueue[0].images, [image]);
+
+    const seq = store.appendMessage('s1', 'User', 'again', null, null, [image]);
+    store.updateMessage('s1', seq, {
+      role: 'User',
+      text: 'again',
+      images: [image],
+      request: null,
+      steps: [],
+      requests: [],
+    });
+    const session = store.getSession('s1');
+    assert.deepEqual(session.msgs.at(-1).images, [image]);
+  });
+});

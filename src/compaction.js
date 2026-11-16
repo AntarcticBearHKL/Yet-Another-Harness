@@ -90,11 +90,37 @@ function estimateTextTokens(text) {
   return Math.ceil(value.length / 3);
 }
 
+const IMAGE_TOKEN_ESTIMATE = 1000;
+
+function contentToText(content) {
+  if (!Array.isArray(content)) return String(content ?? '');
+  return content
+    .map((part) => {
+      if (!part || typeof part !== 'object') return '';
+      if (part.type === 'text') return String(part.text ?? '');
+      if (part.type === 'image_url') return '[image]';
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+function contentTokens(content) {
+  if (!Array.isArray(content)) return estimateTextTokens(content);
+  let total = 0;
+  for (const part of content) {
+    if (!part || typeof part !== 'object') continue;
+    if (part.type === 'text') total += estimateTextTokens(part.text);
+    else if (part.type === 'image_url') total += IMAGE_TOKEN_ESTIMATE;
+  }
+  return total;
+}
+
 function estimateMessagesTokens(messages) {
   let total = 0;
   for (const message of Array.isArray(messages) ? messages : []) {
     if (!message || typeof message !== 'object') continue;
-    total += estimateTextTokens(message.content);
+    total += contentTokens(message.content);
     if (message.reasoning_content) {
       total += estimateTextTokens(message.reasoning_content);
     }
@@ -141,7 +167,7 @@ function truncate(text, limit) {
 function messageToText(message) {
   if (!message || typeof message !== 'object') return '';
   if (message.role === 'user') {
-    return `[User]: ${String(message.content ?? '')}`;
+    return `[User]: ${contentToText(message.content)}`;
   }
   if (message.role === 'assistant') {
     const parts = [];
@@ -162,7 +188,7 @@ function messageToText(message) {
     return `[Tool result]: ${truncate(message.content, TOOL_OUTPUT_MAX_CHARS)}`;
   }
   if (message.role === 'system') return '';
-  return String(message.content ?? '');
+  return contentToText(message.content);
 }
 
 function flattenMessages(messages) {
@@ -269,6 +295,8 @@ module.exports = {
   estimateTextTokens,
   estimateMessagesTokens,
   estimateBodyTokens,
+  contentToText,
+  contentTokens,
   contextWindow,
   compactionCeiling,
   messageToText,

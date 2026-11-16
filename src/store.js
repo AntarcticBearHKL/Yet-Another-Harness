@@ -11,6 +11,7 @@ const zlib = require('node:zlib');
 const { DatabaseSync } = require('node:sqlite');
 const { normalizeGoal } = require('./goal');
 const { normalizeCompaction } = require('./compaction');
+const attachments = require('./attachments');
 const { DEFAULT_AGENT_ID } = require('./agent-defaults');
 const {
   DEFAULT_REASONING_EFFORT,
@@ -20,7 +21,7 @@ const {
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 14;
+const SCHEMA_VERSION = 15;
 
 let dataDir = null;
 let legacyDir = null;
@@ -215,7 +216,8 @@ function normalizePendingQueue(raw) {
     }
     if (!item || typeof item !== 'object') continue;
     const text = String(item.text ?? '').trim();
-    if (!text) continue;
+    const images = attachments.normalizeImages(item.images);
+    if (!text && images.length === 0) continue;
     const skills = Array.isArray(item.skills)
       ? item.skills.map(normalizeQueueSkill).filter(Boolean).slice(0, 5)
       : [];
@@ -224,6 +226,7 @@ function normalizePendingQueue(raw) {
       skills,
       agentId: String(item.agentId || '').trim(),
     };
+    if (images.length > 0) entry.images = images;
     if (item.kind === 'compact') entry.kind = 'compact';
     if (item.background === true) entry.background = true;
     if (item.subagent === true) entry.subagent = true;
@@ -289,7 +292,8 @@ function normalizeChats(raw) {
             .filter((msg) => msg && typeof msg === 'object')
             .map((msg) => {
               const role = normalizeRole(msg.role);
-              return {
+              const images = attachments.normalizeImages(msg.images);
+              const normalized = {
                 role,
                 text: String(msg.text ?? ''),
                 // 旧文件可能是 pretty JSON；新文件只存空字符串当"真的发过请求"的标记
@@ -313,6 +317,8 @@ function normalizeChats(raw) {
                     ? msg.usage
                     : null,
               };
+              if (images.length > 0) normalized.images = images;
+              return normalized;
             })
         : [];
 
@@ -456,6 +462,7 @@ CREATE TABLE IF NOT EXISTS messages (
   text TEXT NOT NULL,
   request TEXT,
   usage TEXT,
+  images TEXT,
   PRIMARY KEY (session_id, seq)
 );
 
@@ -590,6 +597,11 @@ function ensureSchema(database) {
     const messageColumns = database.prepare('PRAGMA table_info(messages)').all();
     if (!messageColumns.some((column) => column.name === 'usage')) {
       database.exec('ALTER TABLE messages ADD COLUMN usage TEXT');
+    }
+
+    // v14 -> v15: image references attached to user messages.
+    if (!messageColumns.some((column) => column.name === 'images')) {
+      database.exec('ALTER TABLE messages ADD COLUMN images TEXT');
     }
 
     // v9 -> v10: project development directories.
@@ -727,7 +739,7 @@ function readChats() {
 
   const messageRows = database
     .prepare(
-      'SELECT session_id, seq, role, text, request, usage FROM messages ORDER BY session_id, seq'
+      'SELECT session_id, seq, role, text, request, usage, images FROM messages ORDER BY session_id, seq'
     )
     .all();
   const stepRows = database
@@ -832,6 +844,15 @@ function readChats() {
         if (usage && typeof usage === 'object') msg.usage = usage;
       } catch {
         /* ignore malformed usage */
+      }
+    }
+    if (row.images) {
+      try {
+        const images = JSON.parse(row.images);
+        const normalized = attachments.normalizeImages(images);
+        if (normalized.length > 0) msg.images = normalized;
+      } catch {
+        /* ignore malformed images */
       }
     }
     session.msgs.push(msg);
@@ -1002,7 +1023,7 @@ function writeChats(chats) {
     'DELETE FROM messages WHERE session_id = ?'
   );
   const insertMessage = database.prepare(
-    'INSERT INTO messages (session_id, seq, role, text, request, usage) VALUES (?, ?, ?, ?, ?, ?)'
+    'INSERT INTO messages (session_id, seq, role, text, request, usage, images) VALUES (?, ?, ?, ?, ?, ?, ?)'
   );
   const insertStep = database.prepare(
     `INSERT INTO steps
@@ -1068,7 +1089,10 @@ function writeChats(chats) {
           msg.role,
           msg.text,
           msg.request,
-          msg.usage ? JSON.stringify(msg.usage) : null
+          msg.usage ? JSON.stringify(msg.usage) : null,
+          Array.isArray(msg.images) && msg.images.length > 0
+            ? JSON.stringify(msg.images)
+            : null
         );
         (msg.steps || []).forEach((step, stepSeq) => {
           insertStep.run(
@@ -1362,7 +1386,7 @@ function updateSessionAgentsMd(sessionId, text) {
   return value;
 }
 
-function appendMessage(sessionId, role, text, request, usage = null) {
+function appendMessage(sessionId, role, text, request, usage = null, images = null) {
   const database = openDb();
   const row = database
     .prepare(
@@ -1370,9 +1394,10 @@ function appendMessage(sessionId, role, text, request, usage = null) {
     )
     .get(sessionId);
   const seq = Number(row?.seq) || 0;
+  const normalizedImages = attachments.normalizeImages(images);
   database
     .prepare(
-      'INSERT INTO messages (session_id, seq, role, text, request, usage) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO messages (session_id, seq, role, text, request, usage, images) VALUES (?, ?, ?, ?, ?, ?, ?)'
     )
     .run(
       sessionId,
@@ -1380,7 +1405,8 @@ function appendMessage(sessionId, role, text, request, usage = null) {
       normalizeRole(role),
       String(text ?? ''),
       request === undefined ? null : request,
-      usage && typeof usage === 'object' ? JSON.stringify(usage) : null
+      usage && typeof usage === 'object' ? JSON.stringify(usage) : null,
+      normalizedImages.length > 0 ? JSON.stringify(normalizedImages) : null
     );
   database
     .prepare('UPDATE sessions SET updated_at = ? WHERE id = ?')
@@ -1542,9 +1568,10 @@ function updateMessage(sessionId, seq, msg) {
     msg?.usage && typeof msg.usage === 'object'
       ? JSON.stringify(msg.usage)
       : null;
+  const images = attachments.normalizeImages(msg?.images);
 
   const update = database.prepare(
-    'UPDATE messages SET text = ?, request = ?, usage = ? WHERE session_id = ? AND seq = ?'
+    'UPDATE messages SET text = ?, request = ?, usage = ?, images = ? WHERE session_id = ? AND seq = ?'
   );
   const deleteSteps = database.prepare(
     'DELETE FROM steps WHERE session_id = ? AND message_seq = ?'
@@ -1570,6 +1597,7 @@ function updateMessage(sessionId, seq, msg) {
       String(msg?.text ?? ''),
       msg?.request === undefined ? null : msg.request,
       usage,
+      images.length > 0 ? JSON.stringify(images) : null,
       sessionId,
       seq
     );

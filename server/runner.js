@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const store = require('../src/store');
 const deepseek = require('../src/deepseek');
+const attachments = require('../src/attachments');
 const { ensureAgentsMd } = require('./context');
 const { BUILTIN_AGENT } = require('./agents');
 const { normalizeReasoningEffort } = require('../src/reasoning');
@@ -305,6 +306,21 @@ function lastAgentIndex(messages) {
   return -1;
 }
 
+function sanitizeStoredRequest(body) {
+  if (!body || typeof body !== 'object') return body;
+  for (const message of Array.isArray(body.messages) ? body.messages : []) {
+    if (!Array.isArray(message?.content)) continue;
+    for (const part of message.content) {
+      if (part?.type !== 'image_url') continue;
+      const url = String(part.image_url?.url || '');
+      if (url.startsWith('data:')) {
+        part.image_url.url = '[image data]';
+      }
+    }
+  }
+  return body;
+}
+
 function goalCheckStep({ verdict, reason, scores, checked, goal, turnsUsed }) {
   return {
     kind: 'goal',
@@ -588,6 +604,7 @@ async function compactSession(sessionId, options = {}) {
 function startRun({
   sessionId,
   text,
+  images = [],
   runId,
   skillsText = '',
   agentConfig = null,
@@ -595,8 +612,11 @@ function startRun({
 }) {
   const id = String(runId || '').trim();
   const prompt = String(text || '').trim();
+  const imageList = attachments.normalizeImages(images);
   if (!id) throw Object.assign(new Error('runId is required'), { code: 'bad_request' });
-  if (!prompt) throw Object.assign(new Error('text is required'), { code: 'bad_request' });
+  if (!prompt && imageList.length === 0) {
+    throw Object.assign(new Error('text is required'), { code: 'bad_request' });
+  }
   if (activeRuns.has(id) || sessionRuns.has(sessionId)) {
     throw Object.assign(new Error('another request is still running'), {
       code: 'busy',
@@ -617,7 +637,14 @@ function startRun({
     });
   }
 
-  const userSeq = store.appendMessage(sessionId, 'User', prompt, null);
+  const userSeq = store.appendMessage(
+    sessionId,
+    'User',
+    prompt,
+    null,
+    null,
+    imageList
+  );
   const agentSeq = store.appendMessage(sessionId, 'Agent', '', '');
   store.createRun(id, sessionId, 'running');
 
@@ -648,11 +675,19 @@ function startRun({
     userSeq,
     agentSeq,
     text: prompt,
+    images: imageList,
   });
 
   const history = [
     ...session.msgs,
-    { role: 'User', text: prompt, request: null, steps: [], requests: [] },
+    {
+      role: 'User',
+      text: prompt,
+      images: imageList,
+      request: null,
+      steps: [],
+      requests: [],
+    },
   ];
   const chats = store.loadChats();
   const agentsMd = ensureAgentsMd(session, chats);
@@ -776,8 +811,9 @@ function startRun({
         schedulePersist(state);
       },
       onRequest: (body, round) => {
-        agent.requests[round] = body;
-        emit(sessionId, id, 'request.body', { round, body });
+        const stored = sanitizeStoredRequest(body);
+        agent.requests[round] = stored;
+        emit(sessionId, id, 'request.body', { round, body: stored });
         schedulePersist(state);
       },
       onUsage: (usage, round, timing) => {
