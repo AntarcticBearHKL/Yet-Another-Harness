@@ -61,6 +61,7 @@ async function codeViewTool(args = {}, context = null) {
     title: titleFor(args, abs),
     line: start,
     end_line: end,
+    sessionId: context?.sessionId || null,
   });
 }
 
@@ -89,6 +90,7 @@ async function pdfViewTool(args = {}, context = null) {
     title: titleFor(args, abs),
     page,
     query,
+    sessionId: context?.sessionId || null,
   });
 }
 

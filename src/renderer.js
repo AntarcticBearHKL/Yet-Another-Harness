@@ -530,6 +530,7 @@ const api = {
   onContentInit: (callback) => shell?.onContentInit?.(callback) ?? (() => {}),
   onContentUpdate: (callback) =>
     shell?.onContentUpdate?.(callback) ?? (() => {}),
+  onViewerAsk: (callback) => shell?.onViewerAsk?.(callback) ?? (() => {}),
 
   onChatDelta: (callback) => subscribeEvent('assistant.delta', callback),
   onChatRequest: (callback) => subscribeEvent('request.body', callback),
@@ -5005,6 +5006,41 @@ async function sendMessage() {
     agentId,
     images,
   });
+}
+
+async function sendViewerPrompt(prompt, sessionId = '') {
+  let session = currentSession();
+  if (sessionId && session?.id !== sessionId) {
+    const index = state.sessions.findIndex((item) => item.id === sessionId);
+    if (index >= 0) {
+      selectSession(index);
+      session = currentSession();
+    }
+  }
+  if (!session || session.frozen || session.subagent) return;
+  const text = String(prompt || '').trim();
+  if (!text) return;
+  const agentId = session.agentId || DEFAULT_AGENT_ID;
+  const busy = await sessionBusy(session);
+  const queue = Array.isArray(session.pendingQueue)
+    ? session.pendingQueue
+    : (session.pendingQueue = []);
+  if (busy || queue.length > 0) {
+    queue.push({ text, images: [], skills: [], agentId });
+    closeComposer();
+    saveChatsSoon();
+    if (state.composerOpen) renderComposerContext();
+    if (!busy) processNextQueuedPrompt(session);
+    return;
+  }
+  closeComposer();
+  await startPrompt(session, text, { agentId });
+}
+
+function handleViewerAsk(payload) {
+  const text = String(payload?.prompt || '').trim();
+  if (!text) return;
+  void sendViewerPrompt(text, String(payload?.sessionId || ''));
 }
 
 function queueActionButton(kind, label, svg, onClick) {
@@ -10417,6 +10453,8 @@ function bindEvents() {
     state.openCardKey = autoCardKey();
     renderMessages();
   });
+
+  api.onViewerAsk(handleViewerAsk);
 
   api.onChatToolResult(({ requestId, name, output, ok, round, startedAt, durationMs }) => {
     if (requestId !== state.requestId || !state.streamMessage) return;

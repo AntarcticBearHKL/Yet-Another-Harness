@@ -513,6 +513,15 @@ if (gotLock) {
     ipcMain.handle('content:open', (_event, payload) =>
       openContentWindow(payload)
     );
+    ipcMain.handle('viewer:ask', (_event, payload) => {
+      const win = mainWindow;
+      if (!win || win.isDestroyed()) return false;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+      win.webContents.send('viewer:ask', payload);
+      return true;
+    });
     ipcMain.handle('agile:open', () => openAgileWindow());
     ipcMain.handle('chat:open', (_event, sessionId) =>
       openChatWindow(sessionId)

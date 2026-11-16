@@ -17,13 +17,16 @@ let codeView = null;
 let pdfState = null;
 let selectionAction = null;
 let annotationPopover = null;
+let askPopover = null;
+let viewerToast = null;
+let viewerToastTimer = 0;
 let contentScrollHandler = null;
 
 const ANNOTATION_KEY = 'yah.viewer.annotations.v1';
 let annotationStore = loadAnnotations();
 
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .annotation-popover, .viewer-selection-action';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .annotation-popover, .ask-popover, .viewer-selection-action, .viewer-selection-actions';
 
 const LANG_BY_EXT = {
   js: 'javascript',
@@ -240,23 +243,35 @@ function closeSelectionAction() {
   selectionAction = null;
 }
 
-function showSelectionAction(rect, onClick) {
+function showSelectionAction(rect, actions) {
   closeSelectionAction();
-  const button = el('button', 'viewer-selection-action', '注释');
-  button.type = 'button';
-  button.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    onClick();
-  });
-  document.body.append(button);
-  const width = button.offsetWidth || 48;
-  const height = button.offsetHeight || 28;
-  const left = clamp(rect.right + 10, 12, window.innerWidth - width - 12);
+  const bar = el('div', 'viewer-selection-actions');
+  for (const action of actions || []) {
+    const button = el(
+      'button',
+      `viewer-selection-action${action.primary ? ' primary' : ''}`,
+      action.label
+    );
+    button.type = 'button';
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      action.onClick?.();
+    });
+    bar.append(button);
+  }
+  document.body.append(bar);
+  const width = bar.offsetWidth || 120;
+  const height = bar.offsetHeight || 28;
+  let left = rect.right + 10;
+  if (left + width > window.innerWidth - 12) {
+    left = rect.left - width - 10;
+  }
+  left = clamp(left, 12, window.innerWidth - width - 12);
   const top = clamp(rect.top - 2, 12, window.innerHeight - height - 12);
-  button.style.left = `${left}px`;
-  button.style.top = `${top}px`;
-  selectionAction = button;
+  bar.style.left = `${left}px`;
+  bar.style.top = `${top}px`;
+  selectionAction = bar;
 }
 
 function closeAnnotationPopover() {
@@ -286,6 +301,7 @@ function openAnnotationPopover({
 }) {
   closeSelectionAction();
   closeAnnotationPopover();
+  closeAskPopover();
   const popover = el('div', 'annotation-popover');
   const head = el('div', 'annotation-head');
   head.append(el('span', 'annotation-kicker', 'ANNOTATION'));
@@ -328,6 +344,135 @@ function openAnnotationPopover({
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
   });
+}
+
+/* --------------------------------- ask AI -------------------------------- */
+
+function closeAskPopover() {
+  askPopover?.remove();
+  askPopover = null;
+}
+
+function positionAskPopover(popover, rect) {
+  const width = popover.offsetWidth || 320;
+  const height = popover.offsetHeight || 220;
+  let left = rect.right + 12;
+  if (left + width > window.innerWidth - 12) {
+    left = rect.left - width - 12;
+  }
+  left = clamp(left, 12, window.innerWidth - width - 12);
+  let top = rect.top - 4;
+  if (top < 52) top = rect.bottom + 10;
+  if (top + height > window.innerHeight - 12) {
+    top = window.innerHeight - height - 12;
+  }
+  popover.style.left = `${left}px`;
+  popover.style.top = `${Math.max(12, top)}px`;
+}
+
+function openAskPopover({
+  rect,
+  label,
+  presets = [],
+  placeholder = '你想问什么？例如：这段代码的核心逻辑是什么？',
+  onSubmit,
+}) {
+  closeSelectionAction();
+  closeAnnotationPopover();
+  closeAskPopover();
+  const popover = el('div', 'ask-popover');
+  const head = el('div', 'ask-head');
+  head.append(el('span', 'ask-kicker', 'ASK AI'));
+  if (label) head.append(el('span', 'ask-label', label));
+  const presetRow = el('div', 'ask-presets');
+  const input = el('textarea', 'ask-input');
+  input.rows = 3;
+  input.placeholder = placeholder;
+  const actions = el('div', 'ask-actions');
+  const cancel = el('button', 'ask-cancel', '取消');
+  cancel.type = 'button';
+  const send = el('button', 'ask-send', '发送给 AI');
+  send.type = 'button';
+  send.disabled = true;
+
+  const submit = () => {
+    const value = input.value.trim();
+    if (!value) return;
+    onSubmit?.(value);
+    closeAskPopover();
+  };
+
+  for (const preset of presets) {
+    const chip = el('button', 'ask-preset', preset);
+    chip.type = 'button';
+    chip.addEventListener('click', () => {
+      input.value = preset;
+      submit();
+    });
+    presetRow.append(chip);
+  }
+
+  input.addEventListener('input', () => {
+    send.disabled = !input.value.trim();
+  });
+  input.addEventListener('keydown', (event) => {
+    if (event.isComposing || event.keyCode === 229) return;
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      submit();
+    }
+  });
+  send.addEventListener('click', submit);
+  cancel.addEventListener('click', closeAskPopover);
+  actions.append(cancel, send);
+  popover.append(head);
+  if (presets.length > 0) popover.append(presetRow);
+  popover.append(input, actions);
+  document.body.append(popover);
+  askPopover = popover;
+  positionAskPopover(popover, rect);
+  requestAnimationFrame(() => input.focus());
+}
+
+function showViewerToast(message) {
+  if (!viewerToast) {
+    viewerToast = el('div', 'viewer-toast');
+    document.body.append(viewerToast);
+  }
+  viewerToast.textContent = String(message || '');
+  viewerToast.classList.add('show');
+  clearTimeout(viewerToastTimer);
+  viewerToastTimer = setTimeout(() => {
+    viewerToast?.classList.remove('show');
+  }, 2400);
+}
+
+async function askViewer(prompt, label = '') {
+  const text = String(prompt || '').trim();
+  if (!text) return;
+  try {
+    const ok = await api.askViewer?.({
+      prompt: text,
+      label,
+      sessionId: currentPayload?.sessionId || null,
+    });
+    showViewerToast(ok ? '已发送到对话' : '没有可用的对话窗口');
+  } catch {
+    showViewerToast('发送失败');
+  }
+}
+
+function baseName(file) {
+  return String(file || '').split(/[\\/]/).pop() || String(file || '');
+}
+
+function languageLabel(language) {
+  if (language === 'python') return 'Python';
+  if (language === 'javascript') return 'JavaScript';
+  if (language === 'typescript') return 'TypeScript';
+  if (language === 'jsx') return 'JSX';
+  if (language === 'tsx') return 'TSX';
+  return language || '代码';
 }
 
 /* -------------------------------- code view ------------------------------- */
@@ -484,15 +629,36 @@ function renderHtmlViewer(payload) {
 
 function renderCodeViewer(payload) {
   const file = String(payload?.path || '');
-  const text = String(payload?.text ?? '');
-  const lines = text.replace(/\r\n/g, '\n').split('\n');
-  const language = languageFor(file);
+  const text = String(payload?.text ?? '').replace(/\r\n/g, '\n');
+  const lines = text.split('\n');
+  const language =
+    languageFor(file) ||
+    window.YAHCodeParse?.detectLanguage(file, text) ||
+    '';
+  const analysis =
+    window.YAHCodeParse?.analyzeCode(text, language) || {
+      symbols: [],
+      imports: [],
+      foldRanges: [],
+    };
   const highlighted = highlightCode(text, language);
   const htmlLines = splitHighlightedLines(highlighted);
   const viewer = el('div', 'viewer code-viewer');
   const metaParts = [`${lines.length} 行`];
   if (language) metaParts.push(language);
-  const head = makeViewerHead(file, metaParts.join(' · '));
+  if (analysis.symbols.length) {
+    metaParts.push(`${analysis.symbols.length} 个符号`);
+  }
+
+  const outlineButton = el('button', 'viewer-action', '大纲');
+  outlineButton.type = 'button';
+  outlineButton.setAttribute('aria-pressed', 'false');
+  const askButton = el('button', 'viewer-action primary', '问 AI');
+  askButton.type = 'button';
+  const head = makeViewerHead(file, metaParts.join(' · '), [
+    outlineButton,
+    askButton,
+  ]);
   const body = el('div', 'code-body');
   const lineWrap = el('div', 'code-lines');
   const lineEls = [];
@@ -501,11 +667,15 @@ function renderCodeViewer(payload) {
     const lineEl = el('div', 'code-line');
     lineEl.dataset.line = String(number);
     const num = el('span', 'code-num', String(number));
+    const fold = el('span', 'code-fold');
     const code = el('span', 'code-text');
     code.innerHTML = htmlLines[index] || ' ';
-    lineEl.append(num, code);
+    lineEl.append(num, fold, code);
     lineEl.addEventListener('click', (event) => {
-      if (event.target instanceof Element && event.target.closest('.code-note-pin')) {
+      if (
+        event.target instanceof Element &&
+        event.target.closest('.code-note-pin, .code-fold-toggle, .code-fold-summary')
+      ) {
         return;
       }
       selectCodeLines(number, event.shiftKey);
@@ -515,8 +685,37 @@ function renderCodeViewer(payload) {
   });
   body.append(lineWrap);
   viewer.append(head, body);
+
+  const outline = buildCodeOutline(analysis, (symbol) => {
+    revealCodeRange(symbol.startLine, symbol.endLine);
+  });
+  if (outline) viewer.append(outline);
   content.append(viewer);
-  codeView = { file, lineEls, anchor: null, start: null, end: null };
+
+  codeView = {
+    file,
+    language,
+    lines,
+    lineEls,
+    analysis,
+    outline,
+    folded: new Set(),
+    foldMap: new Map(),
+    anchor: null,
+    start: null,
+    end: null,
+  };
+  setupCodeFolds(analysis);
+
+  const showOutline = Boolean(outline) && window.innerWidth >= 980;
+  viewer.classList.toggle('outline-hidden', !showOutline);
+  outlineButton.setAttribute('aria-pressed', String(showOutline));
+  outlineButton.disabled = !outline;
+  outlineButton.addEventListener('click', () => {
+    const hidden = viewer.classList.toggle('outline-hidden');
+    outlineButton.setAttribute('aria-pressed', String(!hidden));
+  });
+  askButton.addEventListener('click', () => openCodeAskForFile(askButton));
 
   const focusStart = Number.isFinite(Number(payload?.line))
     ? clamp(Math.round(Number(payload.line)), 1, lines.length)
@@ -532,6 +731,8 @@ function renderCodeViewer(payload) {
           lines.length
         );
   if (focusStart !== null) {
+    unfoldForLine(focusStart);
+    unfoldForLine(focusEnd);
     for (let i = focusStart; i <= focusEnd; i += 1) {
       lineEls[i - 1]?.classList.add('focus');
     }
@@ -549,6 +750,272 @@ function renderCodeViewer(payload) {
   contentScrollHandler = closeSelectionAction;
   content.addEventListener('scroll', contentScrollHandler, { passive: true });
 }
+
+function outlineIcon(kind) {
+  if (kind === 'class') return 'C';
+  if (kind === 'method') return 'M';
+  if (kind === 'function') return 'F';
+  if (kind === 'type') return 'T';
+  if (kind === 'enum') return 'E';
+  if (kind === 'namespace') return 'N';
+  if (kind === 'import') return 'I';
+  return '•';
+}
+
+function buildCodeOutline(analysis, onSelect) {
+  const symbols = Array.isArray(analysis?.symbols) ? analysis.symbols : [];
+  const imports = Array.isArray(analysis?.imports) ? analysis.imports : [];
+  if (symbols.length === 0 && imports.length === 0) return null;
+
+  const aside = el('aside', 'code-outline');
+  const head = el('div', 'code-outline-head');
+  head.append(el('span', 'code-outline-title', 'OUTLINE'));
+  head.append(
+    el(
+      'span',
+      'code-outline-count',
+      symbols.length ? `${symbols.length} SYMBOLS` : `${imports.length} IMPORTS`
+    )
+  );
+  const list = el('div', 'code-outline-list');
+
+  const addItem = (symbol) => {
+    const item = el('button', 'code-outline-item');
+    item.type = 'button';
+    item.style.setProperty('--depth', String(symbol.depth || 0));
+    item.append(
+      el('span', `code-outline-icon ${symbol.kind}`, outlineIcon(symbol.kind))
+    );
+    item.append(el('span', 'code-outline-name', symbol.name));
+    item.append(
+      el('span', 'code-outline-line', `L${symbol.line || symbol.startLine}`)
+    );
+    item.setAttribute(
+      'aria-label',
+      `${symbol.kind} ${symbol.name}，第 ${symbol.line || symbol.startLine} 行`
+    );
+    item.addEventListener('click', () => onSelect?.(symbol));
+    list.append(item);
+  };
+
+  if (imports.length > 0) {
+    list.append(el('div', 'code-outline-group', 'IMPORTS'));
+    imports.forEach(addItem);
+  }
+  if (symbols.length > 0) {
+    list.append(el('div', 'code-outline-group', 'SYMBOLS'));
+    symbols.forEach(addItem);
+  }
+  aside.append(head, list);
+  return aside;
+}
+
+function setupCodeFolds(analysis) {
+  if (!codeView) return;
+  const ranges = Array.isArray(analysis?.foldRanges) ? analysis.foldRanges : [];
+  for (const range of ranges) {
+    if (!range || range.endLine <= range.startLine) continue;
+    codeView.foldMap.set(range.startLine, range.endLine);
+    const line = codeView.lineEls[range.startLine - 1];
+    const cell = line?.querySelector('.code-fold');
+    if (!cell) continue;
+    const button = el('button', 'code-fold-toggle');
+    button.type = 'button';
+    button.innerHTML =
+      '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg>';
+    button.setAttribute(
+      'aria-label',
+      `折叠第 ${range.startLine} 到 ${range.endLine} 行`
+    );
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleCodeFold(range.startLine);
+    });
+    cell.append(button);
+  }
+  applyCodeFolds();
+}
+
+function toggleCodeFold(startLine) {
+  if (!codeView?.foldMap.has(startLine)) return;
+  if (codeView.folded.has(startLine)) codeView.folded.delete(startLine);
+  else codeView.folded.add(startLine);
+  applyCodeFolds();
+}
+
+function applyCodeFolds() {
+  if (!codeView) return;
+  codeView.lineEls.forEach((line) => {
+    line.querySelectorAll('.code-fold-summary').forEach((node) => node.remove());
+  });
+  codeView.lineEls.forEach((lineEl, index) => {
+    const number = index + 1;
+    let hidden = false;
+    for (const start of codeView.folded) {
+      const end = codeView.foldMap.get(start);
+      if (end && number > start && number <= end) {
+        hidden = true;
+        break;
+      }
+    }
+    lineEl.classList.toggle('fold-hidden', hidden);
+    const folded = codeView.folded.has(number);
+    lineEl.classList.toggle('folded', folded);
+    const toggle = lineEl.querySelector('.code-fold-toggle');
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', String(!folded));
+      toggle.classList.toggle('open', !folded);
+    }
+    if (folded) {
+      const end = codeView.foldMap.get(number);
+      if (end) {
+        const summary = el(
+          'button',
+          'code-fold-summary',
+          `⋯ ${end - number} 行`
+        );
+        summary.type = 'button';
+        summary.setAttribute('aria-label', `展开第 ${number} 到 ${end} 行`);
+        summary.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleCodeFold(number);
+        });
+        const code = lineEl.querySelector('.code-text');
+        if (code) lineEl.insertBefore(summary, code);
+        else lineEl.append(summary);
+      }
+    }
+  });
+}
+
+function unfoldForLine(lineNumber) {
+  if (!codeView) return;
+  let changed = false;
+  for (const start of [...codeView.folded]) {
+    const end = codeView.foldMap.get(start);
+    if (end && lineNumber > start && lineNumber <= end) {
+      codeView.folded.delete(start);
+      changed = true;
+    }
+  }
+  if (changed) applyCodeFolds();
+}
+
+function revealCodeRange(startLine, endLine) {
+  if (!codeView) return;
+  unfoldForLine(startLine);
+  unfoldForLine(endLine);
+  const start = clamp(Number(startLine) || 1, 1, codeView.lines.length);
+  const end = clamp(Number(endLine) || start, start, codeView.lines.length);
+  for (let i = start; i <= end; i += 1) {
+    const line = codeView.lineEls[i - 1];
+    if (!line) continue;
+    line.classList.remove('jump');
+    void line.offsetWidth;
+    line.classList.add('jump');
+    setTimeout(() => line.classList.remove('jump'), 1300);
+  }
+  codeView.lineEls[start - 1]?.scrollIntoView({
+    block: 'center',
+    behavior: 'smooth',
+  });
+}
+
+function codeScopeForRange(startLine, endLine) {
+  const symbols = codeView?.analysis?.symbols || [];
+  let best = null;
+  for (const symbol of symbols) {
+    if (symbol.startLine > startLine || symbol.endLine < endLine) continue;
+    if (!best || symbol.startLine >= best.startLine) best = symbol;
+  }
+  return best;
+}
+
+function codeSelectionPrompt(startLine, endLine, question) {
+  if (!codeView) return String(question || '');
+  const maxLines = 240;
+  const selected = codeView.lines.slice(startLine - 1, endLine);
+  const shown = selected.slice(0, maxLines);
+  const excerpt = shown
+    .map((line, index) => `${startLine + index}: ${line}`)
+    .join('\n');
+  const scope = codeScopeForRange(startLine, endLine);
+  const scopeLine = scope
+    ? `\n所在${scope.kind === 'class' ? '类' : scope.kind === 'method' ? '方法' : '函数'}：${scope.name}（L${scope.startLine}-L${scope.endLine}）`
+    : '';
+  const truncated =
+    selected.length > maxLines
+      ? `\n（代码较长，只附上前 ${maxLines} 行；其余可读取文件。）`
+      : '';
+  return [
+    `请帮我理解下面这段 ${languageLabel(codeView.language)} 代码。`,
+    '',
+    `文件：${codeView.file}`,
+    `行号：L${startLine}-L${endLine}${scopeLine}`,
+    `语言：${codeView.language || 'unknown'}`,
+    '',
+    '选中代码（行号: 内容）：',
+    '```' + (codeView.language || ''),
+    excerpt,
+    '```',
+    truncated,
+    '',
+    `我的问题：${String(question || '').trim()}`,
+    '',
+    '如果需要更多上下文，请读取上面的文件。',
+  ].join('\n');
+}
+
+function codeFilePrompt(question) {
+  if (!codeView) return String(question || '');
+  const outline = (codeView.analysis?.symbols || [])
+    .slice(0, 40)
+    .map(
+      (symbol) =>
+        `- ${symbol.kind} ${symbol.name} L${symbol.startLine}-L${symbol.endLine}`
+    )
+    .join('\n');
+  return [
+    '请带我读这个文件。',
+    '',
+    `文件：${codeView.file}`,
+    `语言：${codeView.language || 'unknown'}`,
+    `行数：${codeView.lines.length}`,
+    outline ? `已解析结构：\n${outline}` : '',
+    '',
+    `我的问题：${String(question || '').trim()}`,
+    '',
+    '请先概括文件结构，再按我的问题讲解关键逻辑；需要时读取上面的文件。',
+  ].join('\n');
+}
+
+function openCodeAskForRange(rect, startLine, endLine) {
+  if (!codeView) return;
+  const label = `${baseName(codeView.file)} · L${startLine}-L${endLine}`;
+  openAskPopover({
+    rect,
+    label,
+    presets: ['解释这段', '逐行讲解', '找问题', '重构建议'],
+    onSubmit: (question) =>
+      askViewer(codeSelectionPrompt(startLine, endLine, question), label),
+  });
+}
+
+function openCodeAskForFile(anchor) {
+  if (!codeView) return;
+  const rect = anchor.getBoundingClientRect();
+  const label = baseName(codeView.file);
+  openAskPopover({
+    rect,
+    label,
+    presets: ['带我读这个文件', '解释整体结构', '找风险', '总结关键逻辑'],
+    placeholder: '你想让我先看哪一部分？',
+    onSubmit: (question) => askViewer(codeFilePrompt(question), label),
+  });
+}
+
 
 function selectCodeLines(line, extend) {
   if (!codeView) return;
@@ -570,27 +1037,37 @@ function selectCodeLines(line, extend) {
   const first = codeView.lineEls[codeView.start - 1];
   if (!first) return;
   const rect = first.getBoundingClientRect();
-  showSelectionAction(rect, () => {
-    const start = codeView.start;
-    const end = codeView.end;
-    openAnnotationPopover({
-      rect,
-      quote: `L${start}${end > start ? `–${end}` : ''}`,
-      onSave: (note) => {
-        addAnnotation({
-          id: annotationId(),
-          kind: 'code',
-          file: codeView.file,
-          startLine: start,
-          endLine: end,
-          note,
-          createdAt: Date.now(),
+  const start = codeView.start;
+  const end = codeView.end;
+  showSelectionAction(rect, [
+    {
+      label: '问 AI',
+      primary: true,
+      onClick: () => openCodeAskForRange(rect, start, end),
+    },
+    {
+      label: '注释',
+      onClick: () => {
+        openAnnotationPopover({
+          rect,
+          quote: `L${start}${end > start ? `–${end}` : ''}`,
+          onSave: (note) => {
+            addAnnotation({
+              id: annotationId(),
+              kind: 'code',
+              file: codeView.file,
+              startLine: start,
+              endLine: end,
+              note,
+              createdAt: Date.now(),
+            });
+            refreshCodePins();
+            closeSelectionAction();
+          },
         });
-        refreshCodePins();
-        closeSelectionAction();
       },
-    });
-  });
+    },
+  ]);
 }
 
 function refreshCodePins() {
@@ -635,12 +1112,15 @@ function refreshCodePins() {
 
 /* --------------------------------- pdf view -------------------------------- */
 
-function makeViewerHead(pathText, metaText) {
+function makeViewerHead(pathText, metaText, actions = []) {
   const head = el('header', 'viewer-head');
   const pathEl = el('div', 'viewer-path', pathText || 'FILE');
   pathEl.title = pathText || '';
   const meta = el('div', 'viewer-meta', metaText || '');
-  head.append(pathEl, meta);
+  const right = el('div', 'viewer-head-right');
+  right.append(meta);
+  for (const action of actions) right.append(action);
+  head.append(pathEl, right);
   return head;
 }
 
@@ -663,7 +1143,25 @@ function updatePdfMeta() {
   zoomIn.setAttribute('aria-label', '放大 PDF');
   zoomOut.addEventListener('click', () => applyPdfZoom(-0.15));
   zoomIn.addEventListener('click', () => applyPdfZoom(0.15));
-  meta.append(pageInfo, zoomOut, zoomLabel, zoomIn);
+  const askPage = el('button', 'viewer-action primary', '问这一页');
+  askPage.type = 'button';
+  askPage.addEventListener('click', () => {
+    if (!pdfState) return;
+    const page = pdfState.focusPage;
+    if (!pdfPageText(page)) {
+      showViewerToast('这一页还在渲染，请稍后再试');
+      return;
+    }
+    const label = `${baseName(pdfState.file)} · 第 ${page} 页`;
+    openAskPopover({
+      rect: askPage.getBoundingClientRect(),
+      label,
+      presets: ['总结这一页', '解释核心论点', '翻译成中文', '带我读这一页'],
+      onSubmit: (question) =>
+        askViewer(pdfPagePrompt(page, question), label),
+    });
+  });
+  meta.append(pageInfo, zoomOut, zoomLabel, zoomIn, askPage);
 }
 
 async function renderPdfViewer(payload) {
@@ -937,37 +1435,109 @@ function handlePdfSelection() {
     if (!pageEl) return;
     const rect = range.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) return;
-    showSelectionAction(rect, () => {
-      const pageRect = pageEl.getBoundingClientRect();
-      const anchor = {
-        x: clamp((rect.left - pageRect.left) / pageRect.width, 0, 1),
-        y: clamp((rect.top - pageRect.top) / pageRect.height, 0, 1),
-        w: clamp(rect.width / pageRect.width, 0, 1),
-        h: clamp(rect.height / pageRect.height, 0, 1),
-      };
-      const pageNumber = Number(pageEl.dataset.page) || 1;
-      const quote = selection.toString().trim().slice(0, 160);
-      openAnnotationPopover({
-        rect,
-        quote: quote || `第 ${pageNumber} 页`,
-        onSave: (note) => {
-          addAnnotation({
-            id: annotationId(),
-            kind: 'pdf',
-            file: pdfState.file,
-            page: pageNumber,
-            text: quote,
-            rect: anchor,
-            note,
-            createdAt: Date.now(),
+    const pageRect = pageEl.getBoundingClientRect();
+    const anchor = {
+      x: clamp((rect.left - pageRect.left) / pageRect.width, 0, 1),
+      y: clamp((rect.top - pageRect.top) / pageRect.height, 0, 1),
+      w: clamp(rect.width / pageRect.width, 0, 1),
+      h: clamp(rect.height / pageRect.height, 0, 1),
+    };
+    const pageNumber = Number(pageEl.dataset.page) || 1;
+    const selectedText = selection.toString().trim();
+    const quote = selectedText.slice(0, 160);
+    const label = `${baseName(pdfState.file)} · 第 ${pageNumber} 页`;
+    showSelectionAction(rect, [
+      {
+        label: '问 AI',
+        primary: true,
+        onClick: () => {
+          openAskPopover({
+            rect,
+            label,
+            presets: [
+              '解释这段',
+              '这段在论证什么',
+              '翻译成中文',
+              '带我读这一页',
+            ],
+            onSubmit: (question) =>
+              askViewer(
+                pdfSelectionPrompt(pageNumber, selectedText, question),
+                label
+              ),
           });
-          const meta = pdfState.pagesMeta[pageNumber - 1];
-          if (meta) renderPdfPins(meta);
-          closeSelectionAction();
         },
-      });
-    });
+      },
+      {
+        label: '注释',
+        onClick: () => {
+          openAnnotationPopover({
+            rect,
+            quote: quote || `第 ${pageNumber} 页`,
+            onSave: (note) => {
+              addAnnotation({
+                id: annotationId(),
+                kind: 'pdf',
+                file: pdfState.file,
+                page: pageNumber,
+                text: quote,
+                rect: anchor,
+                note,
+                createdAt: Date.now(),
+              });
+              const meta = pdfState.pagesMeta[pageNumber - 1];
+              if (meta) renderPdfPins(meta);
+              closeSelectionAction();
+            },
+          });
+        },
+      },
+    ]);
   }, 0);
+}
+
+function pdfPageText(pageNumber) {
+  if (!pdfState) return '';
+  const meta = pdfState.pagesMeta[pageNumber - 1];
+  const layer = meta?.textLayer;
+  if (!layer) return '';
+  return [...layer.querySelectorAll('span')]
+    .map((span) => span.textContent || '')
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function pdfSelectionPrompt(pageNumber, selectedText, question) {
+  if (!pdfState) return String(question || '');
+  const pageText = pdfPageText(pageNumber);
+  return [
+    '请带我读这篇论文的这一段。',
+    '',
+    `文件：${pdfState.file}`,
+    `页码：第 ${pageNumber} 页`,
+    '',
+    `选中文本：\n"""${String(selectedText || '').slice(0, 4000)}"""`,
+    pageText
+      ? `\n本页文本（供上下文）：\n"""${pageText.slice(0, 7000)}"""`
+      : '',
+    '',
+    `我的问题：${String(question || '').trim()}`,
+  ].join('\n');
+}
+
+function pdfPagePrompt(pageNumber, question) {
+  if (!pdfState) return String(question || '');
+  const pageText = pdfPageText(pageNumber);
+  return [
+    '请带我读这篇论文的这一页。',
+    '',
+    `文件：${pdfState.file}`,
+    `页码：第 ${pageNumber} 页`,
+    pageText ? `\n本页文本：\n"""${pageText.slice(0, 8000)}"""` : '',
+    '',
+    `我的问题：${String(question || '').trim()}`,
+  ].join('\n');
 }
 
 /* ------------------------------ text rendering ----------------------------- */
@@ -1022,6 +1592,8 @@ function cleanupViewer() {
   viewerToken += 1;
   closeSelectionAction();
   closeAnnotationPopover();
+  closeAskPopover();
+  if (viewerToast) viewerToast.classList.remove('show');
   if (contentScrollHandler) {
     content.removeEventListener('scroll', contentScrollHandler);
     contentScrollHandler = null;
@@ -1111,6 +1683,10 @@ closeButton?.addEventListener('click', () => api.close());
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Tab') event.preventDefault();
   if (event.key === 'Escape') {
+    if (askPopover) {
+      closeAskPopover();
+      return;
+    }
     if (annotationPopover) {
       closeAnnotationPopover();
       return;
@@ -1124,6 +1700,10 @@ window.addEventListener('keydown', (event) => {
 });
 document.addEventListener('contextmenu', (event) => {
   event.preventDefault();
+  if (askPopover) {
+    closeAskPopover();
+    return;
+  }
   if (annotationPopover) {
     closeAnnotationPopover();
     return;
@@ -1157,13 +1737,19 @@ document.addEventListener(
 );
 
 document.addEventListener('mousedown', (event) => {
+  const target = event.target;
+  if (askPopover && !(target instanceof Node && askPopover.contains(target))) {
+    closeAskPopover();
+  }
   if (!annotationPopover) return;
-  if (event.target instanceof Node && annotationPopover.contains(event.target)) {
+  if (target instanceof Node && annotationPopover.contains(target)) {
     return;
   }
   if (
-    event.target instanceof Element &&
-    event.target.closest('.code-note-pin, .pdf-note-pin, .viewer-selection-action')
+    target instanceof Element &&
+    target.closest(
+      '.code-note-pin, .pdf-note-pin, .viewer-selection-action, .viewer-selection-actions'
+    )
   ) {
     return;
   }
