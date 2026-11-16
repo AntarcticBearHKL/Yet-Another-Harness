@@ -16,8 +16,8 @@ const canvasDom = {
   addWorkspace: document.getElementById('canvas-add-workspace'),
 };
 
-const CANVAS_GROUP_WIDTH = 420;
-const CANVAS_GROUP_HEIGHT = 64;
+const CANVAS_GROUP_WIDTH = 300;
+const CANVAS_GROUP_HEIGHT = 120;
 const CANVAS_FRAME_PADDING = 28;
 const CANVAS_MIN_ZOOM = 0.2;
 const CANVAS_MAX_ZOOM = 3;
@@ -660,10 +660,6 @@ async function loadCanvasBackground({ force = false } = {}) {
 
 /* -------------------------------- 组渲染 -------------------------------- */
 
-function buildCanvasDot(tone) {
-  return el('span', `canvas-dot ${tone}`);
-}
-
 function buildCanvasChild(child, root) {
   const childEl = el('div', 'canvas-child');
   childEl.dataset.sessionId = child.id;
@@ -673,7 +669,6 @@ function buildCanvasChild(child, root) {
   ) {
     childEl.classList.add('selected');
   }
-  childEl.append(buildCanvasDot(canvasConversationStatus(child).tone));
   childEl.append(
     el('span', 'canvas-child-title', child.title || '未命名对话')
   );
@@ -704,17 +699,6 @@ function buildCanvasChild(child, root) {
 
 function buildCanvasTask(job) {
   const row = el('div', 'canvas-task');
-  const status =
-    job?.status === 'exited'
-      ? job?.exitCode === 0
-        ? 'done'
-        : 'blocked'
-      : job?.status === 'running'
-        ? 'running'
-        : job?.status === 'error' || job?.status === 'timeout'
-          ? 'blocked'
-          : 'idle';
-  row.append(buildCanvasDot(status));
   const note = String(job?.note || job?.command || '后台任务').trim();
   row.append(el('span', 'canvas-task-note', note));
   const command = String(job?.command || '').trim();
@@ -767,14 +751,13 @@ function buildCanvasGroup(root, children, jobs, node) {
   const workspace = canvasWorkspaceFor(root);
   const workspaceName = workspace?.name || '未分组';
   const head = el('header', 'canvas-group-head');
-  head.append(buildCanvasDot(canvasConversationStatus(root).tone));
   const heading = el('div', 'canvas-group-heading');
-  const workspaceEl = el('span', 'canvas-group-workspace', workspaceName);
-  workspaceEl.title = workspaceName;
-  heading.append(workspaceEl);
   heading.append(
     el('span', 'canvas-group-title', root.title || '未命名对话')
   );
+  const workspaceEl = el('span', 'canvas-group-workspace', workspaceName);
+  workspaceEl.title = workspaceName;
+  heading.append(workspaceEl);
   head.append(heading);
   groupEl.append(head);
 
