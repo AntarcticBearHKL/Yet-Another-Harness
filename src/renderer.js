@@ -7016,17 +7016,16 @@ function onWindowDragStart(event) {
   if (overlay && overlay !== dom.switcher && overlay !== canvasOverlay) return;
   let isSpaceDrag = false;
   if (canvasOverlay) {
-    // 画布上：空格 + 左键空白处拖动窗口；中键用于平移画布
-    if (event.button !== 0 || !canvasSpaceHeld) return;
+    // 首页画布不再用空格 + 左键移动窗口；只有 Tab 工作区页空白处可以左键拖动窗口。
+    if (!target.closest('.canvas-workspaces-page')) return;
+    if (event.button !== 0) return;
     if (
       target.closest(
-        '.canvas-group, .canvas-child, .canvas-frame, .canvas-workspaces-page, .canvas-zoom-indicator, button, input, textarea, [contenteditable="true"]'
+        '.canvas-workspace, button, input, textarea, select, [contenteditable="true"]'
       )
     ) {
       return;
     }
-    isSpaceDrag = true;
-    event.preventDefault();
   } else if (spaceDrag) {
     isSpaceDrag = true;
     event.preventDefault();
