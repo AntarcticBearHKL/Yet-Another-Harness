@@ -129,7 +129,6 @@ const state = {
   renderedSessionId: null,
   collapsedProcessKeys: new Set(),
   contextCollapsed: new Set(['system', 'safety', 'agents']),
-  contextGroupCollapsed: false,
   viewMode: null,
   chatWindow: false,
   homeWindow: false,
@@ -923,7 +922,6 @@ function applyFoldState(session) {
       ? fold.contextCollapsed
       : ['system', 'safety', 'agents']
   );
-  state.contextGroupCollapsed = fold?.contextGroupCollapsed === true;
   state.openCardKey = fold?.openKey || null;
   state.foldRestored = Boolean(fold);
 }
@@ -934,7 +932,6 @@ function captureFoldState() {
     collapsedProcessKeys: [...state.collapsedProcessKeys],
     contextCollapsed: [...state.contextCollapsed],
     contextFoldVersion: 2,
-    contextGroupCollapsed: state.contextGroupCollapsed,
     viewMode: state.viewMode || null,
   };
 }
@@ -3170,46 +3167,15 @@ function contextBlock(title, text, key) {
   return block;
 }
 
-function buildContextGroup(blocks) {
-  const collapsed = state.contextGroupCollapsed;
-  const group = el('div', 'context-group');
-  if (collapsed) group.classList.add('collapsed');
-  const head = el('button', 'context-group-head');
-  head.type = 'button';
-  head.setAttribute('aria-expanded', String(!collapsed));
-  head.setAttribute('aria-label', '上下文');
-  head.append(el('span', 'context-group-dot'));
-  head.append(el('span', 'context-group-title', 'CONTEXT'));
-  head.append(el('span', 'context-group-count', String(blocks.length)));
-  const chevron = el('span', 'context-group-chevron');
-  chevron.innerHTML =
-    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
-  head.append(chevron);
-  const body = el('div', 'context-group-body');
-  body.append(...blocks);
-  head.addEventListener('click', () => {
-    const nextCollapsed = group.classList.toggle('collapsed');
-    head.setAttribute('aria-expanded', String(!nextCollapsed));
-    state.contextGroupCollapsed = nextCollapsed;
-    persistFoldState();
-  });
-  group.append(head, body);
-  return group;
-}
-
 function buildContextStack(session) {
   const stack = el('div', 'context-stack');
   renderMcpSummary(session, stack);
   stack.append(
-    contextBlock('SYSTEM PROMPT', systemPromptText(session), 'system')
-  );
-  stack.append(
-    buildContextGroup([
-      contextBlock('AGENT PROMPT', agentPromptText(session), 'agent'),
-      contextBlock('SYSTEMINFO', systemInfoText(session), 'systeminfo'),
-      contextBlock('SAFETY PROMPT', session?.safetyPrompt, 'safety'),
-      contextBlock('AGENTS.MD', session.agentsMd, 'agents'),
-    ])
+    contextBlock('CONTEXT', systemPromptText(session), 'system'),
+    contextBlock('AGENT PROMPT', agentPromptText(session), 'agent'),
+    contextBlock('SYSTEMINFO', systemInfoText(session), 'systeminfo'),
+    contextBlock('SAFETY PROMPT', session?.safetyPrompt, 'safety'),
+    contextBlock('AGENTS.MD', session.agentsMd, 'agents')
   );
   return stack;
 }
