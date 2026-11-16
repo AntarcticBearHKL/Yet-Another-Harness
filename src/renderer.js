@@ -3137,6 +3137,7 @@ function setupChatWindow() {
     { passive: true }
   );
   dom.webContent?.addEventListener('click', (event) => {
+    if (document.body.classList.contains('canvas-window-dragging')) return;
     if (event.target === dom.webContent) closeWebContent();
   });
   setChatCompact(false);
@@ -6377,11 +6378,21 @@ function onWindowDragStart(event) {
   if (event.button !== 0 && event.button !== 1) return;
   const target = event.target;
   if (!(target instanceof Element)) return;
-  if (target.closest(DRAG_EXCLUDE)) return;
+  const webContentTarget = target.closest('#web-content');
+  const spaceDrag = Boolean(webContentTarget && canvasSpaceHeld);
+  if (target.closest(DRAG_EXCLUDE) && !spaceDrag) return;
+  if (
+    spaceDrag &&
+    target.closest(
+      'button, a, input, textarea, select, [contenteditable="true"]'
+    )
+  ) {
+    return;
+  }
   const canvasOverlay = target.closest('#canvas');
   const overlay = target.closest('.overlay');
   if (overlay && overlay !== dom.switcher && overlay !== canvasOverlay) return;
-  let isCanvasSpace = false;
+  let isSpaceDrag = false;
   if (canvasOverlay) {
     // 画布上：空格 + 左键空白处拖动窗口；中键用于平移画布
     if (event.button !== 0 || !canvasSpaceHeld) return;
@@ -6392,7 +6403,10 @@ function onWindowDragStart(event) {
     ) {
       return;
     }
-    isCanvasSpace = true;
+    isSpaceDrag = true;
+    event.preventDefault();
+  } else if (spaceDrag) {
+    isSpaceDrag = true;
     event.preventDefault();
   } else if (event.button !== 0) {
     return;
@@ -6417,7 +6431,7 @@ function onWindowDragStart(event) {
     started: !needsThreshold,
     isCardHead,
     isComposerScrim,
-    isCanvasSpace,
+    isSpaceDrag,
   };
   dragFromComposer = Boolean(
     state.composerOpen && target.closest('#composer')
@@ -6456,7 +6470,7 @@ function onWindowDragEnd() {
   if (!windowDrag) return;
   const wasCardHead = windowDrag.isCardHead;
   const wasComposerScrim = windowDrag.isComposerScrim;
-  const wasCanvasSpace = windowDrag.isCanvasSpace;
+  const wasSpaceDrag = windowDrag.isSpaceDrag;
   const started = windowDrag.started;
   const refocusComposer =
     dragFromComposer && state.composerOpen && started;
@@ -6466,7 +6480,7 @@ function onWindowDragEnd() {
   cancelAnimationFrame(dragFrame);
   dragFrame = 0;
   if (started) api.dragEnd();
-  if (wasCanvasSpace && started) {
+  if (wasSpaceDrag && started) {
     document.body.classList.add('canvas-window-dragging');
     setTimeout(() => {
       document.body.classList.remove('canvas-window-dragging');
@@ -8656,7 +8670,9 @@ function bindEvents() {
     'keydown',
     (event) => {
       if (event.code !== 'Space' && event.key !== ' ') return;
-      if (!window.canvasOverlayOpen?.()) return;
+      const webContentOpen =
+        dom.webContent && !dom.webContent.classList.contains('hidden');
+      if (!window.canvasOverlayOpen?.() && !webContentOpen) return;
       if (event.repeat || event.isComposing) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target;
@@ -8675,7 +8691,6 @@ function bindEvents() {
         state.ringOpen ||
         state.composerOpen ||
         !dom.rawOverlay.classList.contains('hidden') ||
-        !dom.webContent.classList.contains('hidden') ||
         !dom.questionDock.classList.contains('hidden') ||
         (dom.backgroundOverlay &&
           !dom.backgroundOverlay.classList.contains('hidden')) ||

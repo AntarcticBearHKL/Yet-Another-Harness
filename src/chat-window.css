@@ -58,6 +58,20 @@ body.chat-window:has(#composer.open) .chat-window-close {
   color: var(--text);
 }
 
+body.canvas-space #web-content {
+  cursor: grab;
+}
+
+body.canvas-space #web-content a,
+body.canvas-space #web-content button {
+  cursor: pointer;
+}
+
+body.canvas-space #web-content input,
+body.canvas-space #web-content textarea {
+  cursor: text;
+}
+
 body.chat-window #background-badge,
 body.chat-window #window-controls {
   display: none !important;
