@@ -1,6 +1,6 @@
 #resize-layer {
   position: fixed;
-  inset: 0;
+  inset: var(--window-inset, 0px);
   z-index: 9999;
   pointer-events: none;
 }
