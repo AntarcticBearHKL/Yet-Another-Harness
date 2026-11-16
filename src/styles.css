@@ -2026,9 +2026,9 @@ body.ring-open #window-controls {
   display: flex;
   justify-content: center;
   padding: clamp(48px, 11vh, 132px) 32px 40px;
-  background: rgba(251, 246, 239, 0.16);
-  -webkit-backdrop-filter: blur(20px) saturate(1.05);
-  backdrop-filter: blur(20px) saturate(1.05);
+  background: rgba(251, 246, 239, 0.24);
+  -webkit-backdrop-filter: blur(12px) saturate(1.02);
+  backdrop-filter: blur(12px) saturate(1.02);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -2062,46 +2062,31 @@ body.ring-open #window-controls {
   width: 100%;
   min-height: 0;
   max-height: min(78vh, 640px);
-  border: 0;
-  border-radius: 20px;
-  background: rgba(255, 252, 247, 0.94);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    inset 0 0 0 1px rgba(74, 54, 40, 0.06),
-    0 0 0 1px rgba(74, 54, 40, 0.08),
-    0 2px 4px -1px rgba(74, 54, 40, 0.06),
-    0 14px 30px -10px rgba(74, 54, 40, 0.16),
-    0 36px 72px -28px rgba(74, 54, 40, 0.22);
-  transform: translateY(12px) scale(0.985);
+  border: 1px solid rgba(74, 54, 40, 0.16);
+  border-radius: 14px;
+  background: #fffdf9;
+  box-shadow: none;
+  transform: translateY(8px);
   transition:
-    transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 160ms ease;
+    transform 160ms ease,
+    border-color 120ms ease,
+    background 120ms ease;
 }
 
 #composer.open .composer-box {
-  transform: translateY(0) scale(1);
+  transform: translateY(0);
 }
 
 .composer-box:focus-within {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 0 0 1px rgba(185, 111, 61, 0.34),
-    0 0 0 3px rgba(185, 111, 61, 0.08),
-    0 2px 4px -1px rgba(74, 54, 40, 0.06),
-    0 16px 34px -10px rgba(74, 54, 40, 0.18),
-    0 40px 80px -30px rgba(74, 54, 40, 0.24);
+  border-color: rgba(185, 111, 61, 0.5);
 }
 
 .composer-box.drag-over,
 #composer.open .composer-box.drag-over {
-  transform: translateY(-1px) scale(1.003);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 0 0 1px rgba(185, 111, 61, 0.45),
-    0 0 0 4px rgba(185, 111, 61, 0.08),
-    0 2px 4px -1px rgba(74, 54, 40, 0.06),
-    0 18px 38px -12px rgba(74, 54, 40, 0.2),
-    0 44px 88px -32px rgba(74, 54, 40, 0.26);
+  border-color: var(--accent);
+  background: #fffdf9;
+  box-shadow: none;
+  transform: translateY(0);
 }
 
 .composer-context {
@@ -2287,7 +2272,7 @@ body.ring-open #window-controls {
   align-items: center;
   justify-content: center;
   border: 1.5px dashed rgba(185, 111, 61, 0.42);
-  border-radius: 15px;
+  border-radius: 10px;
   background: rgba(255, 252, 247, 0.9);
   -webkit-backdrop-filter: blur(8px) saturate(1.04);
   backdrop-filter: blur(8px) saturate(1.04);
@@ -2876,16 +2861,17 @@ body.ring-open #window-controls {
 }
 
 .composer-effort {
-  --effort-inset: 5px;
+  --effort-inset: 7px;
   display: flex;
   align-items: center;
-  gap: 7px;
-  flex: none;
+  gap: 10px;
+  width: 100%;
   min-width: 0;
   padding: 0;
 }
 
 .effort-label {
+  flex: none;
   color: var(--faint);
   font-size: 8.5px;
   font-weight: 700;
@@ -2895,24 +2881,25 @@ body.ring-open #window-controls {
 }
 
 .effort-value {
-  min-width: 26px;
+  flex: none;
+  min-width: 30px;
   color: var(--dim);
   font-size: 10.5px;
   letter-spacing: 0.01em;
-  text-align: left;
+  text-align: right;
 }
 
 .effort-rail {
   --effort-ratio: 0.5;
   position: relative;
-  flex: none;
-  width: 72px;
-  height: 18px;
+  flex: 1;
+  min-width: 80px;
+  height: 20px;
   border: 0;
-  border-radius: 0;
+  border-radius: 999px;
   background: transparent;
   box-shadow: none;
-  cursor: default;
+  cursor: pointer;
   touch-action: none;
   outline: none;
 }
@@ -2921,12 +2908,13 @@ body.ring-open #window-controls {
   content: "";
   position: absolute;
   top: 50%;
-  left: var(--effort-inset);
-  right: var(--effort-inset);
-  height: 2px;
+  left: 0;
+  right: 0;
+  height: 8px;
   transform: translateY(-50%);
-  border-radius: 1px;
-  background: var(--line);
+  border-radius: 999px;
+  background: rgba(74, 54, 40, 0.075);
+  box-shadow: inset 0 1px 1px rgba(74, 54, 40, 0.05);
 }
 
 .effort-rail-fill {
@@ -2936,9 +2924,9 @@ body.ring-open #window-controls {
   width: calc(
     (100% - 2 * var(--effort-inset)) * var(--effort-ratio)
   );
-  height: 2px;
+  height: 8px;
   transform: translateY(-50%);
-  border-radius: 1px;
+  border-radius: 999px;
   background: var(--accent);
   transition: width 90ms ease;
 }
@@ -2950,13 +2938,20 @@ body.ring-open #window-controls {
     var(--effort-inset) +
       (100% - 2 * var(--effort-inset)) * var(--effort-ratio)
   );
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   transform: translate(-50%, -50%);
+  border: 2px solid #fffdf9;
   border-radius: 50%;
   background: var(--accent);
   pointer-events: none;
-  transition: left 90ms ease;
+  transition:
+    left 90ms ease,
+    transform 120ms ease;
+}
+
+.effort-rail:hover .effort-rail-knob {
+  transform: translate(-50%, -50%) scale(1.08);
 }
 
 .effort-rail.dragging .effort-rail-fill,
@@ -2967,7 +2962,6 @@ body.ring-open #window-controls {
 .effort-rail:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: 3px;
-  border-radius: 999px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2980,12 +2974,11 @@ body.ring-open #window-controls {
 .composer-foot {
   position: relative;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   flex: none;
-  min-height: 48px;
-  padding: 8px 22px 10px 12px;
+  min-height: 0;
+  padding: 10px 20px 12px;
   box-sizing: border-box;
 }
 
@@ -2999,6 +2992,14 @@ body.ring-open #window-controls {
   background: rgba(74, 54, 40, 0.08);
 }
 
+.composer-foot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 26px;
+}
+
 .composer-controls {
   display: flex;
   align-items: center;
@@ -3006,27 +3007,13 @@ body.ring-open #window-controls {
   min-width: 0;
 }
 
-.composer-meta {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex: none;
-}
-
 @media (max-width: 700px) {
-  .composer-foot {
+  .composer-foot-row {
     flex-wrap: wrap;
-    align-items: flex-start;
   }
 
-  .composer-controls {
-    width: 100%;
-  }
-
-  .composer-meta {
-    width: 100%;
-    justify-content: space-between;
-    padding-top: 2px;
+  .composer-send-hint {
+    margin-left: auto;
   }
 }
 

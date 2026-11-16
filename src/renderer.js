@@ -701,7 +701,7 @@ function composerEffortRatioFromPointer(event) {
   const rail = dom.composerEffortRail;
   if (!rail) return 0.5;
   const rect = rail.getBoundingClientRect();
-  const inset = 5;
+  const inset = 7;
   const travel = Math.max(1, rect.width - inset * 2);
   return Math.min(
     1,
