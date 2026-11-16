@@ -7461,7 +7461,11 @@ function startActionMenuPress(event) {
   }
   event.preventDefault();
   if (actionMenuPress) cancelActionMenuPress();
-  if (state.ringOpen) closeActionMenu();
+  if (state.ringOpen) {
+    closeActionMenu();
+    lastActionMenuAt = Date.now();
+    return;
+  }
   const press = {
     target,
     x: event.clientX,
@@ -7511,15 +7515,7 @@ function endActionMenuPress(event) {
   if (!press) return;
   if (press.timer) clearTimeout(press.timer);
   actionMenuPress = null;
-  if (!state.ringOpen) {
-    openActionMenuForPress({
-      ...press,
-      x: event.clientX,
-      y: event.clientY,
-    });
-    lastActionMenuAt = Date.now();
-    return;
-  }
+  if (!state.ringOpen) return;
   const hovered = document.elementFromPoint(event.clientX, event.clientY);
   const active =
     hovered instanceof Element
@@ -7729,6 +7725,10 @@ function handleRightClickBack() {
   }
   if (!dom.rawOverlay.classList.contains('hidden')) {
     closeRawRequest();
+    return;
+  }
+  if (state.chatWindow) {
+    api.close();
     return;
   }
   if (window.canvasOverlayOpen?.()) {
