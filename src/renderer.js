@@ -129,7 +129,7 @@ const state = {
   renderedSessionId: null,
   collapsedProcessKeys: new Set(),
   contextCollapsed: new Set(['system', 'safety', 'agents']),
-  viewMode: null,
+  viewMode: 'questions',
   chatWindow: false,
   homeWindow: false,
   chatCompact: false,
@@ -916,7 +916,6 @@ function setViewMode(mode) {
 function applyFoldState(session) {
   const fold = session?.foldState || null;
   state.foldSessionId = session?.id || null;
-  state.viewMode = fold?.viewMode || null;
   state.collapsedProcessKeys = new Set(fold?.collapsedProcessKeys || []);
   state.contextCollapsed = new Set(
     fold?.contextFoldVersion === 2 && Array.isArray(fold.contextCollapsed)
@@ -3214,6 +3213,7 @@ function setupChatWindow() {
     if (document.body.classList.contains('canvas-window-dragging')) return;
     if (event.target === dom.webContent) closeWebContent();
   });
+  state.viewMode = 'questions';
   setChatCompact(true, { preserveTurn: false });
 }
 
@@ -4546,6 +4546,7 @@ function selectSession(index) {
   if (state.activeQuestion || state.questionQueue.length) cancelQuestionDock();
   closeAgentMenu();
   state.current = index;
+  state.viewMode = 'questions';
   applyFoldState(state.sessions[index]);
   resetComposerSkills();
   state.switcherProjectId = state.sessions[index].projectId;
@@ -4674,6 +4675,7 @@ function newSession(projectId) {
   };
   state.sessions.push(session);
   state.current = state.sessions.length - 1;
+  state.viewMode = 'questions';
   if (!state.homeWindow) applyFoldState(session);
   resetComposerSkills();
   state.forceScroll = true;
@@ -4729,6 +4731,7 @@ async function forkCurrentSession(session, args = '') {
     state.sessions.splice(insertAt, 0, forked);
     state.current = insertAt;
     state.seq += 1;
+    state.viewMode = 'questions';
     applyFoldState(forked);
     resetComposerSkills();
     state.forceScroll = true;
@@ -9912,6 +9915,14 @@ function bindEvents() {
           return;
         }
         // With the composer open, let the normal Space handling below run.
+      } else if (
+        event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        (event.key === '1' || event.key === '2' || event.key === '3')
+      ) {
+        // Let the Ctrl+1/2/3 view preset handler below run.
       } else if (state.composerOpen) {
         return;
       } else {
