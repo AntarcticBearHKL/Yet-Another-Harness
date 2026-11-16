@@ -2,7 +2,7 @@
 
 .agile {
   position: fixed;
-  inset: 0;
+  inset: var(--window-inset, 0px);
   z-index: 60;
   display: flex;
   flex-direction: column;
@@ -870,19 +870,30 @@ body:has(#agile:not(.hidden)) #confirm-overlay {
 
 /* Standalone Agile window: the page is the window, so the shell owns the frame. */
 body.agile-window {
+  --window-inset: 14px;
   background: transparent;
 }
 
+body.agile-window.maximized {
+  --window-inset: 0px;
+}
+
 body.agile-window .agile {
-  border: 1px solid var(--line);
+  border: 1px solid rgba(74, 54, 40, 0.22);
   border-radius: 18px;
   background: var(--solid);
+  box-shadow:
+    0 14px 36px rgba(74, 54, 40, 0.24),
+    0 2px 8px rgba(74, 54, 40, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28);
   overflow: hidden;
 }
 
 body.agile-window.maximized .agile {
+  inset: 0;
   border: 0;
   border-radius: 0;
+  box-shadow: none;
 }
 
 .agile-window-actions {

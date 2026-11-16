@@ -1,7 +1,7 @@
 .chat-window-close {
   position: fixed;
-  top: 10px;
-  right: 12px;
+  top: calc(var(--window-inset, 0px) + 8px);
+  right: calc(var(--window-inset, 0px) + 8px);
   z-index: 60;
   display: grid;
   place-items: center;
@@ -34,9 +34,9 @@ body.chat-window:has(#composer.open) .chat-window-close {
 }
 
 .web-content-close {
-  position: fixed;
-  top: 14px;
-  right: 16px;
+  position: absolute;
+  top: 10px;
+  right: 12px;
   z-index: 5;
   display: grid;
   place-items: center;
@@ -82,7 +82,7 @@ body.chat-window:has(#composer.open) .chat-turn-nav {
 .chat-turn-nav {
   position: fixed;
   top: 50%;
-  right: 16px;
+  right: calc(var(--window-inset, 0px) + 16px);
   z-index: 35;
   display: none;
   flex-direction: column;

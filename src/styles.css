@@ -107,6 +107,15 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+body {
+  --window-inset: 14px;
+}
+
+body.web,
+body.maximized {
+  --window-inset: 0px;
+}
+
 button,
 input,
 textarea {
@@ -130,6 +139,37 @@ button {
   border: 0;
   border-radius: 18px;
   background: var(--solid);
+}
+
+body:not(.web) #app {
+  position: fixed;
+  inset: var(--window-inset);
+  width: auto;
+  height: auto;
+  box-sizing: border-box;
+  border: 1px solid rgba(74, 54, 40, 0.22);
+  border-radius: 18px;
+  box-shadow:
+    0 14px 36px rgba(74, 54, 40, 0.24),
+    0 2px 8px rgba(74, 54, 40, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+body.web #app {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+body.maximized #app {
+  inset: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 body.web #app,
@@ -849,7 +889,7 @@ body.ring-open #window-controls {
 
 .mcp-config {
   position: fixed;
-  inset: 0;
+  inset: var(--window-inset, 0px);
   z-index: 72;
   display: grid;
   place-items: center;
@@ -2759,7 +2799,7 @@ body.ring-open #window-controls {
 /* ---------------------------------------------------------------- overlays */
 .overlay {
   position: fixed;
-  inset: 0;
+  inset: var(--window-inset, 0px);
   z-index: 20;
   display: grid;
   place-items: center;
@@ -3493,7 +3533,7 @@ body.ring-open #background-badge {
 /* ---------------------------------------------------------------- ring menu */
 .ring-catcher {
   position: fixed;
-  inset: 0;
+  inset: var(--window-inset, 0px);
   z-index: 59;
   background: transparent;
 }
@@ -3681,7 +3721,7 @@ body.ring-open #messages {
 /* ---------------------------------------------------------------- catalog */
 .catalog {
   position: fixed;
-  inset: 0;
+  inset: var(--window-inset, 0px);
   z-index: 55;
   display: flex;
   flex-direction: column;
@@ -4512,7 +4552,7 @@ body.ring-open #messages {
 /* ---------------------------------------------------------------- web content */
 .web-content {
   position: fixed;
-  inset: 0;
+  inset: var(--window-inset, 0px);
   z-index: 70;
   display: flex;
   flex-direction: column;
@@ -4972,7 +5012,7 @@ body.web .mobile-compose {
 /* ---------------------------------------------------------------- mcp workspace */
 .mcp {
   position: fixed;
-  inset: 0;
+  inset: var(--window-inset, 0px);
   z-index: 56;
   display: flex;
   flex-direction: column;
