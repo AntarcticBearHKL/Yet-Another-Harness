@@ -7031,16 +7031,13 @@ function onWindowDragStart(event) {
   const overlay = target.closest('.overlay');
   if (overlay && overlay !== dom.switcher && overlay !== canvasOverlay) return;
   if (canvasOverlay) {
-    // 首页画布不再用空格 + 左键移动窗口；只有 Tab 工作区页空白处可以左键拖动窗口。
-    if (!target.closest('.canvas-workspaces-page')) return;
-    if (event.button !== 0) return;
-    if (
-      target.closest(
-        '.canvas-workspace, button, input, textarea, select, [contenteditable="true"]'
-      )
-    ) {
-      return;
-    }
+    // 画布首页和 Tab 工作区页的空白处都可以用左键直接拖动窗口。
+    if (event.button !== 0 || event.shiftKey) return;
+    const workspacePage = target.closest('.canvas-workspaces-page');
+    const excluded = workspacePage
+      ? '.canvas-workspace, button, input, textarea, select, [contenteditable="true"]'
+      : '.canvas-group, .canvas-child, .canvas-frame, .canvas-zoom-indicator, button, input, textarea, select, [contenteditable="true"]';
+    if (target.closest(excluded)) return;
   } else if (event.button !== 0) {
     return;
   }

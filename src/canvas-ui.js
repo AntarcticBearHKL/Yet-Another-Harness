@@ -1739,7 +1739,7 @@ function bindCanvasEvents() {
     ) {
       return;
     }
-    startCanvasMarquee(event);
+    if (event.shiftKey) startCanvasMarquee(event);
   });
 
   canvasDom.stage?.addEventListener('contextmenu', (event) => {
