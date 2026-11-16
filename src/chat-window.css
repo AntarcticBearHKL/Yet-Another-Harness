@@ -156,11 +156,11 @@ body.chat-window.chat-compact .message-card.answer-card .card-text {
 body.chat-window.chat-compact .message-card.prompt-card {
   margin-top: 0;
   border-radius: 12px;
-  background: rgba(238, 198, 160, 0.38);
+  background: #fce4dc;
 }
 
 body.chat-window.chat-compact .message-card.answer-card {
   margin-top: 9px;
   border-radius: 12px;
-  background: rgba(111, 138, 92, 0.14);
+  background: #fffdfa;
 }
