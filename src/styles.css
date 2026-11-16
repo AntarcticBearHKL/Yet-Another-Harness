@@ -299,6 +299,10 @@ body.home-window #home {
   padding: 32px;
 }
 
+body.home-window:has(#canvas:not(.hidden)) #home {
+  display: none;
+}
+
 .home-inner {
   display: flex;
   flex-direction: column;
