@@ -418,12 +418,8 @@ body.canvas-space .canvas-stage.panning {
   right: 22px;
   bottom: 20px;
   z-index: 6;
-  min-width: 54px;
-  padding: 5px 9px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--glass-menu);
-  box-shadow: 0 8px 22px rgba(74, 54, 40, 0.08);
+  min-width: 40px;
+  padding: 0;
   color: var(--dim);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -435,8 +431,6 @@ body.canvas-space .canvas-stage.panning {
     opacity 200ms ease,
     transform 200ms ease;
   pointer-events: none;
-  -webkit-backdrop-filter: blur(16px) saturate(1.04);
-  backdrop-filter: blur(16px) saturate(1.04);
 }
 
 .canvas-zoom-indicator.visible {
