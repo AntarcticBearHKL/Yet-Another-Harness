@@ -169,6 +169,19 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+document.addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+  if (confirmOpen()) {
+    closeConfirm();
+    return;
+  }
+  if (window.handleAgileEscape) {
+    window.handleAgileEscape();
+  } else {
+    api?.close?.();
+  }
+});
+
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) window.refreshAgileIfChanged?.();
 });

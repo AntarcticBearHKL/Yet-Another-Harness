@@ -6551,6 +6551,7 @@ let ringCatcher = null;
 let actionMenuUsageCard = null;
 let actionMenuItems = [];
 let actionMenuPress = null;
+let lastActionMenuAt = 0;
 const ACTION_MENU_HOLD_MS = 150;
 
 function buildActionMenuUsageCard() {
@@ -6714,6 +6715,7 @@ function updateActionMenuHover(x, y) {
 
 function openActionMenu({ x, y, items, usage = false }) {
   if (!dom.actionMenu) return;
+  lastActionMenuAt = Date.now();
   closeActionMenu();
   const menu = dom.actionMenu;
   actionMenuItems = Array.isArray(items) ? items.filter(Boolean) : [];
@@ -6954,6 +6956,97 @@ function openSwitcherActionMenu(target, x, y) {
 
 function handleContextMenu(event) {
   event.preventDefault();
+}
+
+function handleRightClickBack() {
+  if (state.ringOpen) {
+    closeActionMenu();
+    return;
+  }
+  if (Date.now() - lastActionMenuAt < 450) return;
+
+  if (dom.questionDock && !dom.questionDock.classList.contains('hidden')) {
+    void dismissQuestion();
+    return;
+  }
+  if (dom.webContent && !dom.webContent.classList.contains('hidden')) {
+    closeWebContent();
+    return;
+  }
+  if (state.chatWindow) {
+    if (state.composerOpen) {
+      closeComposer();
+      return;
+    }
+    api.close();
+    return;
+  }
+  if (state.composerOpen) {
+    closeComposer();
+    return;
+  }
+  if (dom.approvalOverlay && !dom.approvalOverlay.classList.contains('hidden')) {
+    void resolveToolApproval(false);
+    return;
+  }
+  if (!dom.renameOverlay.classList.contains('hidden')) {
+    closeRename();
+    return;
+  }
+  if (!dom.confirmOverlay.classList.contains('hidden')) {
+    closeConfirm();
+    return;
+  }
+  if (dom.projectOverlay && !dom.projectOverlay.classList.contains('hidden')) {
+    closeProjectDialog();
+    return;
+  }
+  if (dom.goalOverlay && !dom.goalOverlay.classList.contains('hidden')) {
+    closeGoalDialog();
+    return;
+  }
+  if (dom.skillArgsOverlay && !dom.skillArgsOverlay.classList.contains('hidden')) {
+    closeSkillArgs();
+    return;
+  }
+  if (!dom.settingsOverlay.classList.contains('hidden')) {
+    closeSettings();
+    return;
+  }
+  if (
+    dom.backgroundOverlay &&
+    !dom.backgroundOverlay.classList.contains('hidden')
+  ) {
+    closeBackgroundPanel();
+    return;
+  }
+  if (dom.mcpConfig && !dom.mcpConfig.classList.contains('hidden')) {
+    closeMcpConfig();
+    return;
+  }
+  if (state.switcherOpen) {
+    closeSwitcher();
+    return;
+  }
+  if (state.catalogOpen) {
+    closeCatalog();
+    return;
+  }
+  if (window.mcpOverlayOpen?.()) {
+    window.closeMcp?.();
+    return;
+  }
+  if (!dom.rawOverlay.classList.contains('hidden')) {
+    closeRawRequest();
+    return;
+  }
+  if (window.canvasOverlayOpen?.()) {
+    window.closeCanvas?.();
+    return;
+  }
+  if (window.agileOverlayOpen?.()) {
+    window.handleAgileEscape?.();
+  }
 }
 
 function ringPolar(radius, angleDeg) {
@@ -8546,6 +8639,14 @@ function bindEvents() {
   document.addEventListener('mousedown', startActionMenuPress, true);
   document.addEventListener('mousemove', onActionMenuMove, true);
   document.addEventListener('mouseup', endActionMenuPress, true);
+  document.addEventListener(
+    'mouseup',
+    (event) => {
+      if (event.button !== 2) return;
+      handleRightClickBack();
+    },
+    true
+  );
   document.addEventListener('mousedown', onWindowDragStart);
   document.addEventListener('mousemove', onWindowDragMove);
   document.addEventListener('mouseup', onWindowDragEnd);

@@ -1124,6 +1124,14 @@ window.addEventListener('keydown', (event) => {
 });
 document.addEventListener('contextmenu', (event) => {
   event.preventDefault();
+  if (annotationPopover) {
+    closeAnnotationPopover();
+    return;
+  }
+  if (selectionAction) {
+    closeSelectionAction();
+    return;
+  }
   api.close();
 });
 
