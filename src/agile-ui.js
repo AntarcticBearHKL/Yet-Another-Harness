@@ -3,13 +3,8 @@
 const agileDom = {
   overlay: document.getElementById('agile'),
   iterations: document.getElementById('agile-iterations'),
-  iteration: document.getElementById('agile-iteration'),
-  boardMeta: document.getElementById('agile-board-meta'),
   board: document.getElementById('agile-board'),
-  search: document.getElementById('agile-search'),
   toast: document.getElementById('agile-toast'),
-  addIteration: document.getElementById('agile-add-iteration'),
-  boardDetails: document.getElementById('agile-board-details'),
   taskModal: document.getElementById('agile-task-modal'),
   taskKicker: document.getElementById('agile-task-kicker'),
   taskModalTitle: document.getElementById('agile-task-modal-title'),
@@ -27,20 +22,12 @@ const agileDom = {
   taskCancel: document.getElementById('agile-task-cancel'),
   taskSave: document.getElementById('agile-task-save'),
   taskClose: document.getElementById('agile-task-close'),
-  boardModal: document.getElementById('agile-board-modal'),
-  boardStart: document.getElementById('agile-board-start'),
-  boardEnd: document.getElementById('agile-board-end'),
-  boardGoal: document.getElementById('agile-board-goal'),
-  boardSave: document.getElementById('agile-board-save'),
-  boardCancel: document.getElementById('agile-board-cancel'),
-  boardClose: document.getElementById('agile-board-close'),
 };
 
 const agileState = {
   open: false,
   data: null,
   loading: false,
-  search: '',
   managerId: (() => {
     try {
       return new URLSearchParams(location.search).get('managerId') || '';
@@ -136,20 +123,20 @@ function renderAgileSidebar() {
       )
     );
   });
+  const add = el('button', 'agile-iteration-add', '+');
+  add.type = 'button';
+  add.title = '新建迭代';
+  add.setAttribute('aria-label', '新建迭代');
+  add.addEventListener('click', () => {
+    if (!agileState.data) return;
+    void agileAction('create_board', {});
+  });
+  agileDom.iterations.append(add);
   requestAnimationFrame(() => {
     agileDom.iterations
       ?.querySelector('.agile-iteration-row.active')
       ?.scrollIntoView({ block: 'nearest' });
   });
-}
-
-function agileTaskMatches(task) {
-  const needle = agileState.search.trim().toLowerCase();
-  if (!needle) return true;
-  return (
-    String(task.title || '').toLowerCase().includes(needle) ||
-    String(task.description || '').toLowerCase().includes(needle)
-  );
 }
 
 function agileTaskCard(task) {
@@ -205,7 +192,7 @@ function renderAgileBoard() {
   const tasks = data.tasks || [];
   for (const column of data.columns || []) {
     const allColumnTasks = tasks.filter((task) => task.column === column.id);
-    const columnTasks = allColumnTasks.filter(agileTaskMatches);
+    const columnTasks = allColumnTasks;
     const section = el('article', 'agile-column');
     section.style.setProperty('--agile-column-color', column.color);
     const head = el('header', 'agile-column-head');
@@ -234,28 +221,7 @@ function renderAgileBoard() {
   }
 }
 
-function renderAgileHead() {
-  const data = agileState.data;
-  if (!data) return;
-  if (agileDom.iteration) agileDom.iteration.textContent = data.board.label;
-  if (agileDom.boardMeta) {
-    const parts = [];
-    if (data.board.startDate || data.board.endDate) {
-      parts.push(
-        `${data.board.startDate || '…'} → ${data.board.endDate || '…'}`
-      );
-    }
-    if (data.board.goal) parts.push(data.board.goal);
-    parts.push('Agent 移动卡片 · 人写备注');
-    agileDom.boardMeta.textContent = parts.join(' · ');
-  }
-  if (agileDom.search && agileDom.search.value !== agileState.search) {
-    agileDom.search.value = agileState.search;
-  }
-}
-
 function renderAgile() {
-  renderAgileHead();
   renderAgileSidebar();
   renderAgileBoard();
 }
@@ -466,22 +432,6 @@ function renderAgileTaskModal() {
   }
 }
 
-function openAgileBoardDetails() {
-  const board = agileState.data?.board;
-  if (!board) return;
-  agileDom.boardStart.value = board.startDate || '';
-  agileDom.boardEnd.value = board.endDate || '';
-  agileDom.boardGoal.value = board.goal || '';
-  agileDom.boardModal.classList.remove('hidden');
-  agileDom.boardModal.setAttribute('aria-hidden', 'false');
-  requestAnimationFrame(() => agileDom.boardGoal?.focus());
-}
-
-function closeAgileBoardDetails() {
-  agileDom.boardModal.classList.add('hidden');
-  agileDom.boardModal.setAttribute('aria-hidden', 'true');
-}
-
 function openAgile(managerId) {
   if (!agileDom.overlay) return;
   if (typeof closeComposer === 'function') closeComposer();
@@ -507,7 +457,6 @@ function closeAgile() {
     return;
   }
   closeAgileTask();
-  closeAgileBoardDetails();
   agileState.open = false;
   agileDom.overlay.classList.add('hidden');
   agileDom.overlay.setAttribute('aria-hidden', 'true');
@@ -518,10 +467,6 @@ function agileOverlayOpen() {
 }
 
 function handleAgileEscape() {
-  if (agileDom.boardModal && !agileDom.boardModal.classList.contains('hidden')) {
-    closeAgileBoardDetails();
-    return;
-  }
   if (agileDom.taskModal && !agileDom.taskModal.classList.contains('hidden')) {
     closeAgileTask();
   }
@@ -624,14 +569,6 @@ function endAgileBoardPan() {
 }
 
 function bindAgileEvents() {
-  agileDom.addIteration?.addEventListener('click', () => {
-    void agileAction('create_board', {});
-  });
-  agileDom.boardDetails?.addEventListener('click', openAgileBoardDetails);
-  agileDom.search?.addEventListener('input', () => {
-    agileState.search = agileDom.search.value;
-    renderAgileBoard();
-  });
   agileDom.board?.addEventListener('pointerdown', startAgileBoardPan);
   agileDom.board?.addEventListener('pointermove', moveAgileBoardPan);
   agileDom.board?.addEventListener('pointerup', endAgileBoardPan);
@@ -654,25 +591,11 @@ function bindAgileEvents() {
   agileDom.taskModal?.addEventListener('click', (event) => {
     if (event.target === agileDom.taskModal) closeAgileTask();
   });
-  agileDom.boardClose?.addEventListener('click', closeAgileBoardDetails);
-  agileDom.boardCancel?.addEventListener('click', closeAgileBoardDetails);
-  agileDom.boardSave?.addEventListener('click', async () => {
-    const result = await agileAction('update_board', {
-      boardId: agileState.data?.board?.id,
-      startDate: agileDom.boardStart.value,
-      endDate: agileDom.boardEnd.value,
-      goal: agileDom.boardGoal.value,
-    });
-    if (result) closeAgileBoardDetails();
-  });
-  agileDom.boardModal?.addEventListener('click', (event) => {
-    if (event.target === agileDom.boardModal) closeAgileBoardDetails();
-  });
 }
 
 function anyAgileModalOpen() {
-  return [agileDom.taskModal, agileDom.boardModal].some(
-    (modal) => modal && !modal.classList.contains('hidden')
+  return Boolean(
+    agileDom.taskModal && !agileDom.taskModal.classList.contains('hidden')
   );
 }
 

@@ -298,17 +298,6 @@ const AGILE_CREATE_BOARD = fn(
   'Create the next blank iteration on the single agile line. The iteration is numbered automatically.',
   {}
 );
-const AGILE_UPDATE_BOARD = fn(
-  'agile_update_board',
-  'Set an iteration start date, end date and goal.',
-  {
-    boardId: str('Iteration id'),
-    startDate: str('Start date (YYYY-MM-DD)'),
-    endDate: str('End date (YYYY-MM-DD)'),
-    goal: str('Iteration goal'),
-  },
-  ['boardId']
-);
 const AGILE_DELETE_BOARD = fn(
   'agile_delete_board',
   'Delete an iteration and its tasks.',
@@ -1008,7 +997,6 @@ const OMO = [
   AGILE_LIST_BOARDS,
   AGILE_GET_BOARD,
   AGILE_CREATE_BOARD,
-  AGILE_UPDATE_BOARD,
   AGILE_DELETE_BOARD,
   AGILE_LIST_TASKS,
   AGILE_GET_TASK,

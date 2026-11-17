@@ -571,28 +571,6 @@ function createAgileStore(file) {
     return boardSummary(board, data.boards.length - 1);
   }
 
-  function updateBoard(boardId, patch = {}) {
-    load();
-    const board = boardById(boardId);
-    if (!board) throw new Error('Board not found');
-    if (typeof patch.startDate === 'string') board.startDate = normalizeText(patch.startDate, 20);
-    if (typeof patch.endDate === 'string') board.endDate = normalizeText(patch.endDate, 20);
-    if (typeof patch.goal === 'string') board.goal = normalizeText(patch.goal, 300);
-    board.updatedAt = nowIso();
-    recordEvent('board.updated', { boardId: board.id, ...patch }, board.id, {
-      type: 'human',
-      id: null,
-    });
-    persist();
-    return boardSummary(
-      board,
-      data.boards
-        .filter((item) => item.groupId === board.groupId)
-        .sort((left, right) => left.order - right.order)
-        .findIndex((item) => item.id === board.id)
-    );
-  }
-
   function deleteBoard(boardId) {
     load();
     const board = boardById(boardId);
@@ -1294,7 +1272,6 @@ function createAgileStore(file) {
       });
     },
     createBoard,
-    updateBoard,
     deleteBoard,
     assignBoardToGroup,
     selectBoard,

@@ -45,16 +45,6 @@ function agileCreateBoard(args = {}, context = null) {
   return json(getStore(context).createBoard());
 }
 
-function agileUpdateBoard(args = {}, context = null) {
-  return json(
-    getStore(context).updateBoard(args.boardId, {
-      startDate: args.startDate,
-      endDate: args.endDate,
-      goal: args.goal,
-    })
-  );
-}
-
 function agileDeleteBoard(args = {}, context = null) {
   return json({ deleted: getStore(context).deleteBoard(args.boardId) });
 }
@@ -251,7 +241,6 @@ module.exports = {
   agileListBoards,
   agileGetBoard,
   agileCreateBoard,
-  agileUpdateBoard,
   agileDeleteBoard,
   agileListTasks,
   agileGetTask,

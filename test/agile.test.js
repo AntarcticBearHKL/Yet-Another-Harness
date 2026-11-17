@@ -210,6 +210,7 @@ test('agile exposes one iteration line without group or settings tools', () => {
     'agile_rename_group',
     'agile_delete_group',
     'agile_assign_board_to_group',
+    'agile_update_board',
     'agile_get_settings',
     'agile_update_settings',
   ]) {

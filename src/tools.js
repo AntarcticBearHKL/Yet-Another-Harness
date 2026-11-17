@@ -117,7 +117,6 @@ async function execute(name, args, context = null) {
       agile_list_boards: agileTools.agileListBoards,
       agile_get_board: agileTools.agileGetBoard,
       agile_create_board: agileTools.agileCreateBoard,
-      agile_update_board: agileTools.agileUpdateBoard,
       agile_delete_board: agileTools.agileDeleteBoard,
       agile_list_tasks: agileTools.agileListTasks,
       agile_get_task: agileTools.agileGetTask,

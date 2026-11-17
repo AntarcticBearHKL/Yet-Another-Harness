@@ -724,36 +724,6 @@
           <div id="agile-iterations" class="agile-iterations"></div>
         </aside>
         <section class="agile-main">
-          <header class="agile-head">
-            <div class="agile-head-copy">
-              <span id="agile-iteration" class="agile-iteration">Iteration 1</span>
-              <span id="agile-board-meta" class="agile-board-meta"></span>
-            </div>
-            <div class="agile-head-actions">
-              <button
-                id="agile-add-iteration"
-                class="agile-icon-btn"
-                type="button"
-                aria-label="新建迭代"
-                title="新建迭代"
-              >
-                +
-              </button>
-              <input
-                id="agile-search"
-                class="agile-search"
-                type="search"
-                placeholder="搜索任务…"
-              />
-              <button
-                id="agile-board-details"
-                class="pill compact"
-                type="button"
-              >
-                迭代
-              </button>
-            </div>
-          </header>
           <div id="agile-board" class="agile-board"></div>
           <div id="agile-toast" class="agile-toast hidden"></div>
         </section>
@@ -811,38 +781,6 @@
           <div class="agile-foot-spacer"></div>
           <button id="agile-task-cancel" class="pill" type="button">关闭</button>
           <button id="agile-task-save" class="pill primary" type="button">
-            保存
-          </button>
-        </footer>
-      </div>
-    </div>
-
-    <div id="agile-board-modal" class="overlay hidden" aria-hidden="true">
-      <div class="overlay-panel agile-board-panel">
-        <header class="agile-modal-head">
-          <div class="agile-modal-title-wrap">
-            <span class="agile-kicker">ITERATION</span>
-            <h3>迭代设置</h3>
-          </div>
-        </header>
-        <div class="agile-form-grid">
-          <label class="agile-field">
-            <span>开始日期</span>
-            <input id="agile-board-start" class="text-input" type="date" />
-          </label>
-          <label class="agile-field">
-            <span>结束日期</span>
-            <input id="agile-board-end" class="text-input" type="date" />
-          </label>
-        </div>
-        <label class="agile-field">
-          <span>迭代目标</span>
-          <input id="agile-board-goal" class="text-input" type="text" />
-        </label>
-        <footer class="agile-modal-foot">
-          <div class="agile-foot-spacer"></div>
-          <button id="agile-board-cancel" class="pill" type="button">取消</button>
-          <button id="agile-board-save" class="pill primary" type="button">
             保存
           </button>
         </footer>

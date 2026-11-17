@@ -1084,9 +1084,6 @@ function handleApi(req, res, url) {
           case 'create_board':
             result = agileStore.createBoard();
             break;
-          case 'update_board':
-            result = agileStore.updateBoard(body.boardId, body);
-            break;
           case 'delete_board':
             result = agileStore.deleteBoard(body.boardId);
             break;

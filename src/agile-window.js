@@ -86,7 +86,7 @@ function onWindowDragStart(event) {
   const target = event.target;
   if (!(target instanceof Element)) return;
   if (target.closest(DRAG_EXCLUDE)) return;
-  if (!target.closest('.agile-head, .agile-sidebar')) return;
+  if (!target.closest('.agile-sidebar')) return;
   windowDrag = { x: event.screenX, y: event.screenY };
   api.dragStart({ x: event.screenX, y: event.screenY });
 }

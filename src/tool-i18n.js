@@ -121,7 +121,6 @@ const TOOL_I18N = {
   agile_list_boards: t('敏捷迭代列表', '列出所有迭代及任务数和日期。'),
   agile_get_board: t('获取敏捷迭代', '获取迭代的列、任务和设置。'),
   agile_create_board: t('创建敏捷迭代', '在唯一的主线中创建下一个空白迭代，自动编号。'),
-  agile_update_board: t('更新敏捷迭代', '设置迭代的开始日期、结束日期和目标。'),
   agile_delete_board: t('删除敏捷迭代', '删除迭代及其任务。'),
   agile_list_tasks: t('敏捷任务列表', '列出迭代中的任务，可按列、搜索、领取人、待消化备注或就绪状态过滤。', {
     column: '列 ID 或名称：backlog、human、progress、blocked、finished',
