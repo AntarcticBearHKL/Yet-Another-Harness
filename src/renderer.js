@@ -2377,10 +2377,123 @@ function appendSpecialSteps(msg, msgIndex, container) {
   });
 }
 
+function latestCompactBlock(msg, streaming) {
+  const steps = Array.isArray(msg.steps) ? msg.steps : [];
+  let fallback = null;
+  let waiting = null;
+  for (let index = steps.length - 1; index >= 0; index -= 1) {
+    const step = steps[index];
+    if (!step) continue;
+    const isLast = index === steps.length - 1;
+    if (step.kind === 'thinking' || step.kind === 'text') {
+      const text = String(step.text || '');
+      if (text) {
+        return {
+          index,
+          kind: step.kind,
+          title: step.kind === 'thinking' ? '思考' : '回复',
+          text,
+          streaming: streaming && isLast,
+        };
+      }
+      if (!waiting && (step.placeholder || (streaming && isLast))) {
+        waiting = {
+          index,
+          kind: step.kind,
+          title: step.kind === 'thinking' ? '思考' : '回复',
+          text: '',
+          streaming: Boolean(streaming),
+        };
+      }
+      continue;
+    }
+    if (step.kind === 'call') {
+      return {
+        index,
+        kind: 'call',
+        title: '工具调用',
+        text: [step.name, step.arguments].filter(Boolean).join('\n'),
+        streaming: streaming && isLast,
+      };
+    }
+    if (step.kind === 'result') {
+      return {
+        index,
+        kind: 'result',
+        title: step.ok === false ? '工具失败' : '工具结果',
+        text: [step.name, step.output].filter(Boolean).join('\n'),
+        streaming: false,
+      };
+    }
+    if (step.kind === 'status') {
+      if (!fallback && step.label) {
+        fallback = {
+          index,
+          kind: 'status',
+          title: '状态',
+          text: String(step.label),
+          streaming: false,
+        };
+      }
+      continue;
+    }
+    if (step.kind === 'compact' || step.kind === 'goal') {
+      if (!fallback) {
+        fallback = {
+          index,
+          kind: step.kind,
+          title: step.kind === 'compact' ? '上下文压缩' : '目标检查',
+          text: String(step.text || step.label || ''),
+          streaming: false,
+        };
+      }
+    }
+  }
+  const text = String(msg.text || '');
+  if (text) {
+    return { index: -1, kind: 'text', title: '回复', text, streaming: false };
+  }
+  if (waiting) return waiting;
+  if (fallback) return fallback;
+  return {
+    index: -1,
+    kind: 'text',
+    title: '回复',
+    text: '',
+    streaming: Boolean(streaming),
+  };
+}
+
+function renderCompactAgentMessage(msg, msgIndex, container, streaming) {
+  const block = latestCompactBlock(msg, streaming);
+  const key =
+    block.index >= 0
+      ? stepCardKey(msgIndex, block.index)
+      : agentCardKey(msgIndex);
+  const card = textCard({
+    key,
+    kind: block.kind === 'thinking' ? 'thinking' : 'agent',
+    title: block.title,
+    meta: '',
+    text: block.text,
+    streaming: block.streaming,
+    primary: true,
+    onInspect:
+      block.index >= 0 ? () => inspectStep(msg, msg.steps[block.index]) : null,
+  });
+  card.classList.add('compact-latest', `compact-${block.kind}`);
+  appendRow(card, {}, container);
+}
+
 function renderAgentMessage(msg, msgIndex, container) {
   const steps = Array.isArray(msg.steps) ? msg.steps : [];
   const rich = isRichTrace(steps);
   const streaming = state.streaming && msg === state.streamMessage;
+
+  if (state.chatWindow && state.chatCompact) {
+    renderCompactAgentMessage(msg, msgIndex, container, streaming);
+    return;
+  }
 
   if (!rich) {
     // 旧消息或普通回复：一个卡片，旧的工具过程行显示在文字上方
@@ -10547,6 +10660,7 @@ function bindEvents() {
       if (body) body.append(textNode);
     }
     renderTextContent(textNode, last.text);
+    textNode.classList.remove('card-waiting');
     api.updateContent({ key, text: last.text });
     card.classList.add('streaming');
     updateCardClip(card);

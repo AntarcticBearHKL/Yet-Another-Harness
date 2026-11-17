@@ -149,3 +149,15 @@ body.chat-window.chat-compact .message-card.answer-card {
   border-radius: 12px;
   background: rgba(185, 111, 61, 0.08);
 }
+
+body.chat-window.chat-compact .message-card.compact-latest .card-waiting {
+  display: block !important;
+}
+
+body.chat-window.chat-compact .message-card.compact-latest.streaming .card-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  max-height: calc(5 * 1.8em);
+  overflow: hidden;
+}
