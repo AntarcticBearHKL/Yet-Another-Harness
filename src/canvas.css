@@ -782,21 +782,6 @@ body.canvas-space .canvas-stage.panning {
 
 /* --------------------------- manager node / composer --------------------------- */
 
-.canvas-space-hint {
-  position: absolute;
-  left: 16px;
-  bottom: 13px;
-  padding: 3px 7px;
-  border: 1px solid rgba(74, 54, 40, 0.1);
-  border-radius: 6px;
-  background: rgba(251, 246, 239, 0.72);
-  color: var(--faint);
-  font-size: 8.5px;
-  letter-spacing: 0.06em;
-  pointer-events: none;
-  user-select: none;
-}
-
 .canvas-manager {
   position: absolute;
   display: flex;
@@ -996,10 +981,19 @@ body.canvas-space .canvas-stage.panning {
   inset: 0;
   z-index: 9;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  padding: 0 18px 18px;
-  background: rgba(43, 33, 26, 0.08);
+  padding: 40px 24px;
+  overflow-y: auto;
+  background:
+    radial-gradient(
+      circle at 50% 16%,
+      rgba(255, 252, 247, 0.5),
+      transparent 58%
+    ),
+    rgba(248, 242, 234, 0.56);
+  -webkit-backdrop-filter: blur(28px) saturate(1.08);
+  backdrop-filter: blur(28px) saturate(1.08);
 }
 
 .manager-composer.hidden {
@@ -1007,22 +1001,26 @@ body.canvas-space .canvas-stage.panning {
 }
 
 .manager-composer-panel {
-  width: min(560px, 100%);
-  padding: 15px 17px 13px;
-  border: 1px solid rgba(74, 54, 40, 0.16);
-  border-radius: 20px;
-  background: rgba(255, 252, 247, 0.86);
+  width: min(720px, 100%);
+  max-height: calc(100% - 4px);
+  margin: auto;
+  padding: 28px 32px 22px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 24px;
+  background: rgba(255, 252, 247, 0.68);
   box-shadow:
-    0 20px 46px rgba(74, 54, 40, 0.14),
-    0 1px 0 rgba(255, 255, 255, 0.72) inset;
-  backdrop-filter: blur(18px);
+    0 30px 80px rgba(74, 54, 40, 0.16),
+    0 1px 0 rgba(255, 255, 255, 0.84) inset;
+  -webkit-backdrop-filter: blur(20px) saturate(1.05);
+  backdrop-filter: blur(20px) saturate(1.05);
   color: var(--text);
 }
 
 .manager-composer-head {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 16px;
 }
 
 .manager-composer-title-wrap {
@@ -1038,11 +1036,27 @@ body.canvas-space .canvas-stage.panning {
 }
 
 .manager-composer-head h3 {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   color: var(--text);
-  font-size: 17px;
+  font-size: 24px;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.manager-fixed-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 3px 8px;
+  border: 1px solid rgba(185, 111, 61, 0.22);
+  border-radius: 999px;
+  background: rgba(185, 111, 61, 0.07);
+  color: #8a4f2a;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .manager-composer-close {
@@ -1068,21 +1082,16 @@ body.canvas-space .canvas-stage.panning {
 
 .manager-composer-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.75fr);
-  gap: 10px;
-  margin-top: 13px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 15px;
+  margin-top: 22px;
 }
 
 .manager-field {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
-}
-
-.manager-field:last-child,
-.manager-field:nth-last-child(2) {
-  grid-column: 1 / -1;
 }
 
 .manager-field-head {
@@ -1250,40 +1259,37 @@ body.canvas-space .canvas-stage.panning {
 .manager-composer-foot {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin-top: 13px;
-  padding-top: 10px;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 14px;
   border-top: 1px solid rgba(74, 54, 40, 0.09);
-}
-
-.manager-composer-tip {
-  flex: 1;
-  min-width: 0;
-  color: var(--faint);
-  font-size: 8.5px;
 }
 
 .manager-composer-foot .pill {
   flex: none;
 }
 
+.manager-composer-error {
+  margin-right: auto;
+  color: #99533a;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
 @media (max-width: 700px) {
   .manager-composer {
-    padding: 0 10px 10px;
+    align-items: flex-start;
+    padding: 18px 10px;
   }
 
-  .manager-composer-body {
-    grid-template-columns: 1fr;
+  .manager-composer-panel {
+    padding: 20px 16px 16px;
+    border-radius: 20px;
   }
 
-  .manager-field,
-  .manager-field:last-child,
-  .manager-field:nth-last-child(2) {
-    grid-column: 1;
-  }
-
-  .manager-composer-tip {
-    display: none;
+  .manager-composer-head h3 {
+    font-size: 20px;
   }
 
   .canvas-manager {
@@ -1314,12 +1320,6 @@ body.canvas-space .canvas-stage.panning {
 
 .canvas-manager .dot.done {
   background: #8fae78;
-}
-
-.manager-composer-error {
-  color: #99533a;
-  font-size: 8.5px;
-  white-space: nowrap;
 }
 
 .manager-composer-error[hidden] {

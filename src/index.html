@@ -905,8 +905,6 @@
         >
           100%
         </div>
-        <div class="canvas-space-hint">SPACE 新建管理 node</div>
-
         <div id="manager-composer" class="manager-composer hidden" aria-hidden="true">
           <div
             class="manager-composer-panel"
@@ -918,6 +916,7 @@
               <div class="manager-composer-title-wrap">
                 <span class="manager-composer-kicker">MANAGER</span>
                 <h3 id="manager-composer-title">新建管理 node</h3>
+                <span id="manager-fixed-agent" class="manager-fixed-agent">Manager · 管理类</span>
               </div>
               <button
                 id="manager-composer-close"
@@ -939,10 +938,6 @@
                   autocomplete="off"
                 />
               </label>
-              <label class="manager-field">
-                <span class="manager-field-label">Agent</span>
-                <select id="manager-agent" class="manager-input"></select>
-              </label>
               <div class="manager-field">
                 <div class="manager-field-head">
                   <span class="manager-field-label">工作目录</span>
@@ -963,7 +958,6 @@
               </div>
             </div>
             <footer class="manager-composer-foot">
-              <span class="manager-composer-tip">只做配置；创建后在对话里分配任务</span>
               <span id="manager-composer-error" class="manager-composer-error" hidden></span>
               <button id="manager-cancel" class="pill" type="button">取消</button>
               <button id="manager-create" class="pill primary" type="button">

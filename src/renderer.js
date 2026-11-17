@@ -64,7 +64,7 @@ const dom = {
   managerComposerTitle: $('manager-composer-title'),
   managerComposerClose: $('manager-composer-close'),
   managerName: $('manager-name'),
-  managerAgent: $('manager-agent'),
+  managerFixedAgent: $('manager-fixed-agent'),
   managerAddDir: $('manager-add-dir'),
   managerDirs: $('manager-dirs'),
   managerFiles: $('manager-files'),
@@ -653,28 +653,11 @@ function managerComposerDefaultName() {
   return `管理 node ${count + 1}`;
 }
 
-function renderManagerComposerAgents() {
-  if (!dom.managerAgent) return;
-  const agents =
-    state.agents.length > 0
-      ? state.agents
-      : [
-          { id: MANAGER_AGENT_ID, name: MANAGER_AGENT_NAME },
-          { id: DEFAULT_AGENT_ID, name: DEFAULT_AGENT_NAME },
-        ];
-  dom.managerAgent.replaceChildren();
-  for (const agent of agents) {
-    const option = document.createElement('option');
-    option.value = agent.id;
-    option.textContent = agent.name || agent.id;
-    dom.managerAgent.append(option);
-  }
-  const selected =
-    managerComposerState?.agentId ||
-    (agents.some((agent) => agent.id === MANAGER_AGENT_ID)
-      ? MANAGER_AGENT_ID
-      : agents[0]?.id || DEFAULT_AGENT_ID);
-  dom.managerAgent.value = selected;
+function managerAgentDisplayName() {
+  const agent = state.agents.find(
+    (item) => item.id === MANAGER_AGENT_ID
+  );
+  return agent?.name || MANAGER_AGENT_NAME;
 }
 
 function renderManagerComposerDirs() {
@@ -755,7 +738,6 @@ function openManagerComposer(managerId = null) {
     [];
   managerComposerState = {
     editingId: manager?.id || null,
-    agentId: manager?.agentId || MANAGER_AGENT_ID,
     directories: manager
       ? Array.isArray(manager.nodeConfig?.directories)
         ? [...manager.nodeConfig.directories]
@@ -777,12 +759,8 @@ function openManagerComposer(managerId = null) {
       ? manager.title || '管理 node'
       : managerComposerDefaultName();
   }
-  if (state.agents.length === 0) {
-    void loadAgents(true).finally(() => {
-      renderManagerComposerAgents();
-    });
-  } else {
-    renderManagerComposerAgents();
+  if (dom.managerFixedAgent) {
+    dom.managerFixedAgent.textContent = `${managerAgentDisplayName()} · 管理类`;
   }
   renderManagerComposerDirs();
   renderManagerComposerFiles();
@@ -848,9 +826,7 @@ async function createManagerFromComposer() {
   const name =
     String(dom.managerName?.value || '').trim() ||
     managerComposerDefaultName();
-  const agentId =
-    String(dom.managerAgent?.value || '').trim() ||
-    MANAGER_AGENT_ID;
+  const agentId = MANAGER_AGENT_ID;
   const directories = managerComposerState.directories.slice();
   const files = managerComposerState.files.slice();
   const editingId = managerComposerState.editingId;
@@ -871,7 +847,7 @@ async function createManagerFromComposer() {
       return;
     }
     manager.title = name;
-    manager.agentId = agentId;
+    manager.agentId = MANAGER_AGENT_ID;
     manager.nodeConfig = {
       ...(manager.nodeConfig || {}),
       kind: 'manager',
@@ -5820,10 +5796,12 @@ function agentMenuEntries() {
     state.agents.length > 0
       ? state.agents
       : [{ id: DEFAULT_AGENT_ID, name: DEFAULT_AGENT_NAME }];
-  return agents.map((agent) => ({
-    id: agent.id || DEFAULT_AGENT_ID,
-    name: agent.name || DEFAULT_AGENT_NAME,
-  }));
+  return agents
+    .filter((agent) => agent.id !== MANAGER_AGENT_ID)
+    .map((agent) => ({
+      id: agent.id || DEFAULT_AGENT_ID,
+      name: agent.name || DEFAULT_AGENT_NAME,
+    }));
 }
 
 function updateAgentMenuActive() {
@@ -9178,8 +9156,33 @@ function renderCatalogCategories(data, selectedKind, page) {
   }
 
   if (page === 'agents') {
+    const management = state.agents.filter(
+      (agent) => agent.id === MANAGER_AGENT_ID
+    );
+    const regular = state.agents.filter(
+      (agent) => agent.id !== MANAGER_AGENT_ID
+    );
+    if (management.length > 0) {
+      const managementSection = el(
+        'div',
+        'catalog-section catalog-agent-section'
+      );
+      managementSection.append(
+        el('div', 'catalog-section-label', '管理')
+      );
+      for (const agent of management) {
+        managementSection.append(
+          catalogCategoryButton(
+            { id: `agent:${agent.id}`, label: agent.name, count: null },
+            selectedKind
+          )
+        );
+      }
+      dom.catalogCategories.append(managementSection);
+    }
     const section = el('div', 'catalog-section catalog-agent-section');
-    for (const agent of state.agents) {
+    section.append(el('div', 'catalog-section-label', 'Agent'));
+    for (const agent of regular) {
       section.append(
         catalogCategoryButton(
           { id: `agent:${agent.id}`, label: agent.name, count: null },
@@ -9818,7 +9821,13 @@ function renderAgentEditor(agentId) {
   head.append(name);
 
   if (builtin) {
-    head.append(el('span', 'agent-builtin-badge', '内置'));
+    head.append(
+      el(
+        'span',
+        'agent-builtin-badge',
+        agent.id === MANAGER_AGENT_ID ? '管理' : '内置'
+      )
+    );
   } else {
     const del = el('button', 'pill agent-delete');
     del.type = 'button';
@@ -10148,11 +10157,6 @@ function bindEvents() {
   dom.managerComposerClose?.addEventListener('click', closeManagerComposer);
   dom.managerCancel?.addEventListener('click', closeManagerComposer);
   dom.managerCreate?.addEventListener('click', () => void createManagerFromComposer());
-  dom.managerAgent?.addEventListener('change', () => {
-    if (managerComposerState) {
-      managerComposerState.agentId = dom.managerAgent.value;
-    }
-  });
   dom.managerComposer?.addEventListener('click', (event) => {
     if (event.target === dom.managerComposer) closeManagerComposer();
   });
