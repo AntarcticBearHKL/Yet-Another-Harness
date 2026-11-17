@@ -118,6 +118,7 @@ function handleBackgroundStart(sessionId, job) {
 
 function handleBackgroundComplete(sessionId, job) {
   if (!sessionId || !job) return;
+  store.archiveBackgroundJob(job.sessionId || sessionId, job);
   const payload = backgroundJobEventPayload(sessionId, job);
   publishLive(sessionId, 'background.update', payload);
   publishLive(sessionId, 'background.complete', payload);

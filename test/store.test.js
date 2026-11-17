@@ -1030,3 +1030,76 @@ test('image references round-trip through messages and the pending queue', () =>
     assert.deepEqual(session.msgs.at(-1).images, [image]);
   });
 });
+
+test('finished subagents and background tasks archive with the node', () => {
+  withStoreDir(() => {
+    store.saveStructure({
+      projects: [
+        { id: 'p1', name: 'Project 1', directories: ['C:\\work'] },
+      ],
+      sessions: [
+        {
+          id: 'root-1',
+          title: 'Root',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          frozen: false,
+          subagent: false,
+          mcpDisabled: [],
+          msgs: [],
+        },
+        {
+          id: 'child-1',
+          title: 'Child',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          frozen: true,
+          subagent: true,
+          parentSessionId: 'root-1',
+          mcpDisabled: [],
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 1,
+    });
+
+    assert.equal(store.archiveSubagent('child-1', 'done'), true);
+    const child = store
+      .loadChats()
+      .sessions.find((session) => session.id === 'child-1');
+    assert.ok(child.archivedAt);
+    assert.equal(child.archivedStatus, 'done');
+
+    assert.deepEqual(
+      store.sessionSubtreeIds('root-1').sort(),
+      ['child-1', 'root-1']
+    );
+
+    store.archiveBackgroundJob('child-1', {
+      id: 'bg-1',
+      sessionId: 'child-1',
+      note: 'watch',
+      command: 'npm run dev',
+      cwd: 'C:\\work',
+      status: 'done',
+      exitCode: 0,
+      startedAt: 1,
+      endedAt: 2,
+      output: 'ok',
+      stderr: '',
+      truncated: false,
+    });
+    const jobs = store.listArchivedJobs(['child-1']);
+    assert.equal(jobs.length, 1);
+    assert.equal(jobs[0].note, 'watch');
+    assert.equal(store.getArchivedJob('bg-1').output, 'ok');
+
+    const removed = store.deleteSessionsTree('root-1');
+    assert.deepEqual(removed.sort(), ['child-1', 'root-1']);
+    assert.equal(store.loadChats().sessions.length, 0);
+    assert.equal(store.listArchivedJobs(['child-1']).length, 0);
+  });
+});

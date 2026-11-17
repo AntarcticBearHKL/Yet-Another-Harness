@@ -21,7 +21,7 @@ const {
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 16;
+const SCHEMA_VERSION = 17;
 
 let dataDir = null;
 let legacyDir = null;
@@ -454,6 +454,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   frozen INTEGER NOT NULL DEFAULT 0,
   subagent INTEGER NOT NULL DEFAULT 0,
   parent_session_id TEXT,
+  archived_at INTEGER,
+  archived_status TEXT,
   sort_order INTEGER NOT NULL,
   content_hash TEXT NOT NULL,
   updated_at INTEGER NOT NULL
@@ -517,6 +519,22 @@ CREATE TABLE IF NOT EXISTS events (
   PRIMARY KEY (session_id, seq)
 );
 
+CREATE TABLE IF NOT EXISTS archive_jobs (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  note TEXT,
+  command TEXT,
+  cwd TEXT,
+  status TEXT,
+  exit_code INTEGER,
+  started_at INTEGER,
+  ended_at INTEGER,
+  output TEXT,
+  stderr TEXT,
+  truncated INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS app_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   current_session_id TEXT,
@@ -533,6 +551,7 @@ CREATE INDEX IF NOT EXISTS idx_steps_message ON steps(session_id, message_seq, s
 CREATE INDEX IF NOT EXISTS idx_requests_message ON requests(session_id, message_seq, round);
 CREATE INDEX IF NOT EXISTS idx_runs_session ON runs(session_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id, seq);
+CREATE INDEX IF NOT EXISTS idx_archive_jobs_session ON archive_jobs(session_id, ended_at);
 `;
 
 function close() {
@@ -655,6 +674,19 @@ function ensureSchema(database) {
       database.exec('ALTER TABLE sessions ADD COLUMN parent_session_id TEXT');
     }
 
+    // v16 -> v17: archived subagent conversations and finished background tasks.
+    if (!parentColumns.some((column) => column.name === 'archived_at')) {
+      database.exec('ALTER TABLE sessions ADD COLUMN archived_at INTEGER');
+    }
+    if (!parentColumns.some((column) => column.name === 'archived_status')) {
+      database.exec('ALTER TABLE sessions ADD COLUMN archived_status TEXT');
+    }
+    database
+      .prepare(
+        "UPDATE sessions SET archived_at = COALESCE(archived_at, updated_at), archived_status = COALESCE(archived_status, 'done') WHERE subagent = 1 AND archived_at IS NULL"
+      )
+      .run();
+
     const fallbackProject = database
       .prepare('SELECT id FROM projects ORDER BY sort_order ASC LIMIT 1')
       .get();
@@ -769,7 +801,7 @@ function readChats() {
 
   const sessionRows = database
     .prepare(
-      'SELECT id, title, system, agents_md, agent_id, project_id, frozen, subagent, parent_session_id, mcp_disabled, fold_state, pending_queue, goal, compaction FROM sessions ORDER BY sort_order ASC'
+      'SELECT id, title, system, agents_md, agent_id, project_id, frozen, subagent, parent_session_id, archived_at, archived_status, mcp_disabled, fold_state, pending_queue, goal, compaction FROM sessions ORDER BY sort_order ASC'
     )
     .all();
   if (sessionRows.length === 0) {
@@ -862,6 +894,13 @@ function readChats() {
           subagent: Boolean(row.subagent),
           parentSessionId: row.parent_session_id
             ? String(row.parent_session_id)
+            : null,
+          archivedAt:
+            row.archived_at === null || row.archived_at === undefined
+              ? null
+              : Number(row.archived_at),
+          archivedStatus: row.archived_status
+            ? String(row.archived_status)
             : null,
           mcpDisabled,
           foldState,
@@ -1413,6 +1452,180 @@ function deleteSession(sessionId) {
   openDb().prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
 }
 
+function sessionSubtreeIds(sessionId) {
+  const root = String(sessionId || '');
+  if (!root) return [];
+  const database = openDb();
+  const rows = database
+    .prepare('SELECT id, parent_session_id FROM sessions')
+    .all();
+  const children = new Map();
+  for (const row of rows) {
+    const parent = row.parent_session_id ? String(row.parent_session_id) : '';
+    if (!parent) continue;
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(String(row.id));
+  }
+  const ids = [];
+  const seen = new Set();
+  const queue = [root];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+    for (const child of children.get(id) || []) queue.push(child);
+  }
+  return ids;
+}
+
+function archiveSubagent(sessionId, status = 'done') {
+  const id = String(sessionId || '');
+  if (!id) return false;
+  const now = Date.now();
+  const result = openDb()
+    .prepare(
+      "UPDATE sessions SET archived_at = COALESCE(archived_at, ?), archived_status = ?, updated_at = ? WHERE id = ? AND subagent = 1"
+    )
+    .run(now, String(status || 'done'), now, id);
+  return Number(result.changes) > 0;
+}
+
+function archiveUnfinishedSubagents() {
+  const now = Date.now();
+  const result = openDb()
+    .prepare(
+      `UPDATE sessions
+       SET archived_at = ?, archived_status = 'interrupted', updated_at = ?
+       WHERE subagent = 1
+         AND archived_at IS NULL
+         AND id NOT IN (
+           SELECT session_id FROM runs WHERE status IN ('running', 'queued')
+         )`
+    )
+    .run(now, now);
+  return Number(result.changes) || 0;
+}
+
+function archiveBackgroundJob(sessionId, job) {
+  const id = String(job?.id || '');
+  const owner = String(job?.sessionId || sessionId || '');
+  if (!id || !owner) return null;
+  const now = Date.now();
+  try {
+    openDb()
+      .prepare(
+        `INSERT INTO archive_jobs
+           (id, session_id, note, command, cwd, status, exit_code, started_at, ended_at, output, stderr, truncated, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           session_id = excluded.session_id,
+           note = excluded.note,
+           command = excluded.command,
+           cwd = excluded.cwd,
+           status = excluded.status,
+           exit_code = excluded.exit_code,
+           started_at = excluded.started_at,
+           ended_at = excluded.ended_at,
+           output = excluded.output,
+           stderr = excluded.stderr,
+           truncated = excluded.truncated`
+      )
+      .run(
+        id,
+        owner,
+        String(job?.note || ''),
+        String(job?.command || ''),
+        String(job?.cwd || ''),
+        String(job?.status || 'done'),
+        Number.isInteger(job?.exitCode) ? job.exitCode : null,
+        Number(job?.startedAt) || now,
+        Number(job?.endedAt) || now,
+        String(job?.output || ''),
+        String(job?.stderr || ''),
+        job?.truncated ? 1 : 0,
+        now
+      );
+    return id;
+  } catch (error) {
+    console.error('archive background job failed', error);
+    return null;
+  }
+}
+
+function listArchivedJobs(sessionIds) {
+  const ids = [...new Set((sessionIds || []).map(String).filter(Boolean))];
+  if (ids.length === 0) return [];
+  const placeholders = ids.map(() => '?').join(',');
+  return openDb()
+    .prepare(
+      `SELECT id, session_id, note, command, cwd, status, exit_code, started_at, ended_at, truncated,
+              substr(output, -600) AS output_preview,
+              substr(stderr, -300) AS stderr_preview
+       FROM archive_jobs
+       WHERE session_id IN (${placeholders})
+       ORDER BY ended_at DESC`
+    )
+    .all(...ids)
+    .map((row) => ({
+      id: String(row.id),
+      sessionId: String(row.session_id),
+      note: row.note ? String(row.note) : '',
+      command: row.command ? String(row.command) : '',
+      cwd: row.cwd ? String(row.cwd) : '',
+      status: row.status ? String(row.status) : 'done',
+      exitCode: row.exit_code === null ? null : Number(row.exit_code),
+      startedAt: row.started_at === null ? null : Number(row.started_at),
+      endedAt: row.ended_at === null ? null : Number(row.ended_at),
+      truncated: Boolean(row.truncated),
+      outputPreview: row.output_preview ? String(row.output_preview) : '',
+      stderrPreview: row.stderr_preview ? String(row.stderr_preview) : '',
+    }));
+}
+
+function getArchivedJob(jobId) {
+  const id = String(jobId || '');
+  if (!id) return null;
+  const row = openDb()
+    .prepare(
+      `SELECT id, session_id, note, command, cwd, status, exit_code, started_at, ended_at, output, stderr, truncated
+       FROM archive_jobs WHERE id = ?`
+    )
+    .get(id);
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    sessionId: String(row.session_id),
+    note: row.note ? String(row.note) : '',
+    command: row.command ? String(row.command) : '',
+    cwd: row.cwd ? String(row.cwd) : '',
+    status: row.status ? String(row.status) : 'done',
+    exitCode: row.exit_code === null ? null : Number(row.exit_code),
+    startedAt: row.started_at === null ? null : Number(row.started_at),
+    endedAt: row.ended_at === null ? null : Number(row.ended_at),
+    output: row.output ? String(row.output) : '',
+    stderr: row.stderr ? String(row.stderr) : '',
+    truncated: Boolean(row.truncated),
+  };
+}
+
+function deleteSessionsTree(sessionId) {
+  const ids = sessionSubtreeIds(sessionId);
+  if (ids.length === 0) return [];
+  const database = openDb();
+  const placeholders = ids.map(() => '?').join(',');
+  database
+    .prepare(`DELETE FROM archive_jobs WHERE session_id IN (${placeholders})`)
+    .run(...ids);
+  database
+    .prepare(`DELETE FROM runs WHERE session_id IN (${placeholders})`)
+    .run(...ids);
+  database
+    .prepare(`DELETE FROM sessions WHERE id IN (${placeholders})`)
+    .run(...ids);
+  return ids;
+}
+
 function updateSessionGoal(sessionId, goal) {
   const database = openDb();
   const normalized = goal === null || goal === undefined ? null : normalizeGoal(goal);
@@ -1833,6 +2046,13 @@ module.exports = {
   saveChats,
   saveStructure,
   deleteSession,
+  sessionSubtreeIds,
+  archiveSubagent,
+  archiveUnfinishedSubagents,
+  archiveBackgroundJob,
+  listArchivedJobs,
+  getArchivedJob,
+  deleteSessionsTree,
   appendMessage,
   createSession,
   getSession,

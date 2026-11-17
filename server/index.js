@@ -75,6 +75,8 @@ const STATIC_FILES = new Map([
   ['/agile-window.js', 'agile-window.js'],
   ['/canvas.css', 'canvas.css'],
   ['/canvas-ui.js', 'canvas-ui.js'],
+  ['/archive.css', 'archive.css'],
+  ['/archive-ui.js', 'archive-ui.js'],
   ['/chat-window.css', 'chat-window.css'],
   ['/code-parse.js', 'code-parse.js'],
   ['/resize.css', 'resize.css'],
@@ -563,9 +565,11 @@ function handleApi(req, res, url) {
       sendJson(res, 400, { error: 'sessionId is required' });
       return true;
     }
-    runner.cancelSessionRuns([sessionId]);
-    store.deleteSession(sessionId);
-    sendJson(res, 200, { ok: true });
+    const ids = store.sessionSubtreeIds(sessionId);
+    runner.cancelSessionRuns(ids);
+    for (const id of ids) processTools.forgetJobsForSession(id);
+    store.deleteSessionsTree(sessionId);
+    sendJson(res, 200, { ok: true, ids });
     return true;
   }
 
@@ -1024,6 +1028,65 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && pathname === '/api/archive') {
+    const sessionId = String(url.searchParams.get('sessionId') || '');
+    const session = sessionId ? store.getSession(sessionId) : null;
+    if (!session) {
+      sendJson(res, 404, { error: 'session not found' });
+      return true;
+    }
+    const ids = store.sessionSubtreeIds(sessionId);
+    const idSet = new Set(ids);
+    const chats = store.loadChats();
+    const subagents = chats.sessions
+      .filter(
+        (item) =>
+          item.id !== sessionId &&
+          item.subagent &&
+          item.archivedAt &&
+          idSet.has(item.id)
+      )
+      .map((item) => {
+        const lastAgent = [...item.msgs]
+          .reverse()
+          .find((msg) => msg.role === 'Agent');
+        return {
+          id: item.id,
+          title: item.title,
+          parentSessionId: item.parentSessionId || null,
+          archivedAt: item.archivedAt,
+          status: item.archivedStatus || 'done',
+          messages: item.msgs.length,
+          preview: String(lastAgent?.text || '').slice(0, 500),
+        };
+      })
+      .sort((left, right) => (right.archivedAt || 0) - (left.archivedAt || 0));
+    const jobs = store.listArchivedJobs(ids);
+    sendJson(res, 200, {
+      session: { id: session.id, title: session.title },
+      subagents,
+      jobs,
+    });
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/archive/job') {
+    const sessionId = String(url.searchParams.get('sessionId') || '');
+    const jobId = String(url.searchParams.get('id') || '');
+    const session = sessionId ? store.getSession(sessionId) : null;
+    if (!session) {
+      sendJson(res, 404, { error: 'session not found' });
+      return true;
+    }
+    const job = jobId ? store.getArchivedJob(jobId) : null;
+    if (!job || !store.sessionSubtreeIds(sessionId).includes(job.sessionId)) {
+      sendJson(res, 404, { error: 'archived task not found' });
+      return true;
+    }
+    sendJson(res, 200, { job });
+    return true;
+  }
+
   if (req.method === 'GET' && pathname === '/api/background/events') {
     openBackgroundEventStream(req, res);
     return true;
@@ -1353,6 +1416,7 @@ localServer.listen(LOCAL_PORT, HOST, () => {
   });
   store.loadChats();
   store.interruptRuns();
+  store.archiveUnfinishedSubagents();
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(PID_FILE, String(process.pid), 'utf8');
   pidWritten = true;

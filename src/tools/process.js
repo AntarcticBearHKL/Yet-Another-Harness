@@ -172,6 +172,31 @@ function cancelJob(id, sessionId) {
   return job;
 }
 
+function cancelJobsForSession(sessionId) {
+  const id = String(sessionId || '');
+  if (!id) return [];
+  const cancelled = [];
+  for (const job of jobs.values()) {
+    if (job.sessionId !== id || job.status !== 'running') continue;
+    cancelJob(job.id);
+    cancelled.push(job.id);
+  }
+  return cancelled;
+}
+
+function forgetJobsForSession(sessionId) {
+  const id = String(sessionId || '');
+  if (!id) return 0;
+  let removed = 0;
+  for (const [jobId, job] of [...jobs.entries()]) {
+    if (job.sessionId !== id) continue;
+    if (job.status === 'running') cancelJob(jobId);
+    jobs.delete(jobId);
+    removed += 1;
+  }
+  return removed;
+}
+
 function notifyBackgroundStart(context, job) {
   if (typeof context?.onBackgroundStart !== 'function') return;
   try {
@@ -339,6 +364,8 @@ module.exports = {
   backgroundCancel,
   listJobs,
   cancelJob,
+  cancelJobsForSession,
+  forgetJobsForSession,
   jobSummary,
   jobPayload,
   monitorList,

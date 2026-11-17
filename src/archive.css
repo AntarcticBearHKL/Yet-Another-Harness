@@ -1,0 +1,234 @@
+/* Archived subagents and background tasks for one canvas node. */
+
+.archive-page {
+  position: fixed;
+  inset: var(--window-inset, 0px);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #fdfaf5, #f7f1e8);
+}
+
+.archive-page.hidden {
+  display: none;
+}
+
+body.archive-window #main,
+body.archive-window #canvas,
+body.archive-window #switcher,
+body.archive-window #background-badge {
+  display: none !important;
+}
+
+body.maximized .archive-page {
+  border-radius: 0;
+}
+
+.archive-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: none;
+  min-height: 72px;
+  padding: 14px 24px 8px;
+}
+
+.archive-head-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.archive-kicker {
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+
+.archive-head h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.archive-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.archive-close {
+  width: 30px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.archive-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 24px 56px;
+}
+
+.archive-section + .archive-section {
+  margin-top: 28px;
+}
+
+.archive-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1;
+}
+
+.archive-count {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.archive-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-card);
+  color: var(--text-soft);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.archive-row:hover {
+  border-color: rgba(185, 111, 61, 0.32);
+  background: var(--hover);
+}
+
+.archive-row-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.archive-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--faint);
+  font-size: 10.5px;
+}
+
+.archive-row-preview {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--dim);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.archive-empty {
+  padding: 18px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--faint);
+  font-size: 12px;
+  text-align: center;
+}
+
+.archive-detail-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(860px, calc(100vw - 48px));
+  height: min(680px, calc(100vh - 48px));
+}
+
+.archive-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: none;
+  padding-bottom: 12px;
+}
+
+.archive-detail-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.archive-detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.archive-detail-meta-row {
+  display: flex;
+  gap: 12px;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+
+.archive-detail-meta-label {
+  width: 74px;
+  flex: none;
+  color: var(--faint);
+}
+
+.archive-detail-meta-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.archive-detail-output {
+  flex: 1;
+  min-height: 0;
+  margin: 12px 0 0;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(74, 54, 40, 0.035);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

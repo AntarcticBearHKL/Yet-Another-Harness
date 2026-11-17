@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('yah', {
   askViewer: (payload) => ipcRenderer.invoke('viewer:ask', payload),
   openAgileWindow: () => ipcRenderer.invoke('agile:open'),
   openConfigWindow: (kind) => ipcRenderer.invoke('config:open', kind),
+  openArchiveWindow: (sessionId) =>
+    ipcRenderer.invoke('archive:open', sessionId),
   openChatWindow: (sessionId, options) =>
     ipcRenderer.invoke('chat:open', sessionId, options),
   updateContent: (payload) => ipcRenderer.send('content:update', payload),

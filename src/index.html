@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="agile.css" />
     <link rel="stylesheet" href="canvas.css" />
+    <link rel="stylesheet" href="archive.css" />
     <link rel="stylesheet" href="chat-window.css" />
     <link rel="stylesheet" href="resize.css" />
   </head>
@@ -978,10 +979,68 @@
       </div>
     </div>
 
+    <section id="archive-page" class="archive-page hidden" aria-hidden="true">
+      <header class="archive-head">
+        <div class="archive-head-copy">
+          <span class="archive-kicker">ARCHIVED</span>
+          <h2 id="archive-node-title">Conversation</h2>
+        </div>
+        <div class="archive-head-actions">
+          <button id="archive-refresh" class="pill compact" type="button">
+            刷新
+          </button>
+          <button
+            id="archive-close"
+            class="pill compact archive-close"
+            type="button"
+            aria-label="关闭"
+          >
+            ×
+          </button>
+        </div>
+      </header>
+      <div class="archive-body">
+        <section class="archive-section">
+          <div class="archive-section-head">
+            <span>SUBAGENTS</span>
+            <span id="archive-subagent-count" class="archive-count">0</span>
+          </div>
+          <div id="archive-subagents" class="archive-list"></div>
+        </section>
+        <section class="archive-section">
+          <div class="archive-section-head">
+            <span>BACKGROUND</span>
+            <span id="archive-job-count" class="archive-count">0</span>
+          </div>
+          <div id="archive-jobs" class="archive-list"></div>
+        </section>
+      </div>
+      <div id="archive-detail" class="overlay hidden" aria-hidden="true">
+        <div class="overlay-panel archive-detail-panel">
+          <header class="archive-detail-head">
+            <div class="archive-head-copy">
+              <span class="archive-kicker">BACKGROUND</span>
+              <h3 id="archive-detail-title">Task</h3>
+            </div>
+            <button
+              id="archive-detail-close"
+              class="pill compact"
+              type="button"
+            >
+              关闭
+            </button>
+          </header>
+          <div id="archive-detail-meta" class="archive-detail-meta"></div>
+          <pre id="archive-detail-output" class="archive-detail-output"></pre>
+        </div>
+      </div>
+    </section>
+
     <script src="resize.js" defer></script>
     <script src="renderer.js" defer></script>
     <script src="mcp-ui.js" defer></script>
     <script src="agile-ui.js" defer></script>
     <script src="canvas-ui.js" defer></script>
+    <script src="archive-ui.js" defer></script>
   </body>
 </html>

@@ -88,6 +88,7 @@ function createSubagentService({ resolveAgent } = {}) {
         store.updateSessionPendingQueue(parent.id, [...queue, queueItem]);
       }
     }
+    store.archiveSubagent(entry.sessionId, status);
     runner.publishLive(entry.parentSessionId, 'subagent.complete', {
       sessionId: entry.sessionId,
       parentSessionId: entry.parentSessionId,
@@ -268,6 +269,7 @@ function createSubagentService({ resolveAgent } = {}) {
       entry.unsubscribe = null;
     }
     runner.cancelRun(entry.runId);
+    store.archiveSubagent(entry.sessionId, 'cancelled');
     runner.publishLive(entry.parentSessionId, 'subagent.complete', {
       sessionId: entry.sessionId,
       parentSessionId: entry.parentSessionId,

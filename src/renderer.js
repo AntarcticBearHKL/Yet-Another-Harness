@@ -133,6 +133,7 @@ const state = {
   chatWindow: false,
   homeWindow: false,
   panelWindow: false,
+  archiveWindow: false,
   chatCompact: false,
   chatTurnIndex: -1,
   chatNav: null,
@@ -427,6 +428,7 @@ const api = {
   isMaximized: () => shell?.isMaximized?.() ?? Promise.resolve(false),
   openAgileWindow: () => shell?.openAgileWindow?.(),
   openConfigWindow: (kind) => shell?.openConfigWindow?.(kind),
+  openArchiveWindow: (sessionId) => shell?.openArchiveWindow?.(sessionId),
   openChatWindow: (sessionId, options) =>
     shell?.openChatWindow?.(sessionId, options),
   getPathForFile: (file) =>
@@ -512,6 +514,14 @@ const api = {
   generateTitle: (payload) =>
     requestJson('/api/title', { method: 'POST', body: payload }),
   loadCatalog: () => requestJson('/api/catalog'),
+  loadArchive: (sessionId) =>
+    requestJson(`/api/archive?sessionId=${encodeURIComponent(sessionId)}`),
+  loadArchiveJob: (sessionId, jobId) =>
+    requestJson(
+      `/api/archive/job?sessionId=${encodeURIComponent(
+        sessionId
+      )}&id=${encodeURIComponent(jobId)}`
+    ),
   loadBackground: (sessionId) =>
     requestJson(
       `/api/background?sessionId=${encodeURIComponent(sessionId)}`
@@ -613,7 +623,11 @@ function ensureProjects() {
 }
 
 function sessionsInProject(projectId = state.switcherProjectId) {
-  return state.sessions.filter((session) => session.projectId === projectId);
+  return state.sessions.filter(
+    (session) =>
+      session.projectId === projectId &&
+      !(session.subagent && session.archivedAt)
+  );
 }
 
 function makeId() {
@@ -4768,9 +4782,26 @@ async function forkCurrentSession(session, args = '') {
 }
 
 function deleteSessionById(sessionId) {
-  const index = state.sessions.findIndex((session) => session.id === sessionId);
-  if (index < 0) return;
-  deleteSession(index);
+  const ids = new Set([String(sessionId || '')]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const session of state.sessions) {
+      if (
+        !ids.has(session.id) &&
+        session.parentSessionId &&
+        ids.has(session.parentSessionId)
+      ) {
+        ids.add(session.id);
+        changed = true;
+      }
+    }
+  }
+  const ordered = [...ids].reverse();
+  for (const id of ordered) {
+    const index = state.sessions.findIndex((session) => session.id === id);
+    if (index >= 0) deleteSession(index);
+  }
 }
 
 function deleteSession(index) {
@@ -7182,6 +7213,18 @@ function openConfigPage(kind) {
   else openCatalog(key);
 }
 
+function openArchiveWindowForSession(sessionId) {
+  const id = String(sessionId || '').trim();
+  if (!id) return;
+  if (api.isElectron && api.openArchiveWindow) {
+    Promise.resolve(api.openArchiveWindow(id)).catch((error) =>
+      console.error('open archive window failed', error)
+    );
+  }
+}
+
+window.openArchiveWindowForSession = openArchiveWindowForSession;
+
 const RING_ITEMS = [
   {
     label: 'Agent',
@@ -7215,6 +7258,8 @@ const RING_ICONS = {
   settings: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   agile:
     '<path d="M4 4h4v16H4zM10 4h4v10h-4zM16 4h4v6h-4z"/>',
+  archive:
+    '<path d="M4 7h16v13H4zM3 4h18v3H3zM9 11h6"/>',
   minimize: '<path d="M4 12h16"/>',
   maximize: '<path d="M5 5h14v14H5z"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
@@ -7448,7 +7493,7 @@ function onActionMenuMove(event) {
 
 function startActionMenuPress(event) {
   if (event.button !== 2) return;
-  if (state.panelWindow) return;
+  if (state.panelWindow || state.archiveWindow) return;
   if (
     event.target instanceof Element &&
     event.target.closest('#action-menu, .usage-card')
@@ -7546,6 +7591,7 @@ function endActionMenuPress(event) {
   const press = actionMenuPress;
   if (!press) return;
   if (press.timer) clearTimeout(press.timer);
+  const menuKind = press.menuKind;
   actionMenuPress = null;
   if (!state.ringOpen) return;
   const hovered = document.elementFromPoint(event.clientX, event.clientY);
@@ -7554,7 +7600,12 @@ function endActionMenuPress(event) {
       ? hovered.closest('#action-menu .action-menu-item')
       : null;
   if (!active) {
-    // Keep the menu open after the hold so it can be used with a normal click.
+    if (menuKind === 'canvas-node') {
+      closeActionMenu();
+      lastActionMenuAt = Date.now();
+      return;
+    }
+    // Keep other menus open after the hold so they can also be used with a click.
     lastActionMenuAt = Date.now();
     return;
   }
@@ -10785,7 +10836,12 @@ async function boot() {
   ensureProjects();
   const params = new URLSearchParams(location.search);
   const panelKind = String(params.get('panel') || '').trim();
-  if (panelKind) {
+  const archiveSessionId = String(params.get('archive') || '').trim();
+  if (archiveSessionId) {
+    state.archiveWindow = true;
+    document.body.classList.add('archive-window');
+    document.title = 'YAH - Archived';
+  } else if (panelKind) {
     state.panelWindow = true;
     document.body.classList.add('panel-window');
     const panelLabels = {
@@ -10811,9 +10867,13 @@ async function boot() {
   if (state.chatWindow) applyFoldState(currentSession());
 
   bindEvents();
-  connectBackgroundEvents();
+  if (!state.archiveWindow) connectBackgroundEvents();
   applySettings();
   await loadAgents();
+  if (state.archiveWindow) {
+    setTimeout(() => window.openArchivePage?.(archiveSessionId), 0);
+    return;
+  }
   if (state.panelWindow) {
     setTimeout(() => {
       if (panelKind === 'mcp') window.openMcp?.();

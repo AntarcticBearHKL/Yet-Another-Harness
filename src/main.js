@@ -51,6 +51,7 @@ let saveAgileBoundsTimer = null;
 const contentWindows = new Map();
 const chatWindows = new Map();
 const configWindows = new Map();
+const archiveWindows = new Map();
 let dragState = null;
 let resizeState = null;
 
@@ -368,6 +369,63 @@ function openConfigWindow(kind) {
   return win.id;
 }
 
+function openArchiveWindow(sessionId) {
+  const id = String(sessionId || '').trim();
+  if (!id) return null;
+
+  const existing = archiveWindows.get(id);
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore();
+    existing.show();
+    existing.focus();
+    return existing.id;
+  }
+
+  const win = new BrowserWindow({
+    width: 1040,
+    height: 780,
+    minWidth: 720,
+    minHeight: 520,
+    title: 'YAH - Archived',
+    icon: path.join(__dirname, '..', 'assets', 'yah.ico'),
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    roundedCorners: false,
+    thickFrame: true,
+    hasShadow: false,
+    show: false,
+    resizable: true,
+    center: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      spellcheck: false,
+    },
+  });
+
+  archiveWindows.set(id, win);
+  win.loadURL(
+    `${LOCAL_URL}/?archive=${encodeURIComponent(id)}&shell=electron`
+  );
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed()) win.show();
+  });
+  win.on('closed', () => {
+    if (archiveWindows.get(id) === win) archiveWindows.delete(id);
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event) => {
+    event.preventDefault();
+  });
+  return win.id;
+}
+
 function loadAgileWindowState() {
   try {
     return JSON.parse(fs.readFileSync(AGILE_WINDOW_STATE_FILE, 'utf8'));
@@ -549,6 +607,10 @@ function createWindow() {
       if (!win.isDestroyed()) win.close();
     }
     configWindows.clear();
+    for (const win of [...archiveWindows.values()]) {
+      if (!win.isDestroyed()) win.close();
+    }
+    archiveWindows.clear();
   });
 
   mainWindow.webContents.on('context-menu', (event) => {
@@ -626,6 +688,9 @@ if (gotLock) {
     });
     ipcMain.handle('agile:open', () => openAgileWindow());
     ipcMain.handle('config:open', (_event, kind) => openConfigWindow(kind));
+    ipcMain.handle('archive:open', (_event, sessionId) =>
+      openArchiveWindow(sessionId)
+    );
     ipcMain.handle('chat:open', (_event, sessionId, options) =>
       openChatWindow(sessionId, options)
     );

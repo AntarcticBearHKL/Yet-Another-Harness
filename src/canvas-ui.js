@@ -275,12 +275,14 @@ function canvasGroupJobs(root, children) {
     const list = canvasState.backgroundBySession[session.id];
     if (Array.isArray(list)) jobs.push(...list);
   }
-  return jobs.sort((left, right) => {
-    const leftRunning = left.status === 'running' ? 0 : 1;
-    const rightRunning = right.status === 'running' ? 0 : 1;
-    if (leftRunning !== rightRunning) return leftRunning - rightRunning;
-    return (right.startedAt || 0) - (left.startedAt || 0);
-  });
+  return jobs
+    .filter((job) => job.status === 'running')
+    .sort((left, right) => {
+      const leftRunning = left.status === 'running' ? 0 : 1;
+      const rightRunning = right.status === 'running' ? 0 : 1;
+      if (leftRunning !== rightRunning) return leftRunning - rightRunning;
+      return (right.startedAt || 0) - (left.startedAt || 0);
+    });
 }
 
 /* -------------------------------- 分组框 -------------------------------- */
@@ -777,10 +779,11 @@ function buildCanvasGroup(root, children, jobs, node) {
   groupEl.append(head);
 
   const columns = el('div', 'canvas-group-columns');
+  const activeChildren = children.filter((child) => !child.archivedAt);
   columns.append(
     buildCanvasColumn(
       'SUBAGENTS',
-      children.map((child) => buildCanvasChild(child, root))
+      activeChildren.map((child) => buildCanvasChild(child, root))
     ),
     buildCanvasColumn(
       'BACKGROUND',
@@ -1518,6 +1521,11 @@ function openCanvasNodeMenu(sessionId, x, y) {
     },
   ];
   items.push({
+    label: '归档',
+    icon: RING_ICONS.archive,
+    action: () => window.openArchiveWindowForSession?.(session.id),
+  });
+  items.push({
     label: '改名',
     icon: RING_ICONS.rename,
     action: () => openRename('session', session.id),
@@ -1815,7 +1823,14 @@ api.onSubagentStarted((payload) => {
   }
 });
 
-api.onSubagentComplete(() => {
+api.onSubagentComplete((payload) => {
+  const session = payload?.sessionId
+    ? state.sessions.find((item) => item.id === payload.sessionId)
+    : null;
+  if (session) {
+    session.archivedAt = payload?.endedAt || Date.now();
+    session.archivedStatus = payload?.status || 'done';
+  }
   if (
     canvasOverlayOpen() &&
     !canvasState.drag &&
