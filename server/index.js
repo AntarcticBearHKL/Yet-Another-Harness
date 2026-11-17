@@ -184,6 +184,7 @@ const STATIC_FILES = new Map([
   ['/code-parse.js', 'code-parse.js'],
   ['/resize.css', 'resize.css'],
   ['/resize.js', 'resize.js'],
+  ['/tool-i18n.js', 'tool-i18n.js'],
   ['/renderer.js', 'renderer.js'],
   ['/mcp-ui.js', 'mcp-ui.js'],
   ['/agile-ui.js', 'agile-ui.js'],

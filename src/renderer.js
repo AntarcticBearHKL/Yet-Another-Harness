@@ -2312,7 +2312,7 @@ function renderToolCard(callStep, resultStep, msg, key, options = {}) {
         .split('__')
         .filter(Boolean)
         .join(' · ') || name
-    : name;
+    : window.toolDisplayName?.(name) || name;
   const callMetrics = call?.metrics || null;
   const resultMetrics = result?.metrics || null;
   const startedAt = Number.isFinite(Number(callMetrics?.startedAt))
@@ -8845,7 +8845,7 @@ const CATALOG_EMPTY = {
 const TOOL_GROUPS = [
   {
     id: 'agile',
-    label: 'Agile',
+    label: '敏捷',
     pattern: /^agile_/i,
   },
   {
@@ -9259,7 +9259,7 @@ function renderCatalogSkillItem(entry) {
         el('span', 'catalog-param-name', argument.name || 'argument')
       );
       if (argument.required) {
-        paramHead.append(el('span', 'catalog-param-required', 'required'));
+        paramHead.append(el('span', 'catalog-param-required', '必填'));
       }
       row.append(paramHead);
       if (argument.description) {
@@ -9278,19 +9278,24 @@ function renderCatalogSkillItem(entry) {
 
 function renderCatalogToolItem(entry) {
   const fn = entry.function || entry;
+  const toolName = fn.name || 'tool';
+  const displayName = window.toolDisplayName?.(toolName) || toolName;
+  const displayDescription =
+    window.toolDisplayDescription?.(toolName, fn.description) || '';
   const item = el('div', 'catalog-item catalog-tool-item');
   const properties = fn.parameters?.properties || {};
   const required = new Set(fn.parameters?.required || []);
   const names = Object.keys(properties);
-  const hasDetails = Boolean(fn.description) || names.length > 0;
+  const hasDetails = Boolean(displayDescription) || names.length > 0;
   const meta = names.length
     ? `${names.length} 参数${required.size ? ` · ${required.size} 必填` : ''}`
     : '无参数';
   const head = el('button', 'catalog-tool-head');
   head.type = 'button';
   head.setAttribute('aria-expanded', 'false');
+  head.title = toolName;
   head.append(el('span', 'catalog-tool-dot'));
-  head.append(el('span', 'catalog-tool-name', fn.name || 'tool'));
+  head.append(el('span', 'catalog-tool-name', displayName));
   head.append(el('span', 'catalog-tool-meta', meta));
   if (hasDetails) head.append(catalogChevron());
   item.append(head);
@@ -9299,25 +9304,33 @@ function renderCatalogToolItem(entry) {
   const body = el('div', 'catalog-tool-body');
   const clip = el('div', 'catalog-tool-clip');
   const inner = el('div', 'catalog-tool-inner');
-  if (fn.description) {
-    inner.append(el('div', 'catalog-desc', fn.description));
+  if (displayDescription) {
+    inner.append(el('div', 'catalog-desc', displayDescription));
   }
   if (names.length > 0) {
     const params = el('div', 'catalog-params');
     for (const paramName of names) {
       const schema = properties[paramName] || {};
+      const description =
+        window.toolParamDescription?.(toolName, paramName) || '';
       const row = el('div', 'catalog-param');
       const paramHead = el('div', 'catalog-param-head');
       paramHead.append(el('span', 'catalog-param-name', paramName));
       if (schema.type) {
-        paramHead.append(el('span', 'catalog-param-type', schema.type));
+        paramHead.append(
+          el(
+            'span',
+            'catalog-param-type',
+            window.toolTypeLabel?.(schema.type) || schema.type
+          )
+        );
       }
       if (required.has(paramName)) {
-        paramHead.append(el('span', 'catalog-param-required', 'required'));
+        paramHead.append(el('span', 'catalog-param-required', '必填'));
       }
       row.append(paramHead);
-      if (schema.description) {
-        row.append(el('div', 'catalog-param-desc', schema.description));
+      if (description) {
+        row.append(el('div', 'catalog-param-desc', description));
       }
       params.append(row);
     }
@@ -9662,14 +9675,19 @@ function renderAgentToolsEditor(agent, allTools) {
         saveTools();
         updateState();
       });
+      const displayName = window.toolDisplayName?.(tool.name) || tool.name;
+      const displayDescription =
+        window.toolDisplayDescription?.(tool.name, tool.description) || '';
       const body = el('span', 'agent-tool-body');
-      body.append(el('span', 'agent-tool-name', tool.name));
-      if (tool.description) {
-        body.append(el('span', 'agent-tool-desc', tool.description));
+      const nameNode = el('span', 'agent-tool-name', displayName);
+      nameNode.title = tool.name;
+      body.append(nameNode);
+      if (displayDescription) {
+        body.append(el('span', 'agent-tool-desc', displayDescription));
       }
       row.append(checkbox, body);
       row.dataset.search =
-        `${tool.name} ${tool.description || ''}`.toLowerCase();
+        `${displayName} ${displayDescription} ${tool.name} ${tool.description || ''}`.toLowerCase();
       list.append(row);
       toolCheckboxes.set(tool.name, checkbox);
     }
