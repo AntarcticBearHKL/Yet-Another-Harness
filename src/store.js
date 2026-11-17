@@ -2023,6 +2023,21 @@ function activeRunForSession(sessionId) {
   );
 }
 
+function listActiveRuns() {
+  return openDb()
+    .prepare(
+      `SELECT id, session_id, status FROM runs
+       WHERE status IN ('running', 'queued')
+       ORDER BY started_at ASC`
+    )
+    .all()
+    .map((row) => ({
+      runId: String(row.id),
+      sessionId: String(row.session_id),
+      status: String(row.status || 'running'),
+    }));
+}
+
 function interruptRuns() {
   openDb()
     .prepare(
@@ -2071,5 +2086,6 @@ module.exports = {
   createRun,
   updateRun,
   activeRunForSession,
+  listActiveRuns,
   interruptRuns,
 };

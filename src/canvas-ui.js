@@ -50,6 +50,10 @@ const canvasState = {
   workspaceDrag: null,
   backgroundBySession: {},
   backgroundFetched: {},
+  running: new Set(),
+  runsTimer: null,
+  runsRequest: 0,
+  runsDirty: false,
   saveTimer: null,
   pageTimer: null,
   zoomTimer: null,
@@ -660,6 +664,49 @@ async function loadCanvasBackground({ force = false } = {}) {
   renderCanvas();
 }
 
+async function loadCanvasRuns() {
+  if (!canvasOverlayOpen()) return;
+  const request = ++canvasState.runsRequest;
+  try {
+    const data = await api.loadActiveRuns();
+    if (request !== canvasState.runsRequest) return;
+    const next = new Set(
+      (Array.isArray(data?.runs) ? data.runs : [])
+        .map((run) => String(run?.sessionId || ''))
+        .filter(Boolean)
+    );
+    const changed =
+      next.size !== canvasState.running.size ||
+      [...next].some((id) => !canvasState.running.has(id));
+    canvasState.running = next;
+    if (changed) canvasState.runsDirty = true;
+    if (
+      canvasState.runsDirty &&
+      canvasOverlayOpen() &&
+      !canvasState.drag &&
+      !canvasState.frameDrag &&
+      !canvasState.marquee &&
+      !canvasState.workspaceDrag
+    ) {
+      canvasState.runsDirty = false;
+      renderCanvas();
+    }
+  } catch {
+    /* ignore polling failures */
+  }
+}
+
+function scheduleCanvasRunsPoll() {
+  if (!canvasOverlayOpen()) return;
+  if (canvasState.runsTimer) return;
+  canvasState.runsTimer = setTimeout(async () => {
+    canvasState.runsTimer = null;
+    if (!canvasOverlayOpen()) return;
+    if (!document.hidden) await loadCanvasRuns();
+    scheduleCanvasRunsPoll();
+  }, 1500);
+}
+
 /* -------------------------------- 组渲染 -------------------------------- */
 
 function buildCanvasChild(child, root) {
@@ -764,6 +811,10 @@ function buildCanvasGroup(root, children, jobs, node) {
   if (canvasState.selectedIds.has(root.id)) {
     groupEl.classList.add('selected');
   }
+  const running = [root, ...children].some((session) =>
+    canvasState.running.has(session.id)
+  );
+  if (running) groupEl.classList.add('running');
 
   const workspace = canvasWorkspaceFor(root);
   const workspaceName = workspace?.name || '未分组';
@@ -776,6 +827,13 @@ function buildCanvasGroup(root, children, jobs, node) {
   workspaceEl.title = workspaceName;
   heading.append(workspaceEl);
   head.append(heading);
+  if (running) {
+    const loading = el('span', 'canvas-group-loading');
+    loading.setAttribute('role', 'status');
+    loading.setAttribute('aria-label', '生成中');
+    loading.title = '生成中';
+    head.append(loading);
+  }
   groupEl.append(head);
 
   const columns = el('div', 'canvas-group-columns');
@@ -1587,6 +1645,8 @@ function openCanvas() {
     renderCanvas();
   }
   void loadCanvasBackground();
+  void loadCanvasRuns();
+  scheduleCanvasRunsPoll();
 }
 
 function openCanvasWorkspaces() {
@@ -1599,6 +1659,9 @@ function closeCanvas() {
   if (!canvasDom.overlay) return;
   canvasState.open = false;
   canvasState.pageOpen = false;
+  canvasState.runsRequest += 1;
+  clearTimeout(canvasState.runsTimer);
+  canvasState.runsTimer = null;
   endWorkspaceDrag();
   clearTimeout(canvasState.pageTimer);
   canvasDom.page?.classList.add('hidden');
@@ -1642,6 +1705,8 @@ function refreshCanvas() {
   renderCanvas();
   if (canvasState.pageOpen) renderWorkspacePage();
   void loadCanvasBackground();
+  void loadCanvasRuns();
+  scheduleCanvasRunsPoll();
 }
 
 /* --------------------------------- 存储 --------------------------------- */

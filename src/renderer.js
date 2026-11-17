@@ -485,6 +485,7 @@ const api = {
     requestJson(
       `/api/runs/active?sessionId=${encodeURIComponent(sessionId)}`
     ),
+  loadActiveRuns: () => requestJson('/api/runs'),
   saveGoal: (sessionId, goal) =>
     requestJson('/api/goals', {
       method: 'POST',

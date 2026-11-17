@@ -1114,6 +1114,11 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && pathname === '/api/runs') {
+    sendJson(res, 200, { runs: store.listActiveRuns() });
+    return true;
+  }
+
   if (req.method === 'GET' && pathname === '/api/runs/active') {
     const sessionId = String(url.searchParams.get('sessionId') || '');
     if (!sessionId) {

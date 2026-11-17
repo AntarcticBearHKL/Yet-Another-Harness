@@ -1103,3 +1103,46 @@ test('finished subagents and background tasks archive with the node', () => {
     assert.equal(store.listArchivedJobs(['child-1']).length, 0);
   });
 });
+
+test('active runs list is exposed for the canvas', () => {
+  withStoreDir(() => {
+    store.saveStructure({
+      projects: [
+        { id: 'p1', name: 'Project 1', directories: ['C:\\work'] },
+      ],
+      sessions: [
+        {
+          id: 's1',
+          title: 'One',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          frozen: false,
+          mcpDisabled: [],
+          msgs: [],
+        },
+        {
+          id: 's2',
+          title: 'Two',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          frozen: false,
+          mcpDisabled: [],
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 2,
+    });
+    store.createRun('run-1', 's1');
+    store.createRun('run-2', 's2');
+    store.updateRun('run-1', 'done');
+    const runs = store.listActiveRuns();
+    assert.deepEqual(
+      runs.map((run) => run.sessionId),
+      ['s2']
+    );
+    assert.equal(runs[0].status, 'running');
+  });
+});
