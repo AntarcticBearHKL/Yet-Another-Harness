@@ -8069,7 +8069,6 @@ function endActionMenuPress(event) {
   const press = actionMenuPress;
   if (!press) return;
   if (press.timer) clearTimeout(press.timer);
-  const menuKind = press.menuKind;
   actionMenuPress = null;
   if (!state.ringOpen) return;
   const hovered = document.elementFromPoint(event.clientX, event.clientY);
@@ -8078,12 +8077,7 @@ function endActionMenuPress(event) {
       ? hovered.closest('#action-menu .action-menu-item')
       : null;
   if (!active) {
-    if (menuKind === 'canvas-node') {
-      closeActionMenu();
-      lastActionMenuAt = Date.now();
-      return;
-    }
-    // Keep other menus open after the hold so they can also be used with a click.
+    closeActionMenu();
     lastActionMenuAt = Date.now();
     return;
   }
