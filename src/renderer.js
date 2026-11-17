@@ -727,6 +727,9 @@ function openManagerComposer(managerId = null) {
 function closeManagerComposer() {
   if (!dom.managerComposer) return;
   managerComposerState = null;
+  if (dom.managerName && document.activeElement === dom.managerName) {
+    dom.managerName.blur();
+  }
   dom.managerComposer.classList.add('hidden');
   dom.managerComposer.setAttribute('aria-hidden', 'true');
 }
@@ -10068,6 +10071,34 @@ function bindEvents() {
     if (event.key === 'Escape' && !event.isComposing) {
       event.preventDefault();
       closeManagerComposer();
+      return;
+    }
+    if (
+      (event.code === 'Space' || event.key === ' ') &&
+      !event.isComposing &&
+      !event.repeat &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.shiftKey
+    ) {
+      const nameInput = dom.managerName;
+      const nameFocused =
+        nameInput &&
+        (event.target === nameInput || document.activeElement === nameInput);
+      if (nameFocused) {
+        if (!String(nameInput.value || '').trim()) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeManagerComposer();
+        }
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (!String(nameInput?.value || '').trim()) {
+        closeManagerComposer();
+      }
       return;
     }
     if (

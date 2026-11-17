@@ -13,6 +13,12 @@ body.chat-window.chat-compact #messages {
   padding-right: 96px;
 }
 
+/* The empty state has no turn navigator to make room for. Keep it centered
+   in the whole window instead of the narrower content column. */
+body.chat-window.chat-compact #messages:has(> .empty) {
+  padding-right: 32px;
+}
+
 body.chat-window:has(#composer.open) .chat-turn-nav {
   opacity: 0;
   pointer-events: none;
