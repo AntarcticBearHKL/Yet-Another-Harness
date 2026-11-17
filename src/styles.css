@@ -5625,21 +5625,6 @@ body.maximized .mcp {
   white-space: nowrap;
 }
 
-.mcp-add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  flex: none;
-  height: 40px;
-  margin-top: 6px;
-  border: 1px dashed var(--line);
-  border-radius: 8px;
-  color: var(--dim);
-  font-size: 12.5px;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
-}
-
 .mcp-side-actions {
   display: flex;
   flex-direction: column;
@@ -5658,21 +5643,6 @@ body.maximized .mcp {
 .mcp-reload:hover {
   background: var(--hover);
   color: var(--text);
-}
-
-.mcp-add:hover {
-  border-color: var(--accent);
-  background: var(--hover);
-  color: var(--text);
-}
-
-.mcp-add svg {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
 }
 
 .mcp-side-empty {
@@ -6739,10 +6709,6 @@ body.maximized .mcp {
   overflow-y: auto;
 }
 
-.mcp-form-mode {
-  margin-bottom: 12px;
-}
-
 .mcp-form-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6750,25 +6716,12 @@ body.maximized .mcp {
 }
 
 .mcp-form-fields.hidden,
-.mcp-form-group.hidden,
-.mcp-form-json-wrap.hidden {
+.mcp-form-group.hidden {
   display: none;
 }
 
 .mcp-form-group {
   display: contents;
-}
-
-.mcp-form-json-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.mcp-json-input {
-  min-height: 280px;
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: 12px;
 }
 
 /* Goal dialog, goal strip, goal check block, context compaction block. */
@@ -7425,7 +7378,6 @@ body.maximized .mcp {
 }
 
 .pill,
-.mcp-add,
 .goal-strip-button,
 .mcp-text-button {
   border-radius: var(--radius-control);
@@ -7441,16 +7393,6 @@ body.maximized .mcp {
   height: 28px;
   padding: 0 10px;
   font-size: 11.5px;
-}
-
-.mcp-add {
-  height: 40px;
-  margin-top: 10px;
-  background: transparent;
-}
-
-.mcp-add:hover {
-  background: var(--hover);
 }
 
 .goal-strip-button {

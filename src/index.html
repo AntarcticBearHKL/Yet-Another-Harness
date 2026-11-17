@@ -246,16 +246,10 @@
       <div class="mcp-body">
         <aside class="mcp-side">
           <div id="mcp-server-list" class="mcp-server-list"></div>
-          <button id="mcp-add" class="mcp-add" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            添加服务器
-          </button>
         </aside>
         <section class="mcp-main">
           <div id="mcp-empty" class="mcp-empty">
-            还没有 MCP 服务器
+            还没有 MCP 服务器，让 Agent 帮你添加
           </div>
           <div id="mcp-detail" class="mcp-detail hidden">
             <header class="mcp-head">
@@ -320,24 +314,6 @@
     <div id="mcp-form-overlay" class="overlay hidden" aria-hidden="true">
       <div class="overlay-panel mcp-form-panel">
         <div class="mcp-form-scroll">
-          <div class="segmented mcp-form-mode">
-            <button
-              id="mcp-form-mode-form"
-              class="pill compact"
-              type="button"
-              aria-pressed="true"
-            >
-              表单
-            </button>
-            <button
-              id="mcp-form-mode-json"
-              class="pill compact"
-              type="button"
-              aria-pressed="false"
-            >
-              JSON 配置
-            </button>
-          </div>
           <div id="mcp-form-fields" class="mcp-form-fields">
             <div class="mcp-field">
               <span class="mcp-label">名称</span>
@@ -444,18 +420,6 @@
                   placeholder="Authorization=Bearer ..."
                 ></textarea>
               </div>
-            </div>
-          </div>
-          <div id="mcp-form-json-wrap" class="mcp-form-json-wrap hidden">
-            <textarea
-              id="mcp-form-json"
-              class="mcp-textarea mcp-json-input"
-              rows="14"
-              spellcheck="false"
-              placeholder='{"mcpServers":{"filesystem":{"command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","D:\\Dev"]}}}'
-            ></textarea>
-            <div class="mcp-field-desc">
-              支持 mcpServers / mcp.servers / servers
             </div>
           </div>
           <div id="mcp-form-error" class="mcp-inline-error hidden"></div>

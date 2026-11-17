@@ -8,7 +8,6 @@ const mcpDom = {
   overlay: document.getElementById('mcp-overlay'),
   close: document.getElementById('mcp-close'),
   serverList: document.getElementById('mcp-server-list'),
-  add: document.getElementById('mcp-add'),
   empty: document.getElementById('mcp-empty'),
   detail: document.getElementById('mcp-detail'),
   title: document.getElementById('mcp-title'),
@@ -27,11 +26,6 @@ const mcpDom = {
   formCancel: document.getElementById('mcp-form-cancel'),
   formSave: document.getElementById('mcp-form-save'),
   formError: document.getElementById('mcp-form-error'),
-  formModeForm: document.getElementById('mcp-form-mode-form'),
-  formModeJson: document.getElementById('mcp-form-mode-json'),
-  formFields: document.getElementById('mcp-form-fields'),
-  formJsonWrap: document.getElementById('mcp-form-json-wrap'),
-  formJson: document.getElementById('mcp-form-json'),
   formName: document.getElementById('mcp-form-name'),
   formTransport: document.getElementById('mcp-form-transport'),
   formStdio: document.getElementById('mcp-form-stdio'),
@@ -58,7 +52,6 @@ const mcpState = {
   deleteTimer: null,
   deleteArmed: false,
   formOpen: false,
-  formMode: 'form',
   formEditId: null,
   formTransport: 'stdio',
   formSaving: false,
@@ -465,9 +458,6 @@ function mcpRenderServerList() {
     row.addEventListener('click', () => mcpSelectServer(server.id));
     mcpDom.serverList.append(row);
   }
-  if (mcpDom.add) {
-    mcpDom.serverList.append(mcpDom.add);
-  }
 }
 
 function mcpRenderHeader() {
@@ -477,7 +467,7 @@ function mcpRenderHeader() {
     mcpDom.empty.classList.remove('hidden');
     mcpDom.empty.textContent =
       mcpState.servers.length === 0
-        ? '还没有 MCP 服务器'
+        ? '还没有 MCP 服务器，让 Agent 帮你添加'
         : '选择一个服务器';
     return;
   }
@@ -2177,20 +2167,6 @@ function mcpSetFormTransport(transport) {
   mcpDom.formRemote.classList.toggle('hidden', transport === 'stdio');
 }
 
-function mcpSetFormMode(mode) {
-  mcpState.formMode = mode;
-  mcpDom.formModeForm.setAttribute(
-    'aria-pressed',
-    mode === 'form' ? 'true' : 'false'
-  );
-  mcpDom.formModeJson.setAttribute(
-    'aria-pressed',
-    mode === 'json' ? 'true' : 'false'
-  );
-  mcpDom.formFields.classList.toggle('hidden', mode !== 'form');
-  mcpDom.formJsonWrap.classList.toggle('hidden', mode !== 'json');
-}
-
 function mcpResetForm() {
   mcpDom.formName.value = '';
   mcpDom.formCommand.value = '';
@@ -2199,37 +2175,30 @@ function mcpResetForm() {
   mcpDom.formEnv.value = '';
   mcpDom.formUrl.value = '';
   mcpDom.formHeaders.value = '';
-  mcpDom.formJson.value = '';
   mcpDom.formError.classList.add('hidden');
   mcpDom.formError.textContent = '';
   mcpSetFormTransport('stdio');
-  mcpSetFormMode('form');
 }
 
 function mcpOpenForm(editId) {
-  const server = editId
-    ? mcpState.servers.find((item) => item.id === editId)
-    : null;
-  if (server?.source === 'opencode') {
+  const server = mcpState.servers.find((item) => item.id === editId);
+  if (!server) return;
+  if (server.source === 'opencode') {
     mcpToast('请在 OpenCode 中修改');
     return;
   }
   mcpResetForm();
   mcpState.formOpen = true;
-  mcpState.formEditId = editId || null;
+  mcpState.formEditId = server.id;
   mcpState.formSaving = false;
-  mcpDom.formModeJson.disabled = Boolean(server);
-  mcpDom.formModeJson.style.opacity = server ? '0.45' : '';
-  if (server) {
-    mcpDom.formName.value = server.name;
-    mcpSetFormTransport(server.transport || 'stdio');
-    mcpDom.formCommand.value = server.command || '';
-    mcpDom.formArgs.value = (server.args || []).join('\n');
-    mcpDom.formCwd.value = server.cwd || '';
-    mcpDom.formEnv.value = mcpFormatKeyValues(server.env || {});
-    mcpDom.formUrl.value = server.url || '';
-    mcpDom.formHeaders.value = mcpFormatKeyValues(server.headers || {});
-  }
+  mcpDom.formName.value = server.name;
+  mcpSetFormTransport(server.transport || 'stdio');
+  mcpDom.formCommand.value = server.command || '';
+  mcpDom.formArgs.value = (server.args || []).join('\n');
+  mcpDom.formCwd.value = server.cwd || '';
+  mcpDom.formEnv.value = mcpFormatKeyValues(server.env || {});
+  mcpDom.formUrl.value = server.url || '';
+  mcpDom.formHeaders.value = mcpFormatKeyValues(server.headers || {});
   mcpDom.formOverlay.classList.remove('hidden');
   mcpDom.formOverlay.setAttribute('aria-hidden', 'false');
   requestAnimationFrame(() => mcpDom.formName.focus());
@@ -2268,26 +2237,14 @@ function mcpFormPayload() {
 
 async function mcpSaveForm() {
   if (mcpState.formSaving) return;
+  const editId = mcpState.formEditId;
+  if (!editId) {
+    mcpCloseForm();
+    return;
+  }
   mcpState.formSaving = true;
   mcpDom.formError.classList.add('hidden');
-  const editId = mcpState.formEditId;
   try {
-    let response;
-    if (mcpState.formMode === 'json' && !editId) {
-      response = await requestJson('/api/mcp/servers', {
-        method: 'POST',
-        body: { json: mcpDom.formJson.value },
-      });
-      const added = Array.isArray(response?.added) ? response.added : [];
-      mcpCloseForm();
-      await mcpRefreshState();
-      if (added[0]?.id) mcpSelectServer(added[0].id);
-      mcpToast(
-        added.length > 1 ? `已添加 ${added.length} 个服务器` : '服务器已添加',
-        'success'
-      );
-      return;
-    }
     const payload = mcpFormPayload();
     if (!payload.name) throw new Error('填写名称');
     if (payload.transport === 'stdio' && !payload.command) {
@@ -2296,22 +2253,15 @@ async function mcpSaveForm() {
     if (payload.transport !== 'stdio' && !payload.url) {
       throw new Error('需要 URL');
     }
-    if (editId) {
-      response = await requestJson(
-        `/api/mcp/servers/${encodeURIComponent(editId)}`,
-        { method: 'PUT', body: payload }
-      );
-    } else {
-      response = await requestJson('/api/mcp/servers', {
-        method: 'POST',
-        body: payload,
-      });
-    }
+    const response = await requestJson(
+      `/api/mcp/servers/${encodeURIComponent(editId)}`,
+      { method: 'PUT', body: payload }
+    );
     const server = response?.server || null;
     mcpCloseForm();
     await mcpRefreshState();
     if (server?.id) mcpSelectServer(server.id);
-    mcpToast(editId ? '服务器已更新' : '服务器已添加', 'success');
+    mcpToast('服务器已更新', 'success');
   } catch (error) {
     mcpDom.formError.textContent = error.message;
     mcpDom.formError.classList.remove('hidden');
@@ -2398,7 +2348,6 @@ async function mcpRemoveServer() {
 
 function mcpBindEvents() {
   mcpDom.close?.addEventListener('click', closeMcp);
-  mcpDom.add.addEventListener('click', () => mcpOpenForm(null));
   mcpDom.refresh.addEventListener('click', () => void mcpRefreshCapabilities());
   mcpDom.reconnect.addEventListener('click', () => void mcpReconnect());
   mcpDom.edit.addEventListener('click', () => {
@@ -2419,11 +2368,6 @@ function mcpBindEvents() {
   mcpDom.formClose?.addEventListener('click', mcpCloseForm);
   mcpDom.formCancel.addEventListener('click', mcpCloseForm);
   mcpDom.formSave.addEventListener('click', () => void mcpSaveForm());
-  mcpDom.formModeForm.addEventListener('click', () => mcpSetFormMode('form'));
-  mcpDom.formModeJson.addEventListener('click', () => {
-    if (mcpDom.formModeJson.disabled) return;
-    mcpSetFormMode('json');
-  });
   mcpDom.formTransport.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-transport]');
     if (!button) return;
