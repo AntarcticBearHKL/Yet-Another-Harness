@@ -1214,3 +1214,46 @@ test('manager and work node fields round-trip through sqlite', () => {
     assert.equal(store.getSession('w1').managerId, null);
   });
 });
+
+test('structure saves refuse to wipe every session by accident', () => {
+  withStoreDir(() => {
+    store.saveStructure({
+      projects: [
+        { id: 'p1', name: 'Project 1', directories: ['C:\\work'] },
+      ],
+      sessions: [
+        {
+          id: 's1',
+          title: 'Chat 1',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 1,
+    });
+    assert.throws(
+      () =>
+        store.saveStructure({
+          projects: [
+            { id: 'p1', name: 'Project 1', directories: ['C:\\work'] },
+          ],
+          sessions: [],
+          current: 0,
+          seq: 1,
+        }),
+      /refusing to replace existing sessions/
+    );
+    assert.equal(store.loadChats().sessions.length, 1);
+    store.saveStructure({
+      projects: [],
+      sessions: [],
+      current: 0,
+      seq: 1,
+      allowEmpty: true,
+    });
+    assert.equal(store.loadChats().sessions.length, 0);
+  });
+});

@@ -1399,6 +1399,21 @@ function saveStructure(chats) {
   const preserveCurrent = Boolean(chats && chats.preserveCurrent);
   const normalized = normalizeChats(chats);
   const database = openDb();
+  const existingSessionCount =
+    Number(
+      database.prepare('SELECT COUNT(*) AS n FROM sessions').get()?.n
+    ) || 0;
+  if (
+    existingSessionCount > 0 &&
+    normalized.sessions.length === 0 &&
+    chats?.allowEmpty !== true
+  ) {
+    const error = new Error(
+      'refusing to replace existing sessions with an empty structure'
+    );
+    error.status = 409;
+    throw error;
+  }
 
   const upsertProject = database.prepare(
     `INSERT INTO projects (id, name, directories, sort_order)
