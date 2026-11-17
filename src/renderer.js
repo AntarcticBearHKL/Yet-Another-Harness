@@ -7533,7 +7533,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, .canvas-manager, .manager-composer-panel, #web-content';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, .canvas-manager, .canvas-manager-group, .manager-composer-panel, #web-content';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -7599,7 +7599,7 @@ function onWindowDragStart(event) {
     const workspacePage = target.closest('.canvas-workspaces-page');
     const excluded = workspacePage
       ? '.canvas-workspace, button, input, textarea, select, [contenteditable="true"]'
-      : '.canvas-group, .canvas-child, .canvas-manager, .canvas-frame, .canvas-zoom-indicator, .manager-composer-panel, button, input, textarea, select, [contenteditable="true"]';
+      : '.canvas-group, .canvas-child, .canvas-manager, .canvas-manager-group, .canvas-frame, .canvas-zoom-indicator, .manager-composer-panel, button, input, textarea, select, [contenteditable="true"]';
     if (target.closest(excluded)) return;
   } else if (event.button !== 0) {
     return;

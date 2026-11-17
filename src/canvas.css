@@ -1325,3 +1325,58 @@ body.canvas-space .canvas-stage.panning {
 .manager-composer-error[hidden] {
   display: none;
 }
+
+.canvas-manager-group {
+  position: absolute;
+  border: 1px solid rgba(185, 111, 61, 0.28);
+  border-radius: 26px;
+  background: rgba(185, 111, 61, 0.045);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+}
+
+.canvas-manager-group:hover {
+  border-color: rgba(185, 111, 61, 0.42);
+  background: rgba(185, 111, 61, 0.06);
+}
+
+.canvas-manager-group.dragging {
+  cursor: grabbing;
+  border-color: var(--accent);
+  background: rgba(185, 111, 61, 0.075);
+}
+
+.canvas-manager-group-label {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
+  pointer-events: none;
+  user-select: none;
+}
+
+.canvas-manager-group-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: rgba(185, 111, 61, 0.55);
+}
+
+.canvas-manager-group-count {
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}

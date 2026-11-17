@@ -17,8 +17,8 @@ let providers = {
 
 const WORKNODE_WIDTH = 300;
 const WORKNODE_HEIGHT = 220;
-const MANAGER_WIDTH = 340;
-const MANAGER_HEIGHT = 180;
+const MANAGER_WIDTH = 300;
+const MANAGER_HEIGHT = 150;
 const WORKNODE_GAP_X = 36;
 const WORKNODE_GAP_Y = 34;
 const WORKNODE_COLUMNS = 2;

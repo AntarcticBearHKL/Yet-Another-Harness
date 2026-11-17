@@ -18,6 +18,9 @@ const canvasDom = {
 
 const CANVAS_GROUP_WIDTH = 300;
 const CANVAS_GROUP_HEIGHT = 120;
+const CANVAS_MANAGER_GROUP_WIDTH = 700;
+const CANVAS_MANAGER_GROUP_HEIGHT = 460;
+const CANVAS_MANAGER_GROUP_PADDING = 20;
 const CANVAS_FRAME_PADDING = 32;
 const CANVAS_MIN_ZOOM = 0.2;
 const CANVAS_MAX_ZOOM = 3;
@@ -256,12 +259,11 @@ function ensureCanvasGroups() {
     if (!node) {
       const col = rootIndex % 3;
       const row = Math.floor(rootIndex / 3);
-      const isManager = root.nodeRole === 'manager';
       node = canvasState.nodes[root.id] = {
         x: 80 + col * 480,
         y: 80 + row * 360,
-        width: isManager ? 340 : CANVAS_GROUP_WIDTH,
-        height: isManager ? 180 : CANVAS_GROUP_HEIGHT,
+        width: CANVAS_GROUP_WIDTH,
+        height: CANVAS_GROUP_HEIGHT,
         parentSessionId: null,
       };
       dirty = true;
@@ -841,6 +843,34 @@ function canvasManagerTeam(manager, sessions = state.sessions) {
   );
 }
 
+function buildCanvasManagerGroup(manager, team, node) {
+  const groupEl = el('div', 'canvas-manager-group');
+  groupEl.dataset.sessionId = manager.id;
+  groupEl.style.left = `${(Number(node.x) || 0) - CANVAS_MANAGER_GROUP_PADDING}px`;
+  groupEl.style.top = `${(Number(node.y) || 0) - CANVAS_MANAGER_GROUP_PADDING}px`;
+  groupEl.style.width = `${CANVAS_MANAGER_GROUP_WIDTH}px`;
+  groupEl.style.height = `${CANVAS_MANAGER_GROUP_HEIGHT}px`;
+  const label = el('div', 'canvas-manager-group-label');
+  label.append(el('span', 'canvas-manager-group-dot'));
+  label.append(el('span', '', 'GROUP'));
+  label.append(el('span', 'canvas-manager-group-count', String(1 + team.length)));
+  groupEl.append(label);
+  groupEl.addEventListener('pointerdown', (event) => {
+    const managerCard = canvasDom.nodes?.querySelector(
+      `.canvas-group[data-session-id="${CSS.escape(manager.id)}"]`
+    );
+    startCanvasManagerDrag(
+      event,
+      manager,
+      managerCard || groupEl,
+      node,
+      team,
+      groupEl
+    );
+  });
+  return groupEl;
+}
+
 function buildCanvasManager(manager, team, node) {
   const managerEl = el('article', 'canvas-manager');
   managerEl.dataset.sessionId = manager.id;
@@ -987,7 +1017,11 @@ function buildCanvasGroup(root, children, jobs, node) {
     el(
       'span',
       'canvas-group-manager',
-      managerName ? `所属 ${managerName}` : '未归属'
+      root.nodeRole === 'manager'
+        ? '管理 node'
+        : managerName
+          ? `所属 ${managerName}`
+          : '未归属'
     )
   );
   heading.append(subline);
@@ -1017,6 +1051,16 @@ function buildCanvasGroup(root, children, jobs, node) {
 
   groupEl.title = `${managerName || '未归属'} · ${root.title || '未命名对话'}`;
   groupEl.addEventListener('pointerdown', (event) => {
+    if (root.nodeRole === 'manager') {
+      startCanvasManagerDrag(
+        event,
+        root,
+        groupEl,
+        node,
+        canvasManagerTeam(root)
+      );
+      return;
+    }
     startCanvasGroupDrag(event, root, groupEl, node);
   });
   groupEl.addEventListener('click', (event) => {
@@ -1065,12 +1109,16 @@ function renderCanvasNodes(index) {
     const node = canvasState.nodes[manager.id];
     if (!node) continue;
     const team = canvasManagerTeam(manager, index.sessions);
-    const managerEl = buildCanvasManager(manager, team, node);
-    managerEl.style.left = `${node.x}px`;
-    managerEl.style.top = `${node.y}px`;
-    managerEl.style.width = `${340}px`;
-    canvasDom.nodes.append(managerEl);
-    measured.push({ groupEl: managerEl, node });
+    const groupBackdrop = buildCanvasManagerGroup(manager, team, node);
+    canvasDom.nodes.append(groupBackdrop);
+    const children = childrenByRoot.get(manager.id) || [];
+    const jobs = canvasGroupJobs(manager, children);
+    const cardEl = buildCanvasGroup(manager, children, jobs, node);
+    cardEl.style.left = `${node.x}px`;
+    cardEl.style.top = `${node.y}px`;
+    cardEl.style.width = `${CANVAS_GROUP_WIDTH}px`;
+    canvasDom.nodes.append(cardEl);
+    measured.push({ groupEl: cardEl, node });
   }
   for (const root of regularRoots) {
     const node = canvasState.nodes[root.id];
@@ -1451,7 +1499,14 @@ function flashZoomIndicator() {
 
 /* --------------------------------- 拖拽 --------------------------------- */
 
-function startCanvasManagerDrag(event, manager, managerEl, node, team = []) {
+function startCanvasManagerDrag(
+  event,
+  manager,
+  managerEl,
+  node,
+  team = [],
+  groupBackdrop = null
+) {
   if (event.button !== 0) return;
   if (
     event.target instanceof Element &&
@@ -1460,6 +1515,12 @@ function startCanvasManagerDrag(event, manager, managerEl, node, team = []) {
     return;
   }
   event.stopPropagation();
+  const backdrop =
+    groupBackdrop ||
+    canvasDom.nodes?.querySelector(
+      `.canvas-manager-group[data-session-id="${CSS.escape(manager.id)}"]`
+    ) ||
+    null;
   const items = [{ node, el: managerEl }];
   for (const session of team) {
     const teamNode = canvasState.nodes[session.id];
@@ -1473,6 +1534,7 @@ function startCanvasManagerDrag(event, manager, managerEl, node, team = []) {
   canvasState.managerDrag = {
     manager,
     managerEl,
+    groupBackdrop: backdrop,
     items,
     startX: event.clientX,
     startY: event.clientY,
@@ -1484,6 +1546,7 @@ function startCanvasManagerDrag(event, manager, managerEl, node, team = []) {
     moved: false,
     pointerId: event.pointerId,
   };
+  backdrop?.classList.add('dragging');
   try {
     managerEl.setPointerCapture(event.pointerId);
   } catch {
@@ -1542,6 +1605,10 @@ function onCanvasPointerMove(event) {
       origin.item.node.y = origin.y + dy;
       origin.item.el.style.left = `${origin.item.node.x}px`;
       origin.item.el.style.top = `${origin.item.node.y}px`;
+    }
+    if (drag.groupBackdrop) {
+      drag.groupBackdrop.style.left = `${(Number(drag.items[0].node.x) || 0) - CANVAS_MANAGER_GROUP_PADDING}px`;
+      drag.groupBackdrop.style.top = `${(Number(drag.items[0].node.y) || 0) - CANVAS_MANAGER_GROUP_PADDING}px`;
     }
     event.preventDefault();
     return;
@@ -1643,6 +1710,7 @@ function onCanvasPointerUp() {
     } catch {
       /* ignore */
     }
+    drag.groupBackdrop?.classList.remove('dragging');
     canvasState.managerDrag = null;
   }
   if (canvasState.frameDrag) {
@@ -2007,8 +2075,8 @@ function createCanvasManagerNode(sessionId) {
     return;
   }
   const rect = canvasDom.stage.getBoundingClientRect();
-  const width = 340;
-  const height = 180;
+  const width = CANVAS_GROUP_WIDTH;
+  const height = CANVAS_GROUP_HEIGHT;
   const viewX = (rect.width / 2 - canvasState.view.x) / canvasState.view.k;
   const viewY = (rect.height / 2 - canvasState.view.y) / canvasState.view.k;
   let x = viewX - width / 2;
@@ -2231,7 +2299,7 @@ function bindCanvasEvents() {
     if (
       event.target instanceof Element &&
       event.target.closest(
-        '.canvas-group, .canvas-manager, .canvas-frame, .manager-composer, .canvas-workspaces-page, .canvas-zoom-indicator, button'
+        '.canvas-group, .canvas-manager, .canvas-manager-group, .canvas-frame, .manager-composer, .canvas-workspaces-page, .canvas-zoom-indicator, button'
       )
     ) {
       return;
@@ -2254,7 +2322,7 @@ function bindCanvasEvents() {
     }
     if (
       event.target instanceof Element &&
-      event.target.closest('.canvas-group, .canvas-manager, .canvas-frame, .manager-composer, .canvas-workspaces-page, button')
+      event.target.closest('.canvas-group, .canvas-manager, .canvas-manager-group, .canvas-frame, .manager-composer, .canvas-workspaces-page, button')
     ) {
       return;
     }
