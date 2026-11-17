@@ -907,63 +907,40 @@
         </div>
         <div id="manager-composer" class="manager-composer hidden" aria-hidden="true">
           <div
-            class="manager-composer-panel"
+            class="manager-composer-content"
             role="dialog"
             aria-modal="true"
             aria-labelledby="manager-composer-title"
           >
-            <header class="manager-composer-head">
-              <div class="manager-composer-title-wrap">
-                <span class="manager-composer-kicker">MANAGER</span>
-                <h3 id="manager-composer-title">新建管理 node</h3>
-                <span id="manager-fixed-agent" class="manager-fixed-agent">Manager · 管理类</span>
+            <div class="manager-composer-kicker">MANAGER</div>
+            <h3 id="manager-composer-title">新建管理 node</h3>
+            <div id="manager-fixed-agent" class="manager-fixed-agent">Manager · 管理类</div>
+            <input
+              id="manager-name"
+              class="manager-name-input"
+              type="text"
+              maxlength="80"
+              autocomplete="off"
+              placeholder="名称"
+            />
+            <div
+              id="manager-drop"
+              class="manager-drop"
+              tabindex="0"
+              role="button"
+              aria-label="拖入文件夹"
+            >
+              <div id="manager-drop-empty" class="manager-drop-empty">
+                <span class="manager-drop-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+                  </svg>
+                </span>
+                <span>把文件夹拖到这里</span>
               </div>
-              <button
-                id="manager-composer-close"
-                class="manager-composer-close"
-                type="button"
-                aria-label="关闭"
-              >
-                ×
-              </button>
-            </header>
-            <div class="manager-composer-body">
-              <label class="manager-field">
-                <span class="manager-field-label">名称</span>
-                <input
-                  id="manager-name"
-                  class="manager-input"
-                  type="text"
-                  maxlength="80"
-                  autocomplete="off"
-                />
-              </label>
-              <div class="manager-field">
-                <div class="manager-field-head">
-                  <span class="manager-field-label">工作目录</span>
-                  <button id="manager-add-dir" class="manager-link" type="button">
-                    + 添加目录
-                  </button>
-                </div>
-                <div id="manager-dirs" class="manager-dir-list"></div>
-              </div>
-              <div class="manager-field">
-                <div class="manager-field-head">
-                  <span class="manager-field-label">文件</span>
-                  <span class="manager-file-hint">拖入文件或目录</span>
-                </div>
-                <div id="manager-files" class="manager-file-drop" tabindex="0">
-                  <span class="manager-file-empty">把参考文件拖到这里</span>
-                </div>
-              </div>
+              <div id="manager-drop-chips" class="manager-drop-chips"></div>
             </div>
-            <footer class="manager-composer-foot">
-              <span id="manager-composer-error" class="manager-composer-error" hidden></span>
-              <button id="manager-cancel" class="pill" type="button">取消</button>
-              <button id="manager-create" class="pill primary" type="button">
-                创建管理 node
-              </button>
-            </footer>
+            <div id="manager-composer-error" class="manager-composer-error" hidden></div>
           </div>
         </div>
       </main>

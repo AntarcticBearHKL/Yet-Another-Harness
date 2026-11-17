@@ -62,14 +62,11 @@ const dom = {
   projectOverlay: $('project-overlay'),
   managerComposer: $('manager-composer'),
   managerComposerTitle: $('manager-composer-title'),
-  managerComposerClose: $('manager-composer-close'),
   managerName: $('manager-name'),
   managerFixedAgent: $('manager-fixed-agent'),
-  managerAddDir: $('manager-add-dir'),
-  managerDirs: $('manager-dirs'),
-  managerFiles: $('manager-files'),
-  managerCancel: $('manager-cancel'),
-  managerCreate: $('manager-create'),
+  managerDrop: $('manager-drop'),
+  managerDropEmpty: $('manager-drop-empty'),
+  managerDropChips: $('manager-drop-chips'),
   managerComposerError: $('manager-composer-error'),
   projectName: $('project-name'),
   projectDrop: $('project-drop'),
@@ -661,23 +658,19 @@ function managerAgentDisplayName() {
 }
 
 function renderManagerComposerDirs() {
-  if (!dom.managerDirs) return;
-  dom.managerDirs.replaceChildren();
+  if (!dom.managerDropChips) return;
+  dom.managerDropChips.replaceChildren();
   const dirs = managerComposerState?.directories || [];
-  if (dirs.length === 0) {
-    dom.managerDirs.append(
-      el('span', 'manager-dir-empty', '还没有目录')
-    );
-    return;
-  }
+  dom.managerDropEmpty?.classList.toggle('hidden', dirs.length > 0);
   dirs.forEach((directory) => {
-    const row = el('div', 'manager-dir');
+    const row = el('div', 'manager-drop-chip');
     const label = el('span', '', directory);
     label.title = directory;
     const remove = el('button', '', '×');
     remove.type = 'button';
-    remove.setAttribute('aria-label', '移除目录');
-    remove.addEventListener('click', () => {
+    remove.setAttribute('aria-label', '移除文件夹');
+    remove.addEventListener('click', (event) => {
+      event.stopPropagation();
       if (!managerComposerState) return;
       managerComposerState.directories =
         managerComposerState.directories.filter(
@@ -686,36 +679,7 @@ function renderManagerComposerDirs() {
       renderManagerComposerDirs();
     });
     row.append(label, remove);
-    dom.managerDirs.append(row);
-  });
-}
-
-function renderManagerComposerFiles() {
-  if (!dom.managerFiles) return;
-  dom.managerFiles.replaceChildren();
-  const files = managerComposerState?.files || [];
-  if (files.length === 0) {
-    dom.managerFiles.append(
-      el('span', 'manager-file-empty', '把参考文件拖到这里')
-    );
-    return;
-  }
-  files.forEach((file) => {
-    const row = el('div', 'manager-file');
-    const label = el('span', '', file);
-    label.title = file;
-    const remove = el('button', '', '×');
-    remove.type = 'button';
-    remove.setAttribute('aria-label', '移除文件');
-    remove.addEventListener('click', () => {
-      if (!managerComposerState) return;
-      managerComposerState.files = managerComposerState.files.filter(
-        (item) => item !== file
-      );
-      renderManagerComposerFiles();
-    });
-    row.append(label, remove);
-    dom.managerFiles.append(row);
+    dom.managerDropChips.append(row);
   });
 }
 
@@ -728,14 +692,6 @@ function openManagerComposer(managerId = null) {
             session.id === managerId && session.nodeRole === 'manager'
         )
       : null;
-  const currentProject = state.projects.find(
-    (project) => project.id === currentSession()?.projectId
-  );
-  const fallbackDirectories =
-    currentProject?.directories ||
-    state.projects.find((project) => project.directories?.length)
-      ?.directories ||
-    [];
   managerComposerState = {
     editingId: manager?.id || null,
     directories: manager
@@ -743,9 +699,6 @@ function openManagerComposer(managerId = null) {
         ? [...manager.nodeConfig.directories]
         : [...(state.projects.find((p) => p.id === manager.projectId)
             ?.directories || [])]
-      : [...fallbackDirectories],
-    files: manager && Array.isArray(manager.nodeConfig?.files)
-      ? [...manager.nodeConfig.files]
       : [],
   };
   if (dom.managerComposerError) dom.managerComposerError.hidden = true;
@@ -763,7 +716,6 @@ function openManagerComposer(managerId = null) {
     dom.managerFixedAgent.textContent = `${managerAgentDisplayName()} · 管理类`;
   }
   renderManagerComposerDirs();
-  renderManagerComposerFiles();
   dom.managerComposer.classList.remove('hidden');
   dom.managerComposer.setAttribute('aria-hidden', 'false');
   requestAnimationFrame(() => {
@@ -798,28 +750,6 @@ async function addManagerComposerDirectories(paths) {
   renderManagerComposerDirs();
 }
 
-async function addManagerComposerFiles(paths) {
-  if (!managerComposerState) return;
-  for (const raw of paths) {
-    const target = String(raw || '').trim();
-    if (!target) continue;
-    let isDir = false;
-    try {
-      isDir = await api.isDirectory(target);
-    } catch {
-      isDir = false;
-    }
-    if (isDir) {
-      if (!managerComposerState.directories.includes(target)) {
-        managerComposerState.directories.push(target);
-      }
-    } else if (!managerComposerState.files.includes(target)) {
-      managerComposerState.files.push(target);
-    }
-  }
-  renderManagerComposerDirs();
-  renderManagerComposerFiles();
-}
 
 async function createManagerFromComposer() {
   if (!managerComposerState) return;
@@ -828,11 +758,10 @@ async function createManagerFromComposer() {
     managerComposerDefaultName();
   const agentId = MANAGER_AGENT_ID;
   const directories = managerComposerState.directories.slice();
-  const files = managerComposerState.files.slice();
   const editingId = managerComposerState.editingId;
   if (directories.length === 0) {
     if (dom.managerComposerError) {
-      dom.managerComposerError.textContent = '至少添加一个工作目录';
+      dom.managerComposerError.textContent = '先拖入至少一个文件夹';
       dom.managerComposerError.hidden = false;
     }
     return;
@@ -852,7 +781,7 @@ async function createManagerFromComposer() {
       ...(manager.nodeConfig || {}),
       kind: 'manager',
       directories,
-      files,
+      files: [],
     };
     const project = state.projects.find(
       (item) => item.id === manager.projectId
@@ -889,7 +818,7 @@ async function createManagerFromComposer() {
     nodeConfig: {
       kind: 'manager',
       directories,
-      files,
+      files: [],
     },
     mcpDisabled: [],
     foldState: null,
@@ -7533,7 +7462,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, .canvas-manager, .canvas-manager-group, .manager-composer-panel, #web-content';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, .canvas-manager, .canvas-manager-group, .manager-composer, .manager-composer-content, #web-content';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -7599,7 +7528,7 @@ function onWindowDragStart(event) {
     const workspacePage = target.closest('.canvas-workspaces-page');
     const excluded = workspacePage
       ? '.canvas-workspace, button, input, textarea, select, [contenteditable="true"]'
-      : '.canvas-group, .canvas-child, .canvas-manager, .canvas-manager-group, .canvas-frame, .canvas-zoom-indicator, .manager-composer-panel, button, input, textarea, select, [contenteditable="true"]';
+      : '.canvas-group, .canvas-child, .canvas-manager, .canvas-manager-group, .canvas-frame, .canvas-zoom-indicator, .manager-composer, .manager-composer-content, button, input, textarea, select, [contenteditable="true"]';
     if (target.closest(excluded)) return;
   } else if (event.button !== 0) {
     return;
@@ -8021,6 +7950,7 @@ function startActionMenuPress(event) {
     return;
   }
   const target = event.target instanceof Element ? event.target : null;
+  if (target?.closest('.manager-composer')) return;
   const canvasOpen = Boolean(window.canvasOverlayOpen?.());
   const switcherOpen =
     state.switcherOpen || dom.switcher.classList.contains('open');
@@ -10150,15 +10080,13 @@ function bindEvents() {
   dom.projectDrop?.addEventListener('dragleave', () => {
     dom.projectDrop.classList.remove('dragging');
   });
-  dom.managerAddDir?.addEventListener('click', async () => {
-    const paths = await api.pickDirectories();
-    await addManagerComposerDirectories(paths);
-  });
-  dom.managerComposerClose?.addEventListener('click', closeManagerComposer);
-  dom.managerCancel?.addEventListener('click', closeManagerComposer);
-  dom.managerCreate?.addEventListener('click', () => void createManagerFromComposer());
   dom.managerComposer?.addEventListener('click', (event) => {
     if (event.target === dom.managerComposer) closeManagerComposer();
+  });
+  dom.managerComposer?.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeManagerComposer();
   });
   dom.managerComposer?.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !event.isComposing) {
@@ -10185,21 +10113,25 @@ function bindEvents() {
       void createManagerFromComposer();
     }
   });
-  dom.managerFiles?.addEventListener('dragover', (event) => {
+  dom.managerDrop?.addEventListener('dragover', (event) => {
     event.preventDefault();
-    dom.managerFiles.classList.add('dragging');
+    dom.managerDrop.classList.add('dragging');
   });
-  dom.managerFiles?.addEventListener('dragleave', () => {
-    dom.managerFiles.classList.remove('dragging');
+  dom.managerDrop?.addEventListener('dragleave', () => {
+    dom.managerDrop.classList.remove('dragging');
   });
-  dom.managerFiles?.addEventListener('drop', async (event) => {
+  dom.managerDrop?.addEventListener('drop', async (event) => {
     event.preventDefault();
-    dom.managerFiles.classList.remove('dragging');
+    dom.managerDrop.classList.remove('dragging');
     const files = [...(event.dataTransfer?.files || [])];
     const paths = files
       .map((file) => api.getPathForFile(file))
       .filter(Boolean);
-    await addManagerComposerFiles(paths);
+    await addManagerComposerDirectories(paths);
+  });
+  dom.managerDrop?.addEventListener('click', async () => {
+    const paths = await api.pickDirectories();
+    await addManagerComposerDirectories(paths);
   });
   dom.projectDrop?.addEventListener('drop', async (event) => {
     event.preventDefault();
