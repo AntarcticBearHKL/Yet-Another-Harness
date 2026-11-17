@@ -884,6 +884,294 @@ const WORKTREE_REMOVE = fn(
   ['directory']
 );
 
+const REPO_DIR = str('Repository directory; defaults to the project working directory');
+
+const GIT_STATUS = fn(
+  'git_status',
+  'Show the repository state: branch, upstream, ahead/behind, staged, unstaged, untracked and conflicted files.',
+  { repoDir: REPO_DIR }
+);
+const GIT_DIFF = fn(
+  'git_diff',
+  'Show changes as per-file insertion/deletion stats and an optional unified patch.',
+  {
+    repoDir: REPO_DIR,
+    staged: bool('Show staged changes (git diff --cached)'),
+    rev: str('Compare against a commit or range, for example HEAD~3 or main..HEAD'),
+    paths: arr('Limit the diff to these pathspecs', { type: 'string' }),
+    context: num('Unified context lines (default 3, max 50)'),
+    patch: bool('Include the unified patch text (default true)'),
+  }
+);
+const GIT_LOG = fn(
+  'git_log',
+  'Show commit history with hash, author, date, subject and body.',
+  {
+    repoDir: REPO_DIR,
+    limit: num('Maximum commits (default 20, max 200)'),
+    rev: str('Revision or range to walk (default HEAD)'),
+    author: str('Only commits by this author'),
+    since: str('Only commits after this date'),
+    until: str('Only commits before this date'),
+    grep: str('Only commits whose message matches this pattern'),
+    path: str('Only commits touching this path'),
+  }
+);
+const GIT_SHOW = fn(
+  'git_show',
+  'Show one commit: metadata, per-file stats and an optional patch.',
+  {
+    repoDir: REPO_DIR,
+    rev: str('Commit, tag or revision (default HEAD)'),
+    context: num('Unified context lines (default 3, max 50)'),
+    patch: bool('Include the unified patch text (default true)'),
+  }
+);
+const GIT_BLAME = fn(
+  'git_blame',
+  'Show which commit and author last changed each line of a file.',
+  {
+    repoDir: REPO_DIR,
+    path: str('File path inside the repository'),
+    rev: str('Revision to blame (default HEAD)'),
+    startLine: num('First line (1-based)'),
+    endLine: num('Last line (inclusive)'),
+    maxLines: num('Maximum lines when endLine is omitted (default 200, max 1000)'),
+  },
+  ['path']
+);
+const GIT_BRANCH = fn(
+  'git_branch',
+  'Manage branches: list, create, delete or rename.',
+  {
+    repoDir: REPO_DIR,
+    action: {
+      type: 'string',
+      enum: ['list', 'create', 'delete', 'rename'],
+      description: 'Action (default list)',
+    },
+    name: str('Branch name'),
+    newName: str('New branch name for rename'),
+    startPoint: str('Commit or branch to start from when creating'),
+    all: bool('Include remote-tracking branches when listing'),
+    force: bool('Force delete an unmerged branch (still requires confirm)'),
+    confirm: bool('Confirm deletion'),
+  }
+);
+const GIT_CHECKOUT = fn(
+  'git_checkout',
+  'Switch to a branch, tag or commit. Set create=true to create and switch to a new branch.',
+  {
+    repoDir: REPO_DIR,
+    target: str('Branch, tag or commit to check out'),
+    create: bool('Create a new branch named target and switch to it'),
+    startPoint: str('Commit or branch to start the new branch from'),
+  },
+  ['target']
+);
+const GIT_ADD = fn(
+  'git_add',
+  'Stage explicit paths, all changes, or tracked changes only.',
+  {
+    repoDir: REPO_DIR,
+    paths: arr('Paths or pathspecs to stage', { type: 'string' }),
+    all: bool('Stage all changes, including untracked files'),
+    update: bool('Stage tracked changes only'),
+  }
+);
+const GIT_COMMIT = fn(
+  'git_commit',
+  'Commit staged changes and return the commit hash and statistics. Amending requires confirm=true.',
+  {
+    repoDir: REPO_DIR,
+    message: str('Commit message'),
+    amend: bool('Amend the previous commit (requires confirm)'),
+    allowEmpty: bool('Allow a commit with no staged changes'),
+    confirm: bool('Confirm amending history'),
+  },
+  ['message']
+);
+const GIT_STASH = fn(
+  'git_stash',
+  'Manage stashes: list, push, pop, apply, drop, clear or show.',
+  {
+    repoDir: REPO_DIR,
+    action: {
+      type: 'string',
+      enum: ['list', 'push', 'pop', 'apply', 'drop', 'clear', 'show'],
+      description: 'Action (default list)',
+    },
+    message: str('Stash message for push'),
+    paths: arr('Limit the stash to these paths', { type: 'string' }),
+    index: num('Stash index (default 0)'),
+    includeUntracked: bool('Include untracked files when pushing'),
+    confirm: bool('Confirm drop or clear'),
+  }
+);
+const GIT_FETCH = fn(
+  'git_fetch',
+  'Download refs from a remote without changing the working tree.',
+  {
+    repoDir: REPO_DIR,
+    remote: str('Remote name'),
+    branch: str('Remote branch to fetch'),
+    all: bool('Fetch all remotes'),
+    prune: bool('Prune deleted remote-tracking branches'),
+    tags: bool('Fetch tags'),
+  }
+);
+const GIT_PULL = fn(
+  'git_pull',
+  'Fetch and integrate remote changes. Fast-forward-only by default.',
+  {
+    repoDir: REPO_DIR,
+    remote: str('Remote name'),
+    branch: str('Remote branch to pull'),
+    ffOnly: bool('Only allow fast-forward merges (default true)'),
+  }
+);
+const GIT_PUSH = fn(
+  'git_push',
+  'Push the current branch to a remote. Force pushing is never allowed.',
+  {
+    repoDir: REPO_DIR,
+    remote: str('Remote name'),
+    branch: str('Branch to push'),
+    setUpstream: bool('Set the upstream branch (requires remote and branch)'),
+    tags: bool('Push tags'),
+  }
+);
+const GIT_MERGE = fn(
+  'git_merge',
+  'Merge a branch, or abort or continue the current merge.',
+  {
+    repoDir: REPO_DIR,
+    action: {
+      type: 'string',
+      enum: ['merge', 'abort', 'continue'],
+      description: 'Action (default merge)',
+    },
+    branch: str('Branch to merge'),
+    noFastForward: bool('Always create a merge commit'),
+    message: str('Merge commit message'),
+  }
+);
+const GIT_REMOTE = fn(
+  'git_remote',
+  'Manage remotes: list, add, remove, change URL or rename.',
+  {
+    repoDir: REPO_DIR,
+    action: {
+      type: 'string',
+      enum: ['list', 'add', 'remove', 'setUrl', 'rename'],
+      description: 'Action (default list)',
+    },
+    name: str('Remote name'),
+    url: str('Remote URL'),
+    newName: str('New remote name for rename'),
+    confirm: bool('Confirm removal'),
+  }
+);
+const GIT_TAG = fn(
+  'git_tag',
+  'Manage tags: list, create or delete.',
+  {
+    repoDir: REPO_DIR,
+    action: {
+      type: 'string',
+      enum: ['list', 'create', 'delete'],
+      description: 'Action (default list)',
+    },
+    name: str('Tag name'),
+    message: str('Annotated tag message'),
+    target: str('Commit or object to tag (default HEAD)'),
+    confirm: bool('Confirm deletion'),
+  }
+);
+const GIT_RESTORE = fn(
+  'git_restore',
+  'Restore files from a commit or the index. Discarding working tree changes requires confirm=true.',
+  {
+    repoDir: REPO_DIR,
+    paths: arr('Paths to restore', { type: 'string' }),
+    staged: bool('Restore the index instead of the working tree'),
+    worktree: bool('Restore the working tree (default when staged is false)'),
+    source: str('Source revision (default the index, or HEAD with staged)'),
+    confirm: bool('Confirm discarding working tree changes'),
+  },
+  ['paths']
+);
+const GIT_RESET = fn(
+  'git_reset',
+  'Reset the current branch to a commit. Soft and mixed only move the branch or index; hard requires confirm=true.',
+  {
+    repoDir: REPO_DIR,
+    mode: {
+      type: 'string',
+      enum: ['soft', 'mixed', 'hard'],
+      description: 'Reset mode (default mixed)',
+    },
+    target: str('Commit to reset to (default HEAD)'),
+    confirm: bool('Confirm a hard reset'),
+  }
+);
+const GIT_REVERT = fn(
+  'git_revert',
+  'Revert commits by creating new commits, or abort or continue the current revert.',
+  {
+    repoDir: REPO_DIR,
+    action: {
+      type: 'string',
+      enum: ['start', 'abort', 'continue'],
+      description: 'Action (default start)',
+    },
+    commits: arr('Commits to revert', { type: 'string' }),
+    noCommit: bool('Apply changes without creating a commit'),
+    mainline: num('Parent number when reverting a merge commit'),
+  }
+);
+const GIT_CHERRY_PICK = fn(
+  'git_cherry_pick',
+  'Cherry-pick commits onto the current branch, or abort or continue the current cherry-pick.',
+  {
+    repoDir: REPO_DIR,
+    action: {
+      type: 'string',
+      enum: ['start', 'abort', 'continue'],
+      description: 'Action (default start)',
+    },
+    commits: arr('Commits to cherry-pick', { type: 'string' }),
+    noCommit: bool('Apply changes without creating a commit'),
+    mainline: num('Parent number when cherry-picking a merge commit'),
+  }
+);
+
+const GIT_TOOLS = [
+  GIT_STATUS,
+  GIT_DIFF,
+  GIT_LOG,
+  GIT_SHOW,
+  GIT_BLAME,
+  GIT_BRANCH,
+  GIT_CHECKOUT,
+  GIT_ADD,
+  GIT_COMMIT,
+  GIT_STASH,
+  GIT_FETCH,
+  GIT_PULL,
+  GIT_PUSH,
+  GIT_MERGE,
+  GIT_REMOTE,
+  GIT_TAG,
+  GIT_RESTORE,
+  GIT_RESET,
+  GIT_REVERT,
+  GIT_CHERRY_PICK,
+  WORKTREE_LIST,
+  WORKTREE_CREATE,
+  WORKTREE_REMOVE,
+];
+
 const TEAM_CREATE = fn(
   'team_create',
   'Create a local team record with optional members.',
@@ -966,9 +1254,6 @@ const OPENCODE = [
   PDF_VIEW,
   HTML_VIEW,
   CHROME,
-  WORKTREE_LIST,
-  WORKTREE_CREATE,
-  WORKTREE_REMOVE,
   QUESTION,
   SUBAGENT,
   LIST_MCP_RESOURCES,
@@ -1126,7 +1411,7 @@ const WORKNODE_TOOLS = [
 
 function mergedDefinitions() {
   const byName = new Map();
-  for (const definition of [...OPENCODE, ...OMO, ...WORKNODE_TOOLS]) {
+  for (const definition of [...OPENCODE, ...OMO, ...WORKNODE_TOOLS, ...GIT_TOOLS]) {
     byName.set(definition.function.name, definition);
   }
   return [...byName.values()];
@@ -1137,4 +1422,5 @@ module.exports = {
   OPENCODE,
   OMO,
   WORKNODE_TOOLS,
+  GIT_TOOLS,
 };

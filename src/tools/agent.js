@@ -400,86 +400,6 @@ async function readMcpResource(args) {
   }
 }
 
-function gitWorktrees() {
-  return new Promise((resolve) => {
-    const { spawn } = require('node:child_process');
-    const child = spawn('git', ['worktree', 'list', '--porcelain'], {
-      cwd: process.cwd(),
-      windowsHide: true,
-    });
-    let output = '';
-    let error = '';
-    child.stdout.on('data', (chunk) => (output += chunk.toString()));
-    child.stderr.on('data', (chunk) => (error += chunk.toString()));
-    child.on('close', (code) =>
-      resolve(code === 0 ? { ok: true, output } : { ok: false, error })
-    );
-  });
-}
-
-async function worktreeList() {
-  const result = await gitWorktrees();
-  if (!result.ok) return `tool error: ${result.error.trim() || 'git worktree failed'}`;
-  const worktrees = result.output
-    .split(/\r?\n\r?\n/)
-    .map((block) => {
-      const lines = block.split(/\r?\n/);
-      const dir = lines.find((line) => line.startsWith('worktree '));
-      const branch = lines.find((line) => line.startsWith('branch '));
-      return dir
-        ? {
-            directory: dir.slice('worktree '.length),
-            branch: branch ? branch.slice('branch '.length) : '',
-          }
-        : null;
-    })
-    .filter(Boolean);
-  return JSON.stringify({ worktrees }, null, 2);
-}
-
-async function worktreeCreate(args) {
-  const name = String(args.name || '').trim();
-  if (!name) return 'tool error: name is required';
-  const target = path.resolve(process.cwd(), '..', name);
-  const { spawn } = require('node:child_process');
-  return new Promise((resolve) => {
-    const child = spawn('git', ['worktree', 'add', target, '-b', name], {
-      cwd: process.cwd(),
-      windowsHide: true,
-    });
-    let error = '';
-    child.stderr.on('data', (chunk) => (error += chunk.toString()));
-    child.on('close', (code) =>
-      resolve(
-        code === 0
-          ? `Created worktree in ${target}`
-          : `tool error: ${error.trim() || 'git worktree add failed'}`
-      )
-    );
-  });
-}
-
-async function worktreeRemove(args) {
-  const directory = String(args.directory || '').trim();
-  if (!directory) return 'tool error: directory is required';
-  const { spawn } = require('node:child_process');
-  const argv = ['worktree', 'remove'];
-  if (args.force === true) argv.push('--force');
-  argv.push(directory);
-  return new Promise((resolve) => {
-    const child = spawn('git', argv, { cwd: process.cwd(), windowsHide: true });
-    let error = '';
-    child.stderr.on('data', (chunk) => (error += chunk.toString()));
-    child.on('close', (code) =>
-      resolve(
-        code === 0
-          ? `Removed worktree ${directory}`
-          : `tool error: ${error.trim() || 'git worktree remove failed'}`
-      )
-    );
-  });
-}
-
 module.exports = {
   configure,
   subagentTool,
@@ -496,7 +416,4 @@ module.exports = {
   skillMcpTool,
   listMcpResources,
   readMcpResource,
-  worktreeList,
-  worktreeCreate,
-  worktreeRemove,
 };

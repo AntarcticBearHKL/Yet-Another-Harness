@@ -16,6 +16,7 @@ const chromeTools = require('./tools/chrome');
 const viewerTools = require('./tools/viewer');
 const agileTools = require('./tools/agile');
 const worknodeTools = require('./tools/worknode');
+const gitTools = require('./tools/git');
 
 function configure(next = {}) {
   agentTools.configure(next);
@@ -154,9 +155,29 @@ async function execute(name, args, context = null) {
       code_view: viewerTools.codeViewTool,
       pdf_view: viewerTools.pdfViewTool,
       html_view: viewerTools.htmlViewTool,
-      worktree_list: agentTools.worktreeList,
-      worktree_create: agentTools.worktreeCreate,
-      worktree_remove: agentTools.worktreeRemove,
+      git_status: gitTools.gitStatus,
+      git_diff: gitTools.gitDiff,
+      git_log: gitTools.gitLog,
+      git_show: gitTools.gitShow,
+      git_blame: gitTools.gitBlame,
+      git_branch: gitTools.gitBranch,
+      git_checkout: gitTools.gitCheckout,
+      git_add: gitTools.gitAdd,
+      git_commit: gitTools.gitCommit,
+      git_stash: gitTools.gitStash,
+      git_fetch: gitTools.gitFetch,
+      git_pull: gitTools.gitPull,
+      git_push: gitTools.gitPush,
+      git_merge: gitTools.gitMerge,
+      git_remote: gitTools.gitRemote,
+      git_tag: gitTools.gitTag,
+      git_restore: gitTools.gitRestore,
+      git_reset: gitTools.gitReset,
+      git_revert: gitTools.gitRevert,
+      git_cherry_pick: gitTools.gitCherryPick,
+      worktree_list: gitTools.worktreeList,
+      worktree_create: gitTools.worktreeCreate,
+      worktree_remove: gitTools.worktreeRemove,
       list_mcp_resources: agentTools.listMcpResources,
       read_mcp_resource: agentTools.readMcpResource,
       team_create: stateTools.teamCreate,
@@ -261,6 +282,20 @@ function statusLabel(name, args) {
   }
   if (name === 'task' || name === 'subagent' || name === 'call_omo_agent' || name === 'delegate_task') {
     return value.description ? `${name}: ${value.description}` : name;
+  }
+  if (name.startsWith('git_') || name.startsWith('worktree_')) {
+    const detail = String(
+      value.action ||
+        value.branch ||
+        value.target ||
+        value.path ||
+        value.name ||
+        value.rev ||
+        ''
+    )
+      .replace(/\s+/g, ' ')
+      .slice(0, 60);
+    return detail ? `${name}: ${detail}` : name;
   }
   if (name === 'patch') return 'patch';
   if (name === 'skill_mcp') {

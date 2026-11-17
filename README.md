@@ -156,8 +156,10 @@ server/mcp/format.js   MCP 结果转纯文本
 src/main.js        Electron 壳：窗口、拖动/缩放、全文窗口、拉起/连接后端
 src/preload.js     只暴露窗口拖动/缩放和全文窗口能力
 src/deepseek.js    OpenCode Go SSE + tool_calls 累积 + agent loop（后端）
-src/tools.js       工具注册表：OpenCode + OMO 合并、MCP 路由、兼容别名
-src/tools/         hashline、文件/搜索、shell/后台、会话/任务/目标、子模型、web、agile 工具模块
+src/tools.js       工具注册表：OpenCode + OMO 合并、MCP 路由、渲染标签
+src/tools/         hashline、文件/搜索、shell/后台、会话/任务/目标、子模型、web、agile、git 工具模块
+src/tools/git.js   结构化 Git 工具（execFile + argv，禁用 shell 拼接；危险操作需 confirm）
+src/tool-groups.js 工具目录分组（敏捷、Git、搜索、文件、系统等）
 src/tools/guard.js 项目目录路径守卫：越界时暂停工具并等待人工审批
 src/compaction.js  上下文压缩：OpenCode 阈值、checkpoint 模板、最近消息切分
 src/goal.js        Goal 模式：目标归一化、审计问题、continue/complete/blocked 判定
@@ -241,10 +243,11 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 
 YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（OMO）的工具；同名工具按 OMO 优先覆盖 OpenCode。
 
-- OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`SystemInfo`、`list_mcp_resources`、`read_mcp_resource`、`session_rename`、`models`、`worktree_*`
+- OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`SystemInfo`、`list_mcp_resources`、`read_mcp_resource`、`session_rename`、`models`
+- Git（结构化、无 shell，统一放在工具的 Git 菜单）：`git_status`、`git_diff`、`git_log`、`git_show`、`git_blame`、`git_branch`、`git_checkout`、`git_add`、`git_commit`、`git_stash`、`git_fetch`、`git_pull`、`git_push`、`git_merge`、`git_remote`、`git_tag`、`git_restore`、`git_reset`、`git_revert`、`git_cherry_pick`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）、`skill`
 - OMO 常驻 / 条件工具：`session_list/read/search/info`、`task_create/get/list/update`、`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`subagent_start/list/output/stop`、`interactive_bash`、`task/subagent/call_omo_agent/delegate_task`、`create_goal/update_goal/get_goal`、`skill_mcp`、`look_at`、`team_*`
-- 兼容别名：`read_file`、`hashline_edit`；旧调用名 `web_search` 仍可执行，但不再作为工具暴露
+- 兼容别名：`hashline_edit`；`read_file` 与 `web_search` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
 - OMO 的 `team_*`、`background_*`、`monitor_*` 在 YAH 里是本地记录 / 进程管理版本；`background_*` 是长驻进程管理，不再把完成输出塞回对话；`task`/`subagent`/`call_omo_agent`/`delegate_task` 是单次子模型调用；`subagent_*` 是带只读对话、可 fork、完成后把结果塞回父对话的完整子代理；`interactive_bash` 在 Windows 上退化为普通 shell
 
