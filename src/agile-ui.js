@@ -74,25 +74,43 @@ function agileDate(value, withTime = false) {
   }
 }
 
+const AGILE_TRASH_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M9 6V4h6v2M6 6l1 14h10l1-14M10 10v7M14 10v7"/></svg>';
+
 function agileIterationRow(board, activeId, isLast) {
   const row = el('div', 'agile-iteration-row');
   row.tabIndex = 0;
   row.setAttribute('role', 'button');
   if (board.id === activeId) row.classList.add('active');
   row.append(el('span', 'agile-iteration-label', board.label));
-  row.append(el('span', 'agile-iteration-count', String(board.taskCount)));
   if (isLast) {
-    const del = el('button', 'agile-iteration-delete', '×');
+    const del = el('button', 'agile-iteration-delete');
     del.type = 'button';
     del.title = '删除迭代';
     del.setAttribute('aria-label', `删除 ${board.label}`);
+    del.innerHTML = AGILE_TRASH_ICON;
+    let armed = false;
+    let timer = null;
+    const disarm = () => {
+      armed = false;
+      clearTimeout(timer);
+      del.classList.remove('armed');
+      del.title = '删除迭代';
+      del.setAttribute('aria-label', `删除 ${board.label}`);
+    };
     del.addEventListener('click', (event) => {
       event.stopPropagation();
-      openConfirm({
-        text: `删除「${board.label}」和里面的所有任务？不可恢复。`,
-        action: () =>
-          void agileAction('delete_board', { boardId: board.id }),
-      });
+      if (!armed) {
+        armed = true;
+        del.classList.add('armed');
+        del.title = '再次点击确认删除';
+        del.setAttribute('aria-label', '再次点击确认删除');
+        clearTimeout(timer);
+        timer = setTimeout(disarm, 3200);
+        return;
+      }
+      disarm();
+      void agileAction('delete_board', { boardId: board.id });
     });
     row.append(del);
   }

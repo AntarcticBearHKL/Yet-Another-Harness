@@ -100,25 +100,27 @@ body:has(#agile:not(.hidden)) #confirm-overlay {
   white-space: nowrap;
 }
 
-.agile-iteration-count {
-  flex: none;
-  color: var(--faint);
-  font-size: 9.5px;
-  font-variant-numeric: tabular-nums;
-}
-
 .agile-iteration-delete {
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   flex: none;
   border: 0;
   border-radius: 5px;
   background: transparent;
   color: var(--faint);
-  font-size: 12px;
-  opacity: 0;
+  opacity: 0.55;
+}
+
+.agile-iteration-delete svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .agile-iteration-row:hover .agile-iteration-delete,
@@ -126,7 +128,8 @@ body:has(#agile:not(.hidden)) #confirm-overlay {
   opacity: 1;
 }
 
-.agile-iteration-delete:hover {
+.agile-iteration-delete:hover,
+.agile-iteration-delete.armed {
   background: rgba(176, 74, 60, 0.1);
   color: #b04a3c;
 }
