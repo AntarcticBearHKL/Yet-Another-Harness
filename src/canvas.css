@@ -1495,36 +1495,6 @@ body.canvas-space .canvas-stage.panning {
   background: rgba(185, 111, 61, 0.075);
 }
 
-.canvas-manager-group-label {
-  position: absolute;
-  top: 14px;
-  right: 18px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--faint);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  line-height: 1;
-  text-transform: uppercase;
-  pointer-events: none;
-  user-select: none;
-}
-
-.canvas-manager-group-dot {
-  width: 6px;
-  height: 6px;
-  flex: none;
-  border-radius: 50%;
-  background: rgba(185, 111, 61, 0.55);
-}
-
-.canvas-manager-group-count {
-  color: var(--faint);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
-}
 
 /* Flat manager creator: full-screen glass, no sheet */
 .manager-composer {

@@ -940,11 +940,6 @@ function buildCanvasManagerGroup(manager, team, node) {
   groupEl.style.top = `${(Number(node.y) || 0) - CANVAS_MANAGER_GROUP_PADDING}px`;
   groupEl.style.width = `${CANVAS_MANAGER_GROUP_WIDTH}px`;
   groupEl.style.height = `${CANVAS_MANAGER_GROUP_HEIGHT}px`;
-  const label = el('div', 'canvas-manager-group-label');
-  label.append(el('span', 'canvas-manager-group-dot'));
-  label.append(el('span', '', 'GROUP'));
-  label.append(el('span', 'canvas-manager-group-count', String(1 + team.length)));
-  groupEl.append(label);
   groupEl.addEventListener('pointerdown', (event) => {
     const managerCard = canvasDom.nodes?.querySelector(
       `.canvas-manager-panel[data-session-id="${CSS.escape(manager.id)}"]`
