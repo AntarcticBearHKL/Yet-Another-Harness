@@ -9569,15 +9569,6 @@ function renderAgentToolsEditor(agent, allTools, options = {}) {
   const readOnly = options.readOnly === true;
   const field = el('div', 'agent-field');
   field.append(el('div', 'agent-field-label', '工具权限'));
-  if (readOnly) {
-    field.append(
-      el(
-        'div',
-        'agent-readonly-note',
-        'Manager 的工具权限固定，不能手工修改。'
-      )
-    );
-  }
 
   const allNames = allTools.map((tool) => tool.name).filter(Boolean);
   const known = new Set(allNames);
@@ -9795,7 +9786,7 @@ function renderAgentEditor(agentId) {
       el(
         'span',
         'agent-builtin-badge',
-        agent.id === MANAGER_AGENT_ID ? '管理 · 只读' : '内置'
+        agent.id === MANAGER_AGENT_ID ? '管理' : '内置'
       )
     );
   } else {
@@ -9822,11 +9813,6 @@ function renderAgentEditor(agentId) {
     head.append(del);
   }
   editor.append(head);
-  if (readOnly) {
-    editor.append(
-      el('div', 'agent-readonly-note', 'Manager 配置固定，不允许手工修改。')
-    );
-  }
 
   const promptField = el('div', 'agent-field');
   promptField.append(el('div', 'agent-field-label', '提示词'));
