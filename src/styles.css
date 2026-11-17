@@ -2905,7 +2905,7 @@ body.home-window #main > .edge-blur {
   position: relative;
   flex: 1;
   min-width: 80px;
-  height: 12px;
+  height: 18px;
   border: 0;
   border-radius: 999px;
   background: rgba(74, 54, 40, 0.075);
