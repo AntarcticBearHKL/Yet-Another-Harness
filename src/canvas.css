@@ -3,11 +3,11 @@
   display: flex;
   align-items: stretch;
   padding: 0;
-  background: var(--glass-workspace);
+  background: linear-gradient(135deg, #fdfaf5, #f7f1e8);
   border-radius: 18px;
   overflow: hidden;
-  -webkit-backdrop-filter: blur(22px) saturate(1.06);
-  backdrop-filter: blur(22px) saturate(1.06);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 #canvas.hidden {
@@ -104,7 +104,6 @@ body.canvas-space .canvas-stage.panning {
   position: absolute;
   inset: 0;
   transform-origin: 0 0;
-  will-change: transform;
 }
 
 /*
