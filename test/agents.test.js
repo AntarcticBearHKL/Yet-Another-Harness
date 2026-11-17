@@ -163,6 +163,13 @@ test('the manager profile is fixed and cannot be overridden', () => {
     assert.equal(loaded.prompt, MANAGER_AGENT.prompt);
     assert.deepEqual(loaded.tools, MANAGER_AGENT.tools);
     assert.equal(loaded.builtin, true);
+    assert.ok(loaded.tools.includes('agile_list_boards'));
+    assert.ok(loaded.tools.includes('webfetch'));
+    assert.ok(loaded.tools.includes('websearch'));
+    assert.ok(!loaded.tools.includes('worknode_options'));
+    assert.ok(!loaded.tools.includes('worknode_list'));
+    assert.ok(!loaded.tools.includes('worknode_read'));
+    assert.ok(!loaded.tools.includes('read_file'));
 
     const saved = saveAgents(file, [
       { id: 'manager', name: 'Again', prompt: 'Nope', tools: ['read'] },

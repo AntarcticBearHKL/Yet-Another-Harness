@@ -8894,7 +8894,6 @@ const TOOL_GROUPS = [
 
 const TOOL_GROUP_BY_NAME = new Map([
   ['read', 'file'],
-  ['read_file', 'file'],
   ['write', 'file'],
   ['edit', 'file'],
   ['hashline_edit', 'file'],

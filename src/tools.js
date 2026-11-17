@@ -2,7 +2,6 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const readline = require('node:readline');
 const mcp = require('./mcp-registry');
 const { guardPath } = require('./tools/guard');
 const { mergedDefinitions } = require('./tools/definitions');
@@ -65,12 +64,9 @@ async function execute(name, args, context = null) {
       return await webSearch(query, max);
     }
 
-    if (name === 'read_file') {
-      return await readFileTool(value, context);
-    }
-
     const handlers = {
       read: files.readTool,
+      read_file: files.readTool,
       write: files.writeTool,
       edit: files.editTool,
       hashline_edit: files.editTool,
@@ -103,14 +99,11 @@ async function execute(name, args, context = null) {
       subagent_list: agentTools.subagentListTool,
       subagent_output: agentTools.subagentOutputTool,
       subagent_stop: agentTools.subagentStopTool,
-      worknode_options: worknodeTools.worknodeOptions,
-      worknode_list: worknodeTools.worknodeList,
       worknode_create: worknodeTools.worknodeCreate,
       worknode_adopt: worknodeTools.worknodeAdopt,
       worknode_update: worknodeTools.worknodeUpdate,
       worknode_start: worknodeTools.worknodeStart,
       worknode_status: worknodeTools.worknodeStatus,
-      worknode_read: worknodeTools.worknodeRead,
       worknode_message: worknodeTools.worknodeMessage,
       worknode_stop: worknodeTools.worknodeStop,
       team_layout: worknodeTools.teamLayout,
@@ -335,97 +328,6 @@ function statusLabel(name, args) {
     return mcp.statusLabel(name, args);
   }
   return `tool: ${name}`;
-}
-
-async function readFileTool(value, context = null) {
-  const rawPath = String(value.path ?? '').trim();
-  if (!rawPath) {
-    return 'tool error: read_file requires a non-empty "path"';
-  }
-  const abs = path.resolve(rawPath);
-  await guardPath(abs, context, { tool: 'read_file' });
-  const offset = Math.max(1, Number(value.offset) || 1);
-  const limit = Math.max(1, Math.min(2000, Number(value.limit) || 200));
-
-  let stat;
-  try {
-    stat = await fs.promises.stat(abs);
-  } catch (error) {
-    return `tool error: cannot read "${rawPath}": ${error.code || error.message}`;
-  }
-  if (!stat.isFile()) {
-    return `tool error: "${rawPath}" is not a file`;
-  }
-
-  try {
-    const handle = await fs.promises.open(abs, 'r');
-    try {
-      const sample = Buffer.alloc(4096);
-      const { bytesRead } = await handle.read(sample, 0, sample.length, 0);
-      if (sample.subarray(0, bytesRead).includes(0)) {
-        return `tool error: "${rawPath}" looks like a binary file`;
-      }
-    } finally {
-      await handle.close();
-    }
-  } catch (error) {
-    return `tool error: cannot read "${rawPath}": ${error.code || error.message}`;
-  }
-
-  const stream = fs.createReadStream(abs, { encoding: 'utf8' });
-  const lines = readline.createInterface({
-    input: stream,
-    crlfDelay: Infinity,
-  });
-  const output = [];
-  const MAX_LINE = 4000;
-  const MAX_CHARS = 100_000;
-  let chars = 0;
-  let lineNo = 0;
-  let truncated = false;
-
-  try {
-    for await (const rawLine of lines) {
-      lineNo += 1;
-      if (lineNo < offset) continue;
-      if (output.length >= limit) {
-        truncated = true;
-        break;
-      }
-      let line = lineNo === 1 ? rawLine.replace(/^\uFEFF/, '') : rawLine;
-      if (line.length > MAX_LINE) {
-        line = `${line.slice(0, MAX_LINE - 1)}…`;
-      }
-      if (chars + line.length > MAX_CHARS) {
-        truncated = true;
-        break;
-      }
-      output.push(`${lineNo}: ${line}`);
-      chars += line.length + 1;
-    }
-  } catch (error) {
-    return `tool error: cannot read "${rawPath}": ${error.code || error.message}`;
-  } finally {
-    lines.close();
-    stream.destroy();
-  }
-
-  if (output.length === 0) {
-    if (lineNo === 0) {
-      return `${abs}\n(empty file)`;
-    }
-    if (offset > lineNo) {
-      return `tool error: offset ${offset} is beyond end of file (${lineNo} lines)`;
-    }
-    return `tool error: no lines at offset ${offset}`;
-  }
-
-  const last = offset + output.length - 1;
-  let result = `${abs}\n${output.join('\n')}`;
-  if (truncated) {
-    result += `\n… truncated at line ${last}; use offset=${last + 1} to continue`;
-  }
-  return result;
 }
 
 async function webSearch(query, max) {

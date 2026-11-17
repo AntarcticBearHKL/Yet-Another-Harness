@@ -19,7 +19,7 @@ const BUILTIN_AGENT = {
 };
 
 const MANAGER_AGENT_PROMPT =
-  'You are the manager node in YAH. You do not do the work yourself: you analyze the user request, split it into independent work nodes, choose the best Agent for each work node, give each one a concrete task, and monitor progress. Use worknode_options to see available Agents, tools, skills, MCP servers and unowned conversations. Use worknode_create to create and optionally start a work node, or worknode_adopt to take an existing conversation into your team. Use worknode_status and worknode_read to check progress and results, worknode_message to send a follow-up, worknode_stop to stop one, and team_layout to arrange the canvas. Keep the user informed with concise progress summaries. Only delegate when it helps; simple questions can be answered directly.' +
+  'You are the manager node in YAH. You do not do the work yourself: you analyze the user request, split it into independent work nodes, choose the best Agent for each work node, give each one a concrete task, and monitor progress. Use worknode_create to create a work node, or worknode_adopt to take an existing conversation into your team. Use worknode_status to check progress and results, worknode_message to send a follow-up, worknode_stop to stop one, and team_layout to arrange the canvas. Keep the user informed with concise progress summaries. Only delegate when it helps; simple questions can be answered directly.' +
   '\n\nRules:\n- A work node always runs with an Agent. The Agent is the permission upper bound.\n- You may narrow a work node to a subset of the chosen Agent tools, skills or MCP servers, but never grant beyond it.\n- Work nodes share the manager working directories. Keep tasks scoped to those directories.\n- Do not create duplicate work nodes for the same task.\n- When all work nodes finish, summarize what was produced and what still needs attention.';
 
 const MANAGER_AGENT = {
@@ -27,23 +27,50 @@ const MANAGER_AGENT = {
   name: MANAGER_AGENT_NAME,
   prompt: MANAGER_AGENT_PROMPT,
   tools: [
-    'worknode_options',
-    'worknode_list',
     'worknode_create',
     'worknode_adopt',
     'worknode_update',
     'worknode_start',
     'worknode_status',
-    'worknode_read',
     'worknode_message',
     'worknode_stop',
     'team_layout',
+    'agile_list_boards',
+    'agile_get_board',
+    'agile_create_board',
+    'agile_delete_board',
+    'agile_list_tasks',
+    'agile_get_task',
+    'agile_create_task',
+    'agile_create_tasks',
+    'agile_update_task',
+    'agile_move_task',
+    'agile_move_tasks',
+    'agile_delete_task',
+    'agile_set_blocked_reason',
+    'agile_claim_task',
+    'agile_release_task',
+    'agile_heartbeat_task',
+    'agile_claim_next',
+    'agile_digest_notes',
+    'agile_undigest_notes',
+    'agile_list_columns',
+    'agile_get_board_snapshot',
+    'agile_list_events',
+    'agile_wait_for_event',
+    'agile_list_roadmap',
+    'agile_list_skills',
+    'agile_get_skill',
+    'agile_create_skill',
+    'agile_update_skill',
+    'agile_delete_skill',
     'question',
     'read',
     'glob',
     'grep',
     'skill',
     'websearch',
+    'webfetch',
   ],
   builtin: true,
 };

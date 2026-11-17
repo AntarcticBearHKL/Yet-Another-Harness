@@ -1055,22 +1055,12 @@ const OMO = [
 
 const WORKNODE_TOOLS = [
   fn(
-    'worknode_options',
-    'List the Agents, tools, skills and MCP servers that can be assigned to a work node. Use this before creating work nodes.',
-    {}
-  ),
-  fn(
-    'worknode_list',
-    'List the work nodes owned by this manager node, with Agent, task, status and last output preview.',
-    { includeArchived: bool('Include archived work nodes') }
-  ),
-  fn(
     'worknode_create',
     'Create a work node conversation under this manager node. Choose an Agent, give it a concrete task, and optionally narrow its tools, skills or MCP servers. Set start=false to create it idle.',
     {
       title: str('Short work node title'),
       task: str('Task prompt for the work node'),
-      agentId: str('Agent id chosen from worknode_options'),
+      agentId: str('Agent id to assign'),
       tools: arr('Optional subset of the Agent tools'),
       skills: arr('Optional subset of skill ids'),
       mcp: arr('Optional subset of MCP server ids'),
@@ -1082,7 +1072,7 @@ const WORKNODE_TOOLS = [
     'worknode_adopt',
     'Attach an existing conversation node to this manager as a work node. The conversation keeps its messages; use worknode_update to change its Agent or task afterward.',
     {
-      id: str('Existing root conversation id from worknode_options.availableWorknodes'),
+      id: str('Existing root conversation id'),
     },
     ['id']
   ),
@@ -1114,16 +1104,6 @@ const WORKNODE_TOOLS = [
     { id: str('Optional work node id') }
   ),
   fn(
-    'worknode_read',
-    'Read recent messages from a work node.',
-    {
-      id: str('Work node id'),
-      offset: num('0-based message offset'),
-      limit: num('Maximum messages (default 20, max 60)'),
-    },
-    ['id']
-  ),
-  fn(
     'worknode_message',
     'Send a follow-up prompt to a work node. It must be idle.',
     {
@@ -1144,22 +1124,9 @@ const WORKNODE_TOOLS = [
   ),
 ];
 
-const LEGACY = [
-  fn(
-    'read_file',
-    'Alias of read: read a UTF-8 text file with numbered lines.',
-    {
-      path: str('Absolute path or path relative to the working directory'),
-      offset: num('1-based line number to start from'),
-      limit: num('Maximum lines (1-2000)'),
-    },
-    ['path']
-  ),
-];
-
 function mergedDefinitions() {
   const byName = new Map();
-  for (const definition of [...LEGACY, ...OPENCODE, ...OMO, ...WORKNODE_TOOLS]) {
+  for (const definition of [...OPENCODE, ...OMO, ...WORKNODE_TOOLS]) {
     byName.set(definition.function.name, definition);
   }
   return [...byName.values()];
@@ -1169,6 +1136,5 @@ module.exports = {
   mergedDefinitions,
   OPENCODE,
   OMO,
-  LEGACY,
   WORKNODE_TOOLS,
 };

@@ -14,7 +14,6 @@ const t = (name, description, params) => ({
 });
 
 const TOOL_I18N = {
-  read_file: t('读取文件', 'read 的别名：读取 UTF-8 文本文件并显示带行号的文本。'),
   read: t('读取', '读取文本文件或目录。每行带 LINE#ID 锚点，便于后续精确编辑；大文件可用 offset 和 limit。'),
   write: t('写入', '写入 UTF-8 文本文件，需要时自动创建父目录。'),
   shell: t('终端命令', '执行终端命令，返回 stdout、stderr 和退出码；支持工作目录、超时和后台运行。'),
@@ -106,14 +105,11 @@ const TOOL_I18N = {
   team_shutdown_request: t('请求关闭成员', '将团队成员标记为请求关闭。'),
   team_approve_shutdown: t('同意关闭成员', '将团队成员标记为已关闭。'),
   team_reject_shutdown: t('拒绝关闭成员', '将团队成员恢复为活跃状态。'),
-  worknode_options: t('工作 node 选项', '列出可分配给工作 node 的 Agent、工具、技能和 MCP 服务器。'),
-  worknode_list: t('工作 node 列表', '列出当前管理 node 下的工作 node、Agent、任务、状态和最近输出。'),
   worknode_create: t('创建工作 node', '在当前管理 node 下创建会话，选择 Agent、任务，并可收窄工具、技能或 MCP。'),
   worknode_adopt: t('接管工作 node', '把已有会话挂到当前管理 node 下作为工作 node，保留原有消息。'),
   worknode_update: t('更新工作 node', '更新工作 node 的分配；运行中不可修改。'),
   worknode_start: t('启动工作 node', '用任务或新任务提示词启动空闲的工作 node。'),
   worknode_status: t('工作 node 状态', '查看一个或全部工作 node 的状态、当前运行、任务和最近输出。'),
-  worknode_read: t('读取工作 node', '读取工作 node 的最近消息。'),
   worknode_message: t('发送工作 node 消息', '向空闲的工作 node 发送后续提示。'),
   worknode_stop: t('停止工作 node', '停止运行中的工作 node；省略 id 时停止当前管理 node 下的全部工作 node。'),
   team_layout: t('整理工作区', '把当前管理 node 下的所有工作 node 排成整齐的网格。'),

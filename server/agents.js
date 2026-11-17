@@ -18,6 +18,7 @@ const MAX_TOOLS = 200;
 
 const TOOL_ALIASES = {
   web_search: 'websearch',
+  read_file: 'read',
 };
 
 function normalizeTools(raw) {

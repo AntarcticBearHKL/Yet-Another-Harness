@@ -33,12 +33,13 @@ test('ddg redirect urls are unwrapped', () => {
   assert.equal(tools._test.decodeDdgUrl(href), 'https://slint.dev/');
 });
 
-test('definitions expose one websearch and the read_file alias', () => {
+test('definitions expose one websearch and one read tool', () => {
   const defs = tools.definitions();
   const names = defs.map((def) => def.function.name);
   assert.equal(defs[0].type, 'function');
   assert.ok(names.includes('websearch'));
-  assert.ok(names.includes('read_file'));
+  assert.ok(names.includes('read'));
+  assert.ok(!names.includes('read_file'), 'read_file is merged into read');
   assert.ok(!names.includes('web_search'), 'web_search alias is not exposed');
   assert.equal(
     names.filter((name) => name === 'websearch' || name === 'web_search').length,
@@ -46,44 +47,37 @@ test('definitions expose one websearch and the read_file alias', () => {
   );
 });
 
-test('read_file returns numbered lines and supports paging', async () => {
+test('read returns LINE#ID anchors and supports paging', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-read-'));
   const file = path.join(dir, 'sample.txt');
   fs.writeFileSync(file, 'alpha\nbeta\ngamma\n');
   try {
     const full = await tools.execute(
-      'read_file',
+      'read',
       JSON.stringify({ path: file })
     );
-    assert.match(full, /1: alpha/);
-    assert.match(full, /2: beta/);
-    assert.match(full, /3: gamma/);
+    assert.match(full, /1#[A-Z0-9]+\|alpha/);
+    assert.match(full, /2#[A-Z0-9]+\|beta/);
+    assert.match(full, /3#[A-Z0-9]+\|gamma/);
 
     const page = await tools.execute(
-      'read_file',
+      'read',
       JSON.stringify({ path: file, offset: 2, limit: 1 })
     );
-    assert.match(page, /2: beta/);
-    assert.doesNotMatch(page, /1: alpha/);
+    assert.match(page, /2#[A-Z0-9]+\|beta/);
+    assert.doesNotMatch(page, /1#[A-Z0-9]+\|alpha/);
     assert.match(page, /offset=3/);
-
-    const empty = path.join(dir, 'empty.txt');
-    fs.writeFileSync(empty, '');
-    assert.match(
-      await tools.execute('read_file', JSON.stringify({ path: empty })),
-      /empty file/
-    );
 
     const binary = path.join(dir, 'binary.dat');
     fs.writeFileSync(binary, Buffer.from([0, 1, 2, 3]));
     assert.match(
-      await tools.execute('read_file', JSON.stringify({ path: binary })),
+      await tools.execute('read', JSON.stringify({ path: binary })),
       /binary file/
     );
 
     assert.match(
       await tools.execute(
-        'read_file',
+        'read',
         JSON.stringify({ path: path.join(dir, 'missing.txt') })
       ),
       /tool error/

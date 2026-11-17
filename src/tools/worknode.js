@@ -311,78 +311,6 @@ async function startWorkNode(workNode, task) {
   }
 }
 
-function worknodeOptions() {
-  const agents = (providers.listAgents?.() || [])
-    .filter((agent) => !isManagerAgent(agent))
-    .map((agent) => ({
-    id: agent.id,
-    name: agent.name,
-    tools: Array.isArray(agent.tools) ? agent.tools : null,
-  }));
-  const tools = toolDefinitions().filter(
-    (tool) =>
-      tool.name &&
-      !tool.name.startsWith(WORKNODE_TOOL_PREFIX) &&
-      tool.name !== WORKNODE_ORCHESTRATION_TOOL
-  );
-  const skills = (providers.skillService?.list?.({}) || []).map((skill) => ({
-    id: skill.id,
-    name: skill.name,
-    source: skill.source || '',
-    sourceKind: skill.sourceKind || '',
-  }));
-  const mcp = allMcpServers().map((server) => ({
-    id: server.id || server.name,
-    name: server.name || server.id,
-    enabled: server.enabled !== false,
-    status: server.status || '',
-  }));
-  const availableWorknodes = store
-    .loadChats()
-    .sessions.filter(
-      (session) =>
-        session.nodeRole !== 'manager' &&
-        !session.subagent &&
-        !session.managerId &&
-        !session.archivedAt
-    )
-    .slice(0, 100)
-    .map((session) => ({
-      id: session.id,
-      title: session.title,
-      agent: session.agentId,
-      projectId: session.projectId,
-    }));
-  return JSON.stringify(
-    { agents, tools, skills, mcp, availableWorknodes },
-    null,
-    2
-  );
-}
-
-function worknodeList(args = {}, context = null) {
-  const manager = managerFor(context || args.context);
-  if (!manager) return error('only a manager node can list work nodes');
-  const includeArchived = args.includeArchived === true;
-  const sessions = store.listWorkNodes(manager.id).filter(
-    (session) => includeArchived || !session.archivedAt
-  );
-  return JSON.stringify(
-    sessions.map((session) => ({
-      id: session.id,
-      title: session.title,
-      agent: session.agentId,
-      task: session.nodeConfig?.task || '',
-      status: nodeStatus(session),
-      running: isRunning(session.id),
-      archived: Boolean(session.archivedAt),
-      lastOutput: preview(lastAgentText(session)),
-    })),
-    null,
-    2
-  );
-}
-
 async function worknodeCreate(args = {}, context = null) {
   const manager = managerFor(context || args.context);
   if (!manager) return error('only a manager node can create work nodes');
@@ -391,7 +319,7 @@ async function worknodeCreate(args = {}, context = null) {
   const agent = resolveAgent(args.agentId);
   if (!agent) {
     return error(
-      `agent not found: ${args.agentId || '(missing)'}. Call worknode_options first.`
+      `agent not found: ${args.agentId || '(missing)'}. Choose an available Agent id.`
     );
   }
   if (isManagerAgent(agent)) {
@@ -610,30 +538,6 @@ function worknodeStatus(args = {}, context = null) {
   );
 }
 
-function worknodeRead(args = {}, context = null) {
-  const manager = managerFor(context || args.context);
-  if (!manager) return error('only a manager node can read work nodes');
-  const workNode = workNodeFor(manager, args.id);
-  if (!workNode) return error(`work node not found: ${args.id || '(missing)'}`);
-  const messages = Array.isArray(workNode.msgs) ? workNode.msgs : [];
-  const offset = Math.max(0, Number(args.offset) || 0);
-  const limit = Math.min(60, Math.max(1, Number(args.limit) || 20));
-  const slice = messages.slice(offset, offset + limit);
-  return JSON.stringify(
-    {
-      id: workNode.id,
-      title: workNode.title,
-      total: messages.length,
-      messages: slice.map((message) => ({
-        role: message.role,
-        text: String(message.text || '').slice(0, 4000),
-      })),
-    },
-    null,
-    2
-  );
-}
-
 async function worknodeMessage(args = {}, context = null) {
   const manager = managerFor(context || args.context);
   if (!manager) return error('only a manager node can message work nodes');
@@ -717,20 +621,13 @@ function teamLayout(args = {}, context = null) {
   return JSON.stringify({ ok: true, placed: sessions.length }, null, 2);
 }
 
-function worknodeOptionsTool() {
-  return worknodeOptions();
-}
-
 module.exports = {
   configure,
-  worknodeOptions: worknodeOptionsTool,
-  worknodeList,
   worknodeCreate,
   worknodeAdopt,
   worknodeUpdate,
   worknodeStart,
   worknodeStatus,
-  worknodeRead,
   worknodeMessage,
   worknodeStop,
   teamLayout,

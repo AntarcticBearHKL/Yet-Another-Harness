@@ -129,7 +129,7 @@ test('worknode tools create, assign and place a work node', async () => {
     assert.equal(adopted.ok, true);
     assert.equal(store.getSession('legacy-1').managerId, 'm1');
     const list = JSON.parse(
-      await worknode.worknodeList({}, { sessionId: 'm1' })
+      await worknode.worknodeStatus({}, { sessionId: 'm1' })
     );
     assert.equal(list.length, 2);
     assert.ok(list.some((item) => item.id === work.id));
