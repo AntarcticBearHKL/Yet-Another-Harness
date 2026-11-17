@@ -5479,6 +5479,7 @@ body.maximized .mcp {
 .mcp-body {
   display: grid;
   grid-template-columns: clamp(210px, 24vw, 280px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-height: 0;
 }
@@ -5530,7 +5531,7 @@ body.maximized .mcp {
   flex: 1;
   gap: 2px;
   min-height: 0;
-  padding: 14px 0 8px;
+  padding: 14px 0 28px;
   overflow-y: auto;
 }
 
@@ -5881,8 +5882,11 @@ body.maximized .mcp {
 }
 
 .mcp-tab-body {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .mcp-split {
@@ -5995,8 +5999,9 @@ body.maximized .mcp {
 }
 
 .mcp-detail-pane {
+  flex: 1;
   min-height: 0;
-  padding: 24px 24px 44px;
+  padding: 32px 24px 64px;
   overflow-y: auto;
 }
 
@@ -6530,7 +6535,7 @@ body.maximized .mcp {
 }
 
 .mcp-overview {
-  padding-bottom: 40px;
+  padding-bottom: 64px;
 }
 
 .mcp-overview-grid {
@@ -7440,7 +7445,7 @@ body.maximized .mcp {
 
 .mcp-add {
   height: 40px;
-  margin-top: 6px;
+  margin-top: 10px;
   background: transparent;
 }
 
