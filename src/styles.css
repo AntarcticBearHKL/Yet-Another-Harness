@@ -4122,6 +4122,10 @@ body.ring-open #messages {
   top: 6px;
   right: 8px;
   z-index: 6;
+  width: 28px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
 }
 
 .catalog-head {

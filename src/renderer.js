@@ -90,7 +90,6 @@ const dom = {
   catalogCategories: $('catalog-categories'),
   catalogList: $('catalog-list'),
   catalogClose: $('catalog-close'),
-  catalogTitle: $('catalog-title'),
   webContent: $('web-content'),
   webContentBody: $('web-content-body'),
   webContentClose: $('web-content-close'),
@@ -9286,7 +9285,6 @@ async function openCatalog(kind) {
           ? 'Agent'
           : 'tool';
   dom.catalog.setAttribute('aria-label', label);
-  if (dom.catalogTitle) dom.catalogTitle.textContent = label;
   if (state.panelWindow) document.title = `YAH - ${label}`;
   state.catalogOpen = true;
   state.catalogKind =
