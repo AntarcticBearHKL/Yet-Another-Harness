@@ -769,6 +769,10 @@ function startRun({
   const toolContext = {
     enforceProjectRoots: true,
     sessionId,
+    managerId:
+      session.nodeRole === 'manager'
+        ? session.id
+        : String(session.managerId || '').trim(),
     projectId: session.projectId,
     allowedDirs,
     approve: (request) => requestToolApproval(sessionId, id, request),

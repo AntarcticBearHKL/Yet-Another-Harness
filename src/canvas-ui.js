@@ -843,6 +843,96 @@ function canvasManagerTeam(manager, sessions = state.sessions) {
   );
 }
 
+function openManagerAgile(managerId) {
+  const id = String(managerId || '').trim();
+  if (!id) return;
+  if (window.yah?.openAgileWindow) {
+    void window.yah.openAgileWindow(id);
+    return;
+  }
+  window.openAgile?.(id);
+}
+
+function buildCanvasManagerPanel(manager, team, node) {
+  const panelEl = el('article', 'canvas-manager-panel');
+  panelEl.dataset.sessionId = manager.id;
+  if (canvasState.selectedIds.has(manager.id)) {
+    panelEl.classList.add('selected');
+  }
+  const running = [manager, ...team].some((session) =>
+    canvasState.running.has(session.id)
+  );
+  if (running) panelEl.classList.add('running');
+
+  const head = el('header', 'canvas-manager-panel-head');
+  const icon = el('span', 'canvas-manager-panel-icon');
+  icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${CANVAS_MANAGER_ICON}</svg>`;
+  head.append(icon);
+  head.append(
+    el('span', 'canvas-manager-panel-title', manager.title || '管理 node')
+  );
+  if (running) {
+    const loading = el('span', 'canvas-manager-panel-loading');
+    loading.setAttribute('role', 'status');
+    loading.setAttribute('aria-label', '生成中');
+    head.append(loading);
+  }
+  panelEl.append(head);
+
+  const actions = el('div', 'canvas-manager-panel-actions');
+  const agileButton = el('button', 'canvas-manager-panel-action');
+  agileButton.type = 'button';
+  const agileIcon = el('span', 'canvas-manager-panel-action-icon');
+  agileIcon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${RING_ICONS.agile}</svg>`;
+  agileButton.append(agileIcon, el('span', '', 'Agile 面板'));
+  agileButton.addEventListener('pointerdown', (event) => {
+    event.stopPropagation();
+  });
+  agileButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openManagerAgile(manager.id);
+  });
+  actions.append(agileButton);
+  panelEl.append(actions);
+
+  panelEl.title = manager.title || '管理 node';
+  panelEl.addEventListener('pointerdown', (event) => {
+    startCanvasManagerDrag(event, manager, panelEl, node, team);
+  });
+  panelEl.addEventListener('click', (event) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest('button')
+    ) {
+      return;
+    }
+    if (canvasState.suppressClick) {
+      canvasState.suppressClick = false;
+      return;
+    }
+    if (event.shiftKey) {
+      canvasToggleGroupSelection(manager.id);
+      return;
+    }
+    canvasSelectGroup(manager.id, null);
+  });
+  panelEl.addEventListener('dblclick', (event) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest('button')
+    ) {
+      return;
+    }
+    event.preventDefault();
+    openCanvasSession(manager.id);
+  });
+  panelEl.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+  });
+  return panelEl;
+}
+
 function buildCanvasManagerGroup(manager, team, node) {
   const groupEl = el('div', 'canvas-manager-group');
   groupEl.dataset.sessionId = manager.id;
@@ -857,7 +947,7 @@ function buildCanvasManagerGroup(manager, team, node) {
   groupEl.append(label);
   groupEl.addEventListener('pointerdown', (event) => {
     const managerCard = canvasDom.nodes?.querySelector(
-      `.canvas-group[data-session-id="${CSS.escape(manager.id)}"]`
+      `.canvas-manager-panel[data-session-id="${CSS.escape(manager.id)}"]`
     );
     startCanvasManagerDrag(
       event,
@@ -1111,9 +1201,7 @@ function renderCanvasNodes(index) {
     const team = canvasManagerTeam(manager, index.sessions);
     const groupBackdrop = buildCanvasManagerGroup(manager, team, node);
     canvasDom.nodes.append(groupBackdrop);
-    const children = childrenByRoot.get(manager.id) || [];
-    const jobs = canvasGroupJobs(manager, children);
-    const cardEl = buildCanvasGroup(manager, children, jobs, node);
+    const cardEl = buildCanvasManagerPanel(manager, team, node);
     cardEl.style.left = `${node.x}px`;
     cardEl.style.top = `${node.y}px`;
     cardEl.style.width = `${CANVAS_GROUP_WIDTH}px`;
@@ -1203,7 +1291,7 @@ function renderCanvas() {
 function canvasApplySelection() {
   const ids = canvasState.selectedIds;
   for (const group of canvasDom.nodes.querySelectorAll(
-    '.canvas-group, .canvas-manager'
+    '.canvas-group, .canvas-manager, .canvas-manager-panel'
   )) {
     group.classList.toggle(
       'selected',
@@ -1250,7 +1338,7 @@ function canvasClearSelection() {
   canvasState.selectedChildId = null;
   canvasState.selectedIds = new Set();
   for (const item of canvasDom.nodes.querySelectorAll(
-    '.canvas-group.selected, .canvas-child.selected, .canvas-manager.selected'
+    '.canvas-group.selected, .canvas-child.selected, .canvas-manager.selected, .canvas-manager-panel.selected'
   )) {
     item.classList.remove('selected');
   }
@@ -1970,6 +2058,11 @@ function openCanvasNodeMenu(sessionId, x, y) {
           action: () => openCanvasSession(session.id),
         },
         {
+          label: 'Agile 面板',
+          icon: RING_ICONS.agile,
+          action: () => openManagerAgile(session.id),
+        },
+        {
           label: '配置',
           icon: RING_ICONS.settings,
           action: () => window.openManagerComposer?.(session.id),
@@ -2299,7 +2392,7 @@ function bindCanvasEvents() {
     if (
       event.target instanceof Element &&
       event.target.closest(
-        '.canvas-group, .canvas-manager, .canvas-manager-group, .canvas-frame, .manager-composer, .canvas-workspaces-page, .canvas-zoom-indicator, button'
+        '.canvas-group, .canvas-manager, .canvas-manager-panel, .canvas-manager-group, .canvas-frame, .manager-composer, .canvas-workspaces-page, .canvas-zoom-indicator, button'
       )
     ) {
       return;
@@ -2322,7 +2415,7 @@ function bindCanvasEvents() {
     }
     if (
       event.target instanceof Element &&
-      event.target.closest('.canvas-group, .canvas-manager, .canvas-manager-group, .canvas-frame, .manager-composer, .canvas-workspaces-page, button')
+      event.target.closest('.canvas-group, .canvas-manager, .canvas-manager-panel, .canvas-manager-group, .canvas-frame, .manager-composer, .canvas-workspaces-page, button')
     ) {
       return;
     }

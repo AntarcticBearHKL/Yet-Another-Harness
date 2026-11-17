@@ -1,14 +1,25 @@
 'use strict';
 
 let store = null;
+let resolveStore = null;
 
 function configure(next) {
-  store = next;
+  if (typeof next === 'function') {
+    resolveStore = next;
+    store = null;
+    return;
+  }
+  resolveStore = null;
+  store = next || null;
 }
 
-function getStore() {
-  if (!store) throw new Error('Agile store is not configured');
-  return store;
+function getStore(context = null) {
+  if (resolveStore) {
+    const resolved = resolveStore(context);
+    if (resolved) return resolved;
+  }
+  if (store) return store;
+  throw new Error('Agile store is not configured');
 }
 
 function json(value) {
@@ -22,37 +33,37 @@ function actorFor(args) {
   };
 }
 
-function agileListGroups() {
-  return json(getStore().listGroups());
+function agileListGroups(args = {}, context = null) {
+  return json(getStore(context).listGroups());
 }
 
-function agileCreateGroup(args = {}) {
-  return json(getStore().createGroup(args.name));
+function agileCreateGroup(args = {}, context = null) {
+  return json(getStore(context).createGroup(args.name));
 }
 
-function agileRenameGroup(args = {}) {
-  return json(getStore().renameGroup(args.groupId, args.name));
+function agileRenameGroup(args = {}, context = null) {
+  return json(getStore(context).renameGroup(args.groupId, args.name));
 }
 
-function agileDeleteGroup(args = {}) {
-  return json({ deleted: getStore().deleteGroup(args.groupId) });
+function agileDeleteGroup(args = {}, context = null) {
+  return json({ deleted: getStore(context).deleteGroup(args.groupId) });
 }
 
-function agileListBoards() {
-  return json(getStore().listBoards());
+function agileListBoards(args = {}, context = null) {
+  return json(getStore(context).listBoards());
 }
 
-function agileGetBoard(args = {}) {
-  return json(getStore().snapshot(args.boardId));
+function agileGetBoard(args = {}, context = null) {
+  return json(getStore(context).snapshot(args.boardId));
 }
 
-function agileCreateBoard(args = {}) {
-  return json(getStore().createBoard(args.groupId));
+function agileCreateBoard(args = {}, context = null) {
+  return json(getStore(context).createBoard(args.groupId));
 }
 
-function agileUpdateBoard(args = {}) {
+function agileUpdateBoard(args = {}, context = null) {
   return json(
-    getStore().updateBoard(args.boardId, {
+    getStore(context).updateBoard(args.boardId, {
       startDate: args.startDate,
       endDate: args.endDate,
       goal: args.goal,
@@ -60,17 +71,17 @@ function agileUpdateBoard(args = {}) {
   );
 }
 
-function agileDeleteBoard(args = {}) {
-  return json({ deleted: getStore().deleteBoard(args.boardId) });
+function agileDeleteBoard(args = {}, context = null) {
+  return json({ deleted: getStore(context).deleteBoard(args.boardId) });
 }
 
-function agileAssignBoardToGroup(args = {}) {
-  return json(getStore().assignBoardToGroup(args.boardId, args.groupId));
+function agileAssignBoardToGroup(args = {}, context = null) {
+  return json(getStore(context).assignBoardToGroup(args.boardId, args.groupId));
 }
 
-function agileListTasks(args = {}) {
+function agileListTasks(args = {}, context = null) {
   return json(
-    getStore().listTasks(args.boardId, {
+    getStore(context).listTasks(args.boardId, {
       column: args.column,
       search: args.search,
       claimedBy: args.claimedBy,
@@ -80,13 +91,13 @@ function agileListTasks(args = {}) {
   );
 }
 
-function agileGetTask(args = {}) {
-  return json(getStore().getTask(args.taskId));
+function agileGetTask(args = {}, context = null) {
+  return json(getStore(context).getTask(args.taskId));
 }
 
-function agileCreateTask(args = {}) {
+function agileCreateTask(args = {}, context = null) {
   return json(
-    getStore().createTask({
+    getStore(context).createTask({
       boardId: args.boardId,
       column: 'backlog',
       title: args.title,
@@ -97,9 +108,9 @@ function agileCreateTask(args = {}) {
   );
 }
 
-function agileCreateTasks(args = {}) {
+function agileCreateTasks(args = {}, context = null) {
   return json(
-    getStore().createTasks({
+    getStore(context).createTasks({
       boardId: args.boardId,
       tasks: args.tasks,
       actor: actorFor(args),
@@ -107,9 +118,9 @@ function agileCreateTasks(args = {}) {
   );
 }
 
-function agileUpdateTask(args = {}) {
+function agileUpdateTask(args = {}, context = null) {
   return json(
-    getStore().updateTask(args.taskId, {
+    getStore(context).updateTask(args.taskId, {
       title: args.title,
       description: args.description,
       assignee: args.assignee,
@@ -119,94 +130,94 @@ function agileUpdateTask(args = {}) {
   );
 }
 
-function agileMoveTask(args = {}) {
+function agileMoveTask(args = {}, context = null) {
   return json(
-    getStore().moveTask(args.taskId, args.column, {
+    getStore(context).moveTask(args.taskId, args.column, {
       position: args.position,
       actor: actorFor(args),
     })
   );
 }
 
-function agileMoveTasks(args = {}) {
+function agileMoveTasks(args = {}, context = null) {
   return json(
-    getStore().moveTasks(args.taskIds, args.column, {
+    getStore(context).moveTasks(args.taskIds, args.column, {
       position: args.position,
       actor: actorFor(args),
     })
   );
 }
 
-function agileDeleteTask(args = {}) {
+function agileDeleteTask(args = {}, context = null) {
   return json({
-    deleted: getStore().deleteTask(args.taskId, {
+    deleted: getStore(context).deleteTask(args.taskId, {
       actor: actorFor(args),
     }),
   });
 }
 
-function agileSetBlockedReason(args = {}) {
+function agileSetBlockedReason(args = {}, context = null) {
   return json(
-    getStore().setBlockedReason(args.taskId, args.reason, actorFor(args))
+    getStore(context).setBlockedReason(args.taskId, args.reason, actorFor(args))
   );
 }
 
-function agileClaimTask(args = {}) {
-  return json(getStore().claimTask(args.taskId, args.agent));
+function agileClaimTask(args = {}, context = null) {
+  return json(getStore(context).claimTask(args.taskId, args.agent));
 }
 
-function agileReleaseTask(args = {}) {
-  return json(getStore().releaseTask(args.taskId, actorFor(args)));
+function agileReleaseTask(args = {}, context = null) {
+  return json(getStore(context).releaseTask(args.taskId, actorFor(args)));
 }
 
-function agileHeartbeatTask(args = {}) {
-  return json(getStore().heartbeatTask(args.taskId, actorFor(args)));
+function agileHeartbeatTask(args = {}, context = null) {
+  return json(getStore(context).heartbeatTask(args.taskId, actorFor(args)));
 }
 
-function agileClaimNext(args = {}) {
-  return json(getStore().claimNext(args.boardId, args.agent));
+function agileClaimNext(args = {}, context = null) {
+  return json(getStore(context).claimNext(args.boardId, args.agent));
 }
 
-function agileDigestNotes(args = {}) {
+function agileDigestNotes(args = {}, context = null) {
   return json(
-    getStore().digestNotes(args.taskId, args.pointIds, actorFor(args))
+    getStore(context).digestNotes(args.taskId, args.pointIds, actorFor(args))
   );
 }
 
-function agileUndigestNotes(args = {}) {
+function agileUndigestNotes(args = {}, context = null) {
   return json(
-    getStore().undigestNotes(args.taskId, args.pointIds, actorFor(args))
+    getStore(context).undigestNotes(args.taskId, args.pointIds, actorFor(args))
   );
 }
 
-function agileListColumns() {
+function agileListColumns(args = {}, context = null) {
   return json(
-    getStore()
+    getStore(context)
       .snapshot()
       .columns
   );
 }
 
-function agileGetBoardSnapshot(args = {}) {
-  return json(getStore().snapshot(args.boardId));
+function agileGetBoardSnapshot(args = {}, context = null) {
+  return json(getStore(context).snapshot(args.boardId));
 }
 
-function agileGetSettings(args = {}) {
-  return json(getStore().getSettings(args.boardId));
+function agileGetSettings(args = {}, context = null) {
+  return json(getStore(context).getSettings(args.boardId));
 }
 
-function agileUpdateSettings(args = {}) {
+function agileUpdateSettings(args = {}, context = null) {
   return json(
-    getStore().updateSettings(args.boardId, args.fields || args)
+    getStore(context).updateSettings(args.boardId, args.fields || args)
   );
 }
 
-function agileListEvents(args = {}) {
-  return json(getStore().listEvents(args.limit));
+function agileListEvents(args = {}, context = null) {
+  return json(getStore(context).listEvents(args.limit));
 }
 
-async function agileWaitForEvent(args = {}) {
-  const event = await getStore().waitForEvent({
+async function agileWaitForEvent(args = {}, context = null) {
+  const event = await getStore(context).waitForEvent({
     since: args.since,
     timeoutMs: args.timeoutMs,
     type: args.type,
@@ -215,7 +226,7 @@ async function agileWaitForEvent(args = {}) {
   if (!event) {
     return json({
       timedOut: true,
-      seq: getStore().listEvents(1)[0]?.seq || 0,
+      seq: getStore(context).listEvents(1)[0]?.seq || 0,
       since: Number(args.since) || 0,
     });
   }
@@ -227,23 +238,23 @@ async function agileWaitForEvent(args = {}) {
   });
 }
 
-function agileListRoadmap() {
-  return json(getStore().listRoadmap());
+function agileListRoadmap(args = {}, context = null) {
+  return json(getStore(context).listRoadmap());
 }
 
-function agileListSkills() {
-  return json(getStore().listSkills());
+function agileListSkills(args = {}, context = null) {
+  return json(getStore(context).listSkills());
 }
 
-function agileGetSkill(args = {}) {
-  const skill = getStore().getSkill(args.skill || args.skillId || args.name);
+function agileGetSkill(args = {}, context = null) {
+  const skill = getStore(context).getSkill(args.skill || args.skillId || args.name);
   if (!skill) throw new Error('Skill not found');
   return json(skill);
 }
 
-function agileCreateSkill(args = {}) {
+function agileCreateSkill(args = {}, context = null) {
   return json(
-    getStore().createSkill({
+    getStore(context).createSkill({
       name: args.name,
       description: args.description,
       content: args.content,
@@ -251,9 +262,9 @@ function agileCreateSkill(args = {}) {
   );
 }
 
-function agileUpdateSkill(args = {}) {
+function agileUpdateSkill(args = {}, context = null) {
   return json(
-    getStore().updateSkill(args.skillId, {
+    getStore(context).updateSkill(args.skillId, {
       name: args.name,
       description: args.description,
       content: args.content,
@@ -261,8 +272,8 @@ function agileUpdateSkill(args = {}) {
   );
 }
 
-function agileDeleteSkill(args = {}) {
-  return json({ deleted: getStore().deleteSkill(args.skillId) });
+function agileDeleteSkill(args = {}, context = null) {
+  return json({ deleted: getStore(context).deleteSkill(args.skillId) });
 }
 
 module.exports = {

@@ -44,7 +44,7 @@ const WINDOW_STATE_FILE = path.join(userData, 'window.json');
 const AGILE_WINDOW_STATE_FILE = path.join(userData, 'agile-window.json');
 
 let mainWindow = null;
-let agileWindow = null;
+const agileWindows = new Map();
 let backendProcess = null;
 let saveBoundsTimer = null;
 let saveAgileBoundsTimer = null;
@@ -447,22 +447,25 @@ function saveAgileWindowState(bounds) {
   }
 }
 
-function scheduleAgileBoundsSave() {
+function scheduleAgileBoundsSave(win) {
   clearTimeout(saveAgileBoundsTimer);
-  saveAgileBoundsTimer = setTimeout(saveAgileBounds, 300);
+  saveAgileBoundsTimer = setTimeout(() => saveAgileBounds(win), 300);
 }
 
-function saveAgileBounds() {
-  if (!agileWindow || agileWindow.isDestroyed()) return;
-  saveAgileWindowState(agileWindow.getBounds());
+function saveAgileBounds(win) {
+  if (!win || win.isDestroyed()) return;
+  saveAgileWindowState(win.getBounds());
 }
 
-function openAgileWindow() {
-  if (agileWindow && !agileWindow.isDestroyed()) {
-    if (agileWindow.isMinimized()) agileWindow.restore();
-    agileWindow.show();
-    agileWindow.focus();
-    return agileWindow.id;
+function openAgileWindow(managerId) {
+  const id = String(managerId || '').trim();
+  if (!id) return null;
+  const existing = agileWindows.get(id);
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore();
+    existing.show();
+    existing.focus();
+    return existing.id;
   }
 
   const bounds = clampBounds(loadAgileWindowState(), {
@@ -472,7 +475,7 @@ function openAgileWindow() {
     minHeight: 560,
   });
 
-  agileWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     ...bounds,
     minWidth: 900,
     minHeight: 560,
@@ -495,26 +498,30 @@ function openAgileWindow() {
     },
   });
 
-  agileWindow.loadURL(`${LOCAL_URL}/agile.html?shell=electron`);
-  agileWindow.once('ready-to-show', () => {
-    if (agileWindow && !agileWindow.isDestroyed()) agileWindow.show();
+  const url = new URL(`${LOCAL_URL}/agile.html`);
+  url.searchParams.set('shell', 'electron');
+  url.searchParams.set('managerId', id);
+  win.loadURL(url.toString());
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed()) win.show();
   });
-  agileWindow.on('resize', scheduleAgileBoundsSave);
-  agileWindow.on('move', scheduleAgileBoundsSave);
-  agileWindow.on('resized', saveAgileBounds);
-  agileWindow.on('moved', saveAgileBounds);
-  agileWindow.on('close', saveAgileBounds);
-  agileWindow.on('closed', () => {
-    agileWindow = null;
+  win.on('resize', () => scheduleAgileBoundsSave(win));
+  win.on('move', () => scheduleAgileBoundsSave(win));
+  win.on('resized', () => saveAgileBounds(win));
+  win.on('moved', () => saveAgileBounds(win));
+  win.on('close', () => saveAgileBounds(win));
+  win.on('closed', () => {
+    if (agileWindows.get(id) === win) agileWindows.delete(id);
   });
-  agileWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/i.test(url)) shell.openExternal(url);
+  win.webContents.setWindowOpenHandler(({ url: target }) => {
+    if (/^https?:/i.test(target)) shell.openExternal(target);
     return { action: 'deny' };
   });
-  agileWindow.webContents.on('will-navigate', (event) => {
+  win.webContents.on('will-navigate', (event) => {
     event.preventDefault();
   });
-  return agileWindow.id;
+  agileWindows.set(id, win);
+  return win.id;
 }
 
 async function backendHealthy() {
@@ -597,8 +604,10 @@ function createWindow() {
   mainWindow.on('close', saveBounds);
   mainWindow.on('closed', () => {
     mainWindow = null;
-    if (agileWindow && !agileWindow.isDestroyed()) agileWindow.close();
-    agileWindow = null;
+    for (const win of [...agileWindows.values()]) {
+      if (!win.isDestroyed()) win.close();
+    }
+    agileWindows.clear();
     for (const entry of [...contentWindows.values()]) {
       if (!entry.win.isDestroyed()) entry.win.close();
     }
@@ -686,7 +695,7 @@ if (gotLock) {
       win.webContents.send('viewer:ask', payload);
       return true;
     });
-    ipcMain.handle('agile:open', () => openAgileWindow());
+    ipcMain.handle('agile:open', (_event, managerId) => openAgileWindow(managerId));
     ipcMain.handle('config:open', (_event, kind) => openConfigWindow(kind));
     ipcMain.handle('archive:open', (_event, sessionId) =>
       openArchiveWindow(sessionId)

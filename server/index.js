@@ -35,8 +35,101 @@ const STATIC_DIR = path.resolve(process.env.YAH_STATIC_DIR || path.join(ROOT, 's
 const ASSETS_DIR = path.join(ROOT, 'assets');
 const AGENTS_FILE = path.join(DATA_DIR, 'agents.json');
 attachments.init(path.join(DATA_DIR, 'attachments'));
-const agileStore = createAgileStore(path.join(DATA_DIR, 'agile.json'));
-agileTools.configure(agileStore);
+const AGILE_FILE = path.join(DATA_DIR, 'agile.json');
+const AGILE_DIR = path.join(DATA_DIR, 'agile');
+const agileStores = new Map();
+let legacyAgileClaimed = false;
+
+function agileManagerFile(managerId) {
+  const safe = String(managerId || '')
+    .replace(/[^A-Za-z0-9._-]/g, '_')
+    .slice(0, 120);
+  return path.join(AGILE_DIR, `${safe || 'manager'}.json`);
+}
+
+function findManagerSession(managerId) {
+  const id = String(managerId || '').trim();
+  if (!id) return null;
+  return (
+    store
+      .loadChats()
+      .sessions.find(
+        (session) => session.id === id && session.nodeRole === 'manager'
+      ) || null
+  );
+}
+
+function managerAgileStore(managerId) {
+  const id = String(managerId || '').trim();
+  if (!id) {
+    throw Object.assign(new Error('managerId is required for Agile'), {
+      status: 400,
+    });
+  }
+  const cached = agileStores.get(id);
+  if (cached) return cached;
+  const file = agileManagerFile(id);
+  if (!legacyAgileClaimed) {
+    legacyAgileClaimed = true;
+    try {
+      const managers = store
+        .loadChats()
+        .sessions.filter((session) => session.nodeRole === 'manager');
+      if (
+        managers.length === 1 &&
+        managers[0].id === id &&
+        !fs.existsSync(file) &&
+        fs.existsSync(AGILE_FILE)
+      ) {
+        fs.mkdirSync(AGILE_DIR, { recursive: true });
+        fs.copyFileSync(AGILE_FILE, file);
+      }
+    } catch {
+      /* keep the fresh store if the legacy copy fails */
+    }
+  }
+  const created = createAgileStore(file);
+  agileStores.set(id, created);
+  return created;
+}
+
+function resolveAgileStore(managerId) {
+  const id = String(managerId || '').trim();
+  if (!id) {
+    throw Object.assign(new Error('managerId is required for Agile'), {
+      status: 400,
+    });
+  }
+  if (!findManagerSession(id)) {
+    throw Object.assign(new Error('Manager not found'), { status: 404 });
+  }
+  return managerAgileStore(id);
+}
+
+function sessionAgileManagerId(context) {
+  const direct = String(context?.managerId || '').trim();
+  if (direct) return direct;
+  const sessionId = String(context?.sessionId || '').trim();
+  if (!sessionId) return '';
+  const sessions = store.loadChats().sessions;
+  let session = sessions.find((item) => item.id === sessionId) || null;
+  const seen = new Set();
+  while (session && !seen.has(session.id)) {
+    seen.add(session.id);
+    if (session.nodeRole === 'manager') return session.id;
+    const managerId = String(session.managerId || '').trim();
+    if (managerId) return managerId;
+    if (!session.parentSessionId) break;
+    session =
+      sessions.find((item) => item.id === session.parentSessionId) || null;
+  }
+  return '';
+}
+
+agileTools.configure((context) => {
+  const managerId = sessionAgileManagerId(context);
+  return resolveAgileStore(managerId);
+});
 const canvasStore = createCanvasStore(path.join(DATA_DIR, 'canvas.json'));
 const HOST = '127.0.0.1';
 const LOCAL_PORT = Number(process.env.YAH_LOCAL_PORT) || 3789;
@@ -970,10 +1063,12 @@ function handleApi(req, res, url) {
 
   if (req.method === 'GET' && pathname === '/api/agile') {
     const boardId = String(url.searchParams.get('boardId') || '');
+    const managerId = String(url.searchParams.get('managerId') || '');
     try {
+      const agileStore = resolveAgileStore(managerId);
       sendJson(res, 200, agileStore.state(boardId || null));
     } catch (error) {
-      sendJson(res, 400, { error: error.message });
+      sendJson(res, error.status || 400, { error: error.message });
     }
     return true;
   }
@@ -981,6 +1076,7 @@ function handleApi(req, res, url) {
   if (req.method === 'POST' && pathname === '/api/agile') {
     readJson(req)
       .then((body) => {
+        const agileStore = resolveAgileStore(body?.managerId);
         const action = String(body?.action || '');
         let result = null;
         switch (action) {

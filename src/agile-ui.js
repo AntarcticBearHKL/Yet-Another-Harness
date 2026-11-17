@@ -49,6 +49,13 @@ const agileState = {
   data: null,
   loading: false,
   search: '',
+  managerId: (() => {
+    try {
+      return new URLSearchParams(location.search).get('managerId') || '';
+    } catch {
+      return '';
+    }
+  })(),
   taskId: null,
   taskDraft: null,
   groupCreating: false,
@@ -56,6 +63,12 @@ const agileState = {
   request: 0,
   toastTimer: null,
 };
+
+function agileManagerQuery() {
+  return agileState.managerId
+    ? `managerId=${encodeURIComponent(agileState.managerId)}`
+    : '';
+}
 
 function agileToast(message, tone = '') {
   if (!agileDom.toast) return;
@@ -407,9 +420,11 @@ async function loadAgile(boardId = '') {
   agileState.loading = true;
   if (!agileState.data) renderAgileBoard();
   try {
-    const query = boardId
-      ? `?boardId=${encodeURIComponent(boardId)}`
-      : '';
+    const params = [];
+    if (boardId) params.push(`boardId=${encodeURIComponent(boardId)}`);
+    const managerQuery = agileManagerQuery();
+    if (managerQuery) params.push(managerQuery);
+    const query = params.length ? `?${params.join('&')}` : '';
     const data = await requestJson(`/api/agile${query}`);
     if (request !== agileState.request) return;
     agileState.data = data;
@@ -425,7 +440,11 @@ async function agileAction(action, payload = {}) {
   try {
     const data = await requestJson('/api/agile', {
       method: 'POST',
-      body: { action, ...payload },
+      body: {
+        action,
+        managerId: agileState.managerId || undefined,
+        ...payload,
+      },
     });
     if (data?.state) {
       agileState.data = data.state;
@@ -661,9 +680,18 @@ async function saveAgileSettings() {
   if (result) closeAgileSettings();
 }
 
-function openAgile() {
+function openAgile(managerId) {
   if (!agileDom.overlay) return;
   if (typeof closeComposer === 'function') closeComposer();
+  if (managerId !== undefined) {
+    const next = String(managerId || '').trim();
+    if (next !== agileState.managerId) {
+      agileState.managerId = next;
+      agileState.data = null;
+      agileState.taskId = null;
+      agileState.taskDraft = null;
+    }
+  }
   agileState.open = true;
   agileDom.overlay.classList.remove('hidden');
   agileDom.overlay.setAttribute('aria-hidden', 'false');
@@ -828,7 +856,10 @@ async function refreshAgileIfChanged() {
   const confirm = document.getElementById('confirm-overlay');
   if (confirm && !confirm.classList.contains('hidden')) return;
   try {
-    const data = await requestJson('/api/agile');
+    const managerQuery = agileManagerQuery();
+    const data = await requestJson(
+      managerQuery ? `/api/agile?${managerQuery}` : '/api/agile'
+    );
     if (!data || data.seq === agileState.data.seq) return;
     agileState.data = data;
     renderAgile();

@@ -437,7 +437,7 @@ const api = {
   dragMove: (point) => shell?.dragMove?.(point),
   dragEnd: () => shell?.dragEnd?.(),
   isMaximized: () => shell?.isMaximized?.() ?? Promise.resolve(false),
-  openAgileWindow: () => shell?.openAgileWindow?.(),
+  openAgileWindow: (managerId) => shell?.openAgileWindow?.(managerId),
   openConfigWindow: (kind) => shell?.openConfigWindow?.(kind),
   openArchiveWindow: (sessionId) => shell?.openArchiveWindow?.(sessionId),
   openChatWindow: (sessionId, options) =>
@@ -7462,7 +7462,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, .canvas-manager, .canvas-manager-group, .manager-composer, .manager-composer-content, #web-content';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, .canvas-manager, .canvas-manager-panel, .canvas-manager-group, .manager-composer, .manager-composer-content, #web-content';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -7528,7 +7528,7 @@ function onWindowDragStart(event) {
     const workspacePage = target.closest('.canvas-workspaces-page');
     const excluded = workspacePage
       ? '.canvas-workspace, button, input, textarea, select, [contenteditable="true"]'
-      : '.canvas-group, .canvas-child, .canvas-manager, .canvas-manager-group, .canvas-frame, .canvas-zoom-indicator, .manager-composer, .manager-composer-content, button, input, textarea, select, [contenteditable="true"]';
+      : '.canvas-group, .canvas-child, .canvas-manager, .canvas-manager-panel, .canvas-manager-group, .canvas-frame, .canvas-zoom-indicator, .manager-composer, .manager-composer-content, button, input, textarea, select, [contenteditable="true"]';
     if (target.closest(excluded)) return;
   } else if (event.button !== 0) {
     return;
@@ -7956,7 +7956,7 @@ function startActionMenuPress(event) {
     state.switcherOpen || dom.switcher.classList.contains('open');
   const frameTarget = canvasOpen ? target?.closest('.canvas-frame') : null;
   const nodeTarget = canvasOpen
-    ? target?.closest('.canvas-group, .canvas-child, .canvas-manager')
+    ? target?.closest('.canvas-group, .canvas-child, .canvas-manager, .canvas-manager-panel')
     : null;
   const workspaceTarget = canvasOpen
     ? target?.closest('.canvas-workspace')
@@ -8136,18 +8136,6 @@ function openSwitcherActionMenu(target, x, y) {
   }
 
   const items = [
-    {
-      label: 'Agile',
-      icon: RING_ICONS.agile,
-      action: () => {
-        closeSwitcher();
-        if (api.isElectron && api.openAgileWindow) {
-          api.openAgileWindow();
-        } else {
-          window.openAgile?.();
-        }
-      },
-    },
     {
       label: '设置',
       icon: RING_ICONS.settings,
@@ -8664,18 +8652,6 @@ function openSwitcherRingMenu(event) {
   }
 
   const items = [
-    {
-      label: 'Agile',
-      icon: RING_ICONS.agile,
-      action: () => {
-        closeSwitcher();
-        if (api.isElectron && api.openAgileWindow) {
-          api.openAgileWindow();
-        } else {
-          window.openAgile?.();
-        }
-      },
-    },
     {
       label: '设置',
       icon: RING_ICONS.settings,

@@ -192,3 +192,42 @@ test('agile native tools cover boards, notes, digest and moves', async () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('agile native tools use the store for the calling manager', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-agile-scope-'));
+  const stores = new Map([
+    ['manager-a', createAgileStore(path.join(dir, 'manager-a.json'))],
+    ['manager-b', createAgileStore(path.join(dir, 'manager-b.json'))],
+  ]);
+  agileTools.configure((context) => stores.get(context?.managerId) || null);
+  try {
+    const group = JSON.parse(
+      await tools.execute(
+        'agile_create_group',
+        JSON.stringify({ name: 'Only A' }),
+        { managerId: 'manager-a' }
+      )
+    );
+    assert.equal(group.name, 'Only A');
+
+    const a = JSON.parse(
+      await tools.execute('agile_list_groups', '{}', {
+        managerId: 'manager-a',
+      })
+    );
+    const b = JSON.parse(
+      await tools.execute('agile_list_groups', '{}', {
+        managerId: 'manager-b',
+      })
+    );
+    assert.ok(a.some((item) => item.name === 'Only A'));
+    assert.ok(!b.some((item) => item.name === 'Only A'));
+
+    const missing = await tools.execute('agile_list_groups', '{}', {
+      managerId: 'manager-c',
+    });
+    assert.match(missing, /store is not configured/i);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

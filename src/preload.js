@@ -11,7 +11,7 @@ function subscribe(channel, callback) {
 contextBridge.exposeInMainWorld('yah', {
   openContent: (payload) => ipcRenderer.invoke('content:open', payload),
   askViewer: (payload) => ipcRenderer.invoke('viewer:ask', payload),
-  openAgileWindow: () => ipcRenderer.invoke('agile:open'),
+  openAgileWindow: (managerId) => ipcRenderer.invoke('agile:open', managerId),
   openConfigWindow: (kind) => ipcRenderer.invoke('config:open', kind),
   openArchiveWindow: (sessionId) =>
     ipcRenderer.invoke('archive:open', sessionId),
