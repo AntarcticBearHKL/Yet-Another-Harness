@@ -19,6 +19,27 @@ test('viewer tools are defined', () => {
   assert.ok(names.has('html_view'));
 });
 
+test('html viewer allows scripts and interactive content', () => {
+  const definition = mergedDefinitions().find(
+    (item) => item.function?.name === 'html_view'
+  );
+  assert.match(definition.function.description, /JavaScript run/);
+  assert.doesNotMatch(definition.function.description, /scripts are disabled/);
+
+  const renderer = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'content.js'),
+    'utf8'
+  );
+  assert.match(renderer, /allow-scripts/);
+  assert.ok(!renderer.includes('replace(/<script'));
+
+  const shell = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'content.html'),
+    'utf8'
+  );
+  assert.match(shell, /script-src[^;]*'unsafe-inline'/);
+});
+
 test('viewer tools return window payloads', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-viewer-'));
   try {

@@ -29,7 +29,7 @@
     },
     {
       id: 'view',
-      label: '查看',
+      label: '交互显示',
       pattern: /view|code|pdf/i,
     },
     {

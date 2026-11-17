@@ -700,7 +700,7 @@ const MODELS = fn(
 );
 const HTML_VIEW = fn(
   'html_view',
-  'Create a standalone HTML presentation and open it in a separate viewer window. Use HTML and CSS only; scripts are disabled. The page gets YAH cream typography by default and can use CSS variables such as --background, --surface-card, --text, --dim, --faint, --line, --accent, --accent-deep, --radius, --font and --mono.',
+  'Create an interactive HTML presentation and open it in a separate viewer window. HTML, CSS and JavaScript run, and forms, modals and same-origin assets are available. The page gets YAH cream typography by default and can use CSS variables such as --background, --surface-card, --text, --dim, --faint, --line, --accent, --accent-deep, --radius, --font and --mono.',
   {
     html: str('HTML document or fragment to display'),
     title: str('Window title; the same title reuses the same window'),

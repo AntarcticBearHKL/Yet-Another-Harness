@@ -38,7 +38,7 @@ const TOOL_I18N = {
   }),
   code_view: t('代码查看', '为本地文本文件打开独立代码查看窗口，可定位并高亮一段行。'),
   pdf_view: t('PDF 查看', '为本地 PDF 打开独立查看窗口，可跳转到指定页并高亮搜索词。'),
-  html_view: t('HTML 预览', '用 HTML/CSS 创建独立页面预览窗口，脚本会被禁用。'),
+  html_view: t('HTML 预览', '用 HTML/CSS/JavaScript 创建可交互的独立页面窗口；脚本、表单和同源资源可用。'),
   chrome: t('浏览器控制', '通过 DevTools 协议控制真实的 Chrome 或 Edge 窗口，不需要 Playwright。', {
     mode: '读取内容：text（默认）、html 或 accessibility',
     target: '关闭目标：tab（默认）、window 或 browser',

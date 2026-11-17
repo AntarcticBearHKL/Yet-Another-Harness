@@ -73,6 +73,14 @@ test('git tools are registered and grouped under the Git category', () => {
   assert.ok(group);
   assert.equal(group.label, 'Git');
   assert.equal(group.hidden, undefined);
+  assert.equal(
+    TOOL_GROUPS.find((item) => item.id === 'agile').label,
+    'Agile'
+  );
+  assert.equal(
+    TOOL_GROUPS.find((item) => item.id === 'view').label,
+    '交互显示'
+  );
   const push = GIT_TOOLS.find(
     (definition) => definition.function.name === 'git_push'
   );

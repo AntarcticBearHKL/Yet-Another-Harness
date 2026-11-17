@@ -580,17 +580,8 @@ img { max-width: 100%; height: auto; border-radius: 8px; }
 .yah-muted { color: var(--faint); }
 </style>`;
 
-function sanitizeHtml(value) {
-  return String(value ?? '')
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(
-      /<meta[^>]+http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi,
-      ''
-    );
-}
-
 function buildHtmlDocument(value) {
-  const source = sanitizeHtml(value).trim();
+  const source = String(value ?? '').trim();
   const base = HTML_BASE_STYLE;
   if (!source) {
     return `<!doctype html><html><head><meta charset="utf-8">${base}</head><body><p class="yah-muted">Empty HTML</p></body></html>`;
@@ -620,7 +611,12 @@ function renderHtmlViewer(payload) {
   const frame = document.createElement('iframe');
   frame.className = 'html-frame';
   frame.title = title;
-  frame.setAttribute('sandbox', 'allow-same-origin');
+  frame.setAttribute(
+    'sandbox',
+    'allow-same-origin allow-scripts allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock'
+  );
+  frame.setAttribute('allow', 'clipboard-read; clipboard-write; fullscreen');
+  frame.setAttribute('allowfullscreen', '');
   frame.setAttribute('referrerpolicy', 'no-referrer');
   frame.srcdoc = buildHtmlDocument(payload?.html ?? payload?.text);
   viewer.append(head, frame);
