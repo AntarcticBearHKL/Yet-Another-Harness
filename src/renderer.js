@@ -10321,6 +10321,7 @@ function bindEvents() {
           !dom.confirmOverlay.classList.contains('hidden'));
       if (dialogOpen) return;
       event.preventDefault();
+      cancelActionMenuPress();
       window.canvasTabReleased?.();
       return;
     }
