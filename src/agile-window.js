@@ -79,14 +79,14 @@ let dragPoint = null;
 let dragFrame = 0;
 
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .agile-task, .agile-column, .agile-tasks, .agile-groups, .agile-note, .overlay';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .agile-task, .agile-column, .agile-tasks, .agile-iterations, .agile-note, .overlay';
 
 function onWindowDragStart(event) {
   if (!api?.dragStart || event.button !== 0) return;
   const target = event.target;
   if (!(target instanceof Element)) return;
   if (target.closest(DRAG_EXCLUDE)) return;
-  if (!target.closest('.agile-head, .agile-sidebar-head, .agile-sidebar')) return;
+  if (!target.closest('.agile-head, .agile-sidebar')) return;
   windowDrag = { x: event.screenX, y: event.screenY };
   api.dragStart({ x: event.screenX, y: event.screenY });
 }
@@ -115,34 +115,6 @@ document.addEventListener('mousedown', onWindowDragStart);
 document.addEventListener('mousemove', onWindowDragMove);
 document.addEventListener('mouseup', onWindowDragEnd);
 window.addEventListener('blur', onWindowDragEnd);
-
-async function syncMaximized() {
-  if (!api?.isMaximized) return;
-  try {
-    const maximized = await api.isMaximized();
-    document.body.classList.toggle('maximized', maximized);
-  } catch {
-    /* ignore */
-  }
-}
-
-document.getElementById('agile-win-min')?.addEventListener('click', () => {
-  api?.minimize?.();
-});
-document.getElementById('agile-win-max')?.addEventListener('click', () => {
-  api?.maximize?.();
-  setTimeout(syncMaximized, 120);
-});
-document.getElementById('agile-win-close')?.addEventListener('click', () => {
-  api?.close?.();
-});
-document.querySelector('.agile-head')?.addEventListener('dblclick', (event) => {
-  if (!(event.target instanceof Element)) return;
-  if (event.target.closest(DRAG_EXCLUDE)) return;
-  api?.maximize?.();
-  setTimeout(syncMaximized, 120);
-});
-window.addEventListener('resize', syncMaximized);
 
 document.addEventListener('keydown', (event) => {
   if (event.isComposing) return;
@@ -175,11 +147,7 @@ document.addEventListener('contextmenu', (event) => {
     closeConfirm();
     return;
   }
-  if (window.handleAgileEscape) {
-    window.handleAgileEscape();
-  } else {
-    api?.close?.();
-  }
+  window.closeAgile?.();
 });
 
 document.addEventListener('visibilitychange', () => {
@@ -187,5 +155,4 @@ document.addEventListener('visibilitychange', () => {
 });
 
 window.openAgile?.();
-syncMaximized();
 setInterval(() => window.refreshAgileIfChanged?.(), 3000);

@@ -8294,7 +8294,8 @@ function handleRightClickBack() {
     return;
   }
   if (window.agileOverlayOpen?.()) {
-    window.handleAgileEscape?.();
+    window.closeAgile?.();
+    return;
   }
 }
 
@@ -8809,7 +8810,7 @@ function onRightMouseDown(event) {
     return;
   }
   if (window.agileOverlayOpen?.()) {
-    window.handleAgileEscape?.();
+    window.closeAgile?.();
     state.ringSuppress = true;
     return;
   }

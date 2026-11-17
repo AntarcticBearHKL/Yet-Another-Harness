@@ -33,22 +33,6 @@ function actorFor(args) {
   };
 }
 
-function agileListGroups(args = {}, context = null) {
-  return json(getStore(context).listGroups());
-}
-
-function agileCreateGroup(args = {}, context = null) {
-  return json(getStore(context).createGroup(args.name));
-}
-
-function agileRenameGroup(args = {}, context = null) {
-  return json(getStore(context).renameGroup(args.groupId, args.name));
-}
-
-function agileDeleteGroup(args = {}, context = null) {
-  return json({ deleted: getStore(context).deleteGroup(args.groupId) });
-}
-
 function agileListBoards(args = {}, context = null) {
   return json(getStore(context).listBoards());
 }
@@ -58,7 +42,7 @@ function agileGetBoard(args = {}, context = null) {
 }
 
 function agileCreateBoard(args = {}, context = null) {
-  return json(getStore(context).createBoard(args.groupId));
+  return json(getStore(context).createBoard());
 }
 
 function agileUpdateBoard(args = {}, context = null) {
@@ -73,10 +57,6 @@ function agileUpdateBoard(args = {}, context = null) {
 
 function agileDeleteBoard(args = {}, context = null) {
   return json({ deleted: getStore(context).deleteBoard(args.boardId) });
-}
-
-function agileAssignBoardToGroup(args = {}, context = null) {
-  return json(getStore(context).assignBoardToGroup(args.boardId, args.groupId));
 }
 
 function agileListTasks(args = {}, context = null) {
@@ -202,16 +182,6 @@ function agileGetBoardSnapshot(args = {}, context = null) {
   return json(getStore(context).snapshot(args.boardId));
 }
 
-function agileGetSettings(args = {}, context = null) {
-  return json(getStore(context).getSettings(args.boardId));
-}
-
-function agileUpdateSettings(args = {}, context = null) {
-  return json(
-    getStore(context).updateSettings(args.boardId, args.fields || args)
-  );
-}
-
 function agileListEvents(args = {}, context = null) {
   return json(getStore(context).listEvents(args.limit));
 }
@@ -278,16 +248,11 @@ function agileDeleteSkill(args = {}, context = null) {
 
 module.exports = {
   configure,
-  agileListGroups,
-  agileCreateGroup,
-  agileRenameGroup,
-  agileDeleteGroup,
   agileListBoards,
   agileGetBoard,
   agileCreateBoard,
   agileUpdateBoard,
   agileDeleteBoard,
-  agileAssignBoardToGroup,
   agileListTasks,
   agileGetTask,
   agileCreateTask,
@@ -305,8 +270,6 @@ module.exports = {
   agileUndigestNotes,
   agileListColumns,
   agileGetBoardSnapshot,
-  agileGetSettings,
-  agileUpdateSettings,
   agileListEvents,
   agileWaitForEvent,
   agileListRoadmap,

@@ -17,14 +17,24 @@
 }
 
 #agile-task-modal,
-#agile-board-modal,
-#agile-settings-modal {
+#agile-board-modal {
   z-index: 70;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+#agile-task-modal .overlay-panel,
+#agile-board-modal .overlay-panel {
+  border: 1px solid rgba(74, 54, 40, 0.16);
+  background: var(--glass-panel);
+  -webkit-backdrop-filter: blur(18px) saturate(1.04);
+  backdrop-filter: blur(18px) saturate(1.04);
+  box-shadow: none;
 }
 
 #agile-task-modal .hidden,
-#agile-board-modal .hidden,
-#agile-settings-modal .hidden {
+#agile-board-modal .hidden {
   display: none;
 }
 
@@ -52,22 +62,6 @@ body:has(#agile:not(.hidden)) #confirm-overlay {
   border-right: 1px solid var(--line);
 }
 
-.agile-sidebar-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex: none;
-  padding: 0 4px 14px 6px;
-}
-
-.agile-brand {
-  color: var(--accent-deep);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-}
-
 .agile-icon-btn {
   display: grid;
   place-items: center;
@@ -92,110 +86,22 @@ body:has(#agile:not(.hidden)) #confirm-overlay {
   color: var(--text);
 }
 
-.agile-groups {
+.agile-iterations {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
 }
 
-.agile-group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.agile-group-head {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 30px;
-  padding: 0 4px;
-  border-radius: 8px;
-  color: var(--dim);
-}
-
-.agile-group-head:hover {
-  background: var(--hover);
-}
-
-.agile-group-toggle {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 22px;
-  flex: none;
-  border: 0;
-  background: transparent;
-  color: var(--faint);
-  font-size: 12px;
-}
-
-.agile-group-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-soft);
-  font-size: 12px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: default;
-}
-
-.agile-group-actions {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  flex: none;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.agile-group-head:hover .agile-group-actions,
-.agile-group-head:focus-within .agile-group-actions {
-  opacity: 1;
-}
-
-.agile-group-add,
-.agile-group-delete {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--faint);
-  font-size: 13px;
-  line-height: 1;
-}
-
-.agile-group-add:hover,
-.agile-group-delete:hover {
-  border-color: var(--line);
-  background: var(--surface-card);
-  color: var(--text);
-}
-
-.agile-group-items {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin: 0;
-  padding: 0 0 4px 18px;
-  list-style: none;
-}
-
 .agile-iteration-row {
   display: flex;
   align-items: center;
   gap: 4px;
-  min-height: 28px;
-  padding: 0 6px;
+  min-height: 32px;
+  padding: 0 8px;
   border-radius: 7px;
   color: var(--dim);
   cursor: pointer;
@@ -241,74 +147,14 @@ body:has(#agile:not(.hidden)) #confirm-overlay {
   opacity: 0;
 }
 
-.agile-iteration-row:hover .agile-iteration-delete {
+.agile-iteration-row:hover .agile-iteration-delete,
+.agile-iteration-row.active .agile-iteration-delete {
   opacity: 1;
 }
 
 .agile-iteration-delete:hover {
   background: rgba(176, 74, 60, 0.1);
   color: #b04a3c;
-}
-
-.agile-prefix-toggle {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 24px;
-  margin: 2px 0 2px 18px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--faint);
-  font-size: 10px;
-  text-align: left;
-}
-
-.agile-prefix-toggle:hover {
-  background: var(--hover);
-  color: var(--dim);
-}
-
-.agile-group-create {
-  display: flex;
-  padding: 4px 6px;
-}
-
-.agile-group-create input,
-.agile-group-rename {
-  width: 100%;
-  height: 26px;
-  padding: 0 7px;
-  border: 1px solid var(--accent);
-  border-radius: 7px;
-  background: var(--surface-input);
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-}
-
-.agile-sidebar-foot {
-  display: flex;
-  gap: 6px;
-  flex: none;
-  padding: 10px 4px 0;
-  border-top: 1px solid var(--line);
-}
-
-.agile-foot-btn {
-  flex: 1;
-  height: 28px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-card);
-  color: var(--dim);
-  font-size: 11.5px;
-}
-
-.agile-foot-btn:hover {
-  background: var(--hover);
-  color: var(--text);
 }
 
 .agile-main {
@@ -380,19 +226,30 @@ body:has(#agile:not(.hidden)) #confirm-overlay {
 
 .agile-board {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   flex: 1;
   min-height: 0;
   padding: 0 16px 24px 24px;
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  cursor: grab;
+}
+
+.agile-board::-webkit-scrollbar {
+  display: none;
+}
+
+.agile-board.panning {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .agile-column {
   display: flex;
   flex-direction: column;
-  width: clamp(190px, 15vw, 250px);
+  width: clamp(260px, 22vw, 340px);
   flex: 0 0 auto;
   min-height: 0;
   padding: 0;
@@ -645,14 +502,6 @@ body:has(#agile:not(.hidden)) #confirm-overlay {
   gap: 5px;
 }
 
-.agile-field > span,
-.agile-settings-label {
-  color: var(--faint);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
 .agile-textarea {
   min-height: 96px;
   padding: 9px 10px;
@@ -797,55 +646,6 @@ body:has(#agile:not(.hidden)) #confirm-overlay {
   gap: 10px;
 }
 
-.agile-settings-panel {
-  width: min(520px, calc(100vw - 40px));
-}
-
-.agile-check {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--dim);
-  font-size: 12px;
-}
-
-.agile-check input {
-  accent-color: var(--accent);
-}
-
-.agile-wip-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
-  margin-top: 8px;
-}
-
-.agile-wip-field {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--dim);
-  font-size: 11.5px;
-}
-
-.agile-wip-field input {
-  width: 74px;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface-input);
-  color: var(--text);
-  font: inherit;
-  font-size: 11.5px;
-}
-
-.agile-wip-field input:focus {
-  outline: 0;
-  border-color: var(--accent);
-}
-
 @media (max-width: 900px) {
   .agile-shell {
     grid-template-columns: 1fr;
@@ -874,10 +674,6 @@ body.agile-window {
   background: transparent;
 }
 
-body.agile-window.maximized {
-  --window-inset: 0px;
-}
-
 body.agile-window .agile {
   border: 1px solid rgba(74, 54, 40, 0.16);
   border-radius: 18px;
@@ -886,42 +682,4 @@ body.agile-window .agile {
     var(--window-shadow),
     inset 0 0 0 1px rgba(255, 255, 255, 0.28);
   overflow: hidden;
-}
-
-body.agile-window.maximized .agile {
-  inset: 0;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.agile-window-actions {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  flex: none;
-  margin-left: 2px;
-}
-
-.agile-win-btn {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--faint);
-  font-size: 13px;
-  line-height: 1;
-  transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
-}
-
-.agile-win-btn:hover {
-  border-color: var(--line);
-  background: var(--hover);
-  color: var(--text);
 }

@@ -298,66 +298,50 @@ function createAgileStore(file) {
   }
 
   function ensureDefaults(target) {
-    if (!Array.isArray(target.groups) || target.groups.length === 0) {
-      const group = normalizeGroup({ name: 'Group 1', order: 1 });
-      target.groups = [group];
-    }
-    target.groups = target.groups
+    const groups = (Array.isArray(target.groups) ? target.groups : [])
       .map(normalizeGroup)
       .filter(Boolean)
       .sort((left, right) => left.order - right.order);
-    target.groups.forEach((group, index) => {
-      group.order = index + 1;
-    });
-    if (!Array.isArray(target.boards) || target.boards.length === 0) {
-      const group = target.groups[target.groups.length - 1];
-      const board = normalizeBoard({
-        groupId: group.id,
-        order: 1,
-      });
-      target.boards = [board];
-      target.settings = {
-        ...(target.settings || {}),
-        [board.id]: defaultSettings(),
-      };
-    }
-    const groupIds = new Set(target.groups.map((group) => group.id));
-    target.boards = target.boards
+    const primary = groups[0] || normalizeGroup({ name: '主线', order: 1 });
+    primary.order = 1;
+    target.groups = [primary];
+    const groupOrder = new Map(groups.map((group) => [group.id, group.order]));
+
+    const boards = (Array.isArray(target.boards) ? target.boards : [])
       .map(normalizeBoard)
       .filter(Boolean)
-      .map((board) => {
-        if (!groupIds.has(board.groupId)) {
-          board.groupId = target.groups[target.groups.length - 1].id;
-        }
-        return board;
+      .sort((left, right) => {
+        const leftGroup = groupOrder.get(left.groupId) || 0;
+        const rightGroup = groupOrder.get(right.groupId) || 0;
+        return (
+          leftGroup - rightGroup ||
+          left.order - right.order ||
+          String(left.createdAt).localeCompare(String(right.createdAt))
+        );
       });
-    target.boards.sort((left, right) => {
-      const leftGroup = target.groups.find((group) => group.id === left.groupId);
-      const rightGroup = target.groups.find((group) => group.id === right.groupId);
-      const groupDiff = (leftGroup?.order || 0) - (rightGroup?.order || 0);
-      return groupDiff || left.order - right.order;
+    if (boards.length === 0) {
+      boards.push(normalizeBoard({ groupId: primary.id, order: 1 }));
+    }
+    boards.forEach((board, index) => {
+      board.groupId = primary.id;
+      board.order = index + 1;
     });
-    const counters = new Map();
-    for (const board of target.boards) {
-      const next = (counters.get(board.groupId) || 0) + 1;
-      counters.set(board.groupId, next);
-      board.order = next;
-    }
-    const boardIds = new Set(target.boards.map((board) => board.id));
-    target.tasks = (Array.isArray(target.tasks) ? target.tasks : [])
-      .map(normalizeTask)
-      .filter((task) => task && boardIds.has(task.boardId));
-    for (const task of target.tasks) {
-      if (!target.settings?.[task.boardId]) {
-        target.settings = target.settings || {};
-        target.settings[task.boardId] = defaultSettings();
-      }
-    }
+    target.boards = boards;
     target.settings = target.settings && typeof target.settings === 'object'
       ? target.settings
       : {};
     for (const board of target.boards) {
       target.settings[board.id] = normalizeSettings(target.settings[board.id]);
+    }
+
+    const boardIds = new Set(target.boards.map((board) => board.id));
+    target.tasks = (Array.isArray(target.tasks) ? target.tasks : [])
+      .map(normalizeTask)
+      .filter((task) => task && boardIds.has(task.boardId));
+    for (const task of target.tasks) {
+      if (!target.settings[task.boardId]) {
+        target.settings[task.boardId] = defaultSettings();
+      }
     }
     target.skills = (Array.isArray(target.skills) ? target.skills : [])
       .map(normalizeSkill)
@@ -482,16 +466,14 @@ function createAgileStore(file) {
     const board = boardId ? boardById(boardId) : activeBoard();
     if (!board) throw new Error('No agile board exists');
     const settings = normalizeSettings(data.settings[board.id]);
+    const iterations = data.boards.map((item, index) =>
+      boardSummary(item, index)
+    );
     return {
       activeBoardId: board.id,
+      iterations,
       groups: groupSummaries(),
-      board: boardSummary(
-        board,
-        data.boards
-          .filter((item) => item.groupId === board.groupId)
-          .sort((left, right) => left.order - right.order)
-          .findIndex((item) => item.id === board.id)
-      ),
+      board: boardSummary(board, data.boards.findIndex((item) => item.id === board.id)),
       tasks: boardTasks(board.id).map(taskView),
       settings,
       skills: data.skills.map((skill) => ({ ...skill })),
@@ -572,30 +554,21 @@ function createAgileStore(file) {
     return true;
   }
 
-  function createBoard(groupId = null) {
+  function createBoard() {
     load();
-    const group =
-      data.groups.find((item) => item.id === String(groupId || '')) ||
-      data.groups[data.groups.length - 1];
-    if (!group) throw new Error('Create a group first');
-    const order =
-      data.boards.filter((board) => board.groupId === group.id).length + 1;
+    const group = data.groups[0];
+    if (!group) throw new Error('Agile line is not ready');
+    const order = data.boards.length + 1;
     const board = normalizeBoard({ groupId: group.id, order });
     data.boards.push(board);
     data.settings[board.id] = defaultSettings();
     data.activeBoardId = board.id;
-    recordEvent('board.created', { boardId: board.id, groupId: group.id }, board.id, {
+    recordEvent('board.created', { boardId: board.id }, board.id, {
       type: 'human',
       id: null,
     });
     persist();
-    return boardSummary(
-      board,
-      data.boards
-        .filter((item) => item.groupId === group.id)
-        .sort((left, right) => left.order - right.order)
-        .findIndex((item) => item.id === board.id)
-    );
+    return boardSummary(board, data.boards.length - 1);
   }
 
   function updateBoard(boardId, patch = {}) {
@@ -624,12 +597,13 @@ function createAgileStore(file) {
     load();
     const board = boardById(boardId);
     if (!board) throw new Error('Board not found');
-    const siblings = data.boards
-      .filter((item) => item.groupId === board.groupId)
-      .sort((left, right) => left.order - right.order);
-    if (siblings[siblings.length - 1]?.id !== board.id) {
+    const last = data.boards
+      .slice()
+      .sort((left, right) => left.order - right.order)
+      .at(-1);
+    if (last?.id !== board.id) {
       throw new Error(
-        'Only the last iteration in a group can be deleted; earlier iterations are kept.'
+        'Only the last iteration can be deleted; earlier iterations are kept.'
       );
     }
     data.tasks = data.tasks.filter((task) => task.boardId !== board.id);
@@ -1158,47 +1132,15 @@ function createAgileStore(file) {
 
   function listRoadmap() {
     load();
-    const groups = groupSummaries();
     let activeFound = false;
     return {
-      groups: groups.map((group) => ({
-        ...group,
-        boards: group.boards.map((board) => {
-          const isActive = !activeFound && !board.allFinished;
-          if (isActive) activeFound = true;
-          return { ...board, isActive };
-        }),
-      })),
+      iterations: data.boards.map((board, index) => {
+        const summary = boardSummary(board, index);
+        const isActive = !activeFound && !summary.allFinished;
+        if (isActive) activeFound = true;
+        return { ...summary, isActive };
+      }),
     };
-  }
-
-  function getSettings(boardId = null) {
-    load();
-    const board = requireBoard(boardId || data.activeBoardId);
-    return normalizeSettings(data.settings[board.id]);
-  }
-
-  function updateSettings(boardId, fields = {}) {
-    load();
-    const board = requireBoard(boardId || data.activeBoardId);
-    const current = normalizeSettings(data.settings[board.id]);
-    const next = normalizeSettings({
-      ...current,
-      ...fields,
-      wipLimits: {
-        ...current.wipLimits,
-        ...(fields?.wipLimits && typeof fields.wipLimits === 'object'
-          ? fields.wipLimits
-          : {}),
-      },
-    });
-    data.settings[board.id] = next;
-    recordEvent('settings.updated', { boardId: board.id, fields }, board.id, {
-      type: 'human',
-      id: null,
-    });
-    persist();
-    return next;
   }
 
   function listSkills() {
@@ -1357,8 +1299,6 @@ function createAgileStore(file) {
     assignBoardToGroup,
     selectBoard,
     listRoadmap,
-    getSettings,
-    updateSettings,
     listSkills,
     getSkill,
     createSkill,

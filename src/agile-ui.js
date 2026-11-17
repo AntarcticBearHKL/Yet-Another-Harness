@@ -2,15 +2,13 @@
 
 const agileDom = {
   overlay: document.getElementById('agile'),
-  groups: document.getElementById('agile-groups'),
+  iterations: document.getElementById('agile-iterations'),
   iteration: document.getElementById('agile-iteration'),
   boardMeta: document.getElementById('agile-board-meta'),
   board: document.getElementById('agile-board'),
   search: document.getElementById('agile-search'),
   toast: document.getElementById('agile-toast'),
-  addGroup: document.getElementById('agile-add-group'),
-  settingsBtn: document.getElementById('agile-settings-btn'),
-  close: document.getElementById('agile-close'),
+  addIteration: document.getElementById('agile-add-iteration'),
   boardDetails: document.getElementById('agile-board-details'),
   taskModal: document.getElementById('agile-task-modal'),
   taskKicker: document.getElementById('agile-task-kicker'),
@@ -36,12 +34,6 @@ const agileDom = {
   boardSave: document.getElementById('agile-board-save'),
   boardCancel: document.getElementById('agile-board-cancel'),
   boardClose: document.getElementById('agile-board-close'),
-  settingsModal: document.getElementById('agile-settings-modal'),
-  showChangeDate: document.getElementById('agile-show-change-date'),
-  wipFields: document.getElementById('agile-wip-fields'),
-  settingsSave: document.getElementById('agile-settings-save'),
-  settingsCancel: document.getElementById('agile-settings-cancel'),
-  settingsClose: document.getElementById('agile-settings-close'),
 };
 
 const agileState = {
@@ -58,8 +50,7 @@ const agileState = {
   })(),
   taskId: null,
   taskDraft: null,
-  groupCreating: false,
-  groupRename: null,
+  boardPan: null,
   request: 0,
   toastTimer: null,
 };
@@ -132,160 +123,24 @@ function agileIterationRow(board, activeId, isLast) {
   return row;
 }
 
-function agileGroupRow(group) {
-  const wrap = el('div', 'agile-group');
-  const head = el('div', 'agile-group-head');
-  const toggle = el('button', 'agile-group-toggle', group.collapsed ? '▸' : '▾');
-  toggle.type = 'button';
-  toggle.setAttribute('aria-expanded', String(!group.collapsed));
-  toggle.addEventListener('click', () => {
-    void agileAction('update_group', {
-      groupId: group.id,
-      collapsed: !group.collapsed,
-    });
-  });
-  head.append(toggle);
-  if (agileState.groupRename === group.id) {
-    const input = el('input', 'agile-group-rename');
-    input.type = 'text';
-    input.value = group.name;
-    input.maxLength = 60;
-    const finish = (commit) => {
-      if (!agileState.groupRename) return;
-      const name = input.value.trim();
-      agileState.groupRename = null;
-      if (commit && name) {
-        void agileAction('rename_group', { groupId: group.id, name });
-      } else {
-        renderAgileSidebar();
-      }
-    };
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        finish(true);
-      } else if (event.key === 'Escape') {
-        event.preventDefault();
-        finish(false);
-      }
-    });
-    input.addEventListener('blur', () => finish(true));
-    head.append(input);
-    requestAnimationFrame(() => {
-      input.focus();
-      input.select();
-    });
-  } else {
-    const name = el('span', 'agile-group-name', group.name);
-    name.title = '双击改名';
-    name.addEventListener('dblclick', () => {
-      agileState.groupRename = group.id;
-      renderAgileSidebar();
-    });
-    head.append(name);
-  }
-  const actions = el('div', 'agile-group-actions');
-  const add = el('button', 'agile-group-add', '+');
-  add.type = 'button';
-  add.title = '新建迭代';
-  add.setAttribute('aria-label', `在 ${group.name} 新建迭代`);
-  add.addEventListener('click', () => {
-    void agileAction('create_board', { groupId: group.id });
-  });
-  const del = el('button', 'agile-group-delete', '×');
-  del.type = 'button';
-  del.title = '删除分组';
-  del.setAttribute('aria-label', `删除分组 ${group.name}`);
-  del.addEventListener('click', () => {
-    openConfirm({
-      text: `删除分组「${group.name}」以及里面的 ${group.boards.length} 个迭代？不可恢复。`,
-      action: () => void agileAction('delete_group', { groupId: group.id }),
-    });
-  });
-  actions.append(add, del);
-  head.append(actions);
-  wrap.append(head);
-
-  if (group.collapsed) return wrap;
-
-  const boards = group.boards || [];
-  const leadingFinished = [];
-  let reachedLive = false;
-  for (const board of boards) {
-    if (!reachedLive && board.allFinished) leadingFinished.push(board);
-    else reachedLive = true;
-  }
-  const hasPrefix = leadingFinished.length > 0 && leadingFinished.length < boards.length;
-  const hidePrefix = hasPrefix && group.prefixCollapsed;
-  if (hasPrefix) {
-    const prefix = el(
-      'button',
-      'agile-prefix-toggle',
-      `${hidePrefix ? '显示' : '隐藏'} ${leadingFinished.length} 个已完成迭代`
-    );
-    prefix.type = 'button';
-    prefix.addEventListener('click', () => {
-      void agileAction('update_group', {
-        groupId: group.id,
-        prefixCollapsed: !group.prefixCollapsed,
-      });
-    });
-    wrap.append(prefix);
-  }
-  const items = el('div', 'agile-group-items');
-  boards.forEach((board, index) => {
-    if (hidePrefix && leadingFinished.some((item) => item.id === board.id)) {
-      return;
-    }
-    items.append(
+function renderAgileSidebar() {
+  if (!agileDom.iterations) return;
+  agileDom.iterations.replaceChildren();
+  const iterations = agileState.data?.iterations || [];
+  iterations.forEach((board, index) => {
+    agileDom.iterations.append(
       agileIterationRow(
         board,
         agileState.data?.activeBoardId,
-        index === boards.length - 1
+        index === iterations.length - 1
       )
     );
   });
-  wrap.append(items);
-  return wrap;
-}
-
-function renderAgileSidebar() {
-  if (!agileDom.groups) return;
-  agileDom.groups.replaceChildren();
-  const groups = agileState.data?.groups || [];
-  for (const group of groups) {
-    agileDom.groups.append(agileGroupRow(group));
-  }
-  if (agileState.groupCreating) {
-    const row = el('div', 'agile-group-create');
-    const input = el('input');
-    input.type = 'text';
-    input.maxLength = 60;
-    input.placeholder = '分组名称';
-    const finish = (commit) => {
-      if (!agileState.groupCreating) return;
-      const name = input.value.trim();
-      agileState.groupCreating = false;
-      if (commit && name) {
-        void agileAction('create_group', { name });
-      } else {
-        renderAgileSidebar();
-      }
-    };
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        finish(true);
-      } else if (event.key === 'Escape') {
-        event.preventDefault();
-        finish(false);
-      }
-    });
-    input.addEventListener('blur', () => finish(true));
-    row.append(input);
-    agileDom.groups.append(row);
-    requestAnimationFrame(() => input.focus());
-  }
+  requestAnimationFrame(() => {
+    agileDom.iterations
+      ?.querySelector('.agile-iteration-row.active')
+      ?.scrollIntoView({ block: 'nearest' });
+  });
 }
 
 function agileTaskMatches(task) {
@@ -339,14 +194,6 @@ function agileTaskCard(task) {
   return card;
 }
 
-function agileWipState(column, count) {
-  const limit = Number(column.wipLimit) || 0;
-  if (!limit) return { label: String(count), state: '' };
-  if (count > limit) return { label: `${count}/${limit}`, state: 'over' };
-  if (count === limit) return { label: `${count}/${limit}`, state: 'at' };
-  return { label: `${count}/${limit}`, state: '' };
-}
-
 function renderAgileBoard() {
   if (!agileDom.board) return;
   agileDom.board.replaceChildren();
@@ -359,14 +206,12 @@ function renderAgileBoard() {
   for (const column of data.columns || []) {
     const allColumnTasks = tasks.filter((task) => task.column === column.id);
     const columnTasks = allColumnTasks.filter(agileTaskMatches);
-    const wip = agileWipState(column, allColumnTasks.length);
     const section = el('article', 'agile-column');
     section.style.setProperty('--agile-column-color', column.color);
     const head = el('header', 'agile-column-head');
     head.append(el('span', 'agile-column-dot'));
     head.append(el('span', 'agile-column-name', column.name));
-    const count = el('span', 'agile-column-count', wip.label);
-    if (wip.state) count.classList.add(wip.state);
+    const count = el('span', 'agile-column-count', String(allColumnTasks.length));
     count.title = column.hint || '';
     head.append(count);
     if (column.id === 'human') {
@@ -601,7 +446,7 @@ function renderAgileTaskModal() {
     info.push(`认领：${task.claimedBy || '未认领'}`);
     if (task.claimedAt) info.push(`认领时间：${agileDate(task.claimedAt, true)}`);
     if (task.blockedReason) info.push(`阻塞原因：${task.blockedReason}`);
-    if (task.updatedAt && agileState.data?.settings?.showChangeDate !== false) {
+    if (task.updatedAt) {
       info.push(`更新：${agileDate(task.updatedAt, true)}`);
     }
     if (task.isRework) info.push('返工任务：人添加备注后从 Finished 回到 Backlog');
@@ -637,49 +482,6 @@ function closeAgileBoardDetails() {
   agileDom.boardModal.setAttribute('aria-hidden', 'true');
 }
 
-function openAgileSettings() {
-  const settings = agileState.data?.settings;
-  if (!settings) return;
-  agileDom.showChangeDate.checked = settings.showChangeDate !== false;
-  agileDom.wipFields.replaceChildren();
-  for (const column of agileState.data.columns || []) {
-    if (column.done) continue;
-    const field = el('label', 'agile-wip-field');
-    field.append(el('span', '', column.name));
-    const input = el('input');
-    input.type = 'number';
-    input.min = '0';
-    input.max = '999';
-    input.step = '1';
-    input.value = String(settings.wipLimits?.[column.id] || 0);
-    input.dataset.columnId = column.id;
-    field.append(input);
-    agileDom.wipFields.append(field);
-  }
-  agileDom.settingsModal.classList.remove('hidden');
-  agileDom.settingsModal.setAttribute('aria-hidden', 'false');
-}
-
-function closeAgileSettings() {
-  agileDom.settingsModal.classList.add('hidden');
-  agileDom.settingsModal.setAttribute('aria-hidden', 'true');
-}
-
-async function saveAgileSettings() {
-  const wipLimits = {};
-  for (const input of agileDom.wipFields.querySelectorAll('input[data-column-id]')) {
-    wipLimits[input.dataset.columnId] = Number(input.value) || 0;
-  }
-  const result = await agileAction('update_settings', {
-    boardId: agileState.data?.board?.id,
-    fields: {
-      showChangeDate: Boolean(agileDom.showChangeDate.checked),
-      wipLimits,
-    },
-  });
-  if (result) closeAgileSettings();
-}
-
 function openAgile(managerId) {
   if (!agileDom.overlay) return;
   if (typeof closeComposer === 'function') closeComposer();
@@ -706,10 +508,7 @@ function closeAgile() {
   }
   closeAgileTask();
   closeAgileBoardDetails();
-  closeAgileSettings();
   agileState.open = false;
-  agileState.groupCreating = false;
-  agileState.groupRename = null;
   agileDom.overlay.classList.add('hidden');
   agileDom.overlay.setAttribute('aria-hidden', 'true');
 }
@@ -719,25 +518,13 @@ function agileOverlayOpen() {
 }
 
 function handleAgileEscape() {
-  if (agileDom.settingsModal && !agileDom.settingsModal.classList.contains('hidden')) {
-    closeAgileSettings();
-    return;
-  }
   if (agileDom.boardModal && !agileDom.boardModal.classList.contains('hidden')) {
     closeAgileBoardDetails();
     return;
   }
   if (agileDom.taskModal && !agileDom.taskModal.classList.contains('hidden')) {
     closeAgileTask();
-    return;
   }
-  if (agileState.groupCreating || agileState.groupRename) {
-    agileState.groupCreating = false;
-    agileState.groupRename = null;
-    renderAgileSidebar();
-    return;
-  }
-  closeAgile();
 }
 
 async function saveAgileTask() {
@@ -795,17 +582,63 @@ function deleteAgileTask() {
   });
 }
 
+function startAgileBoardPan(event) {
+  if (event.button !== 0 || !agileDom.board) return;
+  const target = event.target;
+  if (
+    target instanceof Element &&
+    target.closest(
+      'button, a, input, textarea, select, .agile-task, .agile-note, .overlay'
+    )
+  ) {
+    return;
+  }
+  agileState.boardPan = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    scrollLeft: agileDom.board.scrollLeft,
+    moved: false,
+  };
+  agileDom.board.classList.add('panning');
+  try {
+    agileDom.board.setPointerCapture(event.pointerId);
+  } catch {
+    /* ignore */
+  }
+}
+
+function moveAgileBoardPan(event) {
+  const pan = agileState.boardPan;
+  if (!pan || !agileDom.board) return;
+  const dx = event.clientX - pan.startX;
+  if (!pan.moved && Math.abs(dx) < 4) return;
+  pan.moved = true;
+  agileDom.board.scrollLeft = pan.scrollLeft - dx;
+  event.preventDefault();
+}
+
+function endAgileBoardPan() {
+  if (!agileState.boardPan) return;
+  agileState.boardPan = null;
+  agileDom.board?.classList.remove('panning');
+}
+
 function bindAgileEvents() {
-  agileDom.close?.addEventListener('click', closeAgile);
-  agileDom.settingsBtn?.addEventListener('click', openAgileSettings);
-  agileDom.boardDetails?.addEventListener('click', openAgileBoardDetails);
-  agileDom.addGroup?.addEventListener('click', () => {
-    agileState.groupCreating = true;
-    renderAgileSidebar();
+  agileDom.addIteration?.addEventListener('click', () => {
+    void agileAction('create_board', {});
   });
+  agileDom.boardDetails?.addEventListener('click', openAgileBoardDetails);
   agileDom.search?.addEventListener('input', () => {
     agileState.search = agileDom.search.value;
     renderAgileBoard();
+  });
+  agileDom.board?.addEventListener('pointerdown', startAgileBoardPan);
+  agileDom.board?.addEventListener('pointermove', moveAgileBoardPan);
+  agileDom.board?.addEventListener('pointerup', endAgileBoardPan);
+  agileDom.board?.addEventListener('pointercancel', endAgileBoardPan);
+  agileDom.board?.addEventListener('lostpointercapture', endAgileBoardPan);
+  agileDom.board?.addEventListener('dragstart', (event) => {
+    event.preventDefault();
   });
   agileDom.taskClose?.addEventListener('click', closeAgileTask);
   agileDom.taskCancel?.addEventListener('click', closeAgileTask);
@@ -835,16 +668,10 @@ function bindAgileEvents() {
   agileDom.boardModal?.addEventListener('click', (event) => {
     if (event.target === agileDom.boardModal) closeAgileBoardDetails();
   });
-  agileDom.settingsClose?.addEventListener('click', closeAgileSettings);
-  agileDom.settingsCancel?.addEventListener('click', closeAgileSettings);
-  agileDom.settingsSave?.addEventListener('click', () => void saveAgileSettings());
-  agileDom.settingsModal?.addEventListener('click', (event) => {
-    if (event.target === agileDom.settingsModal) closeAgileSettings();
-  });
 }
 
 function anyAgileModalOpen() {
-  return [agileDom.taskModal, agileDom.boardModal, agileDom.settingsModal].some(
+  return [agileDom.taskModal, agileDom.boardModal].some(
     (modal) => modal && !modal.classList.contains('hidden')
   );
 }
@@ -852,7 +679,6 @@ function anyAgileModalOpen() {
 async function refreshAgileIfChanged() {
   if (!agileState.data || document.hidden || agileState.loading) return;
   if (anyAgileModalOpen()) return;
-  if (agileState.groupCreating || agileState.groupRename) return;
   const confirm = document.getElementById('confirm-overlay');
   if (confirm && !confirm.classList.contains('hidden')) return;
   try {

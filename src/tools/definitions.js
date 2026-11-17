@@ -283,29 +283,6 @@ const MONITOR_OUTPUT = fn(
   ['id']
 );
 
-const AGILE_LIST_GROUPS = fn(
-  'agile_list_groups',
-  'List agile groups and their iterations. The five columns are fixed: backlog, human, progress, blocked, finished.',
-  {}
-);
-const AGILE_CREATE_GROUP = fn(
-  'agile_create_group',
-  'Create a named group that can hold agile iterations.',
-  { name: str('Group name') },
-  ['name']
-);
-const AGILE_RENAME_GROUP = fn(
-  'agile_rename_group',
-  'Rename an agile group.',
-  { groupId: str('Group id'), name: str('New group name') },
-  ['groupId', 'name']
-);
-const AGILE_DELETE_GROUP = fn(
-  'agile_delete_group',
-  'Delete a group and all iterations and tasks inside it.',
-  { groupId: str('Group id') },
-  ['groupId']
-);
 const AGILE_LIST_BOARDS = fn(
   'agile_list_boards',
   'List all agile iterations with task counts and dates.',
@@ -318,8 +295,8 @@ const AGILE_GET_BOARD = fn(
 );
 const AGILE_CREATE_BOARD = fn(
   'agile_create_board',
-  'Create a new blank iteration inside a group. The iteration is numbered automatically.',
-  { groupId: str('Group id (defaults to the last group)') }
+  'Create the next blank iteration on the single agile line. The iteration is numbered automatically.',
+  {}
 );
 const AGILE_UPDATE_BOARD = fn(
   'agile_update_board',
@@ -337,12 +314,6 @@ const AGILE_DELETE_BOARD = fn(
   'Delete an iteration and its tasks.',
   { boardId: str('Iteration id') },
   ['boardId']
-);
-const AGILE_ASSIGN_BOARD_TO_GROUP = fn(
-  'agile_assign_board_to_group',
-  'Move an iteration into another group. It becomes the last iteration of that group.',
-  { boardId: str('Iteration id'), groupId: str('Target group id') },
-  ['boardId', 'groupId']
 );
 const AGILE_LIST_TASKS = fn(
   'agile_list_tasks',
@@ -500,20 +471,6 @@ const AGILE_GET_BOARD_SNAPSHOT = fn(
   'Get the full projected board snapshot (board, columns, tasks, settings, seq).',
   { boardId: str('Iteration id') }
 );
-const AGILE_GET_SETTINGS = fn(
-  'agile_get_settings',
-  'Get per-iteration settings.',
-  { boardId: str('Iteration id') }
-);
-const AGILE_UPDATE_SETTINGS = fn(
-  'agile_update_settings',
-  'Merge fields into per-iteration settings (showChangeDate, locale, wipLimits).',
-  {
-    boardId: str('Iteration id'),
-    fields: obj('Fields to merge'),
-  },
-  ['fields']
-);
 const AGILE_LIST_EVENTS = fn(
   'agile_list_events',
   'List recent agile domain events (audit trail), oldest first.',
@@ -531,7 +488,7 @@ const AGILE_WAIT_FOR_EVENT = fn(
 );
 const AGILE_LIST_ROADMAP = fn(
   'agile_list_roadmap',
-  'List groups and iterations with dates, goals and unfinished task counts.',
+  'List iterations on the single agile line with dates, goals and unfinished task counts.',
   {}
 );
 const AGILE_LIST_SKILLS = fn(
@@ -1048,16 +1005,11 @@ const OMO = [
   BACKGROUND_STOP,
   BACKGROUND_OUTPUT,
   BACKGROUND_CANCEL,
-  AGILE_LIST_GROUPS,
-  AGILE_CREATE_GROUP,
-  AGILE_RENAME_GROUP,
-  AGILE_DELETE_GROUP,
   AGILE_LIST_BOARDS,
   AGILE_GET_BOARD,
   AGILE_CREATE_BOARD,
   AGILE_UPDATE_BOARD,
   AGILE_DELETE_BOARD,
-  AGILE_ASSIGN_BOARD_TO_GROUP,
   AGILE_LIST_TASKS,
   AGILE_GET_TASK,
   AGILE_CREATE_TASK,
@@ -1075,8 +1027,6 @@ const OMO = [
   AGILE_UNDIGEST_NOTES,
   AGILE_LIST_COLUMNS,
   AGILE_GET_BOARD_SNAPSHOT,
-  AGILE_GET_SETTINGS,
-  AGILE_UPDATE_SETTINGS,
   AGILE_LIST_EVENTS,
   AGILE_WAIT_FOR_EVENT,
   AGILE_LIST_ROADMAP,

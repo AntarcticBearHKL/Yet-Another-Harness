@@ -721,27 +721,7 @@
     >
       <div class="agile-shell">
         <aside class="agile-sidebar">
-          <div class="agile-sidebar-head">
-            <span class="agile-brand">AGILE</span>
-            <button
-              id="agile-add-group"
-              class="agile-icon-btn"
-              type="button"
-              aria-label="新建分组"
-              title="新建分组"
-            >
-              +
-            </button>
-          </div>
-          <div id="agile-groups" class="agile-groups"></div>
-          <div class="agile-sidebar-foot">
-            <button id="agile-settings-btn" class="agile-foot-btn" type="button">
-              设置
-            </button>
-            <button id="agile-close" class="agile-foot-btn" type="button">
-              关闭
-            </button>
-          </div>
+          <div id="agile-iterations" class="agile-iterations"></div>
         </aside>
         <section class="agile-main">
           <header class="agile-head">
@@ -750,6 +730,15 @@
               <span id="agile-board-meta" class="agile-board-meta"></span>
             </div>
             <div class="agile-head-actions">
+              <button
+                id="agile-add-iteration"
+                class="agile-icon-btn"
+                type="button"
+                aria-label="新建迭代"
+                title="新建迭代"
+              >
+                +
+              </button>
               <input
                 id="agile-search"
                 class="agile-search"
@@ -854,32 +843,6 @@
           <div class="agile-foot-spacer"></div>
           <button id="agile-board-cancel" class="pill" type="button">取消</button>
           <button id="agile-board-save" class="pill primary" type="button">
-            保存
-          </button>
-        </footer>
-      </div>
-    </div>
-
-    <div id="agile-settings-modal" class="overlay hidden" aria-hidden="true">
-      <div class="overlay-panel agile-settings-panel">
-        <header class="agile-modal-head">
-          <div class="agile-modal-title-wrap">
-            <span class="agile-kicker">BOARD</span>
-            <h3>Agile 设置</h3>
-          </div>
-        </header>
-        <label class="agile-check">
-          <input id="agile-show-change-date" type="checkbox" />
-          <span>显示更新时间</span>
-        </label>
-        <div class="agile-settings-label">WIP 上限（0 表示不限）</div>
-        <div id="agile-wip-fields" class="agile-wip-fields"></div>
-        <footer class="agile-modal-foot">
-          <div class="agile-foot-spacer"></div>
-          <button id="agile-settings-cancel" class="pill" type="button">
-            取消
-          </button>
-          <button id="agile-settings-save" class="pill primary" type="button">
             保存
           </button>
         </footer>

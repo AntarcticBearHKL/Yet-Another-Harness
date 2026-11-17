@@ -22,19 +22,8 @@ test('agile native tools cover boards, notes, digest and moves', async () => {
       ['backlog', 'human', 'progress', 'blocked', 'finished']
     );
 
-    const group = JSON.parse(
-      await tools.execute(
-        'agile_create_group',
-        JSON.stringify({ name: 'Native group' })
-      )
-    );
-    assert.equal(group.name, 'Native group');
-
     const board = JSON.parse(
-      await tools.execute(
-        'agile_create_board',
-        JSON.stringify({ groupId: group.id })
-      )
+      await tools.execute('agile_create_board', '{}')
     );
     assert.match(board.label, /^Iteration /);
 
@@ -145,27 +134,10 @@ test('agile native tools cover boards, notes, digest and moves', async () => {
       ['blocked', 'blocked']
     );
 
-    const targetGroup = JSON.parse(
-      await tools.execute(
-        'agile_create_group',
-        JSON.stringify({ name: 'Target group' })
-      )
-    );
-    const assigned = JSON.parse(
-      await tools.execute(
-        'agile_assign_board_to_group',
-        JSON.stringify({ boardId: board.id, groupId: targetGroup.id })
-      )
-    );
-    assert.equal(assigned.groupId, targetGroup.id);
-    assert.equal(assigned.label, 'Iteration 1');
     const secondBoard = JSON.parse(
-      await tools.execute(
-        'agile_create_board',
-        JSON.stringify({ groupId: targetGroup.id })
-      )
+      await tools.execute('agile_create_board', '{}')
     );
-    assert.equal(secondBoard.label, 'Iteration 2');
+    assert.match(secondBoard.label, /^Iteration /);
     await assert.rejects(
       async () => store.deleteBoard(board.id),
       /only the last iteration/i
@@ -178,10 +150,10 @@ test('agile native tools cover boards, notes, digest and moves', async () => {
       JSON.stringify({ since, timeoutMs: 3000 })
     );
     await new Promise((resolve) => setTimeout(resolve, 120));
-    store.createGroup('Wait group');
+    store.createBoard();
     const waited = JSON.parse(await waiting);
     assert.equal(waited.timedOut, false);
-    assert.equal(waited.event.type, 'group.created');
+    assert.equal(waited.event.type, 'board.created');
     assert.ok(waited.event.seq > since);
 
     const skills = JSON.parse(
@@ -201,32 +173,88 @@ test('agile native tools use the store for the calling manager', async () => {
   ]);
   agileTools.configure((context) => stores.get(context?.managerId) || null);
   try {
-    const group = JSON.parse(
-      await tools.execute(
-        'agile_create_group',
-        JSON.stringify({ name: 'Only A' }),
-        { managerId: 'manager-a' }
-      )
+    const board = JSON.parse(
+      await tools.execute('agile_create_board', '{}', {
+        managerId: 'manager-a',
+      })
     );
-    assert.equal(group.name, 'Only A');
+    assert.match(board.label, /^Iteration /);
 
     const a = JSON.parse(
-      await tools.execute('agile_list_groups', '{}', {
+      await tools.execute('agile_list_boards', '{}', {
         managerId: 'manager-a',
       })
     );
     const b = JSON.parse(
-      await tools.execute('agile_list_groups', '{}', {
+      await tools.execute('agile_list_boards', '{}', {
         managerId: 'manager-b',
       })
     );
-    assert.ok(a.some((item) => item.name === 'Only A'));
-    assert.ok(!b.some((item) => item.name === 'Only A'));
+    assert.equal(a.length, 2);
+    assert.equal(b.length, 1);
 
-    const missing = await tools.execute('agile_list_groups', '{}', {
+    const missing = await tools.execute('agile_list_boards', '{}', {
       managerId: 'manager-c',
     });
     assert.match(missing, /store is not configured/i);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('agile exposes one iteration line without group or settings tools', () => {
+  const names = tools.definitions().map((definition) => definition.function.name);
+  for (const removed of [
+    'agile_list_groups',
+    'agile_create_group',
+    'agile_rename_group',
+    'agile_delete_group',
+    'agile_assign_board_to_group',
+    'agile_get_settings',
+    'agile_update_settings',
+  ]) {
+    assert.ok(!names.includes(removed), `${removed} should be removed`);
+  }
+});
+
+test('agile store merges legacy groups into one iteration line', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-agile-line-'));
+  const file = path.join(dir, 'agile.json');
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      version: 1,
+      seq: 0,
+      activeBoardId: 'board-b',
+      groups: [
+        { id: 'group-a', name: 'A', order: 1 },
+        { id: 'group-b', name: 'B', order: 2 },
+      ],
+      boards: [
+        { id: 'board-a', groupId: 'group-a', order: 1 },
+        { id: 'board-c', groupId: 'group-a', order: 2 },
+        { id: 'board-b', groupId: 'group-b', order: 1 },
+      ],
+      tasks: [],
+      settings: {},
+      skills: [],
+      events: [],
+    }),
+    'utf8'
+  );
+  try {
+    const store = createAgileStore(file);
+    const state = store.state();
+    assert.equal(state.groups.length, 1);
+    assert.deepEqual(
+      state.iterations.map((iteration) => iteration.label),
+      ['Iteration 1', 'Iteration 2', 'Iteration 3']
+    );
+    assert.deepEqual(
+      state.iterations.map((iteration) => iteration.id),
+      ['board-a', 'board-c', 'board-b']
+    );
+    assert.equal(state.activeBoardId, 'board-b');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

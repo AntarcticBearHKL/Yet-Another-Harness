@@ -1081,20 +1081,8 @@ function handleApi(req, res, url) {
         const action = String(body?.action || '');
         let result = null;
         switch (action) {
-          case 'create_group':
-            result = agileStore.createGroup(body.name);
-            break;
-          case 'rename_group':
-            result = agileStore.renameGroup(body.groupId, body.name);
-            break;
-          case 'update_group':
-            result = agileStore.updateGroup(body.groupId, body);
-            break;
-          case 'delete_group':
-            result = agileStore.deleteGroup(body.groupId);
-            break;
           case 'create_board':
-            result = agileStore.createBoard(body.groupId);
+            result = agileStore.createBoard();
             break;
           case 'update_board':
             result = agileStore.updateBoard(body.boardId, body);
@@ -1144,12 +1132,6 @@ function handleApi(req, res, url) {
               body.taskId,
               body.pointIds,
               { type: 'human', id: null }
-            );
-            break;
-          case 'update_settings':
-            result = agileStore.updateSettings(
-              body.boardId,
-              body.fields || {}
             );
             break;
           default:
