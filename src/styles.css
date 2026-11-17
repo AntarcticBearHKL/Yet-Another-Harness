@@ -4710,6 +4710,23 @@ body.ring-open #messages {
   letter-spacing: 0.08em;
 }
 
+.agent-readonly-note {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-row);
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.agent-tool-row input:disabled,
+.agent-tools-category input:disabled,
+.agent-toggle input:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .agent-prompt {
   width: 100%;
   min-height: 140px;

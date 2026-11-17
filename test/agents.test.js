@@ -11,6 +11,7 @@ const {
   saveAgents,
   getAgent,
 } = require('../server/agents');
+const { MANAGER_AGENT } = require('../src/agent-defaults');
 
 test('agents normalize names, prompts and tool limits', () => {
   const agents = normalizeAgents([
@@ -134,6 +135,41 @@ test('the built-in agent is always present, editable, and cannot be deleted', ()
     saveAgents(file, [{ id: 'a1', name: 'A', prompt: 'p', tools: null }]);
     assert.equal(loadAgents(file)[0].name, 'Build');
     assert.equal(getAgent(file, 'basic').name, 'Build');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the manager profile is fixed and cannot be overridden', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-agents-'));
+  const file = path.join(dir, 'agents.json');
+  try {
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        agents: [
+          {
+            id: 'manager',
+            name: 'Changed',
+            prompt: 'Changed prompt',
+            tools: [],
+          },
+        ],
+      }),
+      'utf8'
+    );
+    const loaded = loadAgents(file).find((agent) => agent.id === 'manager');
+    assert.equal(loaded.name, MANAGER_AGENT.name);
+    assert.equal(loaded.prompt, MANAGER_AGENT.prompt);
+    assert.deepEqual(loaded.tools, MANAGER_AGENT.tools);
+    assert.equal(loaded.builtin, true);
+
+    const saved = saveAgents(file, [
+      { id: 'manager', name: 'Again', prompt: 'Nope', tools: ['read'] },
+    ]).find((agent) => agent.id === 'manager');
+    assert.equal(saved.name, MANAGER_AGENT.name);
+    assert.equal(saved.prompt, MANAGER_AGENT.prompt);
+    assert.deepEqual(saved.tools, MANAGER_AGENT.tools);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

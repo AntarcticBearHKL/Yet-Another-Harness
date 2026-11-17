@@ -9565,9 +9565,19 @@ function agentToolGroups(allTools) {
   return groups;
 }
 
-function renderAgentToolsEditor(agent, allTools) {
+function renderAgentToolsEditor(agent, allTools, options = {}) {
+  const readOnly = options.readOnly === true;
   const field = el('div', 'agent-field');
   field.append(el('div', 'agent-field-label', '工具权限'));
+  if (readOnly) {
+    field.append(
+      el(
+        'div',
+        'agent-readonly-note',
+        'Manager 的工具权限固定，不能手工修改。'
+      )
+    );
+  }
 
   const allNames = allTools.map((tool) => tool.name).filter(Boolean);
   const known = new Set(allNames);
@@ -9596,6 +9606,7 @@ function renderAgentToolsEditor(agent, allTools) {
   const allLabel = el('label', 'agent-toggle');
   const allCheckbox = document.createElement('input');
   allCheckbox.type = 'checkbox';
+  allCheckbox.disabled = readOnly;
   allLabel.append(allCheckbox);
   allLabel.append(el('span', 'agent-toggle-label', '允许所有工具'));
   head.append(allLabel);
@@ -9662,6 +9673,7 @@ function renderAgentToolsEditor(agent, allTools) {
       const row = el('label', 'agent-tool-row');
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
+      checkbox.disabled = readOnly;
       checkbox.checked = selected.has(tool.name);
       checkbox.addEventListener('change', () => {
         if (checkbox.checked) selected.add(tool.name);
@@ -9692,6 +9704,7 @@ function renderAgentToolsEditor(agent, allTools) {
     const row = el('div', 'agent-tools-category');
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
+    checkbox.disabled = readOnly;
     checkbox.addEventListener('click', (event) => event.stopPropagation());
     checkbox.addEventListener('change', () => {
       if (checkbox.checked) {
@@ -9761,16 +9774,20 @@ function renderAgentEditor(agentId) {
     return !String(fn.name || '').startsWith('mcp__');
   });
   const builtin = agent.builtin === true;
+  const readOnly = agent.id === MANAGER_AGENT_ID;
   const editor = el('div', 'agent-editor');
   const head = el('div', 'agent-editor-head');
   const name = el('input', 'agent-name-input');
   name.type = 'text';
   name.value = agent.name;
   name.placeholder = 'Agent 名称';
-  name.addEventListener('input', () => {
-    agent.name = name.value.slice(0, 80);
-    saveAgentsSoon();
-  });
+  name.disabled = readOnly;
+  if (!readOnly) {
+    name.addEventListener('input', () => {
+      agent.name = name.value.slice(0, 80);
+      saveAgentsSoon();
+    });
+  }
   head.append(name);
 
   if (builtin) {
@@ -9778,7 +9795,7 @@ function renderAgentEditor(agentId) {
       el(
         'span',
         'agent-builtin-badge',
-        agent.id === MANAGER_AGENT_ID ? '管理' : '内置'
+        agent.id === MANAGER_AGENT_ID ? '管理 · 只读' : '内置'
       )
     );
   } else {
@@ -9805,6 +9822,11 @@ function renderAgentEditor(agentId) {
     head.append(del);
   }
   editor.append(head);
+  if (readOnly) {
+    editor.append(
+      el('div', 'agent-readonly-note', 'Manager 配置固定，不允许手工修改。')
+    );
+  }
 
   const promptField = el('div', 'agent-field');
   promptField.append(el('div', 'agent-field-label', '提示词'));
@@ -9813,14 +9835,17 @@ function renderAgentEditor(agentId) {
   prompt.placeholder =
     '会注入 system prompt';
   prompt.value = agent.prompt || '';
-  prompt.addEventListener('input', () => {
-    agent.prompt = prompt.value;
-    saveAgentsSoon();
-  });
+  prompt.readOnly = readOnly;
+  if (!readOnly) {
+    prompt.addEventListener('input', () => {
+      agent.prompt = prompt.value;
+      saveAgentsSoon();
+    });
+  }
   promptField.append(prompt);
   editor.append(promptField);
 
-  editor.append(renderAgentToolsEditor(agent, allTools));
+  editor.append(renderAgentToolsEditor(agent, allTools, { readOnly }));
   dom.catalogList.append(editor);
 }
 

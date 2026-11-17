@@ -79,20 +79,10 @@ function builtinAgent(raw) {
   };
 }
 
-function managerAgent(raw) {
-  const source = raw && typeof raw === 'object' ? raw : {};
-  const tools = normalizeTools(source.tools);
+function managerAgent() {
   return {
     ...MANAGER_AGENT,
-    ...source,
-    id: MANAGER_AGENT_ID,
-    name:
-      String(source.name || MANAGER_AGENT.name).trim() || MANAGER_AGENT.name,
-    prompt:
-      typeof source.prompt === 'string' && source.prompt.trim()
-        ? source.prompt
-        : MANAGER_AGENT.prompt,
-    tools: tools === null ? MANAGER_AGENT.tools : tools,
+    tools: [...MANAGER_AGENT.tools],
     builtin: true,
   };
 }
@@ -104,14 +94,11 @@ function loadAgents(file) {
     const stored = normalized.find(
       (agent) => agent.id === DEFAULT_AGENT_ID
     );
-    const storedManager = normalized.find(
-      (agent) => agent.id === MANAGER_AGENT_ID
-    );
     const custom = normalized.filter(
       (agent) =>
         agent.id !== DEFAULT_AGENT_ID && agent.id !== MANAGER_AGENT_ID
     );
-    return [builtinAgent(stored), managerAgent(storedManager), ...custom];
+    return [builtinAgent(stored), managerAgent(), ...custom];
   } catch {
     return [BUILTIN_AGENT, managerAgent()];
   }
@@ -122,16 +109,13 @@ function saveAgents(file, agents) {
   const stored = normalized.find(
     (agent) => agent.id === DEFAULT_AGENT_ID
   );
-  const storedManager = normalized.find(
-    (agent) => agent.id === MANAGER_AGENT_ID
-  );
   const custom = normalized.filter(
     (agent) =>
       agent.id !== DEFAULT_AGENT_ID && agent.id !== MANAGER_AGENT_ID
   );
   const output = [
     builtinAgent(stored),
-    managerAgent(storedManager),
+    managerAgent(),
     ...custom,
   ];
   const payload = output.map(({ builtin, ...agent }) => agent);
