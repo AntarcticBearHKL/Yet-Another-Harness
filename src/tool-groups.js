@@ -9,7 +9,7 @@
   const TOOL_GROUPS = [
     {
       id: 'agile',
-      label: '敏捷',
+      label: 'Agile',
       pattern: /^agile_/i,
     },
     {
