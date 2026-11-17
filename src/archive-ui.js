@@ -5,8 +5,6 @@
   const dom = {
     page: $('archive-page'),
     nodeTitle: $('archive-node-title'),
-    close: $('archive-close'),
-    refresh: $('archive-refresh'),
     subagents: $('archive-subagents'),
     jobs: $('archive-jobs'),
     subagentCount: $('archive-subagent-count'),
@@ -219,8 +217,6 @@
     void loadArchive();
   }
 
-  dom.close?.addEventListener('click', () => api.close());
-  dom.refresh?.addEventListener('click', () => void loadArchive());
   dom.detailClose?.addEventListener('click', closeDetail);
   dom.detail?.addEventListener('click', (event) => {
     if (event.target === dom.detail) closeDetail();

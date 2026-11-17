@@ -61,20 +61,6 @@ body.maximized .archive-page {
   white-space: nowrap;
 }
 
-.archive-head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
-}
-
-.archive-close {
-  width: 30px;
-  padding: 0;
-  font-size: 16px;
-  line-height: 1;
-}
-
 .archive-body {
   flex: 1;
   min-height: 0;

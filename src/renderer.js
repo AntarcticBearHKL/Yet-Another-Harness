@@ -7743,6 +7743,10 @@ function handleContextMenu(event) {
 
 function handleRightClickBack() {
   if (Date.now() - lastActionMenuAt < 450) return;
+  if (state.archiveWindow) {
+    api.close();
+    return;
+  }
   if (state.ringOpen) {
     closeActionMenu();
     return;
