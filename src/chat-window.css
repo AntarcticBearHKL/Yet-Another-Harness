@@ -150,6 +150,11 @@ body.chat-window.chat-compact .message-card.answer-card {
   background: rgba(185, 111, 61, 0.08);
 }
 
+body.chat-window.chat-compact .message-card.compact-latest .card-head {
+  pointer-events: auto;
+  cursor: default;
+}
+
 body.chat-window.chat-compact .message-card.compact-latest .card-waiting {
   display: block !important;
 }

@@ -148,6 +148,7 @@ const state = {
   requestId: null,
   streamMessage: null,
   compactStatus: null,
+  liveReplyViewer: null,
   pendingDelete: -1,
   deleteTimer: null,
   pendingQueueDelete: null,
@@ -1715,6 +1716,44 @@ function openFullContent(payload) {
   });
 }
 
+function liveReplyKey() {
+  const sessionId = currentSession()?.id || 'session';
+  return `live:${sessionId}`;
+}
+
+function liveReplyText(msg) {
+  if (!msg) return '';
+  const block = latestCompactBlock(
+    msg,
+    state.streaming && msg === state.streamMessage
+  );
+  return String(block.text || '');
+}
+
+function openLiveReplyViewer(msg, msgIndex) {
+  if (!msg || msgIndex < 0) return;
+  const key = liveReplyKey();
+  state.liveReplyViewer = {
+    key,
+    sessionId: currentSession()?.id || '',
+    msgIndex,
+  };
+  openFullContent({
+    key,
+    title: '回复 · Markdown',
+    kind: 'text',
+    text: liveReplyText(msg),
+  });
+}
+
+function syncLiveReplyViewer(msg, msgIndex) {
+  if (!msg || msgIndex < 0) return;
+  const key = liveReplyKey();
+  if (state.liveReplyViewer?.key !== key) return;
+  if (state.liveReplyViewer.msgIndex !== msgIndex) return;
+  api.updateContent({ key, text: liveReplyText(msg) });
+}
+
 function textCard({
   key,
   kind,
@@ -2482,6 +2521,21 @@ function renderCompactAgentMessage(msg, msgIndex, container, streaming) {
       block.index >= 0 ? () => inspectStep(msg, msg.steps[block.index]) : null,
   });
   card.classList.add('compact-latest', `compact-${block.kind}`);
+  card.addEventListener(
+    'dblclick',
+    (event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest('button, a, input, textarea')
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      openLiveReplyViewer(msg, msgIndex);
+    },
+    true
+  );
   appendRow(card, {}, container);
 }
 
@@ -3659,6 +3713,11 @@ function renderMessages({ animate = true } = {}) {
     } else {
       state.renderedOpenKeys = targetKeys;
     }
+  }
+
+  if (state.streaming && state.streamMessage) {
+    const liveIndex = session.msgs.indexOf(state.streamMessage);
+    if (liveIndex >= 0) syncLiveReplyViewer(state.streamMessage, liveIndex);
   }
 
   requestAnimationFrame(() => {
@@ -7033,6 +7092,10 @@ function finishStream() {
     );
     removedPlaceholder = steps.length !== finishedMessage.steps.length;
     finishedMessage.steps = steps;
+  }
+  if (finishedMessage && finishedSession) {
+    const liveIndex = finishedSession.msgs.indexOf(finishedMessage);
+    if (liveIndex >= 0) syncLiveReplyViewer(finishedMessage, liveIndex);
   }
   const stick = state.followBottom;
   state.streaming = false;
@@ -10665,6 +10728,7 @@ function bindEvents() {
     card.classList.add('streaming');
     updateCardClip(card);
     stickStreamingText(card);
+    syncLiveReplyViewer(msg, messageIndex);
 
     const stick = state.followBottom;
     state.forceScroll = false;
