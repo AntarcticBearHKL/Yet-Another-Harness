@@ -813,7 +813,7 @@ test('session MCP switches and step metrics round-trip', () => {
   });
 });
 
-test('structure saves drop removed projects and their sessions', () => {
+test('structure saves keep missing sessions unless deletion is explicit', () => {
   withStoreDir(() => {
     store.saveChats({
       projects: [
@@ -862,9 +862,29 @@ test('structure saves drop removed projects and their sessions', () => {
     );
     assert.deepEqual(
       loaded.sessions.map((session) => session.id),
-      ['s1']
+      ['s1', 's2']
     );
     assert.equal(loaded.sessions[0].msgs.length, 1);
+
+    store.saveStructure({
+      projects: [{ id: 'p1', name: 'Keep' }],
+      sessions: [
+        {
+          id: 's1',
+          title: 'Keep Chat',
+          system: 'sys',
+          projectId: 'p1',
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 2,
+      allowDeleteSessions: true,
+    });
+    assert.deepEqual(
+      store.loadChats().sessions.map((session) => session.id),
+      ['s1']
+    );
   });
 });
 
@@ -1253,6 +1273,7 @@ test('structure saves refuse to wipe every session by accident', () => {
       current: 0,
       seq: 1,
       allowEmpty: true,
+      allowDeleteSessions: true,
     });
     assert.equal(store.loadChats().sessions.length, 0);
   });

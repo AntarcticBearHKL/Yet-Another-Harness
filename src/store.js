@@ -1530,9 +1530,11 @@ function saveStructure(chats) {
       );
     });
 
-    for (const id of existingSessions) {
-      if (!incomingSessions.has(id) && !protectedSubagents.has(id)) {
-        deleteSession.run(id);
+    if (chats?.allowDeleteSessions === true) {
+      for (const id of existingSessions) {
+        if (!incomingSessions.has(id) && !protectedSubagents.has(id)) {
+          deleteSession.run(id);
+        }
       }
     }
     for (const id of existingProjects) {
