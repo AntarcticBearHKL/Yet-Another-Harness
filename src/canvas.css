@@ -779,3 +779,549 @@ body.canvas-space .canvas-stage.panning {
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   }
 }
+
+/* --------------------------- manager node / composer --------------------------- */
+
+.canvas-space-hint {
+  position: absolute;
+  left: 16px;
+  bottom: 13px;
+  padding: 3px 7px;
+  border: 1px solid rgba(74, 54, 40, 0.1);
+  border-radius: 6px;
+  background: rgba(251, 246, 239, 0.72);
+  color: var(--faint);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  pointer-events: none;
+  user-select: none;
+}
+
+.canvas-manager {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  width: 340px;
+  min-height: 150px;
+  padding: 14px 16px 13px;
+  border: 1px solid rgba(58, 43, 33, 0.55);
+  border-radius: 17px;
+  background: #3a2b21;
+  color: #fdf8f1;
+  box-shadow:
+    0 10px 26px rgba(74, 54, 40, 0.14),
+    0 1px 0 rgba(255, 253, 249, 0.08) inset;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.canvas-manager.selected {
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 10px 26px rgba(74, 54, 40, 0.16);
+}
+
+.canvas-manager.running {
+  border-color: rgba(224, 160, 107, 0.58);
+}
+
+.canvas-manager-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.canvas-manager-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 7px;
+  background: rgba(253, 248, 241, 0.1);
+  color: #e0a06b;
+}
+
+.canvas-manager-icon svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.canvas-manager-kicker {
+  overflow: hidden;
+  color: #dfc7b0;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-manager-agent {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: 1px solid rgba(224, 160, 107, 0.28);
+  border-radius: 5px;
+  background: rgba(224, 160, 107, 0.08);
+  color: #e6b98f;
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.canvas-manager-loading {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border: 1.2px solid rgba(224, 160, 107, 0.24);
+  border-top-color: #e0a06b;
+  border-radius: 50%;
+  animation: canvas-group-spin 0.8s linear infinite;
+}
+
+.canvas-manager-title {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 8px;
+  color: #fdf8f1;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.canvas-manager-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  color: #cbb6a3;
+  font-size: 8.5px;
+}
+
+.canvas-manager-progress {
+  height: 3px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(253, 248, 241, 0.12);
+}
+
+.canvas-manager-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #c27b47, #e0a06b);
+  transition: width 200ms ease;
+}
+
+.canvas-manager-team {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(253, 248, 241, 0.1);
+}
+
+.canvas-manager-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #cbb6a3;
+  font-size: 9.5px;
+}
+
+.canvas-manager-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-manager-row-state {
+  margin-left: auto;
+  flex: none;
+  color: #9f8b7a;
+  font-size: 8px;
+}
+
+.canvas-manager-empty {
+  color: #9f8b7a;
+  font-size: 9.5px;
+}
+
+.canvas-manager-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  color: #9f8b7a;
+  font-size: 8px;
+}
+
+.canvas-group-agent {
+  padding: 2px 5px;
+  border: 1px solid rgba(74, 54, 40, 0.13);
+  border-radius: 5px;
+  background: rgba(252, 246, 238, 0.75);
+  color: var(--dim);
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.canvas-group-manager {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manager-composer {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 18px 18px;
+  background: rgba(43, 33, 26, 0.08);
+}
+
+.manager-composer.hidden {
+  display: none;
+}
+
+.manager-composer-panel {
+  width: min(560px, 100%);
+  padding: 15px 17px 13px;
+  border: 1px solid rgba(74, 54, 40, 0.16);
+  border-radius: 20px;
+  background: rgba(255, 252, 247, 0.86);
+  box-shadow:
+    0 20px 46px rgba(74, 54, 40, 0.14),
+    0 1px 0 rgba(255, 255, 255, 0.72) inset;
+  backdrop-filter: blur(18px);
+  color: var(--text);
+}
+
+.manager-composer-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.manager-composer-title-wrap {
+  min-width: 0;
+  flex: 1;
+}
+
+.manager-composer-kicker {
+  color: #8a4f2a;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.manager-composer-head h3 {
+  margin: 3px 0 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.manager-composer-close {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 19px;
+  line-height: 1;
+}
+
+.manager-composer-close:hover {
+  border-color: rgba(74, 54, 40, 0.12);
+  background: rgba(252, 246, 238, 0.8);
+  color: var(--text);
+}
+
+.manager-composer-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.75fr);
+  gap: 10px;
+  margin-top: 13px;
+}
+
+.manager-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.manager-field:last-child,
+.manager-field:nth-last-child(2) {
+  grid-column: 1 / -1;
+}
+
+.manager-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.manager-field-label {
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.manager-input {
+  width: 100%;
+  min-width: 0;
+  height: 33px;
+  padding: 0 9px;
+  border: 1px solid rgba(74, 54, 40, 0.14);
+  border-radius: 9px;
+  background: rgba(255, 253, 249, 0.78);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+.manager-input:focus {
+  border-color: rgba(185, 111, 61, 0.45);
+  box-shadow: 0 0 0 2px rgba(185, 111, 61, 0.08);
+}
+
+.manager-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8a4f2a;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.manager-dir-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 24px;
+}
+
+.manager-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 6px;
+  border: 1px solid rgba(74, 54, 40, 0.12);
+  border-radius: 7px;
+  background: rgba(252, 246, 238, 0.72);
+  color: var(--dim);
+  font-size: 8.5px;
+}
+
+.manager-dir span {
+  overflow: hidden;
+  max-width: 280px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manager-dir button {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.manager-dir button:hover {
+  background: rgba(74, 54, 40, 0.08);
+  color: var(--text);
+}
+
+.manager-dir-empty {
+  color: var(--faint);
+  font-size: 9px;
+}
+
+.manager-file-hint {
+  color: var(--faint);
+  font-size: 8.5px;
+}
+
+.manager-file-drop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-height: 40px;
+  padding: 6px 7px;
+  border: 1px dashed rgba(74, 54, 40, 0.18);
+  border-radius: 9px;
+  background: rgba(252, 246, 238, 0.38);
+  outline: none;
+}
+
+.manager-file-drop.dragging {
+  border-color: rgba(185, 111, 61, 0.48);
+  background: rgba(185, 111, 61, 0.06);
+}
+
+.manager-file-empty {
+  color: var(--faint);
+  font-size: 9px;
+}
+
+.manager-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 6px;
+  border: 1px solid rgba(74, 54, 40, 0.12);
+  border-radius: 7px;
+  background: rgba(255, 253, 249, 0.76);
+  color: var(--dim);
+  font-size: 8.5px;
+}
+
+.manager-file span {
+  overflow: hidden;
+  max-width: 240px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manager-file button {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.manager-file button:hover {
+  background: rgba(74, 54, 40, 0.08);
+  color: var(--text);
+}
+
+.manager-composer-foot {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 13px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(74, 54, 40, 0.09);
+}
+
+.manager-composer-tip {
+  flex: 1;
+  min-width: 0;
+  color: var(--faint);
+  font-size: 8.5px;
+}
+
+.manager-composer-foot .pill {
+  flex: none;
+}
+
+@media (max-width: 700px) {
+  .manager-composer {
+    padding: 0 10px 10px;
+  }
+
+  .manager-composer-body {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-field,
+  .manager-field:last-child,
+  .manager-field:nth-last-child(2) {
+    grid-column: 1;
+  }
+
+  .manager-composer-tip {
+    display: none;
+  }
+
+  .canvas-manager {
+    width: 300px;
+  }
+}
+
+.canvas-group-subline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 1px;
+}
+
+.canvas-manager .dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #b7a999;
+}
+
+.canvas-manager .dot.run {
+  background: #e0a06b;
+  box-shadow: 0 0 0 2px rgba(224, 160, 107, 0.14);
+}
+
+.canvas-manager .dot.done {
+  background: #8fae78;
+}
+
+.manager-composer-error {
+  color: #99533a;
+  font-size: 8.5px;
+  white-space: nowrap;
+}
+
+.manager-composer-error[hidden] {
+  display: none;
+}

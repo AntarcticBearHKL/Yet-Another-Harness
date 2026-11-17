@@ -31,6 +31,8 @@ const CANVAS_WORKSPACE_COLORS = [
 ];
 const CANVAS_FOLDER_ICON =
   '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>';
+const CANVAS_MANAGER_ICON =
+  '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/><circle cx="12" cy="12" r="2.6"/>';
 
 const canvasState = {
   open: false,
@@ -44,6 +46,7 @@ const canvasState = {
   selectedChildId: null,
   selectedIds: new Set(),
   drag: null,
+  managerDrag: null,
   frameDrag: null,
   marquee: null,
   pan: null,
@@ -54,6 +57,7 @@ const canvasState = {
   runsTimer: null,
   runsRequest: 0,
   runsDirty: false,
+  pendingWorknodes: false,
   saveTimer: null,
   pageTimer: null,
   zoomTimer: null,
@@ -219,6 +223,10 @@ function ensureCanvasGroups() {
   const { sessions, roots } = index;
   const ids = new Set(sessions.map((session) => session.id));
   let dirty = index.dirty;
+  if (canvasState.frames.length > 0) {
+    canvasState.frames = [];
+    dirty = true;
+  }
   for (const id of Object.keys(canvasState.nodes)) {
     if (!ids.has(id)) {
       delete canvasState.nodes[id];
@@ -248,11 +256,12 @@ function ensureCanvasGroups() {
     if (!node) {
       const col = rootIndex % 3;
       const row = Math.floor(rootIndex / 3);
+      const isManager = root.nodeRole === 'manager';
       node = canvasState.nodes[root.id] = {
         x: 80 + col * 480,
         y: 80 + row * 360,
-        width: CANVAS_GROUP_WIDTH,
-        height: CANVAS_GROUP_HEIGHT,
+        width: isManager ? 340 : CANVAS_GROUP_WIDTH,
+        height: isManager ? 180 : CANVAS_GROUP_HEIGHT,
         parentSessionId: null,
       };
       dirty = true;
@@ -684,6 +693,7 @@ async function loadCanvasRuns() {
       canvasState.runsDirty &&
       canvasOverlayOpen() &&
       !canvasState.drag &&
+      !canvasState.managerDrag &&
       !canvasState.frameDrag &&
       !canvasState.marquee &&
       !canvasState.workspaceDrag
@@ -805,6 +815,150 @@ function buildCanvasColumn(title, rows) {
   return column;
 }
 
+function canvasNodeStatus(session) {
+  if (!session) return { label: '空闲', tone: 'idle' };
+  if (canvasState.running.has(session.id)) {
+    return { label: '运行中', tone: 'running' };
+  }
+  const messages = Array.isArray(session.msgs) ? session.msgs : [];
+  const last = messages[messages.length - 1];
+  if (!last) return { label: '空闲', tone: 'idle' };
+  if (last.role === 'User') return { label: '等待', tone: 'idle' };
+  if (last.role === 'Agent' && String(last.text || '').trim()) {
+    return { label: '完成', tone: 'done' };
+  }
+  return { label: '空闲', tone: 'idle' };
+}
+
+function canvasManagerTeam(manager, sessions = state.sessions) {
+  return sessions.filter(
+    (session) =>
+      session &&
+      session.managerId === manager.id &&
+      session.nodeRole !== 'manager' &&
+      !session.subagent &&
+      !session.archivedAt
+  );
+}
+
+function buildCanvasManager(manager, team, node) {
+  const managerEl = el('article', 'canvas-manager');
+  managerEl.dataset.sessionId = manager.id;
+  if (canvasState.selectedIds.has(manager.id)) {
+    managerEl.classList.add('selected');
+  }
+  const running = [manager, ...team].some((session) =>
+    canvasState.running.has(session.id)
+  );
+  if (running) managerEl.classList.add('running');
+
+  const head = el('header', 'canvas-manager-head');
+  const icon = el('span', 'canvas-manager-icon');
+  icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${CANVAS_MANAGER_ICON}</svg>`;
+  head.append(icon);
+  head.append(
+    el(
+      'span',
+      'canvas-manager-kicker',
+      running ? 'MANAGER · 编排中' : 'MANAGER · 空闲'
+    )
+  );
+  head.append(
+    el('span', 'canvas-manager-agent', canvasAgentName(manager))
+  );
+  if (running) {
+    const loading = el('span', 'canvas-manager-loading');
+    loading.setAttribute('role', 'status');
+    loading.setAttribute('aria-label', '生成中');
+    head.append(loading);
+  }
+  managerEl.append(head);
+
+  managerEl.append(
+    el('div', 'canvas-manager-title', manager.title || '管理 node')
+  );
+
+  const done = team.filter((session) => {
+    const status = canvasNodeStatus(session);
+    return status.tone === 'done';
+  }).length;
+  const runningCount = team.filter((session) =>
+    canvasState.running.has(session.id)
+  ).length;
+  const meta = el('div', 'canvas-manager-meta');
+  meta.append(
+    el(
+      'span',
+      '',
+      `${team.length} 个工作 node · ${runningCount} 运行 · ${done} 完成`
+    )
+  );
+  managerEl.append(meta);
+
+  const progress = el('div', 'canvas-manager-progress');
+  const fill = el('span');
+  fill.style.width = `${team.length ? Math.round((done / team.length) * 100) : 0}%`;
+  progress.append(fill);
+  managerEl.append(progress);
+
+  const teamList = el('div', 'canvas-manager-team');
+  if (team.length === 0) {
+    teamList.append(
+      el('div', 'canvas-manager-empty', '还没有工作 node · 在对话里让它创建')
+    );
+  } else {
+    team.slice(0, 3).forEach((session) => {
+      const status = canvasNodeStatus(session);
+      const row = el('div', 'canvas-manager-row');
+      row.append(el('span', `dot ${status.tone}`));
+      row.append(
+        el(
+          'span',
+          'canvas-manager-row-title',
+          session.title || '工作 node'
+        )
+      );
+      row.append(el('span', 'canvas-manager-row-state', status.label));
+      teamList.append(row);
+    });
+    if (team.length > 3) {
+      teamList.append(
+        el('div', 'canvas-manager-empty', `还有 ${team.length - 3} 个…`)
+      );
+    }
+  }
+  managerEl.append(teamList);
+
+  const foot = el('div', 'canvas-manager-foot');
+  foot.append(
+    el('span', '', '双击打开对话 · 拖动整队')
+  );
+  managerEl.append(foot);
+
+  managerEl.title = `${manager.title || '管理 node'} · ${canvasAgentName(manager)}`;
+  managerEl.addEventListener('pointerdown', (event) => {
+    startCanvasManagerDrag(event, manager, managerEl, node, team);
+  });
+  managerEl.addEventListener('click', (event) => {
+    if (canvasState.suppressClick) {
+      canvasState.suppressClick = false;
+      return;
+    }
+    if (event.button !== 0) return;
+    if (event.shiftKey) {
+      canvasToggleGroupSelection(manager.id);
+      return;
+    }
+    canvasSelectGroup(manager.id, null);
+  });
+  managerEl.addEventListener('dblclick', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openCanvasSession(manager.id);
+  });
+  return managerEl;
+}
+
 function buildCanvasGroup(root, children, jobs, node) {
   const groupEl = el('article', 'canvas-group');
   groupEl.dataset.sessionId = root.id;
@@ -816,16 +970,27 @@ function buildCanvasGroup(root, children, jobs, node) {
   );
   if (running) groupEl.classList.add('running');
 
-  const workspace = canvasWorkspaceFor(root);
-  const workspaceName = workspace?.name || '未分组';
+  const manager = root.managerId
+    ? state.sessions.find((session) => session.id === root.managerId)
+    : null;
+  const managerName = manager?.title || '';
   const head = el('header', 'canvas-group-head');
   const heading = el('div', 'canvas-group-heading');
   heading.append(
     el('span', 'canvas-group-title', root.title || '未命名对话')
   );
-  const workspaceEl = el('span', 'canvas-group-workspace', workspaceName);
-  workspaceEl.title = workspaceName;
-  heading.append(workspaceEl);
+  const subline = el('div', 'canvas-group-subline');
+  subline.append(
+    el('span', 'canvas-group-agent', canvasAgentName(root))
+  );
+  subline.append(
+    el(
+      'span',
+      'canvas-group-manager',
+      managerName ? `所属 ${managerName}` : '未归属'
+    )
+  );
+  heading.append(subline);
   head.append(heading);
   if (running) {
     const loading = el('span', 'canvas-group-loading');
@@ -850,7 +1015,7 @@ function buildCanvasGroup(root, children, jobs, node) {
   );
   groupEl.append(columns);
 
-  groupEl.title = `${workspaceName} · ${root.title || '未命名对话'}`;
+  groupEl.title = `${managerName || '未归属'} · ${root.title || '未命名对话'}`;
   groupEl.addEventListener('pointerdown', (event) => {
     startCanvasGroupDrag(event, root, groupEl, node);
   });
@@ -894,7 +1059,20 @@ function renderCanvasNodes(index) {
   let dirty = false;
   let resized = false;
   const measured = [];
-  for (const root of roots) {
+  const managers = roots.filter((root) => root.nodeRole === 'manager');
+  const regularRoots = roots.filter((root) => root.nodeRole !== 'manager');
+  for (const manager of managers) {
+    const node = canvasState.nodes[manager.id];
+    if (!node) continue;
+    const team = canvasManagerTeam(manager, index.sessions);
+    const managerEl = buildCanvasManager(manager, team, node);
+    managerEl.style.left = `${node.x}px`;
+    managerEl.style.top = `${node.y}px`;
+    managerEl.style.width = `${340}px`;
+    canvasDom.nodes.append(managerEl);
+    measured.push({ groupEl: managerEl, node });
+  }
+  for (const root of regularRoots) {
     const node = canvasState.nodes[root.id];
     if (!node) continue;
     const children = childrenByRoot.get(root.id) || [];
@@ -968,7 +1146,6 @@ function applyCanvasView() {
 function renderCanvas() {
   const index = ensureCanvasGroups();
   renderCanvasNodes(index);
-  renderCanvasFrames();
   applyCanvasView();
   if (canvasDom.empty) {
     canvasDom.empty.classList.toggle('hidden', index.roots.length > 0);
@@ -977,7 +1154,9 @@ function renderCanvas() {
 
 function canvasApplySelection() {
   const ids = canvasState.selectedIds;
-  for (const group of canvasDom.nodes.querySelectorAll('.canvas-group')) {
+  for (const group of canvasDom.nodes.querySelectorAll(
+    '.canvas-group, .canvas-manager'
+  )) {
     group.classList.toggle(
       'selected',
       ids.has(group.dataset.sessionId)
@@ -1023,7 +1202,7 @@ function canvasClearSelection() {
   canvasState.selectedChildId = null;
   canvasState.selectedIds = new Set();
   for (const item of canvasDom.nodes.querySelectorAll(
-    '.canvas-group.selected, .canvas-child.selected'
+    '.canvas-group.selected, .canvas-child.selected, .canvas-manager.selected'
   )) {
     item.classList.remove('selected');
   }
@@ -1272,6 +1451,47 @@ function flashZoomIndicator() {
 
 /* --------------------------------- 拖拽 --------------------------------- */
 
+function startCanvasManagerDrag(event, manager, managerEl, node, team = []) {
+  if (event.button !== 0) return;
+  if (
+    event.target instanceof Element &&
+    event.target.closest('button, a, input, textarea, select')
+  ) {
+    return;
+  }
+  event.stopPropagation();
+  const items = [{ node, el: managerEl }];
+  for (const session of team) {
+    const teamNode = canvasState.nodes[session.id];
+    if (!teamNode) continue;
+    const teamEl = canvasDom.nodes.querySelector(
+      `.canvas-group[data-session-id="${CSS.escape(session.id)}"]`
+    );
+    if (!teamEl) continue;
+    items.push({ node: teamNode, el: teamEl });
+  }
+  canvasState.managerDrag = {
+    manager,
+    managerEl,
+    items,
+    startX: event.clientX,
+    startY: event.clientY,
+    origins: items.map((item) => ({
+      item,
+      x: item.node.x,
+      y: item.node.y,
+    })),
+    moved: false,
+    pointerId: event.pointerId,
+  };
+  try {
+    managerEl.setPointerCapture(event.pointerId);
+  } catch {
+    /* ignore */
+  }
+  canvasSelectGroup(manager.id, null);
+}
+
 function startCanvasGroupDrag(event, root, groupEl, node) {
   if (event.button !== 0) return;
   if (
@@ -1301,6 +1521,28 @@ function startCanvasGroupDrag(event, root, groupEl, node) {
 function onCanvasPointerMove(event) {
   if (canvasState.workspaceDrag) {
     updateWorkspaceDrag(event);
+    event.preventDefault();
+    return;
+  }
+  if (canvasState.managerDrag) {
+    const drag = canvasState.managerDrag;
+    const dx = (event.clientX - drag.startX) / canvasState.view.k;
+    const dy = (event.clientY - drag.startY) / canvasState.view.k;
+    if (
+      !drag.moved &&
+      Math.abs(event.clientX - drag.startX) +
+        Math.abs(event.clientY - drag.startY) <
+        4
+    ) {
+      return;
+    }
+    drag.moved = true;
+    for (const origin of drag.origins) {
+      origin.item.node.x = origin.x + dx;
+      origin.item.node.y = origin.y + dy;
+      origin.item.el.style.left = `${origin.item.node.x}px`;
+      origin.item.el.style.top = `${origin.item.node.y}px`;
+    }
     event.preventDefault();
     return;
   }
@@ -1379,9 +1621,29 @@ function onCanvasPointerMove(event) {
 }
 
 function onCanvasPointerUp() {
+  const finishWorknodesSync = () => {
+    if (canvasState.pendingWorknodes) void syncWorknodes();
+  };
   if (canvasState.workspaceDrag) {
     finishWorkspaceDrag();
+    finishWorknodesSync();
     return;
+  }
+  if (canvasState.managerDrag) {
+    const drag = canvasState.managerDrag;
+    if (drag.moved) {
+      canvasState.suppressClick = true;
+      setTimeout(() => {
+        canvasState.suppressClick = false;
+      }, 80);
+      scheduleCanvasSave();
+    }
+    try {
+      drag.managerEl.releasePointerCapture(drag.pointerId);
+    } catch {
+      /* ignore */
+    }
+    canvasState.managerDrag = null;
   }
   if (canvasState.frameDrag) {
     const drag = canvasState.frameDrag;
@@ -1433,6 +1695,7 @@ function onCanvasPointerUp() {
     canvasDom.stage?.classList.remove('panning');
     scheduleCanvasSave();
   }
+  finishWorknodesSync();
 }
 
 /* ------------------------------- 会话与开关 ------------------------------- */
@@ -1547,30 +1810,127 @@ function deleteCanvasGroup(rootId) {
   scheduleCanvasSave();
 }
 
+function managerTeamSessions(managerId) {
+  return state.sessions.filter(
+    (session) =>
+      session &&
+      session.managerId === managerId &&
+      session.nodeRole !== 'manager' &&
+      !session.archivedAt
+  );
+}
+
+function layoutManagerTeam(managerId) {
+  const managerNode = canvasState.nodes[managerId];
+  if (!managerNode) return;
+  managerTeamSessions(managerId).forEach((session, index) => {
+    const node = canvasState.nodes[session.id];
+    if (!node) return;
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+    node.x =
+      (Number(managerNode.x) || 0) +
+      column * (CANVAS_GROUP_WIDTH + 36);
+    node.y =
+      (Number(managerNode.y) || 0) +
+      (Number(managerNode.height) || 150) +
+      34 +
+      row * (220 + 36);
+  });
+  renderCanvas();
+  scheduleCanvasSave();
+}
+
+async function stopManagerTeam(managerId) {
+  const ids = [
+    managerId,
+    ...managerTeamSessions(managerId).map((session) => session.id),
+  ];
+  for (const id of ids) {
+    try {
+      const active = await api.activeRun(id);
+      if (active?.runId) await api.cancelRun(active.runId);
+    } catch {
+      /* ignore individual stop failures */
+    }
+  }
+}
+
+function deleteManagerNode(managerId) {
+  const manager = state.sessions.find(
+    (session) => session.id === managerId
+  );
+  if (!manager) return;
+  openConfirm({
+    text: '删除这个管理 node？它创建的工作 node 会保留为未归属，不会被删除。',
+    action: async () => {
+      for (const session of state.sessions) {
+        if (session.managerId === managerId) {
+          session.managerId = null;
+        }
+      }
+      await window.flushChats?.();
+      try {
+        await api.deleteSession(managerId);
+      } catch (error) {
+        console.error('delete manager failed', error);
+      }
+      state.sessions = state.sessions.filter(
+        (session) => session.id !== managerId
+      );
+      delete canvasState.nodes[managerId];
+      if (canvasState.selectedId === managerId) canvasClearSelection();
+      renderCanvas();
+      scheduleCanvasSave();
+      await window.refreshChats?.();
+      await reloadCanvas();
+    },
+  });
+}
+
 function openCanvasNodeMenu(sessionId, x, y) {
   const session = state.sessions.find((item) => item.id === sessionId);
   if (!session) return;
-  const index = canvasGroupIndex();
-  const root = index.rootFor(session);
-  const isRoot = root.id === session.id;
-  const groupIds = canvasGroupSessionIds(root.id);
-  if (
-    canvasState.selectedIds.size > 1 &&
-    canvasState.selectedIds.has(root.id)
-  ) {
+  if (session.nodeRole === 'manager') {
     openActionMenu({
       x,
       y,
       items: [
         {
-          label: 'Group',
-          icon: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 8h3v3H8zM13 13h3v3h-3z"/>',
-          action: () => createCanvasFrameFromSelection(),
+          label: '打开对话',
+          icon: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+          action: () => openCanvasSession(session.id),
+        },
+        {
+          label: '配置',
+          icon: RING_ICONS.settings,
+          action: () => window.openManagerComposer?.(session.id),
+        },
+        {
+          label: '自动整理',
+          icon: RING_ICONS.folder,
+          action: () => layoutManagerTeam(session.id),
+        },
+        {
+          label: '停止全部',
+          icon: RING_ICONS.close,
+          action: () => void stopManagerTeam(session.id),
+        },
+        {
+          label: '删除管理 node',
+          icon: RING_ICONS.trash,
+          danger: true,
+          confirm: true,
+          action: () => deleteManagerNode(session.id),
         },
       ],
     });
     return;
   }
+  const index = canvasGroupIndex();
+  const root = index.rootFor(session);
+  const isRoot = root.id === session.id;
+  const groupIds = canvasGroupSessionIds(root.id);
   const items = [
     {
       label: '打开',
@@ -1578,6 +1938,13 @@ function openCanvasNodeMenu(sessionId, x, y) {
       action: () => openCanvasSession(session.id),
     },
   ];
+  if (session.managerId) {
+    items.push({
+      label: '打开管理 node',
+      icon: RING_ICONS.settings,
+      action: () => openCanvasSession(session.managerId),
+    });
+  }
   items.push({
     label: '归档',
     icon: RING_ICONS.archive,
@@ -1633,6 +2000,45 @@ function openCanvasWorkspaceMenu(projectId, x, y) {
   });
 }
 
+function createCanvasManagerNode(sessionId) {
+  if (!canvasDom.stage || !sessionId) return;
+  if (canvasState.nodes[sessionId]) {
+    canvasSelectGroup(sessionId, null);
+    return;
+  }
+  const rect = canvasDom.stage.getBoundingClientRect();
+  const width = 340;
+  const height = 180;
+  const viewX = (rect.width / 2 - canvasState.view.x) / canvasState.view.k;
+  const viewY = (rect.height / 2 - canvasState.view.y) / canvasState.view.k;
+  let x = viewX - width / 2;
+  let y = viewY - height / 2;
+  const others = Object.values(canvasState.nodes).filter(
+    (node) => node && typeof node === 'object'
+  );
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const overlaps = others.some(
+      (node) =>
+        x < node.x + node.width &&
+        node.x < x + width &&
+        y < node.y + node.height &&
+        node.y < y + height
+    );
+    if (!overlaps) break;
+    y += 40;
+  }
+  canvasState.nodes[sessionId] = {
+    x,
+    y,
+    width,
+    height,
+    parentSessionId: null,
+  };
+  canvasSelectGroup(sessionId, null);
+  renderCanvas();
+  scheduleCanvasSave();
+}
+
 function openCanvas() {
   if (!canvasDom.overlay) return;
   if (typeof closeComposer === 'function') closeComposer();
@@ -1651,7 +2057,6 @@ function openCanvas() {
 
 function openCanvasWorkspaces() {
   openCanvas();
-  showWorkspacePage();
 }
 
 function closeCanvas() {
@@ -1669,6 +2074,7 @@ function closeCanvas() {
   canvasDom.overlay.classList.add('hidden');
   canvasDom.overlay.setAttribute('aria-hidden', 'true');
   canvasState.drag = null;
+  canvasState.managerDrag = null;
   canvasState.frameDrag = null;
   canvasState.marquee = null;
   canvasState.pan = null;
@@ -1703,10 +2109,29 @@ function refreshCanvas() {
     return;
   }
   renderCanvas();
-  if (canvasState.pageOpen) renderWorkspacePage();
   void loadCanvasBackground();
   void loadCanvasRuns();
   scheduleCanvasRunsPoll();
+}
+
+async function reloadCanvas() {
+  if (!canvasOverlayOpen()) return;
+  try {
+    const data = await requestJson('/api/canvas');
+    clearTimeout(canvasState.saveTimer);
+    canvasState.saveTimer = null;
+    canvasState.view = canvasNormalizeView(data?.view);
+    canvasState.nodes =
+      data?.nodes && typeof data.nodes === 'object' ? data.nodes : {};
+    canvasState.frames = [];
+    canvasState.loaded = true;
+    renderCanvas();
+    clearTimeout(canvasState.saveTimer);
+    canvasState.saveTimer = null;
+    applyCanvasView();
+  } catch (error) {
+    console.error('reload canvas failed', error);
+  }
 }
 
 /* --------------------------------- 存储 --------------------------------- */
@@ -1806,7 +2231,7 @@ function bindCanvasEvents() {
     if (
       event.target instanceof Element &&
       event.target.closest(
-        '.canvas-group, .canvas-frame, .canvas-workspaces-page, .canvas-zoom-indicator, button'
+        '.canvas-group, .canvas-manager, .canvas-frame, .manager-composer, .canvas-workspaces-page, .canvas-zoom-indicator, button'
       )
     ) {
       return;
@@ -1829,7 +2254,7 @@ function bindCanvasEvents() {
     }
     if (
       event.target instanceof Element &&
-      event.target.closest('.canvas-group, .canvas-frame, .canvas-workspaces-page, button')
+      event.target.closest('.canvas-group, .canvas-manager, .canvas-frame, .manager-composer, .canvas-workspaces-page, button')
     ) {
       return;
     }
@@ -1862,11 +2287,35 @@ window.canvasWorkspacePageOpen = canvasWorkspacePageOpen;
 window.canvasTabReleased = canvasTabReleased;
 window.cancelCanvasPage = cancelCanvasPage;
 window.refreshCanvas = refreshCanvas;
+window.reloadCanvas = reloadCanvas;
+window.createCanvasManagerNode = createCanvasManagerNode;
 window.openCanvasNodeMenu = openCanvasNodeMenu;
 window.openCanvasFrameMenu = openCanvasFrameMenu;
 window.openCanvasWorkspaceMenu = openCanvasWorkspaceMenu;
 
 bindCanvasEvents();
+
+async function syncWorknodes() {
+  if (!canvasOverlayOpen()) return;
+  if (
+    canvasState.drag ||
+    canvasState.managerDrag ||
+    canvasState.frameDrag ||
+    canvasState.marquee ||
+    canvasState.pan ||
+    canvasState.workspaceDrag
+  ) {
+    canvasState.pendingWorknodes = true;
+    return;
+  }
+  canvasState.pendingWorknodes = false;
+  await window.refreshChats?.();
+  await window.reloadCanvas?.();
+}
+
+api.onWorknodesChanged?.(() => {
+  void syncWorknodes();
+});
 
 api.onSubagentStarted((payload) => {
   if (!payload?.sessionId) return;
@@ -1879,6 +2328,7 @@ api.onSubagentStarted((payload) => {
   if (
     canvasOverlayOpen() &&
     !canvasState.drag &&
+    !canvasState.managerDrag &&
     !canvasState.frameDrag &&
     !canvasState.marquee &&
     !canvasState.workspaceDrag
@@ -1899,6 +2349,7 @@ api.onSubagentComplete((payload) => {
   if (
     canvasOverlayOpen() &&
     !canvasState.drag &&
+    !canvasState.managerDrag &&
     !canvasState.frameDrag &&
     !canvasState.marquee &&
     !canvasState.workspaceDrag
@@ -1914,6 +2365,7 @@ api.onBackgroundUpdate((payload) => {
   if (
     canvasOverlayOpen() &&
     !canvasState.drag &&
+    !canvasState.managerDrag &&
     !canvasState.frameDrag &&
     !canvasState.marquee &&
     !canvasState.workspaceDrag
@@ -1928,6 +2380,7 @@ api.onBackgroundComplete((payload) => {
   if (
     canvasOverlayOpen() &&
     !canvasState.drag &&
+    !canvasState.managerDrag &&
     !canvasState.frameDrag &&
     !canvasState.marquee &&
     !canvasState.workspaceDrag

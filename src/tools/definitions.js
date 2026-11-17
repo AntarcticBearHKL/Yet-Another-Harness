@@ -1115,6 +1115,97 @@ const OMO = [
   TEAM_REJECT_SHUTDOWN,
 ];
 
+const WORKNODE_TOOLS = [
+  fn(
+    'worknode_options',
+    'List the Agents, tools, skills and MCP servers that can be assigned to a work node. Use this before creating work nodes.',
+    {}
+  ),
+  fn(
+    'worknode_list',
+    'List the work nodes owned by this manager node, with Agent, task, status and last output preview.',
+    { includeArchived: bool('Include archived work nodes') }
+  ),
+  fn(
+    'worknode_create',
+    'Create a work node conversation under this manager node. Choose an Agent, give it a concrete task, and optionally narrow its tools, skills or MCP servers. Set start=false to create it idle.',
+    {
+      title: str('Short work node title'),
+      task: str('Task prompt for the work node'),
+      agentId: str('Agent id chosen from worknode_options'),
+      tools: arr('Optional subset of the Agent tools'),
+      skills: arr('Optional subset of skill ids'),
+      mcp: arr('Optional subset of MCP server ids'),
+      start: bool('Start the task immediately (default true)'),
+    },
+    ['title', 'agentId', 'task']
+  ),
+  fn(
+    'worknode_adopt',
+    'Attach an existing conversation node to this manager as a work node. The conversation keeps its messages; use worknode_update to change its Agent or task afterward.',
+    {
+      id: str('Existing root conversation id from worknode_options.availableWorknodes'),
+    },
+    ['id']
+  ),
+  fn(
+    'worknode_update',
+    'Update a work node assignment. Only works while it is not running. Values must stay within the chosen Agent permissions.',
+    {
+      id: str('Work node id'),
+      agentId: str('New Agent id'),
+      task: str('New task prompt'),
+      tools: arr('New tool subset'),
+      skills: arr('New skill subset'),
+      mcp: arr('New MCP server subset'),
+    },
+    ['id']
+  ),
+  fn(
+    'worknode_start',
+    'Start a work node with its task, or with a new task prompt. The node must be idle.',
+    {
+      id: str('Work node id'),
+      task: str('Optional task prompt to use instead of the stored task'),
+    },
+    ['id']
+  ),
+  fn(
+    'worknode_status',
+    'Check status, current run, task and last output for one work node, or all work nodes when id is omitted.',
+    { id: str('Optional work node id') }
+  ),
+  fn(
+    'worknode_read',
+    'Read recent messages from a work node.',
+    {
+      id: str('Work node id'),
+      offset: num('0-based message offset'),
+      limit: num('Maximum messages (default 20, max 60)'),
+    },
+    ['id']
+  ),
+  fn(
+    'worknode_message',
+    'Send a follow-up prompt to a work node. It must be idle.',
+    {
+      id: str('Work node id'),
+      text: str('Follow-up prompt'),
+    },
+    ['id', 'text']
+  ),
+  fn(
+    'worknode_stop',
+    'Stop the running work node, or every running work node under this manager when id is omitted.',
+    { id: str('Optional work node id') }
+  ),
+  fn(
+    'team_layout',
+    'Arrange all work nodes under this manager into a tidy grid on the canvas.',
+    {}
+  ),
+];
+
 const LEGACY = [
   fn(
     'read_file',
@@ -1130,10 +1221,16 @@ const LEGACY = [
 
 function mergedDefinitions() {
   const byName = new Map();
-  for (const definition of [...LEGACY, ...OPENCODE, ...OMO]) {
+  for (const definition of [...LEGACY, ...OPENCODE, ...OMO, ...WORKNODE_TOOLS]) {
     byName.set(definition.function.name, definition);
   }
   return [...byName.values()];
 }
 
-module.exports = { mergedDefinitions, OPENCODE, OMO, LEGACY };
+module.exports = {
+  mergedDefinitions,
+  OPENCODE,
+  OMO,
+  LEGACY,
+  WORKNODE_TOOLS,
+};

@@ -7,6 +7,8 @@ const {
   DEFAULT_AGENT_ID,
   BUILTIN_AGENT,
   LEGACY_BUILTIN_PROMPTS,
+  MANAGER_AGENT_ID,
+  MANAGER_AGENT,
 } = require('../src/agent-defaults');
 
 const MAX_AGENTS = 50;
@@ -77,6 +79,24 @@ function builtinAgent(raw) {
   };
 }
 
+function managerAgent(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const tools = normalizeTools(source.tools);
+  return {
+    ...MANAGER_AGENT,
+    ...source,
+    id: MANAGER_AGENT_ID,
+    name:
+      String(source.name || MANAGER_AGENT.name).trim() || MANAGER_AGENT.name,
+    prompt:
+      typeof source.prompt === 'string' && source.prompt.trim()
+        ? source.prompt
+        : MANAGER_AGENT.prompt,
+    tools: tools === null ? MANAGER_AGENT.tools : tools,
+    builtin: true,
+  };
+}
+
 function loadAgents(file) {
   try {
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -84,22 +104,36 @@ function loadAgents(file) {
     const stored = normalized.find(
       (agent) => agent.id === DEFAULT_AGENT_ID
     );
-    const custom = normalized.filter(
-      (agent) => agent.id !== DEFAULT_AGENT_ID
+    const storedManager = normalized.find(
+      (agent) => agent.id === MANAGER_AGENT_ID
     );
-    return [builtinAgent(stored), ...custom];
+    const custom = normalized.filter(
+      (agent) =>
+        agent.id !== DEFAULT_AGENT_ID && agent.id !== MANAGER_AGENT_ID
+    );
+    return [builtinAgent(stored), managerAgent(storedManager), ...custom];
   } catch {
-    return [BUILTIN_AGENT];
+    return [BUILTIN_AGENT, managerAgent()];
   }
 }
 
 function saveAgents(file, agents) {
   const normalized = normalizeAgents(agents);
-  const stored = normalized.find((agent) => agent.id === DEFAULT_AGENT_ID);
-  const custom = normalized.filter(
-    (agent) => agent.id !== DEFAULT_AGENT_ID
+  const stored = normalized.find(
+    (agent) => agent.id === DEFAULT_AGENT_ID
   );
-  const output = [builtinAgent(stored), ...custom];
+  const storedManager = normalized.find(
+    (agent) => agent.id === MANAGER_AGENT_ID
+  );
+  const custom = normalized.filter(
+    (agent) =>
+      agent.id !== DEFAULT_AGENT_ID && agent.id !== MANAGER_AGENT_ID
+  );
+  const output = [
+    builtinAgent(stored),
+    managerAgent(storedManager),
+    ...custom,
+  ];
   const payload = output.map(({ builtin, ...agent }) => agent);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temp = `${file}.tmp`;

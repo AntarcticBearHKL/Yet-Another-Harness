@@ -281,19 +281,33 @@ function modelsTool(args) {
   return JSON.stringify({ models: filtered, total: filtered.length }, null, 2);
 }
 
-async function skillTool(args) {
+async function skillTool(args, context = null) {
   const service = providers.skillService;
   if (!service) return 'tool error: skill service is not configured';
   const name = String(args.name || '').trim();
   if (!name) return 'tool error: skill requires "name"';
   const chats = store.loadChats();
-  const session = args.sessionID
-    ? chats.sessions.find((item) => item.id === args.sessionID)
-    : chats.sessions[chats.current];
+  const sessionId =
+    String(context?.sessionId || args.sessionID || '').trim() ||
+    chats.sessions[chats.current]?.id;
+  const session = sessionId
+    ? chats.sessions.find((item) => item.id === sessionId)
+    : null;
   const disabled = Array.isArray(session?.mcpDisabled)
     ? session.mcpDisabled
     : [];
-  const skills = service.list({ mcpDisabled: disabled });
+  const allowed = Array.isArray(session?.nodeConfig?.skills)
+    ? new Set(session.nodeConfig.skills.map(String))
+    : null;
+  const skills = service
+    .list({ mcpDisabled: disabled })
+    .filter(
+      (skill) =>
+        !allowed ||
+        skill.sourceKind === 'system' ||
+        skill.system === true ||
+        allowed.has(String(skill.id))
+    );
   const needle = name.replace(/^\//, '').toLowerCase();
   const match =
     skills.find((skill) => skill.id.toLowerCase() === needle) ||

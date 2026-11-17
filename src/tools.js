@@ -16,9 +16,11 @@ const mouseTools = require('./tools/mouse');
 const chromeTools = require('./tools/chrome');
 const viewerTools = require('./tools/viewer');
 const agileTools = require('./tools/agile');
+const worknodeTools = require('./tools/worknode');
 
 function configure(next = {}) {
   agentTools.configure(next);
+  worknodeTools.configure(next);
 }
 
 // 免费 websearch：DuckDuckGo 公开 HTML 端点，不需要 API key。
@@ -101,6 +103,17 @@ async function execute(name, args, context = null) {
       subagent_list: agentTools.subagentListTool,
       subagent_output: agentTools.subagentOutputTool,
       subagent_stop: agentTools.subagentStopTool,
+      worknode_options: worknodeTools.worknodeOptions,
+      worknode_list: worknodeTools.worknodeList,
+      worknode_create: worknodeTools.worknodeCreate,
+      worknode_adopt: worknodeTools.worknodeAdopt,
+      worknode_update: worknodeTools.worknodeUpdate,
+      worknode_start: worknodeTools.worknodeStart,
+      worknode_status: worknodeTools.worknodeStatus,
+      worknode_read: worknodeTools.worknodeRead,
+      worknode_message: worknodeTools.worknodeMessage,
+      worknode_stop: worknodeTools.worknodeStop,
+      team_layout: worknodeTools.teamLayout,
       agile_list_groups: agileTools.agileListGroups,
       agile_create_group: agileTools.agileCreateGroup,
       agile_rename_group: agileTools.agileRenameGroup,

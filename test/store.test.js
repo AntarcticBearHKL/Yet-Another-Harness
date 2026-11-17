@@ -1146,3 +1146,71 @@ test('active runs list is exposed for the canvas', () => {
     assert.equal(runs[0].status, 'running');
   });
 });
+
+test('manager and work node fields round-trip through sqlite', () => {
+  withStoreDir(() => {
+    store.saveStructure({
+      projects: [
+        { id: 'p1', name: 'Project 1', directories: ['C:\\work'] },
+      ],
+      sessions: [
+        {
+          id: 'm1',
+          title: 'Manager',
+          system: 'sys',
+          agentId: 'manager',
+          projectId: 'p1',
+          nodeRole: 'manager',
+          nodeConfig: {
+            kind: 'manager',
+            directories: ['C:\\work'],
+            files: ['C:\\work\\outline.md'],
+          },
+          msgs: [],
+        },
+        {
+          id: 'w1',
+          title: 'Work',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          nodeRole: 'work',
+          managerId: 'm1',
+          nodeConfig: {
+            kind: 'work',
+            task: 'read the files',
+            tools: ['read'],
+            skills: ['user:demo'],
+            mcp: ['server-1'],
+          },
+          mcpDisabled: ['server-2'],
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 2,
+    });
+    const manager = store.getSession('m1');
+    const work = store.getSession('w1');
+    assert.equal(manager.nodeRole, 'manager');
+    assert.equal(manager.managerId, null);
+    assert.deepEqual(manager.nodeConfig.directories, [
+      path.resolve('C:\\work'),
+    ]);
+    assert.equal(work.nodeRole, 'work');
+    assert.equal(work.managerId, 'm1');
+    assert.equal(work.nodeConfig.task, 'read the files');
+    assert.deepEqual(work.nodeConfig.tools, ['read']);
+    assert.deepEqual(work.mcpDisabled, ['server-2']);
+    assert.deepEqual(
+      store.listWorkNodes('m1').map((session) => session.id),
+      ['w1']
+    );
+    store.updateSessionNode('w1', {
+      nodeConfig: { ...work.nodeConfig, task: 'next task' },
+    });
+    assert.equal(store.getSession('w1').nodeConfig.task, 'next task');
+    assert.equal(store.detachWorkNodes('m1'), 1);
+    assert.equal(store.getSession('w1').managerId, null);
+  });
+});

@@ -891,13 +891,12 @@
         <div id="canvas-grid" class="canvas-grid" aria-hidden="true"></div>
         <div id="canvas-world" class="canvas-world">
           <div id="canvas-zoom" class="canvas-zoom">
-            <div id="canvas-frames" class="canvas-frames"></div>
             <div id="canvas-nodes" class="canvas-nodes"></div>
           </div>
         </div>
         <div id="canvas-marquee" class="canvas-marquee hidden" aria-hidden="true"></div>
         <div id="canvas-empty" class="canvas-empty">
-          按住 Tab 打开工作区，拖拽到画布上
+          按空格创建一个管理 node
         </div>
         <div
           id="canvas-zoom-indicator"
@@ -906,22 +905,71 @@
         >
           100%
         </div>
-        <div
-          id="canvas-workspaces-page"
-          class="canvas-workspaces-page hidden"
-        >
-          <div class="canvas-workspaces-panel">
-            <header class="canvas-workspaces-head">
-              <h2>工作区</h2>
+        <div class="canvas-space-hint">SPACE 新建管理 node</div>
+
+        <div id="manager-composer" class="manager-composer hidden" aria-hidden="true">
+          <div
+            class="manager-composer-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="manager-composer-title"
+          >
+            <header class="manager-composer-head">
+              <div class="manager-composer-title-wrap">
+                <span class="manager-composer-kicker">MANAGER</span>
+                <h3 id="manager-composer-title">新建管理 node</h3>
+              </div>
               <button
-                id="canvas-add-workspace"
-                class="pill compact"
+                id="manager-composer-close"
+                class="manager-composer-close"
                 type="button"
+                aria-label="关闭"
               >
-                + 新建
+                ×
               </button>
             </header>
-            <div id="canvas-workspaces" class="canvas-workspaces-grid"></div>
+            <div class="manager-composer-body">
+              <label class="manager-field">
+                <span class="manager-field-label">名称</span>
+                <input
+                  id="manager-name"
+                  class="manager-input"
+                  type="text"
+                  maxlength="80"
+                  autocomplete="off"
+                />
+              </label>
+              <label class="manager-field">
+                <span class="manager-field-label">Agent</span>
+                <select id="manager-agent" class="manager-input"></select>
+              </label>
+              <div class="manager-field">
+                <div class="manager-field-head">
+                  <span class="manager-field-label">工作目录</span>
+                  <button id="manager-add-dir" class="manager-link" type="button">
+                    + 添加目录
+                  </button>
+                </div>
+                <div id="manager-dirs" class="manager-dir-list"></div>
+              </div>
+              <div class="manager-field">
+                <div class="manager-field-head">
+                  <span class="manager-field-label">文件</span>
+                  <span class="manager-file-hint">拖入文件或目录</span>
+                </div>
+                <div id="manager-files" class="manager-file-drop" tabindex="0">
+                  <span class="manager-file-empty">把参考文件拖到这里</span>
+                </div>
+              </div>
+            </div>
+            <footer class="manager-composer-foot">
+              <span class="manager-composer-tip">只做配置；创建后在对话里分配任务</span>
+              <span id="manager-composer-error" class="manager-composer-error" hidden></span>
+              <button id="manager-cancel" class="pill" type="button">取消</button>
+              <button id="manager-create" class="pill primary" type="button">
+                创建管理 node
+              </button>
+            </footer>
           </div>
         </div>
       </main>

@@ -60,8 +60,9 @@ test('agents round-trip through the JSON file', () => {
     assert.deepEqual(custom.tools, []);
     const loaded = loadAgents(file);
     assert.equal(loaded[0].id, 'basic');
-    assert.equal(loaded[1].name, 'A');
-    assert.deepEqual(getAgent(file, 'a1'), loaded[1]);
+    assert.equal(loaded[1].id, 'manager');
+    assert.equal(loaded[2].name, 'A');
+    assert.deepEqual(getAgent(file, 'a1'), loaded[2]);
     assert.equal(getAgent(file, 'basic').name, 'Build');
     assert.equal(getAgent(file, 'missing'), null);
   } finally {
@@ -102,7 +103,7 @@ test('the built-in agent is always present, editable, and cannot be deleted', ()
   try {
     assert.deepEqual(
       loadAgents(file).map((agent) => agent.id),
-      ['basic']
+      ['basic', 'manager']
     );
     assert.equal(getAgent(file, '').id, 'basic');
     assert.equal(getAgent(file, '').name, 'Build');
@@ -113,14 +114,14 @@ test('the built-in agent is always present, editable, and cannot be deleted', ()
     ]);
     assert.deepEqual(
       saved.map((agent) => agent.id),
-      ['basic', 'a1']
+      ['basic', 'manager', 'a1']
     );
     assert.equal(saved[0].name, 'Build X');
     assert.deepEqual(saved[0].tools, ['read']);
     const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
     assert.deepEqual(
       stored.agents.map((agent) => agent.id),
-      ['basic', 'a1']
+      ['basic', 'manager', 'a1']
     );
     assert.equal(stored.agents[0].name, 'Build X');
 

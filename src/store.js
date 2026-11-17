@@ -21,7 +21,7 @@ const {
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 17;
+const SCHEMA_VERSION = 18;
 
 let dataDir = null;
 let legacyDir = null;
@@ -256,6 +256,38 @@ function normalizeDirectories(raw) {
   return out;
 }
 
+function normalizeNodeConfig(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const kind = raw.kind === 'manager' ? 'manager' : raw.kind === 'work' ? 'work' : '';
+  if (!kind) return null;
+  const text = (value, limit = 4000) => String(value || '').slice(0, limit);
+  const list = (value, limit = 200) => {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const item of value) {
+      const textValue = String(item || '').trim();
+      if (!textValue || seen.has(textValue)) continue;
+      seen.add(textValue);
+      out.push(textValue);
+      if (out.length >= limit) break;
+    }
+    return out;
+  };
+  const tools = Array.isArray(raw.tools) ? list(raw.tools) : null;
+  const skills = Array.isArray(raw.skills) ? list(raw.skills) : null;
+  const mcp = Array.isArray(raw.mcp) ? list(raw.mcp) : null;
+  return {
+    kind,
+    directories: normalizeDirectories(raw.directories),
+    files: list(raw.files, 100),
+    task: text(raw.task),
+    tools,
+    skills,
+    mcp,
+  };
+}
+
 function normalizeProjects(raw) {
   const projects = [];
   const seen = new Set();
@@ -325,6 +357,15 @@ function normalizeChats(raw) {
       const projectId = projectIds.has(String(session.projectId))
         ? String(session.projectId)
         : fallbackProjectId;
+      const managerId = session.managerId
+        ? String(session.managerId)
+        : null;
+      const nodeRole =
+        session.nodeRole === 'manager'
+          ? 'manager'
+          : session.nodeRole === 'work' || managerId
+            ? 'work'
+            : null;
 
       return {
         id: String(session.id || crypto.randomUUID()),
@@ -339,6 +380,9 @@ function normalizeChats(raw) {
         parentSessionId: session.parentSessionId
           ? String(session.parentSessionId)
           : null,
+        nodeRole,
+        managerId,
+        nodeConfig: normalizeNodeConfig(session.nodeConfig),
         mcpDisabled: Array.isArray(session.mcpDisabled)
           ? session.mcpDisabled.map(String).filter(Boolean)
           : [],
@@ -454,6 +498,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   frozen INTEGER NOT NULL DEFAULT 0,
   subagent INTEGER NOT NULL DEFAULT 0,
   parent_session_id TEXT,
+  node_role TEXT,
+  manager_id TEXT,
+  node_config TEXT,
   archived_at INTEGER,
   archived_status TEXT,
   sort_order INTEGER NOT NULL,
@@ -681,6 +728,18 @@ function ensureSchema(database) {
     if (!parentColumns.some((column) => column.name === 'archived_status')) {
       database.exec('ALTER TABLE sessions ADD COLUMN archived_status TEXT');
     }
+
+    // v17 -> v18: manager / work node roles and per-node assignment config.
+    const nodeColumns = database.prepare('PRAGMA table_info(sessions)').all();
+    if (!nodeColumns.some((column) => column.name === 'node_role')) {
+      database.exec('ALTER TABLE sessions ADD COLUMN node_role TEXT');
+    }
+    if (!nodeColumns.some((column) => column.name === 'manager_id')) {
+      database.exec('ALTER TABLE sessions ADD COLUMN manager_id TEXT');
+    }
+    if (!nodeColumns.some((column) => column.name === 'node_config')) {
+      database.exec('ALTER TABLE sessions ADD COLUMN node_config TEXT');
+    }
     database
       .prepare(
         "UPDATE sessions SET archived_at = COALESCE(archived_at, updated_at), archived_status = COALESCE(archived_status, 'done') WHERE subagent = 1 AND archived_at IS NULL"
@@ -776,6 +835,9 @@ function hashSession(session) {
         projectId: session.projectId,
         subagent: session.subagent === true,
         parentSessionId: session.parentSessionId || null,
+        nodeRole: session.nodeRole || null,
+        managerId: session.managerId || null,
+        nodeConfig: normalizeNodeConfig(session.nodeConfig),
         mcpDisabled: session.mcpDisabled || [],
         msgs: session.msgs,
       })
@@ -801,7 +863,7 @@ function readChats() {
 
   const sessionRows = database
     .prepare(
-      'SELECT id, title, system, agents_md, agent_id, project_id, frozen, subagent, parent_session_id, archived_at, archived_status, mcp_disabled, fold_state, pending_queue, goal, compaction FROM sessions ORDER BY sort_order ASC'
+      'SELECT id, title, system, agents_md, agent_id, project_id, frozen, subagent, parent_session_id, node_role, manager_id, node_config, archived_at, archived_status, mcp_disabled, fold_state, pending_queue, goal, compaction FROM sessions ORDER BY sort_order ASC'
     )
     .all();
   if (sessionRows.length === 0) {
@@ -876,6 +938,21 @@ function readChats() {
           compaction = null;
         }
       }
+      let nodeConfig = null;
+      if (row.node_config) {
+        try {
+          nodeConfig = normalizeNodeConfig(JSON.parse(row.node_config));
+        } catch {
+          nodeConfig = null;
+        }
+      }
+      const managerId = row.manager_id ? String(row.manager_id) : null;
+      const nodeRole =
+        row.node_role === 'manager'
+          ? 'manager'
+          : row.node_role === 'work' || managerId
+            ? 'work'
+            : null;
       return [
         row.id,
         {
@@ -895,6 +972,9 @@ function readChats() {
           parentSessionId: row.parent_session_id
             ? String(row.parent_session_id)
             : null,
+          nodeRole,
+          managerId,
+          nodeConfig,
           archivedAt:
             row.archived_at === null || row.archived_at === undefined
               ? null
@@ -1071,8 +1151,8 @@ function writeChats(chats) {
   );
 
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, agents_md, agent_id, project_id, frozen, subagent, parent_session_id, mcp_disabled, fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, agents_md, agent_id, project_id, frozen, subagent, parent_session_id, node_role, manager_id, node_config, mcp_disabled, fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
@@ -1082,6 +1162,9 @@ function writeChats(chats) {
        frozen = MAX(frozen, excluded.frozen),
        subagent = MAX(subagent, excluded.subagent),
        parent_session_id = excluded.parent_session_id,
+       node_role = excluded.node_role,
+       manager_id = excluded.manager_id,
+       node_config = excluded.node_config,
        mcp_disabled = excluded.mcp_disabled,
        fold_state = excluded.fold_state,
        pending_queue = excluded.pending_queue,
@@ -1156,6 +1239,9 @@ function writeChats(chats) {
         session.frozen ? 1 : 0,
         session.subagent ? 1 : 0,
         session.parentSessionId || null,
+        session.nodeRole || null,
+        session.managerId || null,
+        session.nodeConfig ? JSON.stringify(session.nodeConfig) : null,
         JSON.stringify(session.mcpDisabled || []),
         session.foldState ? JSON.stringify(session.foldState) : null,
         JSON.stringify(session.pendingQueue || []),
@@ -1296,6 +1382,9 @@ function metadataHash(session) {
         projectId: session.projectId,
         subagent: session.subagent === true,
         parentSessionId: session.parentSessionId || null,
+        nodeRole: session.nodeRole || null,
+        managerId: session.managerId || null,
+        nodeConfig: normalizeNodeConfig(session.nodeConfig),
         mcpDisabled: session.mcpDisabled || [],
       })
     )
@@ -1320,8 +1409,8 @@ function saveStructure(chats) {
        sort_order = excluded.sort_order`
   );
   const upsertSession = database.prepare(
-    `INSERT INTO sessions (id, title, system, agent_id, project_id, frozen, subagent, parent_session_id, mcp_disabled, fold_state, pending_queue, sort_order, content_hash, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO sessions (id, title, system, agent_id, project_id, frozen, subagent, parent_session_id, node_role, manager_id, node_config, mcp_disabled, fold_state, pending_queue, sort_order, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        system = excluded.system,
@@ -1330,6 +1419,9 @@ function saveStructure(chats) {
        frozen = MAX(frozen, excluded.frozen),
        subagent = MAX(subagent, excluded.subagent),
        parent_session_id = excluded.parent_session_id,
+       node_role = excluded.node_role,
+       manager_id = excluded.manager_id,
+       node_config = excluded.node_config,
        mcp_disabled = excluded.mcp_disabled,
        fold_state = excluded.fold_state,
        pending_queue = excluded.pending_queue,
@@ -1411,6 +1503,9 @@ function saveStructure(chats) {
         session.frozen ? 1 : 0,
         session.subagent ? 1 : 0,
         session.parentSessionId || null,
+        session.nodeRole || null,
+        session.managerId || null,
+        session.nodeConfig ? JSON.stringify(session.nodeConfig) : null,
         JSON.stringify(session.mcpDisabled || []),
         session.foldState ? JSON.stringify(session.foldState) : null,
         JSON.stringify(session.pendingQueue || []),
@@ -1707,6 +1802,14 @@ function createSession(session) {
   const pendingQueue = normalizePendingQueue(source.pendingQueue);
   const frozen = source.frozen === true || source.frozen === 1;
   const subagent = source.subagent === true || source.subagent === 1;
+  const managerId = source.managerId ? String(source.managerId) : null;
+  const nodeRole =
+    source.nodeRole === 'manager'
+      ? 'manager'
+      : source.nodeRole === 'work' || managerId
+        ? 'work'
+        : null;
+  const nodeConfig = normalizeNodeConfig(source.nodeConfig);
   const hash = metadataHash({
     title: source.title,
     system: source.system,
@@ -1714,14 +1817,17 @@ function createSession(session) {
     projectId: source.projectId,
     subagent,
     parentSessionId: source.parentSessionId || null,
+    nodeRole,
+    managerId,
+    nodeConfig,
     mcpDisabled,
   });
   database
     .prepare(
       `INSERT INTO sessions
-         (id, title, system, agents_md, agent_id, project_id, frozen, subagent, parent_session_id, mcp_disabled,
+         (id, title, system, agents_md, agent_id, project_id, frozen, subagent, parent_session_id, node_role, manager_id, node_config, mcp_disabled,
           fold_state, pending_queue, goal, compaction, sort_order, content_hash, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
@@ -1735,6 +1841,9 @@ function createSession(session) {
       frozen ? 1 : 0,
       subagent ? 1 : 0,
       source.parentSessionId || null,
+      nodeRole,
+      managerId,
+      nodeConfig ? JSON.stringify(nodeConfig) : null,
       JSON.stringify(mcpDisabled),
       null,
       JSON.stringify(pendingQueue),
@@ -1798,6 +1907,12 @@ function forkSession(sourceId, options = {}) {
     mcpDisabled: Array.isArray(options.mcpDisabled)
       ? options.mcpDisabled
       : source.mcpDisabled,
+    nodeRole:
+      options.nodeRole !== undefined ? options.nodeRole : source.nodeRole,
+    managerId:
+      options.managerId !== undefined ? options.managerId : source.managerId,
+    nodeConfig:
+      options.nodeConfig !== undefined ? options.nodeConfig : source.nodeConfig,
     compaction: options.compaction === false ? null : source.compaction,
     pendingQueue: [],
   });
@@ -1829,6 +1944,75 @@ function setCurrentSession(sessionId) {
     .prepare('UPDATE app_state SET current_session_id = ? WHERE id = 1')
     .run(sessionId || null);
   return sessionId || null;
+}
+
+function updateSessionNode(sessionId, patch = {}) {
+  const current = getSession(sessionId);
+  if (!current) {
+    const error = new Error('session not found');
+    error.status = 404;
+    throw error;
+  }
+  const next = { ...current, ...patch };
+  const managerId =
+    patch.managerId !== undefined
+      ? patch.managerId
+        ? String(patch.managerId)
+        : null
+      : current.managerId || null;
+  const nodeRole =
+    patch.nodeRole !== undefined
+      ? patch.nodeRole === 'manager' || patch.nodeRole === 'work'
+        ? patch.nodeRole
+        : null
+      : current.nodeRole || null;
+  const nodeConfig =
+    patch.nodeConfig !== undefined
+      ? normalizeNodeConfig(patch.nodeConfig)
+      : current.nodeConfig;
+  const mcpDisabled =
+    patch.mcpDisabled !== undefined
+      ? Array.isArray(patch.mcpDisabled)
+        ? patch.mcpDisabled.map(String).filter(Boolean)
+        : []
+      : current.mcpDisabled || [];
+  openDb()
+    .prepare(
+      `UPDATE sessions
+       SET title = ?, agent_id = ?, project_id = ?, node_role = ?, manager_id = ?, node_config = ?, mcp_disabled = ?, updated_at = ?
+       WHERE id = ?`
+    )
+    .run(
+      String(next.title || 'Chat'),
+      String(next.agentId || DEFAULT_AGENT_ID),
+      next.projectId || null,
+      nodeRole,
+      managerId,
+      nodeConfig ? JSON.stringify(nodeConfig) : null,
+      JSON.stringify(mcpDisabled),
+      Date.now(),
+      sessionId
+    );
+  return getSession(sessionId);
+}
+
+function listWorkNodes(managerId) {
+  const id = String(managerId || '').trim();
+  if (!id) return [];
+  return loadChats().sessions.filter(
+    (session) => session.managerId === id && session.nodeRole !== 'manager'
+  );
+}
+
+function detachWorkNodes(managerId) {
+  const id = String(managerId || '').trim();
+  if (!id) return 0;
+  const result = openDb()
+    .prepare(
+      'UPDATE sessions SET manager_id = NULL, updated_at = ? WHERE manager_id = ?'
+    )
+    .run(Date.now(), id);
+  return Number(result.changes) || 0;
 }
 
 function updateSessionPendingQueue(sessionId, queue) {
@@ -2071,6 +2255,9 @@ module.exports = {
   appendMessage,
   createSession,
   getSession,
+  updateSessionNode,
+  listWorkNodes,
+  detachWorkNodes,
   nextSessionTitle,
   forkSession,
   setSessionFrozen,

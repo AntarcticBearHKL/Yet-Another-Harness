@@ -62,7 +62,17 @@ const skillService = createSkillService({
 const subagentService = createSubagentService({
   resolveAgent: (agentId) => getAgent(AGENTS_FILE, agentId) || BUILTIN_AGENT,
 });
-tools.configure({ skillService, mcpManager, subagentService });
+tools.configure({
+  skillService,
+  mcpManager,
+  subagentService,
+  store,
+  canvasStore,
+  runner,
+  getAgent: (agentId) => getAgent(AGENTS_FILE, agentId),
+  listAgents: () => loadAgents(AGENTS_FILE),
+  notify: (event) => runner.publishGlobal(event),
+});
 
 let pidWritten = false;
 
@@ -318,6 +328,26 @@ function sessionMcpDisabled(sessionId) {
   if (!disabled.includes('*')) return disabled;
   const all = mcpManager.getState().servers.map((server) => server.id);
   return all.length > 0 ? all : ['*'];
+}
+
+function sessionAllowedSkills(sessionId) {
+  const id = String(sessionId || '').trim();
+  if (!id) return null;
+  const session = store.loadChats().sessions.find((item) => item.id === id);
+  if (!Array.isArray(session?.nodeConfig?.skills)) return null;
+  return session.nodeConfig.skills.map(String);
+}
+
+function filterSkillsForSession(sessionId, skills) {
+  const allowed = sessionAllowedSkills(sessionId);
+  if (!allowed) return skills;
+  const allowedSet = new Set(allowed);
+  return skills.filter(
+    (skill) =>
+      skill.sourceKind === 'system' ||
+      skill.system === true ||
+      allowedSet.has(String(skill.id))
+  );
 }
 
 function handleApi(req, res, url) {
@@ -587,7 +617,10 @@ function handleApi(req, res, url) {
     }
     void mcpManager.ensureConnections();
     sendJson(res, 200, {
-      skills: skillService.list({ mcpDisabled: disabled }),
+      skills: filterSkillsForSession(
+        sessionId,
+        skillService.list({ mcpDisabled: disabled })
+      ),
     });
     return true;
   }
@@ -596,8 +629,19 @@ function handleApi(req, res, url) {
     readJson(req)
       .then(async (body) => {
         const sessionId = String(body?.sessionId || '');
+        const allowed = sessionAllowedSkills(sessionId);
+        const requested = Array.isArray(body?.skills)
+          ? body.skills.filter((skill) => {
+              if (!allowed) return true;
+              const id = String(skill?.id || '');
+              return (
+                id.startsWith('system:') ||
+                allowed.includes(id)
+              );
+            })
+          : [];
         const result = await skillService.resolveMany(
-          body?.skills,
+          requested,
           sessionMcpDisabled(sessionId)
         );
         sendJson(res, 200, { ok: true, ...result });

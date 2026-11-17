@@ -4,6 +4,8 @@ const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const DEFAULT_AGENT_ID = 'basic';
 const DEFAULT_AGENT_NAME = 'Build';
+const MANAGER_AGENT_ID = 'manager';
+const MANAGER_AGENT_NAME = 'Manager';
 const EFFORT_LEVELS = ['low', 'high', 'max'];
 const DEFAULT_EFFORT = 'high';
 const NO_KEY_HINT = 'No API key. Open Settings to add one.';
@@ -58,6 +60,17 @@ const dom = {
   confirmCancel: $('confirm-cancel'),
   confirmOk: $('confirm-ok'),
   projectOverlay: $('project-overlay'),
+  managerComposer: $('manager-composer'),
+  managerComposerTitle: $('manager-composer-title'),
+  managerComposerClose: $('manager-composer-close'),
+  managerName: $('manager-name'),
+  managerAgent: $('manager-agent'),
+  managerAddDir: $('manager-add-dir'),
+  managerDirs: $('manager-dirs'),
+  managerFiles: $('manager-files'),
+  managerCancel: $('manager-cancel'),
+  managerCreate: $('manager-create'),
+  managerComposerError: $('manager-composer-error'),
   projectName: $('project-name'),
   projectDrop: $('project-drop'),
   projectDirs: $('project-dirs'),
@@ -485,6 +498,11 @@ const api = {
     requestJson(
       `/api/runs/active?sessionId=${encodeURIComponent(sessionId)}`
     ),
+  cancelRun: (runId) =>
+    requestJson('/api/cancel', {
+      method: 'POST',
+      body: { runId },
+    }),
   loadActiveRuns: () => requestJson('/api/runs'),
   saveGoal: (sessionId, goal) =>
     requestJson('/api/goals', {
@@ -567,6 +585,8 @@ const api = {
     subscribeEvent('subagent.complete', callback),
   onGoalCheck: (callback) => subscribeEvent('goal.check', callback),
   onGoalUpdated: (callback) => subscribeEvent('goal.updated', callback),
+  onWorknodesChanged: (callback) =>
+    subscribeEvent('worknodes.changed', callback),
   onCompaction: (callback) => subscribeEvent('compaction.done', callback),
   onChatDone: (callback) => subscribeEvent('run.done', callback),
   onChatError: (callback) => subscribeEvent('run.error', callback),
@@ -624,6 +644,291 @@ function ensureProjects() {
   }
 }
 
+let managerComposerState = null;
+
+function managerComposerDefaultName() {
+  const count = state.sessions.filter(
+    (session) => session.nodeRole === 'manager'
+  ).length;
+  return `管理 node ${count + 1}`;
+}
+
+function renderManagerComposerAgents() {
+  if (!dom.managerAgent) return;
+  const agents =
+    state.agents.length > 0
+      ? state.agents
+      : [
+          { id: MANAGER_AGENT_ID, name: MANAGER_AGENT_NAME },
+          { id: DEFAULT_AGENT_ID, name: DEFAULT_AGENT_NAME },
+        ];
+  dom.managerAgent.replaceChildren();
+  for (const agent of agents) {
+    const option = document.createElement('option');
+    option.value = agent.id;
+    option.textContent = agent.name || agent.id;
+    dom.managerAgent.append(option);
+  }
+  const selected =
+    managerComposerState?.agentId ||
+    (agents.some((agent) => agent.id === MANAGER_AGENT_ID)
+      ? MANAGER_AGENT_ID
+      : agents[0]?.id || DEFAULT_AGENT_ID);
+  dom.managerAgent.value = selected;
+}
+
+function renderManagerComposerDirs() {
+  if (!dom.managerDirs) return;
+  dom.managerDirs.replaceChildren();
+  const dirs = managerComposerState?.directories || [];
+  if (dirs.length === 0) {
+    dom.managerDirs.append(
+      el('span', 'manager-dir-empty', '还没有目录')
+    );
+    return;
+  }
+  dirs.forEach((directory) => {
+    const row = el('div', 'manager-dir');
+    const label = el('span', '', directory);
+    label.title = directory;
+    const remove = el('button', '', '×');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', '移除目录');
+    remove.addEventListener('click', () => {
+      if (!managerComposerState) return;
+      managerComposerState.directories =
+        managerComposerState.directories.filter(
+          (item) => item !== directory
+        );
+      renderManagerComposerDirs();
+    });
+    row.append(label, remove);
+    dom.managerDirs.append(row);
+  });
+}
+
+function renderManagerComposerFiles() {
+  if (!dom.managerFiles) return;
+  dom.managerFiles.replaceChildren();
+  const files = managerComposerState?.files || [];
+  if (files.length === 0) {
+    dom.managerFiles.append(
+      el('span', 'manager-file-empty', '把参考文件拖到这里')
+    );
+    return;
+  }
+  files.forEach((file) => {
+    const row = el('div', 'manager-file');
+    const label = el('span', '', file);
+    label.title = file;
+    const remove = el('button', '', '×');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', '移除文件');
+    remove.addEventListener('click', () => {
+      if (!managerComposerState) return;
+      managerComposerState.files = managerComposerState.files.filter(
+        (item) => item !== file
+      );
+      renderManagerComposerFiles();
+    });
+    row.append(label, remove);
+    dom.managerFiles.append(row);
+  });
+}
+
+function openManagerComposer(managerId = null) {
+  if (!dom.managerComposer || !window.canvasOverlayOpen?.()) return;
+  const manager =
+    managerId
+      ? state.sessions.find(
+          (session) =>
+            session.id === managerId && session.nodeRole === 'manager'
+        )
+      : null;
+  const currentProject = state.projects.find(
+    (project) => project.id === currentSession()?.projectId
+  );
+  const fallbackDirectories =
+    currentProject?.directories ||
+    state.projects.find((project) => project.directories?.length)
+      ?.directories ||
+    [];
+  managerComposerState = {
+    editingId: manager?.id || null,
+    agentId: manager?.agentId || MANAGER_AGENT_ID,
+    directories: manager
+      ? Array.isArray(manager.nodeConfig?.directories)
+        ? [...manager.nodeConfig.directories]
+        : [...(state.projects.find((p) => p.id === manager.projectId)
+            ?.directories || [])]
+      : [...fallbackDirectories],
+    files: manager && Array.isArray(manager.nodeConfig?.files)
+      ? [...manager.nodeConfig.files]
+      : [],
+  };
+  if (dom.managerComposerError) dom.managerComposerError.hidden = true;
+  if (dom.managerComposerTitle) {
+    dom.managerComposerTitle.textContent = manager
+      ? '配置管理 node'
+      : '新建管理 node';
+  }
+  if (dom.managerName) {
+    dom.managerName.value = manager
+      ? manager.title || '管理 node'
+      : managerComposerDefaultName();
+  }
+  if (state.agents.length === 0) {
+    void loadAgents(true).finally(() => {
+      renderManagerComposerAgents();
+    });
+  } else {
+    renderManagerComposerAgents();
+  }
+  renderManagerComposerDirs();
+  renderManagerComposerFiles();
+  dom.managerComposer.classList.remove('hidden');
+  dom.managerComposer.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => {
+    dom.managerName?.focus();
+    dom.managerName?.select();
+  });
+}
+
+function closeManagerComposer() {
+  if (!dom.managerComposer) return;
+  managerComposerState = null;
+  dom.managerComposer.classList.add('hidden');
+  dom.managerComposer.setAttribute('aria-hidden', 'true');
+}
+
+async function addManagerComposerDirectories(paths) {
+  if (!managerComposerState) return;
+  for (const raw of paths) {
+    const target = String(raw || '').trim();
+    if (!target) continue;
+    let isDir = false;
+    try {
+      isDir = await api.isDirectory(target);
+    } catch {
+      isDir = false;
+    }
+    if (!isDir) continue;
+    if (!managerComposerState.directories.includes(target)) {
+      managerComposerState.directories.push(target);
+    }
+  }
+  renderManagerComposerDirs();
+}
+
+async function addManagerComposerFiles(paths) {
+  if (!managerComposerState) return;
+  for (const raw of paths) {
+    const target = String(raw || '').trim();
+    if (!target) continue;
+    let isDir = false;
+    try {
+      isDir = await api.isDirectory(target);
+    } catch {
+      isDir = false;
+    }
+    if (isDir) {
+      if (!managerComposerState.directories.includes(target)) {
+        managerComposerState.directories.push(target);
+      }
+    } else if (!managerComposerState.files.includes(target)) {
+      managerComposerState.files.push(target);
+    }
+  }
+  renderManagerComposerDirs();
+  renderManagerComposerFiles();
+}
+
+async function createManagerFromComposer() {
+  if (!managerComposerState) return;
+  const name =
+    String(dom.managerName?.value || '').trim() ||
+    managerComposerDefaultName();
+  const agentId =
+    String(dom.managerAgent?.value || '').trim() ||
+    MANAGER_AGENT_ID;
+  const directories = managerComposerState.directories.slice();
+  const files = managerComposerState.files.slice();
+  const editingId = managerComposerState.editingId;
+  if (directories.length === 0) {
+    if (dom.managerComposerError) {
+      dom.managerComposerError.textContent = '至少添加一个工作目录';
+      dom.managerComposerError.hidden = false;
+    }
+    return;
+  }
+  if (dom.managerComposerError) dom.managerComposerError.hidden = true;
+  if (editingId) {
+    const manager = state.sessions.find(
+      (session) => session.id === editingId && session.nodeRole === 'manager'
+    );
+    if (!manager) {
+      closeManagerComposer();
+      return;
+    }
+    manager.title = name;
+    manager.agentId = agentId;
+    manager.nodeConfig = {
+      ...(manager.nodeConfig || {}),
+      kind: 'manager',
+      directories,
+      files,
+    };
+    const project = state.projects.find(
+      (item) => item.id === manager.projectId
+    );
+    if (project) {
+      project.name = name;
+      project.directories = directories.slice();
+    }
+    await saveChatsNow();
+    closeManagerComposer();
+    window.refreshCanvas?.();
+    await window.reloadCanvas?.();
+    return;
+  }
+  const projectId = makeId();
+  state.projects.push({
+    id: projectId,
+    name,
+    directories: directories.slice(),
+  });
+  const id = makeId();
+  const session = {
+    id,
+    title: name,
+    system: DEFAULT_SYSTEM_PROMPT,
+    agentsMd: null,
+    agentId,
+    projectId,
+    frozen: false,
+    subagent: false,
+    parentSessionId: null,
+    nodeRole: 'manager',
+    managerId: null,
+    nodeConfig: {
+      kind: 'manager',
+      directories,
+      files,
+    },
+    mcpDisabled: [],
+    foldState: null,
+    pendingQueue: [],
+    msgs: [],
+  };
+  state.sessions.push(session);
+  state.current = state.sessions.length - 1;
+  state.switcherProjectId = projectId;
+  await saveChatsNow();
+  closeManagerComposer();
+  window.createCanvasManagerNode?.(id);
+  openSessionWindow(id, { compose: true });
+}
+
 function sessionsInProject(projectId = state.switcherProjectId) {
   return state.sessions.filter(
     (session) =>
@@ -655,6 +960,9 @@ function structurePayload() {
       frozen: session.frozen === true,
       subagent: session.subagent === true,
       parentSessionId: session.parentSessionId || null,
+      nodeRole: session.nodeRole || null,
+      managerId: session.managerId || null,
+      nodeConfig: session.nodeConfig || null,
       mcpDisabled: Array.isArray(session.mcpDisabled)
         ? session.mcpDisabled
         : [],
@@ -3371,9 +3679,56 @@ function contextBlock(title, text, key) {
   return block;
 }
 
+function nodeRoleText(session) {
+  if (!session) return '';
+  if (session.nodeRole === 'manager') {
+    const team = state.sessions.filter(
+      (item) => item.managerId === session.id && !item.archivedAt
+    );
+    const dirs = Array.isArray(session.nodeConfig?.directories)
+      ? session.nodeConfig.directories
+      : [];
+    const files = Array.isArray(session.nodeConfig?.files)
+      ? session.nodeConfig.files
+      : [];
+    return [
+      `Agent: ${agentForSession(session)?.name || session.agentId}`,
+      `目录: ${dirs.join(' · ') || '无'}`,
+      `文件: ${files.join(' · ') || '无'}`,
+      `工作 node: ${team.length}`,
+      '在对话里拆任务，工作 node 由它创建和分配。',
+    ].join('\n');
+  }
+  if (session.nodeRole === 'work') {
+    const manager = state.sessions.find(
+      (item) => item.id === session.managerId
+    );
+    const config = session.nodeConfig || {};
+    return [
+      `管理 node: ${manager?.title || session.managerId || '未归属'}`,
+      `Agent: ${agentForSession(session)?.name || session.agentId}`,
+      `任务: ${config.task || '未设置'}`,
+      `工具: ${Array.isArray(config.tools) ? config.tools.length : '跟随 Agent'}`,
+      `Skill: ${Array.isArray(config.skills) ? config.skills.length : '跟随 Agent'}`,
+      `MCP 关闭: ${(session.mcpDisabled || []).join(', ') || '无'}`,
+    ].join('\n');
+  }
+  return '';
+}
+
 function buildContextStack(session) {
   const stack = el('div', 'context-stack');
   renderMcpSummary(session, stack);
+  const roleText = nodeRoleText(session);
+  if (roleText) {
+    stack.append(
+      contextBlock(
+        session.nodeRole === 'manager' ? 'MANAGER' : 'WORK NODE',
+        roleText,
+        'role'
+      )
+    );
+  }
   stack.append(
     contextBlock('CONTEXT', systemPromptText(session), 'system'),
     contextBlock('AGENT PROMPT', agentPromptText(session), 'agent'),
@@ -5619,7 +5974,10 @@ function moveAgentMenu(delta) {
 
 function agentLocked(session) {
   return Boolean(
-    session && Array.isArray(session.msgs) && session.msgs.length > 0
+    session &&
+      (session.nodeRole === 'manager' ||
+        session.nodeRole === 'work' ||
+        (Array.isArray(session.msgs) && session.msgs.length > 0))
   );
 }
 
@@ -7197,7 +7555,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, #web-content';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, .canvas-manager, .manager-composer-panel, #web-content';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -7263,7 +7621,7 @@ function onWindowDragStart(event) {
     const workspacePage = target.closest('.canvas-workspaces-page');
     const excluded = workspacePage
       ? '.canvas-workspace, button, input, textarea, select, [contenteditable="true"]'
-      : '.canvas-group, .canvas-child, .canvas-frame, .canvas-zoom-indicator, button, input, textarea, select, [contenteditable="true"]';
+      : '.canvas-group, .canvas-child, .canvas-manager, .canvas-frame, .canvas-zoom-indicator, .manager-composer-panel, button, input, textarea, select, [contenteditable="true"]';
     if (target.closest(excluded)) return;
   } else if (event.button !== 0) {
     return;
@@ -7690,7 +8048,7 @@ function startActionMenuPress(event) {
     state.switcherOpen || dom.switcher.classList.contains('open');
   const frameTarget = canvasOpen ? target?.closest('.canvas-frame') : null;
   const nodeTarget = canvasOpen
-    ? target?.closest('.canvas-group, .canvas-child')
+    ? target?.closest('.canvas-group, .canvas-child, .canvas-manager')
     : null;
   const workspaceTarget = canvasOpen
     ? target?.closest('.canvas-workspace')
@@ -9194,7 +9552,8 @@ async function saveAgentsNow() {
 
 function createAgent() {
   const customCount = state.agents.filter(
-    (agent) => agent.id !== DEFAULT_AGENT_ID
+    (agent) =>
+      agent.id !== DEFAULT_AGENT_ID && agent.id !== MANAGER_AGENT_ID
   ).length;
   const agent = {
     id: makeId(),
@@ -9210,7 +9569,7 @@ function createAgent() {
 }
 
 function deleteAgent(agentId) {
-  if (agentId === DEFAULT_AGENT_ID) return;
+  if (agentId === DEFAULT_AGENT_ID || agentId === MANAGER_AGENT_ID) return;
   const index = state.agents.findIndex((agent) => agent.id === agentId);
   if (index < 0) return;
   state.agents.splice(index, 1);
@@ -9616,11 +9975,12 @@ function bindEvents() {
     'keydown',
     (event) => {
       if (event.code !== 'Space' && event.key !== ' ') return;
-      const webContentOpen =
-        dom.webContent && !dom.webContent.classList.contains('hidden');
-      if (!window.canvasOverlayOpen?.() && !webContentOpen) return;
+      if (!window.canvasOverlayOpen?.()) return;
       if (event.repeat || event.isComposing) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (dom.managerComposer && !dom.managerComposer.classList.contains('hidden')) {
+        return;
+      }
       const target = event.target;
       if (
         target instanceof Element &&
@@ -9645,8 +10005,7 @@ function bindEvents() {
         return;
       }
       event.preventDefault();
-      canvasSpaceHeld = true;
-      document.body.classList.add('canvas-space');
+      openManagerComposer();
     },
     true
   );
@@ -9667,6 +10026,9 @@ function bindEvents() {
   });
   window.canvasSpaceHeld = () => canvasSpaceHeld;
   window.openSessionWindow = openSessionWindow;
+  window.openManagerComposer = openManagerComposer;
+  window.closeManagerComposer = closeManagerComposer;
+  window.refreshChats = refreshChats;
   window.flushChats = saveChatsNow;
 
   window.addEventListener('resize', syncMaximized);
@@ -9778,6 +10140,62 @@ function bindEvents() {
   });
   dom.projectDrop?.addEventListener('dragleave', () => {
     dom.projectDrop.classList.remove('dragging');
+  });
+  dom.managerAddDir?.addEventListener('click', async () => {
+    const paths = await api.pickDirectories();
+    await addManagerComposerDirectories(paths);
+  });
+  dom.managerComposerClose?.addEventListener('click', closeManagerComposer);
+  dom.managerCancel?.addEventListener('click', closeManagerComposer);
+  dom.managerCreate?.addEventListener('click', () => void createManagerFromComposer());
+  dom.managerAgent?.addEventListener('change', () => {
+    if (managerComposerState) {
+      managerComposerState.agentId = dom.managerAgent.value;
+    }
+  });
+  dom.managerComposer?.addEventListener('click', (event) => {
+    if (event.target === dom.managerComposer) closeManagerComposer();
+  });
+  dom.managerComposer?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !event.isComposing) {
+      event.preventDefault();
+      closeManagerComposer();
+      return;
+    }
+    if (
+      event.key === 'Enter' &&
+      !event.shiftKey &&
+      !event.isComposing &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest('button, select, textarea')
+      ) {
+        return;
+      }
+      event.preventDefault();
+      void createManagerFromComposer();
+    }
+  });
+  dom.managerFiles?.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    dom.managerFiles.classList.add('dragging');
+  });
+  dom.managerFiles?.addEventListener('dragleave', () => {
+    dom.managerFiles.classList.remove('dragging');
+  });
+  dom.managerFiles?.addEventListener('drop', async (event) => {
+    event.preventDefault();
+    dom.managerFiles.classList.remove('dragging');
+    const files = [...(event.dataTransfer?.files || [])];
+    const paths = files
+      .map((file) => api.getPathForFile(file))
+      .filter(Boolean);
+    await addManagerComposerFiles(paths);
   });
   dom.projectDrop?.addEventListener('drop', async (event) => {
     event.preventDefault();
@@ -10367,25 +10785,18 @@ function bindEvents() {
       return;
     }
 
+    if (dom.managerComposer && !dom.managerComposer.classList.contains('hidden')) {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        closeManagerComposer();
+      }
+      return;
+    }
+
     if (window.canvasOverlayOpen?.()) {
       if (event.key === 'Escape' && !event.isComposing) {
         event.preventDefault();
-        if (window.canvasWorkspacePageOpen?.()) {
-          window.cancelCanvasPage?.();
-        } else {
-          window.closeCanvas?.();
-        }
-        return;
-      }
-      if (
-        event.key === 'Tab' &&
-        !event.shiftKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey
-      ) {
-        event.preventDefault();
-        if (!event.repeat) window.openCanvasWorkspaces?.();
+        window.closeCanvas?.();
         return;
       }
       return;
@@ -10394,11 +10805,6 @@ function bindEvents() {
     if (event.key === 'Tab') {
       if (!dom.settingsOverlay.classList.contains('hidden')) return;
       event.preventDefault();
-      if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
-        return;
-      }
-      if (event.repeat) return;
-      window.openCanvasWorkspaces?.();
       return;
     }
 

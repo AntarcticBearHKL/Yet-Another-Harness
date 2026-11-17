@@ -61,6 +61,11 @@ function publishBackground(event) {
   }
 }
 
+function publishGlobal(event) {
+  if (!event || !event.type) return;
+  publishBackground(event);
+}
+
 function emit(sessionId, runId, type, payload = {}) {
   try {
     const event = store.appendEvent(sessionId, runId, type, payload);
@@ -710,11 +715,46 @@ function startRun({
           'Keep working toward the objective. End every turn with what is done, what was verified, and what remains.',
         ].join('\n')
       : '';
+  const nodeConfig = session.nodeConfig || {};
+  const nodeRoleBlock =
+    session.nodeRole === 'manager'
+      ? [
+          '# Manager Node',
+          `Directories: ${
+            Array.isArray(nodeConfig.directories) && nodeConfig.directories.length
+              ? nodeConfig.directories.join(' · ')
+              : 'none'
+          }`,
+          `Files: ${
+            Array.isArray(nodeConfig.files) && nodeConfig.files.length
+              ? nodeConfig.files.join(' · ')
+              : 'none'
+          }`,
+          'Create work nodes with the worknode tools. Assign each work node an Agent and a task, then monitor it.',
+        ].join('\n')
+      : session.nodeRole === 'work'
+        ? [
+            '# Work Node',
+            `Manager: ${session.managerId || 'none'}`,
+            `Task: ${nodeConfig.task || 'not set'}`,
+            `Tools: ${
+              Array.isArray(nodeConfig.tools)
+                ? nodeConfig.tools.length
+                : 'Agent default'
+            }`,
+            `Skills: ${
+              Array.isArray(nodeConfig.skills)
+                ? nodeConfig.skills.length
+                : 'Agent default'
+            }`,
+          ].join('\n')
+        : '';
   const system = [
     session.system || '',
     agentsMdBlock,
     goalBlock,
     agentBlock,
+    nodeRoleBlock,
     skillBlock ? `# Active Skills\n${skillBlock}` : '',
   ]
     .filter(Boolean)
@@ -740,6 +780,9 @@ function startRun({
   };
 
   let goalAction = null;
+  const sessionToolOverride = Array.isArray(session.nodeConfig?.tools)
+    ? session.nodeConfig.tools.map(String).filter(Boolean)
+    : null;
   deepseek
     .runAgent({
       apiKey,
@@ -748,9 +791,11 @@ function startRun({
       mcpDisabled: Array.isArray(session.mcpDisabled)
         ? session.mcpDisabled
         : [],
-      allowedTools: Array.isArray(resolvedAgentConfig?.tools)
-        ? resolvedAgentConfig.tools
-        : null,
+      allowedTools:
+        sessionToolOverride ||
+        (Array.isArray(resolvedAgentConfig?.tools)
+          ? resolvedAgentConfig.tools
+          : null),
       reasoningEffort: normalizeReasoningEffort(reasoningEffort),
       toolContext,
       compaction: session.compaction,
@@ -966,6 +1011,7 @@ function cancelSessionRuns(sessionIds) {
 module.exports = {
   subscribe,
   subscribeBackground,
+  publishGlobal,
   publishLive,
   startRun,
   cancelRun,
