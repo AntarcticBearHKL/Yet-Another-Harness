@@ -294,6 +294,14 @@ body.home-window #main > .edge-blur {
   display: none !important;
 }
 
+/* Config windows: one Agent / tool / Skill / MCP page fills the window. */
+body.panel-window #main,
+body.panel-window #canvas,
+body.panel-window #switcher,
+body.panel-window #background-badge {
+  display: none !important;
+}
+
 /* ---------------------------------------------------------------- controls */
 .pill {
   display: inline-flex;
@@ -5458,6 +5466,10 @@ body.maximized .mcp {
   top: 6px;
   right: 8px;
   z-index: 6;
+  width: 28px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
 }
 
 .mcp-body {

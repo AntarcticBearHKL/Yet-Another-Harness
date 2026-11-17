@@ -236,6 +236,7 @@ function closeMcp() {
   mcpDom.overlay.classList.add('hidden');
   mcpDom.overlay.setAttribute('aria-hidden', 'true');
   window.loadMcpServers?.(true);
+  if (state.panelWindow && api.isElectron) api.close();
 }
 
 /* ------------------------------------------------------------------- events */

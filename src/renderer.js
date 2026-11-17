@@ -90,6 +90,7 @@ const dom = {
   catalogCategories: $('catalog-categories'),
   catalogList: $('catalog-list'),
   catalogClose: $('catalog-close'),
+  catalogTitle: $('catalog-title'),
   webContent: $('web-content'),
   webContentBody: $('web-content-body'),
   webContentClose: $('web-content-close'),
@@ -132,6 +133,7 @@ const state = {
   viewMode: 'questions',
   chatWindow: false,
   homeWindow: false,
+  panelWindow: false,
   chatCompact: false,
   chatTurnIndex: -1,
   chatNav: null,
@@ -425,6 +427,7 @@ const api = {
   dragEnd: () => shell?.dragEnd?.(),
   isMaximized: () => shell?.isMaximized?.() ?? Promise.resolve(false),
   openAgileWindow: () => shell?.openAgileWindow?.(),
+  openConfigWindow: (kind) => shell?.openConfigWindow?.(kind),
   openChatWindow: (sessionId, options) =>
     shell?.openChatWindow?.(sessionId, options),
   getPathForFile: (file) =>
@@ -7168,26 +7171,38 @@ const RING_USAGE_RADIUS = 225;
 const RING_VISUAL_HALF_W = 170;
 const RING_VISUAL_HALF_H = 330;
 
+function openConfigPage(kind) {
+  const key = String(kind || '').trim();
+  if (api.isElectron && api.openConfigWindow) {
+    Promise.resolve(api.openConfigWindow(key)).catch((error) =>
+      console.error('open config window failed', error)
+    );
+    return;
+  }
+  if (key === 'mcp') window.openMcp?.();
+  else openCatalog(key);
+}
+
 const RING_ITEMS = [
   {
     label: 'Agent',
     icon: '<path d="M12 3a3 3 0 0 1 3 3v1h1a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3h1V6a3 3 0 0 1 3-3Z"/><path d="M9 12h.01M15 12h.01M9 16h6"/>',
-    action: () => openCatalog('agents'),
+    action: () => openConfigPage('agents'),
   },
   {
     label: 'tool',
     icon: '<path d="M14.5 6.5a3.5 3.5 0 0 0-4.9 4.9L4 17v3h3l5.6-5.6a3.5 3.5 0 0 0 4.9-4.9l-2.1 2.1-2.1-2.1 2.1-2.1Z"/>',
-    action: () => openCatalog('tools'),
+    action: () => openConfigPage('tools'),
   },
   {
     label: 'Skill',
     icon: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z"/>',
-    action: () => openCatalog('skills'),
+    action: () => openConfigPage('skills'),
   },
   {
     label: 'MCP',
     icon: '<path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0V8ZM12 16v5"/>',
-    action: () => openMcp(),
+    action: () => openConfigPage('mcp'),
   },
 ];
 
@@ -7434,6 +7449,7 @@ function onActionMenuMove(event) {
 
 function startActionMenuPress(event) {
   if (event.button !== 2) return;
+  if (state.panelWindow) return;
   if (
     event.target instanceof Element &&
     event.target.closest('#action-menu, .usage-card')
@@ -7538,7 +7554,12 @@ function endActionMenuPress(event) {
     hovered instanceof Element
       ? hovered.closest('#action-menu .action-menu-item')
       : null;
-  const index = active ? Number(active.dataset.actionIndex) : -1;
+  if (!active) {
+    // Keep the menu open after the hold so it can be used with a normal click.
+    lastActionMenuAt = Date.now();
+    return;
+  }
+  const index = Number(active.dataset.actionIndex);
   const item = index >= 0 ? actionMenuItems[index] : null;
   closeActionMenu();
   lastActionMenuAt = Date.now();
@@ -8527,6 +8548,7 @@ function closeCatalog() {
   state.catalogRequest += 1;
   dom.catalog.classList.add('hidden');
   dom.catalog.setAttribute('aria-hidden', 'true');
+  if (state.panelWindow && api.isElectron) api.close();
 }
 
 function catalogCategoryButton(item, selectedKind) {
@@ -9255,16 +9277,17 @@ async function openCatalog(kind) {
   closeRingMenu();
   const page =
     kind === 'skills' || kind === 'mcp' || kind === 'agents' ? kind : 'tools';
-  dom.catalog.setAttribute(
-    'aria-label',
+  const label =
     page === 'skills'
       ? 'Skill'
       : page === 'mcp'
         ? 'MCP'
         : page === 'agents'
           ? 'Agent'
-          : 'tool'
-  );
+          : 'tool';
+  dom.catalog.setAttribute('aria-label', label);
+  if (dom.catalogTitle) dom.catalogTitle.textContent = label;
+  if (state.panelWindow) document.title = `YAH - ${label}`;
   state.catalogOpen = true;
   state.catalogKind =
     page === 'tools'
@@ -10762,7 +10785,18 @@ async function boot() {
   });
   ensureProjects();
   const params = new URLSearchParams(location.search);
-  if (params.get('chat') === '1') {
+  const panelKind = String(params.get('panel') || '').trim();
+  if (panelKind) {
+    state.panelWindow = true;
+    document.body.classList.add('panel-window');
+    const panelLabels = {
+      agents: 'Agent',
+      tools: 'tool',
+      skills: 'Skill',
+      mcp: 'MCP',
+    };
+    document.title = `YAH - ${panelLabels[panelKind] || 'Config'}`;
+  } else if (params.get('chat') === '1') {
     state.chatWindow = true;
     document.body.classList.add('chat-window');
     const sessionId = params.get('sessionId') || '';
@@ -10781,6 +10815,13 @@ async function boot() {
   connectBackgroundEvents();
   applySettings();
   await loadAgents();
+  if (state.panelWindow) {
+    setTimeout(() => {
+      if (panelKind === 'mcp') window.openMcp?.();
+      else openCatalog(panelKind);
+    }, 0);
+    return;
+  }
   renderAll();
   if (state.chatWindow && params.get('compose') === '1') {
     openComposer();

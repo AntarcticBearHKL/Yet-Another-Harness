@@ -50,6 +50,7 @@ let saveBoundsTimer = null;
 let saveAgileBoundsTimer = null;
 const contentWindows = new Map();
 const chatWindows = new Map();
+const configWindows = new Map();
 let dragState = null;
 let resizeState = null;
 
@@ -304,6 +305,69 @@ function openChatWindow(sessionId, options = {}) {
   return win.id;
 }
 
+const CONFIG_WINDOW_KINDS = {
+  agents: 'Agent',
+  tools: 'tool',
+  skills: 'Skill',
+  mcp: 'MCP',
+};
+
+function openConfigWindow(kind) {
+  const key = String(kind || '').trim();
+  const label = CONFIG_WINDOW_KINDS[key];
+  if (!label) return null;
+
+  const existing = configWindows.get(key);
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore();
+    existing.show();
+    existing.focus();
+    return existing.id;
+  }
+
+  const win = new BrowserWindow({
+    width: 1080,
+    height: 780,
+    minWidth: 720,
+    minHeight: 520,
+    title: `YAH - ${label}`,
+    icon: path.join(__dirname, '..', 'assets', 'yah.ico'),
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    roundedCorners: false,
+    thickFrame: true,
+    hasShadow: false,
+    show: false,
+    resizable: true,
+    center: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      spellcheck: false,
+    },
+  });
+
+  configWindows.set(key, win);
+  win.loadURL(`${LOCAL_URL}/?panel=${key}&shell=electron`);
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed()) win.show();
+  });
+  win.on('closed', () => {
+    if (configWindows.get(key) === win) configWindows.delete(key);
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event) => {
+    event.preventDefault();
+  });
+  return win.id;
+}
+
 function loadAgileWindowState() {
   try {
     return JSON.parse(fs.readFileSync(AGILE_WINDOW_STATE_FILE, 'utf8'));
@@ -481,6 +545,10 @@ function createWindow() {
       if (!entry.win.isDestroyed()) entry.win.close();
     }
     contentWindows.clear();
+    for (const win of [...configWindows.values()]) {
+      if (!win.isDestroyed()) win.close();
+    }
+    configWindows.clear();
   });
 
   mainWindow.webContents.on('context-menu', (event) => {
@@ -557,6 +625,7 @@ if (gotLock) {
       return true;
     });
     ipcMain.handle('agile:open', () => openAgileWindow());
+    ipcMain.handle('config:open', (_event, kind) => openConfigWindow(kind));
     ipcMain.handle('chat:open', (_event, sessionId, options) =>
       openChatWindow(sessionId, options)
     );
