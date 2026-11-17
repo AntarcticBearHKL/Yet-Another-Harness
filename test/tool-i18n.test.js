@@ -29,8 +29,8 @@ test('every built-in tool has Chinese display text', () => {
 });
 
 test('tool display helpers translate names, types and parameters', () => {
-  assert.equal(toolDisplayName('read'), '读取');
-  assert.equal(toolDisplayName('agile_create_task'), '创建敏捷任务');
+  assert.equal(toolDisplayName('read'), 'read');
+  assert.equal(toolDisplayName('agile_create_task'), 'agile_create_task');
   assert.equal(toolDisplayName('unknown_tool'), 'unknown_tool');
   assert.match(toolDisplayDescription('read'), /文本文件|目录/);
   assert.equal(toolParamDescription('read', 'path'), '路径');

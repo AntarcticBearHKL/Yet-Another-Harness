@@ -2312,7 +2312,7 @@ function renderToolCard(callStep, resultStep, msg, key, options = {}) {
         .split('__')
         .filter(Boolean)
         .join(' · ') || name
-    : window.toolDisplayName?.(name) || name;
+    : name;
   const callMetrics = call?.metrics || null;
   const resultMetrics = result?.metrics || null;
   const startedAt = Number.isFinite(Number(callMetrics?.startedAt))
@@ -9274,7 +9274,6 @@ function renderCatalogSkillItem(entry) {
 function renderCatalogToolItem(entry) {
   const fn = entry.function || entry;
   const toolName = fn.name || 'tool';
-  const displayName = window.toolDisplayName?.(toolName) || toolName;
   const displayDescription =
     window.toolDisplayDescription?.(toolName, fn.description) || '';
   const item = el('div', 'catalog-item catalog-tool-item');
@@ -9290,7 +9289,7 @@ function renderCatalogToolItem(entry) {
   head.setAttribute('aria-expanded', 'false');
   head.title = toolName;
   head.append(el('span', 'catalog-tool-dot'));
-  head.append(el('span', 'catalog-tool-name', displayName));
+  head.append(el('span', 'catalog-tool-name', toolName));
   head.append(el('span', 'catalog-tool-meta', meta));
   if (hasDetails) head.append(catalogChevron());
   item.append(head);
@@ -9670,7 +9669,7 @@ function renderAgentToolsEditor(agent, allTools) {
         saveTools();
         updateState();
       });
-      const displayName = window.toolDisplayName?.(tool.name) || tool.name;
+      const displayName = tool.name;
       const displayDescription =
         window.toolDisplayDescription?.(tool.name, tool.description) || '';
       const body = el('span', 'agent-tool-body');

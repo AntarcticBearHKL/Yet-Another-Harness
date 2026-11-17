@@ -300,7 +300,7 @@ const TYPE_I18N = {
 };
 
 function toolDisplayName(name) {
-  return TOOL_I18N[String(name || '')]?.name || String(name || '');
+  return String(name || '');
 }
 
 function toolDisplayDescription(name, fallback = '') {
