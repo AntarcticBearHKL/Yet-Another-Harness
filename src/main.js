@@ -41,17 +41,20 @@ if (!gotLock) {
 const LOCAL_PORT = Number(process.env.YAH_LOCAL_PORT) || 3789;
 const LOCAL_URL = `http://127.0.0.1:${LOCAL_PORT}`;
 const WINDOW_STATE_FILE = path.join(userData, 'window.json');
+const WINDOW_BOUNDS_FILE = path.join(userData, 'window-bounds.json');
 const AGILE_WINDOW_STATE_FILE = path.join(userData, 'agile-window.json');
 
 let mainWindow = null;
 const agileWindows = new Map();
 let backendProcess = null;
 let saveBoundsTimer = null;
-let saveAgileBoundsTimer = null;
 const contentWindows = new Map();
 const chatWindows = new Map();
 const configWindows = new Map();
 const archiveWindows = new Map();
+const windowBoundsTargets = new Map();
+const windowBoundsTimers = new Map();
+let windowBoundsStore = null;
 let dragState = null;
 let resizeState = null;
 
@@ -111,6 +114,103 @@ function clampBounds(bounds, options = {}) {
     : Math.round(area.y + (area.height - height) / 2);
 
   return { x, y, width, height };
+}
+
+function loadWindowBoundsStore() {
+  if (windowBoundsStore) return windowBoundsStore;
+  try {
+    const text = fs
+      .readFileSync(WINDOW_BOUNDS_FILE, 'utf8')
+      .replace(/^\uFEFF/, '');
+    const raw = JSON.parse(text);
+    windowBoundsStore =
+      raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  } catch {
+    windowBoundsStore = {};
+  }
+  return windowBoundsStore;
+}
+
+function saveWindowBoundsStore() {
+  try {
+    fs.mkdirSync(path.dirname(WINDOW_BOUNDS_FILE), { recursive: true });
+    fs.writeFileSync(
+      WINDOW_BOUNDS_FILE,
+      `${JSON.stringify(loadWindowBoundsStore(), null, 2)}\n`,
+      'utf8'
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function storedWindowBounds(key) {
+  if (!key) return null;
+  const value = loadWindowBoundsStore()[key];
+  return value && typeof value === 'object' ? value : null;
+}
+
+function boundsForWindow(key, options = {}, fallback = null) {
+  return clampBounds(storedWindowBounds(key) || fallback, options);
+}
+
+function rememberWindowBounds(key, win) {
+  if (!key || !win || win.isDestroyed()) return;
+  try {
+    const bounds =
+      typeof win.getNormalBounds === 'function'
+        ? win.getNormalBounds()
+        : win.getBounds();
+    if (!bounds) return;
+    loadWindowBoundsStore()[key] = {
+      x: Math.round(Number(bounds.x) || 0),
+      y: Math.round(Number(bounds.y) || 0),
+      width: Math.round(Number(bounds.width) || 0),
+      height: Math.round(Number(bounds.height) || 0),
+    };
+    saveWindowBoundsStore();
+  } catch {
+    /* ignore */
+  }
+}
+
+function scheduleWindowBoundsSave(key, win) {
+  if (!key) return;
+  clearTimeout(windowBoundsTimers.get(key));
+  windowBoundsTimers.set(
+    key,
+    setTimeout(() => {
+      windowBoundsTimers.delete(key);
+      rememberWindowBounds(key, win);
+    }, 250)
+  );
+}
+
+function attachWindowBounds(key, win) {
+  if (!key || !win) return;
+  windowBoundsTargets.set(key, win);
+  win.on('move', () => scheduleWindowBoundsSave(key, win));
+  win.on('resize', () => scheduleWindowBoundsSave(key, win));
+  win.on('moved', () => rememberWindowBounds(key, win));
+  win.on('resized', () => rememberWindowBounds(key, win));
+  win.on('close', () => rememberWindowBounds(key, win));
+  win.on('closed', () => {
+    clearTimeout(windowBoundsTimers.get(key));
+    windowBoundsTimers.delete(key);
+    if (windowBoundsTargets.get(key) === win) {
+      windowBoundsTargets.delete(key);
+    }
+  });
+}
+
+function flushWindowBounds() {
+  for (const key of [...windowBoundsTimers.keys()]) {
+    clearTimeout(windowBoundsTimers.get(key));
+    windowBoundsTimers.delete(key);
+  }
+  for (const [key, win] of [...windowBoundsTargets.entries()]) {
+    rememberWindowBounds(key, win);
+  }
 }
 
 function scheduleBoundsSave() {
@@ -184,15 +284,24 @@ function openContentWindow(payload) {
     }
   }
 
-  const win = new BrowserWindow({
+  const minWidth =
+    kind === 'pdf' || kind === 'code' || kind === 'html' ? 720 : 520;
+  const minHeight =
+    kind === 'pdf' || kind === 'code' || kind === 'html' ? 520 : 360;
+  const boundsKey = `content:${key || `${kind}:${title}`}`;
+  const bounds = boundsForWindow(boundsKey, {
     width:
       kind === 'pdf' ? 1180 : kind === 'code' || kind === 'html' ? 1100 : 940,
     height:
       kind === 'pdf' ? 900 : kind === 'code' || kind === 'html' ? 820 : 760,
-    minWidth:
-      kind === 'pdf' || kind === 'code' || kind === 'html' ? 720 : 520,
-    minHeight:
-      kind === 'pdf' || kind === 'code' || kind === 'html' ? 520 : 360,
+    minWidth,
+    minHeight,
+  });
+
+  const win = new BrowserWindow({
+    ...bounds,
+    minWidth,
+    minHeight,
     title,
     icon: path.join(__dirname, '..', 'assets', 'yah.ico'),
     frame: false,
@@ -203,7 +312,6 @@ function openContentWindow(payload) {
     hasShadow: false,
     show: false,
     resizable: true,
-    center: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -212,6 +320,7 @@ function openContentWindow(payload) {
       spellcheck: false,
     },
   });
+  attachWindowBounds(boundsKey, win);
 
   const webContentsId = win.webContents.id;
   const entry = { win, key, payload };
@@ -259,9 +368,15 @@ function openChatWindow(sessionId, options = {}) {
     return existing.id;
   }
 
-  const win = new BrowserWindow({
+  const boundsKey = `chat:${id}`;
+  const bounds = boundsForWindow(boundsKey, {
     width: 1040,
     height: 840,
+    minWidth: 640,
+    minHeight: 480,
+  });
+  const win = new BrowserWindow({
+    ...bounds,
     minWidth: 640,
     minHeight: 480,
     title: 'YAH - Chat',
@@ -274,7 +389,6 @@ function openChatWindow(sessionId, options = {}) {
     hasShadow: false,
     show: false,
     resizable: true,
-    center: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -283,6 +397,7 @@ function openChatWindow(sessionId, options = {}) {
       spellcheck: false,
     },
   });
+  attachWindowBounds(boundsKey, win);
 
   chatWindows.set(id, win);
   win.loadURL(
@@ -326,9 +441,15 @@ function openConfigWindow(kind) {
     return existing.id;
   }
 
-  const win = new BrowserWindow({
+  const boundsKey = `config:${key}`;
+  const bounds = boundsForWindow(boundsKey, {
     width: 1080,
     height: 780,
+    minWidth: 720,
+    minHeight: 520,
+  });
+  const win = new BrowserWindow({
+    ...bounds,
     minWidth: 720,
     minHeight: 520,
     title: `YAH - ${label}`,
@@ -341,7 +462,6 @@ function openConfigWindow(kind) {
     hasShadow: false,
     show: false,
     resizable: true,
-    center: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -350,6 +470,7 @@ function openConfigWindow(kind) {
       spellcheck: false,
     },
   });
+  attachWindowBounds(boundsKey, win);
 
   configWindows.set(key, win);
   win.loadURL(`${LOCAL_URL}/?panel=${key}&shell=electron`);
@@ -381,9 +502,15 @@ function openArchiveWindow(sessionId) {
     return existing.id;
   }
 
-  const win = new BrowserWindow({
+  const boundsKey = `archive:${id}`;
+  const bounds = boundsForWindow(boundsKey, {
     width: 1040,
     height: 780,
+    minWidth: 720,
+    minHeight: 520,
+  });
+  const win = new BrowserWindow({
+    ...bounds,
     minWidth: 720,
     minHeight: 520,
     title: 'YAH - Archived',
@@ -396,7 +523,6 @@ function openArchiveWindow(sessionId) {
     hasShadow: false,
     show: false,
     resizable: true,
-    center: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -405,6 +531,7 @@ function openArchiveWindow(sessionId) {
       spellcheck: false,
     },
   });
+  attachWindowBounds(boundsKey, win);
 
   archiveWindows.set(id, win);
   win.loadURL(
@@ -434,29 +561,6 @@ function loadAgileWindowState() {
   }
 }
 
-function saveAgileWindowState(bounds) {
-  try {
-    fs.mkdirSync(path.dirname(AGILE_WINDOW_STATE_FILE), { recursive: true });
-    fs.writeFileSync(
-      AGILE_WINDOW_STATE_FILE,
-      `${JSON.stringify(bounds, null, 2)}\n`,
-      'utf8'
-    );
-  } catch {
-    /* ignore */
-  }
-}
-
-function scheduleAgileBoundsSave(win) {
-  clearTimeout(saveAgileBoundsTimer);
-  saveAgileBoundsTimer = setTimeout(() => saveAgileBounds(win), 300);
-}
-
-function saveAgileBounds(win) {
-  if (!win || win.isDestroyed()) return;
-  saveAgileWindowState(win.getBounds());
-}
-
 function openAgileWindow(managerId) {
   const id = String(managerId || '').trim();
   if (!id) return null;
@@ -468,12 +572,17 @@ function openAgileWindow(managerId) {
     return existing.id;
   }
 
-  const bounds = clampBounds(loadAgileWindowState(), {
-    width: 1440,
-    height: 900,
-    minWidth: 900,
-    minHeight: 560,
-  });
+  const boundsKey = `agile:${id}`;
+  const bounds = boundsForWindow(
+    boundsKey,
+    {
+      width: 1440,
+      height: 900,
+      minWidth: 900,
+      minHeight: 560,
+    },
+    loadAgileWindowState()
+  );
 
   const win = new BrowserWindow({
     ...bounds,
@@ -497,6 +606,7 @@ function openAgileWindow(managerId) {
       spellcheck: false,
     },
   });
+  attachWindowBounds(boundsKey, win);
 
   const url = new URL(`${LOCAL_URL}/agile.html`);
   url.searchParams.set('shell', 'electron');
@@ -505,11 +615,6 @@ function openAgileWindow(managerId) {
   win.once('ready-to-show', () => {
     if (!win.isDestroyed()) win.show();
   });
-  win.on('resize', () => scheduleAgileBoundsSave(win));
-  win.on('move', () => scheduleAgileBoundsSave(win));
-  win.on('resized', () => saveAgileBounds(win));
-  win.on('moved', () => saveAgileBounds(win));
-  win.on('close', () => saveAgileBounds(win));
   win.on('closed', () => {
     if (agileWindows.get(id) === win) agileWindows.delete(id);
   });
@@ -841,8 +946,7 @@ if (gotLock) {
 
   app.on('before-quit', () => {
     clearTimeout(saveBoundsTimer);
-    clearTimeout(saveAgileBoundsTimer);
     saveBounds();
-    saveAgileBounds();
+    flushWindowBounds();
   });
 }
