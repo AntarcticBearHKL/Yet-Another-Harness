@@ -7576,12 +7576,114 @@ textarea::placeholder {
   opacity: 0.75;
 }
 
-/* Conversation context blocks: MCP and the context entries. */
+/* Conversation context blocks: MCP, the node role and the folded context. */
 .context-stack {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin: 0 0 28px;
+}
+
+.context-group {
+  position: relative;
+  padding-left: 20px;
+}
+
+.context-group::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: rgba(185, 111, 61, 0.45);
+  pointer-events: none;
+}
+
+.context-group-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  text-align: left;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.context-group-head:hover,
+.context-group-head:focus-visible {
+  outline: none;
+  color: var(--text);
+}
+
+.context-group-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: rgba(185, 111, 61, 0.45);
+}
+
+.context-group-title {
+  color: var(--dim);
+  transition: color 120ms ease;
+}
+
+.context-group-head:hover .context-group-title {
+  color: var(--text);
+}
+
+.context-group-count {
+  color: var(--faint);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.context-group-chevron {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+  color: var(--faint);
+  transition: transform 160ms ease;
+}
+
+.context-group.collapsed .context-group-chevron {
+  transform: rotate(-90deg);
+}
+
+.context-group-chevron svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.context-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.context-group.collapsed .context-group-body {
+  display: none;
 }
 
 .context-block {
