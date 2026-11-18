@@ -7754,7 +7754,6 @@ let actionMenuUsageCard = null;
 let actionMenuItems = [];
 let actionMenuPress = null;
 let lastActionMenuAt = 0;
-const ACTION_MENU_HOLD_MS = 150;
 
 function buildActionMenuUsageCard() {
   const panel = el('div', 'ring-usage-panel usage-card');
@@ -7801,7 +7800,6 @@ function closeActionMenu() {
 }
 
 function cancelActionMenuPress() {
-  if (actionMenuPress?.timer) clearTimeout(actionMenuPress.timer);
   actionMenuPress = null;
   closeActionMenu();
 }
@@ -7971,6 +7969,7 @@ function onActionMenuMove(event) {
 function startActionMenuPress(event) {
   if (event.button !== 2) return;
   if (state.panelWindow || state.archiveWindow) return;
+  if (state.chatWindow) return;
   if (
     event.target instanceof Element &&
     event.target.closest('#action-menu, .usage-card')
@@ -8025,18 +8024,13 @@ function startActionMenuPress(event) {
     target,
     x: event.clientX,
     y: event.clientY,
-    timer: null,
     menuKind,
     canvasSessionId,
     canvasWorkspaceId,
     canvasFrameId,
   };
   actionMenuPress = press;
-  press.timer = setTimeout(() => {
-    if (actionMenuPress !== press) return;
-    press.timer = null;
-    openActionMenuForPress(press);
-  }, ACTION_MENU_HOLD_MS);
+  openActionMenuForPress(press);
 }
 
 function openActionMenuForPress(press) {
@@ -8069,14 +8063,6 @@ function endActionMenuPress(event) {
   const press = actionMenuPress;
   if (!press) return;
   actionMenuPress = null;
-  if (press.timer) {
-    // A normal quick right-click: open the menu on release instead of making
-    // the user hold for ACTION_MENU_HOLD_MS. The menu stays open for a click.
-    clearTimeout(press.timer);
-    press.timer = null;
-    openActionMenuForPress(press);
-    return;
-  }
   if (!state.ringOpen) return;
   const hovered = document.elementFromPoint(event.clientX, event.clientY);
   const active =
@@ -8097,14 +8083,6 @@ function endActionMenuPress(event) {
 
 function openMainActionMenu(x, y) {
   const items = [...RING_ITEMS];
-  if (state.chatWindow && api.isElectron) {
-    items.push({
-      label: '关闭窗口',
-      icon: RING_ICONS.close,
-      action: () => api.close(),
-      danger: true,
-    });
-  }
   openActionMenu({
     x,
     y,
@@ -9878,6 +9856,7 @@ function bindEvents() {
     'mousedown',
     (event) => {
       if (!state.ringOpen) return;
+      if (actionMenuPress) return;
       if (
         event.target instanceof Element &&
         event.target.closest('#action-menu, .usage-card')
