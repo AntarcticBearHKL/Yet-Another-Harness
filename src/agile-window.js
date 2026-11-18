@@ -79,7 +79,7 @@ let dragPoint = null;
 let dragFrame = 0;
 
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .agile-task, .agile-column, .agile-tasks, .agile-iterations, .agile-note, .overlay';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .agile-task, .agile-column, .agile-tasks, .agile-iteration-row, .agile-iteration-add, .agile-note, .overlay';
 
 function onWindowDragStart(event) {
   if (!api?.dragStart || event.button !== 0) return;
@@ -87,6 +87,11 @@ function onWindowDragStart(event) {
   if (!(target instanceof Element)) return;
   if (target.closest(DRAG_EXCLUDE)) return;
   if (!target.closest('.agile-sidebar')) return;
+  const iterations = target.closest('.agile-iterations');
+  if (iterations) {
+    const rect = iterations.getBoundingClientRect();
+    if (event.clientX >= rect.left + iterations.clientWidth) return;
+  }
   windowDrag = { x: event.screenX, y: event.screenY };
   api.dragStart({ x: event.screenX, y: event.screenY });
 }

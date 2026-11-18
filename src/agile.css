@@ -95,7 +95,7 @@ body:has(#agile:not(.hidden)) #confirm-overlay {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  font-size: 12px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
