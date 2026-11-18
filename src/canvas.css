@@ -225,32 +225,47 @@ body.canvas-space .canvas-stage.panning {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-.canvas-group.running {
-  border-color: rgba(185, 111, 61, 0.34);
+.canvas-group.running,
+.canvas-manager-panel.running,
+.canvas-system-node.status-running,
+.canvas-system-node.status-collecting {
+  border-color: rgba(185, 111, 61, 0.62);
+  animation: canvas-node-breathe 2.4s ease-in-out infinite;
 }
 
-.canvas-group-loading {
-  width: 12px;
-  height: 12px;
-  flex: none;
-  margin: 3px 0 0 8px;
-  border: 1.5px solid rgba(185, 111, 61, 0.22);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: canvas-group-spin 0.8s linear infinite;
-  pointer-events: none;
+.canvas-group.selected.running,
+.canvas-manager-panel.selected.running {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
 }
 
-@keyframes canvas-group-spin {
-  to {
-    transform: rotate(360deg);
+@keyframes canvas-node-breathe {
+  0%,
+  100% {
+    border-color: rgba(185, 111, 61, 0.36);
+    box-shadow:
+      0 0 0 0 rgba(185, 111, 61, 0),
+      0 8px 20px rgba(74, 54, 40, 0.08);
+  }
+  50% {
+    border-color: rgba(185, 111, 61, 0.86);
+    box-shadow:
+      0 0 0 2px rgba(185, 111, 61, 0.08),
+      0 0 22px rgba(185, 111, 61, 0.24),
+      0 8px 20px rgba(74, 54, 40, 0.08);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .canvas-group-loading {
+  .canvas-group.running,
+  .canvas-manager-panel.running,
+  .canvas-system-node.status-running,
+  .canvas-system-node.status-collecting {
     animation: none;
-    border-top-color: var(--accent);
+    border-color: rgba(185, 111, 61, 0.62);
+    box-shadow:
+      0 0 0 2px rgba(185, 111, 61, 0.08),
+      0 0 18px rgba(185, 111, 61, 0.18);
   }
 }
 
@@ -852,16 +867,6 @@ body.canvas-space .canvas-stage.panning {
   white-space: nowrap;
 }
 
-.canvas-manager-panel-loading {
-  width: 11px;
-  height: 11px;
-  flex: none;
-  border: 1.3px solid rgba(185, 111, 61, 0.22);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: canvas-group-spin 0.8s linear infinite;
-}
-
 .canvas-manager-panel .canvas-manager-meta {
   margin-top: 7px;
   color: var(--dim);
@@ -1012,16 +1017,6 @@ body.canvas-space .canvas-stage.panning {
   font-weight: 700;
   letter-spacing: 0.06em;
   white-space: nowrap;
-}
-
-.canvas-manager-loading {
-  width: 10px;
-  height: 10px;
-  flex: none;
-  border: 1.2px solid rgba(224, 160, 107, 0.24);
-  border-top-color: #e0a06b;
-  border-radius: 50%;
-  animation: canvas-group-spin 0.8s linear infinite;
 }
 
 .canvas-manager-title {

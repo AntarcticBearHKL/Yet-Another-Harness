@@ -875,12 +875,6 @@ function buildCanvasManagerPanel(manager, team, node) {
   head.append(
     el('span', 'canvas-manager-panel-title', manager.title || 'Manager')
   );
-  if (running) {
-    const loading = el('span', 'canvas-manager-panel-loading');
-    loading.setAttribute('role', 'status');
-    loading.setAttribute('aria-label', '生成中');
-    head.append(loading);
-  }
   panelEl.append(head);
 
   const done = team.filter(
@@ -1408,12 +1402,6 @@ function buildCanvasManager(manager, team, node) {
   head.append(
     el('span', 'canvas-manager-agent', canvasAgentName(manager))
   );
-  if (running) {
-    const loading = el('span', 'canvas-manager-loading');
-    loading.setAttribute('role', 'status');
-    loading.setAttribute('aria-label', '生成中');
-    head.append(loading);
-  }
   managerEl.append(head);
 
   managerEl.append(
@@ -1538,13 +1526,6 @@ function buildCanvasGroup(root, children, jobs, node) {
   );
   heading.append(subline);
   head.append(heading);
-  if (running) {
-    const loading = el('span', 'canvas-group-loading');
-    loading.setAttribute('role', 'status');
-    loading.setAttribute('aria-label', '生成中');
-    loading.title = '生成中';
-    head.append(loading);
-  }
   groupEl.append(head);
 
   const columns = el('div', 'canvas-group-columns');
