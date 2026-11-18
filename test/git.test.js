@@ -85,7 +85,7 @@ test('git tools are registered and grouped under the Git category', () => {
   );
   assert.equal(
     TOOL_GROUPS.find((item) => item.id === 'subagent').label,
-    'subagent'
+    'Subagent'
   );
   assert.deepEqual(
     TOOL_GROUPS.filter((item) => !item.hidden).map((item) => item.id),
@@ -96,20 +96,22 @@ test('git tools are registered and grouped under the Git category', () => {
       'git',
       'view',
       'background',
-      'subagent',
       'agile',
       'session',
       'canvas',
+      'subagent',
     ]
   );
   assert.equal(TOOL_GROUPS.find((item) => item.id === 'session').label, '会话');
-  assert.equal(TOOL_GROUPS.find((item) => item.id === 'canvas').label, '画布');
+  assert.equal(TOOL_GROUPS.find((item) => item.id === 'canvas').label, 'Agent');
   assert.equal(toolGroupFor({ name: 'question' }).id, 'view');
   assert.ok(!TOOL_GROUPS.some((item) => item.id === 'browser'));
   assert.equal(toolGroupFor({ name: 'chrome' }).id, 'view');
   assert.equal(toolGroupFor({ name: 'worknode_create' }).id, 'canvas');
   assert.equal(toolGroupFor({ name: 'worknode_close' }).id, 'canvas');
-  assert.equal(toolGroupFor({ name: 'worknode_create' }).label, '画布');
+  assert.equal(toolGroupFor({ name: 'worknode_create' }).label, 'Agent');
+  assert.equal(toolGroupFor({ name: 'subagent_start' }).id, 'subagent');
+  assert.equal(toolGroupFor({ name: 'subagent_close' }).id, 'subagent');
   const push = GIT_TOOLS.find(
     (definition) => definition.function.name === 'git_push'
   );

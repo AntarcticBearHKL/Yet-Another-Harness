@@ -246,10 +246,10 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 - OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`systeminfo`、`session_rename`
 - Git（结构化、无 shell，统一放在工具的 Git 菜单）：`git_status`、`git_diff`、`git_log`、`git_show`、`git_blame`、`git_branch`、`git_checkout`、`git_add`、`git_commit`、`git_stash`、`git_fetch`、`git_pull`、`git_push`、`git_merge`、`git_remote`、`git_tag`、`git_restore`、`git_reset`、`git_revert`、`git_cherry_pick`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）
-- OMO 常驻 / 条件工具：`session_list/read/search/info`、`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`subagent_start/list/output/stop`、`task/subagent/call_omo_agent/delegate_task`
+- OMO 常驻 / 条件工具：`session_list/read/search/info`、`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`subagent_start/close`
 - 兼容别名：`hashline_edit`；`read_file`、`web_search`、`interactive_bash`、`SystemInfo`、`system_info` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
-- `background_*`、`monitor_*` 是长驻进程管理，不再把完成输出塞回对话；`task`/`subagent`/`call_omo_agent`/`delegate_task` 是单次子模型调用；`subagent_*` 是带只读对话、可 fork、完成后把结果塞回父对话的完整子代理；`interactive_bash` 已合并为 `shell` 的隐藏别名
+- `background_*`、`monitor_*` 是长驻进程管理，不再把完成输出塞回对话；`subagent_start` 启动带完整工具的子代理，完成后把结果塞回父对话，`subagent_close` 停止并关闭它；`interactive_bash` 已合并为 `shell` 的隐藏别名
 
 ## Tool calling
 

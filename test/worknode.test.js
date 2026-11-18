@@ -81,9 +81,7 @@ test('canvas work nodes can be created and closed', async () => {
           kind: 'agent',
           tools: [
             'subagent_start',
-            'subagent_list',
-            'subagent_output',
-            'subagent_stop',
+            'subagent_close',
           ],
         },
       ],
@@ -95,9 +93,7 @@ test('canvas work nodes can be created and closed', async () => {
             kind: 'agent',
             tools: [
               'subagent_start',
-              'subagent_list',
-              'subagent_output',
-              'subagent_stop',
+              'subagent_close',
             ],
           };
         }
@@ -141,9 +137,7 @@ test('canvas work nodes can be created and closed', async () => {
     assert.equal(work.nodeConfig.task, 'do it');
     assert.deepEqual(work.nodeConfig.tools, [
       'subagent_start',
-      'subagent_list',
-      'subagent_output',
-      'subagent_stop',
+      'subagent_close',
     ]);
     assert.equal(runs.length, 1);
     assert.equal(runs[0].sessionId, work.id);

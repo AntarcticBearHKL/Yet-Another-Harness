@@ -198,10 +198,6 @@ const TOOL_I18N = {
     questions: '要提问的问题（1-5 个）',
     timeout_seconds: '定时模式：自动提交前的秒数（5-600，默认 60）',
   }),
-  subagent: t('子代理', 'task 的别名：一次性子代理，同步运行一次模型请求并返回结果。'),
-  task: t('子代理任务', '一次性子代理：同步运行一次模型请求并返回简洁结果。'),
-  call_omo_agent: t('调用子代理', '以 OMO 风格调用子代理，是 task 的别名。'),
-  delegate_task: t('委派任务', '把任务委派给子代理，是 task 的别名。'),
   glob: t('文件匹配', '按 glob 模式快速匹配文件（如 **/*.js），按修改时间排序返回路径。'),
   grep: t('内容搜索', '使用正则表达式在文件内容中搜索；可用 include 过滤文件，支持 content、files_with_matches、count 三种输出。', {
     output_mode: '输出模式：content、files_with_matches（默认）或 count',
@@ -222,10 +218,8 @@ const TOOL_I18N = {
   monitor_stop: t('停止监控', '停止被监控的后台命令。'),
   monitor_list: t('监控列表', '列出被监控的后台命令。'),
   monitor_output: t('监控输出', '读取被监控后台命令的输出。'),
-  subagent_start: t('启动子代理', '在独立只读会话中启动子代理并立即返回；子代理可使用工具完整运行。'),
-  subagent_list: t('子代理列表', '列出子代理会话、状态和结果预览。'),
-  subagent_output: t('子代理输出', '读取子代理会话的最终结果和状态。'),
-  subagent_stop: t('停止子代理', '停止正在运行的子代理。'),
+  subagent_start: t('启动 Subagent', '在独立只读会话中启动 Subagent 并立即返回；Subagent 可使用工具完整运行。'),
+  subagent_close: t('关闭 Subagent', '停止正在运行的 Subagent 并关闭其会话。'),
   worknode_create: t('创建对话', '在当前管理 node 下创建一个画布对话，选择 Agent、任务，并可收窄工具、技能或 MCP。'),
   worknode_close: t('关闭对话', '关闭一个画布对话：停止运行、归档会话并从画布移除。'),
 

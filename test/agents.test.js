@@ -50,9 +50,7 @@ test('agent profiles are restricted to subagent tools', () => {
   assert.equal(agents[0].kind, 'agent');
   assert.deepEqual(agents[0].tools, [
     'subagent_start',
-    'subagent_list',
-    'subagent_output',
-    'subagent_stop',
+    'subagent_close',
   ]);
 });
 

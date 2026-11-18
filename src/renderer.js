@@ -8,12 +8,7 @@ const MANAGER_AGENT_ID = 'manager';
 const MANAGER_AGENT_NAME = 'Manager';
 const AGENT_AGENT_ID = 'agent';
 const AGENT_AGENT_NAME = 'Agent';
-const SUBAGENT_TOOL_NAMES = [
-  'subagent_start',
-  'subagent_list',
-  'subagent_output',
-  'subagent_stop',
-];
+const SUBAGENT_TOOL_NAMES = ['subagent_start', 'subagent_close'];
 const EFFORT_LEVELS = ['low', 'high', 'max'];
 const DEFAULT_EFFORT = 'high';
 const NO_KEY_HINT = 'No API key. Open Settings to add one.';

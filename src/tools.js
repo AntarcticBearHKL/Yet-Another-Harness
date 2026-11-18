@@ -88,9 +88,7 @@ async function execute(name, args, context = null) {
       background_output: processTools.backgroundOutput,
       background_cancel: processTools.backgroundCancel,
       subagent_start: agentTools.subagentStartTool,
-      subagent_list: agentTools.subagentListTool,
-      subagent_output: agentTools.subagentOutputTool,
-      subagent_stop: agentTools.subagentStopTool,
+      subagent_close: agentTools.subagentCloseTool,
       worknode_create: worknodeTools.worknodeCreate,
       worknode_close: worknodeTools.worknodeClose,
       agile_list_boards: agileTools.agileListBoards,
@@ -126,10 +124,6 @@ async function execute(name, args, context = null) {
       monitor_stop: processTools.monitorStop,
       monitor_list: processTools.monitorList,
       monitor_output: processTools.monitorOutput,
-      task: agentTools.subagentTool,
-      subagent: agentTools.subagentTool,
-      call_omo_agent: agentTools.subagentTool,
-      delegate_task: agentTools.subagentTool,
       question: agentTools.questionTool,
       systeminfo: systemTools.systemInfoTool,
       SystemInfo: systemTools.systemInfoTool,
@@ -250,8 +244,8 @@ function statusLabel(name, args) {
   if (name === 'skill') {
     return value.name ? `skill: ${value.name}` : 'skill';
   }
-  if (name === 'task' || name === 'subagent' || name === 'call_omo_agent' || name === 'delegate_task') {
-    return value.description ? `${name}: ${value.description}` : name;
+  if (name === 'subagent_start' || name === 'subagent_close') {
+    return value.sessionId ? `${name}: ${value.sessionId}` : name;
   }
   if (name.startsWith('git_') || name.startsWith('worktree_')) {
     const detail = String(

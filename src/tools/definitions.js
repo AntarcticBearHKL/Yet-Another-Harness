@@ -465,82 +465,21 @@ const AGILE_DELETE_SKILL = fn(
   { skillId: str('Skill id') },
   ['skillId']
 );
-const TASK = fn(
-  'task',
-  'Quick one-shot subagent: runs one model request without tools and returns a concise result synchronously. Use subagent_start for a full subagent conversation with tools, a read-only transcript, and a result queued back into this conversation.',
-  {
-    description: str('A short 3-5 word description of the task'),
-    prompt: str('The task for the subagent to perform'),
-    subagent_type: str('Agent label (e.g. general, explore)'),
-    model: str('Optional model id'),
-    background: bool('Run in the background (currently synchronous)'),
-  },
-  ['description', 'prompt']
-);
-const SUBAGENT = fn(
-  'subagent',
-  'Quick one-shot subagent. Alias of task; use subagent_start for a full read-only subagent conversation with tools.',
-  {
-    agent: str('Agent label'),
-    description: str('A short 3-5 word label for the task'),
-    prompt: str('The task for the subagent to perform'),
-    model: str('Optional model id'),
-    sessionID: str('Optional session id'),
-    background: bool('Run in the background (currently synchronous)'),
-  },
-  ['agent', 'description', 'prompt']
-);
-const CALL_OMO_AGENT = fn(
-  'call_omo_agent',
-  'Call an OMO-style subagent with a prompt. Alias of task.',
-  {
-    description: str('A short description of the task'),
-    prompt: str('The task for the subagent'),
-    subagent_type: str('Agent label'),
-    model: str('Optional model id'),
-    background: bool('Run in the background (currently synchronous)'),
-  },
-  ['description', 'prompt']
-);
-const DELEGATE_TASK = fn(
-  'delegate_task',
-  'Delegate a task to a subagent. Alias of task.',
-  {
-    description: str('A short description of the task'),
-    prompt: str('The task for the subagent'),
-    subagent_type: str('Agent label'),
-    model: str('Optional model id'),
-    background: bool('Run in the background (currently synchronous)'),
-  },
-  ['description', 'prompt']
-);
-
 const SUBAGENT_START = fn(
   'subagent_start',
-  'Start a subagent in its own read-only conversation and return immediately. The subagent runs the full agent loop with tools; when it finishes, its result is queued back into this conversation as a follow-up prompt. Use fork=true to copy the current conversation into the subagent first; otherwise it starts a fresh conversation. Use this for tasks whose result should come back here. Use background_start for long-running processes that should keep running.',
+  'Start a Subagent in its own read-only conversation and return immediately. The Subagent runs the full agent loop with tools; when it finishes, its result is queued back into this conversation as a follow-up prompt. Use fork=true to copy the current conversation into the Subagent first; otherwise it starts a fresh conversation. Use subagent_close to stop and close it, and use background_start for long-running processes that should keep running.',
   {
-    prompt: str('The task for the subagent'),
-    name: str('Short name for the subagent conversation'),
-    fork: bool('Fork the current conversation into the subagent conversation'),
+    prompt: str('The task for the Subagent'),
+    name: str('Short name for the Subagent conversation'),
+    fork: bool('Fork the current conversation into the Subagent conversation'),
     agent: str('Subagent profile id or label (defaults to Build)'),
     note: str('Short note shown in the result'),
   },
   ['prompt']
 );
-const SUBAGENT_LIST = fn(
-  'subagent_list',
-  'List subagent conversations with their status and result preview.',
-  {}
-);
-const SUBAGENT_OUTPUT = fn(
-  'subagent_output',
-  'Read a subagent conversation’s final result and status.',
-  { sessionId: str('Subagent session id') },
-  ['sessionId']
-);
-const SUBAGENT_STOP = fn(
-  'subagent_stop',
-  'Stop a running subagent.',
+const SUBAGENT_CLOSE = fn(
+  'subagent_close',
+  'Stop a running Subagent and close its conversation.',
   { sessionId: str('Subagent session id') },
   ['sessionId']
 );
@@ -1089,7 +1028,6 @@ const OPENCODE = [
   HTML_VIEW,
   CHROME,
   QUESTION,
-  SUBAGENT,
 ];
 
 const OMO = [
@@ -1138,13 +1076,8 @@ const OMO = [
   MONITOR_STOP,
   MONITOR_LIST,
   MONITOR_OUTPUT,
-  TASK,
-  CALL_OMO_AGENT,
-  DELEGATE_TASK,
   SUBAGENT_START,
-  SUBAGENT_LIST,
-  SUBAGENT_OUTPUT,
-  SUBAGENT_STOP,
+  SUBAGENT_CLOSE,
 ];
 
 const WORKNODE_TOOLS = [

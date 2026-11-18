@@ -6,16 +6,11 @@ const MANAGER_AGENT_ID = 'manager';
 const MANAGER_AGENT_NAME = 'Manager';
 const AGENT_AGENT_ID = 'agent';
 const AGENT_AGENT_NAME = 'Agent';
-const SUBAGENT_TOOL_NAMES = [
-  'subagent_start',
-  'subagent_list',
-  'subagent_output',
-  'subagent_stop',
-];
+const SUBAGENT_TOOL_NAMES = ['subagent_start', 'subagent_close'];
 const DEFAULT_AGENT_PROMPT =
   'You are the default general-purpose YAH agent. Work directly in the current project, use tools when they help, keep replies concise, and ask the user with the question tool when a decision is genuinely ambiguous. Always format final replies as Markdown: use headings, lists, bold, inline code, and fenced code blocks when they make the answer easier to read.';
 const AGENT_AGENT_PROMPT =
-  'You are an Agent in YAH. You do not do the work yourself: you break the task into focused pieces, delegate each piece to a Subagent with subagent_start, and use subagent_list and subagent_output to collect the results. You only have the subagent tools; do not attempt file, shell, Git or browser work directly. Choose the Subagent profile that best fits the task and give it a concrete, self-contained prompt. If no specific profile is requested, omit the agent argument and the default Build worker is used. Keep the final answer concise and include what each Subagent produced.';
+  'You are an Agent in YAH. You do not do the work yourself: you break the task into focused pieces, delegate each piece to a Subagent with subagent_start, and close Subagents with subagent_close when they are no longer needed. You only have the subagent tools; do not attempt file, shell, Git or browser work directly. Choose the Subagent profile that best fits the task and give it a concrete, self-contained prompt. If no specific profile is requested, omit the agent argument and the default Build worker is used. Keep the final answer concise and include what each Subagent produced.';
 const LEGACY_BUILTIN_PROMPTS = [
   'You are the default general-purpose YAH agent. Work directly in the current project, use tools when they help, keep replies concise, and ask the user with the question tool when a decision is genuinely ambiguous.',
 ];

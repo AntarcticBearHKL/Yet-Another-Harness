@@ -38,11 +38,6 @@
       pattern: /background|monitor/i,
     },
     {
-      id: 'subagent',
-      label: 'subagent',
-      pattern: /^(subagent|delegate_task|call_omo_agent)/i,
-    },
-    {
       id: 'agile',
       label: 'Agile',
       pattern: /^agile_/i,
@@ -54,8 +49,13 @@
     },
     {
       id: 'canvas',
-      label: '画布',
+      label: 'Agent',
       pattern: /^worknode_/i,
+    },
+    {
+      id: 'subagent',
+      label: 'Subagent',
+      pattern: /^subagent_/i,
     },
   ];
 
@@ -86,13 +86,7 @@
     ['monitor_list', 'background'],
     ['monitor_output', 'background'],
     ['subagent_start', 'subagent'],
-    ['subagent_list', 'subagent'],
-    ['subagent_output', 'subagent'],
-    ['subagent_stop', 'subagent'],
-    ['task', 'subagent'],
-    ['subagent', 'subagent'],
-    ['call_omo_agent', 'subagent'],
-    ['delegate_task', 'subagent'],
+    ['subagent_close', 'subagent'],
     ['question', 'view'],
     ['session_list', 'session'],
     ['session_read', 'session'],

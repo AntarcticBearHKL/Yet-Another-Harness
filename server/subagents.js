@@ -300,7 +300,19 @@ function createSubagentService({ resolveAgent } = {}) {
     return true;
   }
 
-  return { start, list, output, stop };
+  function close(sessionId) {
+    const id = String(sessionId || '').trim();
+    if (!id) throw new Error('sessionId is required');
+    const session = store.getSession(id);
+    if (!session || !session.subagent) {
+      throw new Error('subagent session not found');
+    }
+    const stopped = stop(id);
+    store.archiveSubagent(id, 'closed');
+    return { ok: true, sessionId: id, stopped, closed: true };
+  }
+
+  return { start, list, output, stop, close };
 }
 
 module.exports = { createSubagentService };
