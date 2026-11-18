@@ -148,6 +148,7 @@ async function execute(name, args, context = null) {
       look_at: agentTools.lookAtTool,
       question: agentTools.questionTool,
       models: agentTools.modelsTool,
+      systeminfo: systemTools.systemInfoTool,
       SystemInfo: systemTools.systemInfoTool,
       system_info: systemTools.systemInfoTool,
       mouse: mouseTools.mouseTool,
@@ -345,7 +346,9 @@ function statusLabel(name, args) {
   if (name === 'models') {
     return value.query ? `models: ${value.query}` : 'models';
   }
-  if (name === 'SystemInfo' || name === 'system_info') return 'SystemInfo';
+  if (name === 'systeminfo' || name === 'SystemInfo' || name === 'system_info') {
+    return 'systeminfo';
+  }
   if (name === 'worktree_create') {
     return value.name ? `worktree_create: ${value.name}` : 'worktree_create';
   }

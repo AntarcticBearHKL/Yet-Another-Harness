@@ -574,7 +574,7 @@ function handleApi(req, res, url) {
       ? project.directories
       : [];
     tools
-      .execute('SystemInfo', '{}', { cwd: directories[0] || '' })
+      .execute('systeminfo', '{}', { cwd: directories[0] || '' })
       .then((text) => sendJson(res, 200, { text }))
       .catch((error) =>
         sendJson(res, 500, {

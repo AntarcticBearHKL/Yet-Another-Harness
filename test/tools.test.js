@@ -220,6 +220,17 @@ test('shell runs a command', async () => {
   assert.match(out, /yah-tools/);
 });
 
+test('interactive_bash is merged into shell', async () => {
+  const names = tools.definitions().map((item) => item.function.name);
+  assert.ok(names.includes('shell'));
+  assert.ok(!names.includes('interactive_bash'));
+  const out = await tools.execute(
+    'interactive_bash',
+    JSON.stringify({ command: 'echo yah-alias' })
+  );
+  assert.match(out, /yah-alias/);
+});
+
 test('status label is short and readable', () => {
   assert.equal(
     tools.statusLabel('web_search', '{"query":"rust slint"}'),

@@ -31,6 +31,7 @@ const TOOL_I18N = {
   session_rename: t('重命名会话', '重命名 YAH 会话；省略 sessionID 时重命名当前会话。'),
   models: t('模型列表', '搜索可用模型。'),
   SystemInfo: t('系统信息', '获取本地系统快照：日期、时间、大致位置、系统、终端、项目工作目录及其权限规则、系统语言。'),
+  systeminfo: t('系统信息', '获取本地系统快照：日期、时间、大致位置、系统、终端、项目工作目录及其权限规则、系统语言。'),
   mouse: t('鼠标控制', '控制真实的 Windows 鼠标，坐标使用物理屏幕像素，可移动、点击、双击、拖动和滚动。', {
     action: '鼠标操作：position、move、click、doubleclick、drag、scroll',
     button: '鼠标按键（默认左键）',

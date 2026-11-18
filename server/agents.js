@@ -19,6 +19,9 @@ const MAX_TOOLS = 200;
 const TOOL_ALIASES = {
   web_search: 'websearch',
   read_file: 'read',
+  interactive_bash: 'shell',
+  SystemInfo: 'systeminfo',
+  system_info: 'systeminfo',
 };
 
 function normalizeTools(raw) {

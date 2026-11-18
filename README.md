@@ -51,7 +51,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 所有菜单、浮层、工作区和表单共用同一套暖色表面：面板 18px、菜单 14px、卡片 12px、控件 9px 圆角；按钮、输入框、空状态、侧栏宽度和顶部间距统一，列表选中状态统一为暖色底（对话列表用圆点），不再在名字前加竖杠
 - 所有弹出框、菜单和工作区使用更透明的暖色磨砂背景，保留原有背景模糊效果；右键菜单、Agent 菜单、Skill 联想、设置 / 确认面板和工作区都使用同一套玻璃质感；文字和选中态保持清晰
 - 所有弹窗、面板和菜单不再显示顶部标题，只保留内容与操作；MCP 工作区、MCP 配置、usage 面板、问题面板和全文页也都没有标题栏
-- 每个对话顶部、第一条消息之前把 `MCP`、`SYSTEM PROMPT`、`SYSTEMINFO`、`SAFETY PROMPT`、`AGENTS.MD` 五个 block 按此顺序放在同一个上下文组里，组后与实际消息留出间隔；`SYSTEM PROMPT`、`SAFETY PROMPT`、`AGENTS.MD` 默认折叠，`SYSTEMINFO` 默认展开；点击标题即可折叠 / 展开，使用和对话「过程」组一致的圆点、hover 暖色底和高度过渡；折叠时只保留标题行，不显示内容，也没有右侧箭头，折叠状态随会话保存。`SYSTEM PROMPT` 显示当前会话所选 Agent 的提示词，没有时回退到会话 system prompt。`SYSTEMINFO` 打开对话时自动调用 `SystemInfo` 工具并把返回的纯文本注入 block，显示日期、时间、近似地理位置、操作系统、shell、项目工作目录（含只允许读写工作目录内文件、越界需要手动批准的警告）和系统语言，结果按会话和项目目录缓存。`SAFETY PROMPT` 读取会话的 `safetyPrompt`，目前为空。`AGENTS.md` / `agent.md` 在对话开始时从项目目录读取一次并随会话保存，之后文件变化不影响当前对话；内容会以 `# AGENTS.md` 注入 system prompt。任何内容块为空时只在标题行右侧显示 `EMPTY`，没有正文，也不能展开或折叠；AGENTS.md 为空时同样不会写进上下文
+- 每个对话顶部、第一条消息之前把 `MCP`、`SYSTEM PROMPT`、`SYSTEMINFO`、`SAFETY PROMPT`、`AGENTS.MD` 五个 block 按此顺序放在同一个上下文组里，组后与实际消息留出间隔；`SYSTEM PROMPT`、`SAFETY PROMPT`、`AGENTS.MD` 默认折叠，`SYSTEMINFO` 默认展开；点击标题即可折叠 / 展开，使用和对话「过程」组一致的圆点、hover 暖色底和高度过渡；折叠时只保留标题行，不显示内容，也没有右侧箭头，折叠状态随会话保存。`SYSTEM PROMPT` 显示当前会话所选 Agent 的提示词，没有时回退到会话 system prompt。`SYSTEMINFO` 打开对话时自动调用 `systeminfo` 工具并把返回的纯文本注入 block，显示日期、时间、近似地理位置、操作系统、shell、项目工作目录（含只允许读写工作目录内文件、越界需要手动批准的警告）和系统语言，结果按会话和项目目录缓存。`SAFETY PROMPT` 读取会话的 `safetyPrompt`，目前为空。`AGENTS.md` / `agent.md` 在对话开始时从项目目录读取一次并随会话保存，之后文件变化不影响当前对话；内容会以 `# AGENTS.md` 注入 system prompt。任何内容块为空时只在标题行右侧显示 `EMPTY`，没有正文，也不能展开或折叠；AGENTS.md 为空时同样不会写进上下文
 - 有弹窗（设置、raw 查看器、MCP、tool、改名/确认、全文磨砂页）打开时，右键等于关闭弹窗
 - 改名弹窗的输入框和项目名称输入框使用同一套透明毛玻璃：半透明暖白底 + 10px backdrop blur，面板本身继续使用统一的 glass panel
 - `question` 是系统工具：模型可以在执行中暂停并向你提问，一次最多 5 个问题，可分多轮；聊天底部会上滑一块磨砂提问面板，每个选项都能单选 / 多选，也可以自己输入答案；关闭面板等于取消这次提问
@@ -243,13 +243,13 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 
 YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（OMO）的工具；同名工具按 OMO 优先覆盖 OpenCode。
 
-- OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`SystemInfo`、`list_mcp_resources`、`read_mcp_resource`、`session_rename`、`models`
+- OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`systeminfo`、`list_mcp_resources`、`read_mcp_resource`、`session_rename`、`models`
 - Git（结构化、无 shell，统一放在工具的 Git 菜单）：`git_status`、`git_diff`、`git_log`、`git_show`、`git_blame`、`git_branch`、`git_checkout`、`git_add`、`git_commit`、`git_stash`、`git_fetch`、`git_pull`、`git_push`、`git_merge`、`git_remote`、`git_tag`、`git_restore`、`git_reset`、`git_revert`、`git_cherry_pick`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）、`skill`
-- OMO 常驻 / 条件工具：`session_list/read/search/info`、`task_create/get/list/update`、`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`subagent_start/list/output/stop`、`interactive_bash`、`task/subagent/call_omo_agent/delegate_task`、`create_goal/update_goal/get_goal`、`skill_mcp`、`look_at`、`team_*`
-- 兼容别名：`hashline_edit`；`read_file` 与 `web_search` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
+- OMO 常驻 / 条件工具：`session_list/read/search/info`、`task_create/get/list/update`、`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`subagent_start/list/output/stop`、`task/subagent/call_omo_agent/delegate_task`、`create_goal/update_goal/get_goal`、`skill_mcp`、`look_at`、`team_*`
+- 兼容别名：`hashline_edit`；`read_file`、`web_search`、`interactive_bash`、`SystemInfo`、`system_info` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
-- OMO 的 `team_*`、`background_*`、`monitor_*` 在 YAH 里是本地记录 / 进程管理版本；`background_*` 是长驻进程管理，不再把完成输出塞回对话；`task`/`subagent`/`call_omo_agent`/`delegate_task` 是单次子模型调用；`subagent_*` 是带只读对话、可 fork、完成后把结果塞回父对话的完整子代理；`interactive_bash` 在 Windows 上退化为普通 shell
+- OMO 的 `team_*`、`background_*`、`monitor_*` 在 YAH 里是本地记录 / 进程管理版本；`background_*` 是长驻进程管理，不再把完成输出塞回对话；`task`/`subagent`/`call_omo_agent`/`delegate_task` 是单次子模型调用；`subagent_*` 是带只读对话、可 fork、完成后把结果塞回父对话的完整子代理；`interactive_bash` 已合并为 `shell` 的隐藏别名
 
 ## Tool calling
 
@@ -271,7 +271,7 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 
 `question` 让模型在任务中途提问：一次调用最多 5 个问题，每个问题可带选项（`multiple: true` 支持多选），前端会自动追加「其他（自己输入）」。支持两种模式：`blocking`（默认）会一直暂停，直到用户回答或关闭；`timed` 需要同时提供 `timeout_seconds`（5-600，默认 60），问题面板右上角显示倒计时环和剩余秒数，用户操作面板内任何控件都会重置倒计时，倒计时结束会自动提交当前已选 / 已填的内容（可能为空），工具返回「计时结束 / 未回答」并让模型按自己的判断继续。答案通过 `POST /api/questions/:id` 回传，倒计时重置通过 `POST /api/questions/:id/heartbeat` 延长服务端兜底计时；关闭面板会返回 `tool error: The user dismissed this question`。
 
-`SystemInfo` 快速返回精简的本地系统快照（纯文本）：日期、时间（含 UTC 偏移）、近似地理位置（时区城市）、操作系统、shell、项目工作目录及其读写边界警告（只允许读写工作目录内的文件，越界需要用户手动批准）和系统语言。全部本地读取，不联网；对话顶部的 `SYSTEMINFO` block 会自动调用它并展示结果。
+`systeminfo` 快速返回精简的本地系统快照（纯文本）：日期、时间（含 UTC 偏移）、近似地理位置（时区城市）、操作系统、shell、项目工作目录及其读写边界警告（只允许读写工作目录内的文件，越界需要用户手动批准）和系统语言。全部本地读取，不联网；对话顶部的 `SYSTEMINFO` block 会自动调用它并展示结果。
 
 ## MCP
 

@@ -518,17 +518,6 @@ const AGILE_DELETE_SKILL = fn(
   { skillId: str('Skill id') },
   ['skillId']
 );
-const INTERACTIVE_BASH = fn(
-  'interactive_bash',
-  'Run a shell command (interactive tmux sessions are not available on Windows; this runs a normal shell command).',
-  {
-    command: str('Command to run'),
-    workdir: str('Working directory'),
-    timeout: num('Timeout in milliseconds'),
-  },
-  ['command']
-);
-
 const TASK = fn(
   'task',
   'Quick one-shot subagent: runs one model request without tools and returns a concise result synchronously. Use subagent_start for a full subagent conversation with tools, a read-only transcript, and a result queued back into this conversation.',
@@ -866,7 +855,7 @@ const CHROME = fn(
   ['action']
 );
 const SYSTEM_INFO = fn(
-  'SystemInfo',
+  'systeminfo',
   'Get a compact local system snapshot as plain text: date, time, approximate location, OS, shell, project working directory with its access rule, and system language. No network.',
   {}
 );
@@ -1312,7 +1301,6 @@ const OMO = [
   MONITOR_STOP,
   MONITOR_LIST,
   MONITOR_OUTPUT,
-  INTERACTIVE_BASH,
   TASK,
   CALL_OMO_AGENT,
   DELEGATE_TASK,

@@ -77,7 +77,7 @@
     ['websearch', 'search'],
     ['webfetch', 'search'],
     ['shell', 'system'],
-    ['interactive_bash', 'system'],
+    ['systeminfo', 'system'],
     ['mouse', 'system'],
     ['code_view', 'view'],
     ['pdf_view', 'view'],
