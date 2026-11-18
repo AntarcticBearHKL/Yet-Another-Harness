@@ -9008,10 +9008,10 @@ function renderCatalogCategories(data, selectedKind, page) {
       .filter((item) => item.count > 0);
     const otherCount = toolCounts.get('other') || 0;
     if (otherCount > 0) {
-      items.push({ id: 'tool:other', label: '其他', count: otherCount });
+      items.push({ id: 'tool:other', label: '画布', count: otherCount });
     }
     if (items.length === 0) {
-      items.push({ id: 'tool:other', label: '其他', count: 0 });
+      items.push({ id: 'tool:other', label: '画布', count: 0 });
     }
   } else {
     items = [
@@ -9420,7 +9420,7 @@ function agentToolGroups(allTools) {
     return toolGroupFor(fn).id === 'other';
   });
   if (other.length > 0) {
-    groups.push({ id: 'other', label: '其他', tools: other });
+    groups.push({ id: 'other', label: '画布', tools: other });
   }
   return groups;
 }

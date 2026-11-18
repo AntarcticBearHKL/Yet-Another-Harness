@@ -77,10 +77,35 @@ test('git tools are registered and grouped under the Git category', () => {
     TOOL_GROUPS.find((item) => item.id === 'agile').label,
     'Agile'
   );
+  assert.equal(TOOL_GROUPS.find((item) => item.id === 'view').label, '交互');
+  assert.equal(TOOL_GROUPS.find((item) => item.id === 'search').label, '网络');
   assert.equal(
-    TOOL_GROUPS.find((item) => item.id === 'view').label,
-    '交互显示'
+    TOOL_GROUPS.find((item) => item.id === 'background').label,
+    '任务'
   );
+  assert.equal(
+    TOOL_GROUPS.find((item) => item.id === 'subagent').label,
+    'subagent'
+  );
+  assert.deepEqual(
+    TOOL_GROUPS.filter((item) => !item.hidden).map((item) => item.id),
+    [
+      'system',
+      'file',
+      'search',
+      'git',
+      'view',
+      'background',
+      'subagent',
+      'agile',
+      'canvas',
+    ]
+  );
+  assert.ok(!TOOL_GROUPS.some((item) => item.id === 'browser'));
+  assert.equal(toolGroupFor({ name: 'chrome' }).id, 'view');
+  assert.equal(toolGroupFor({ name: 'worknode_message' }).id, 'canvas');
+  assert.equal(toolGroupFor({ name: 'team_layout' }).id, 'canvas');
+  assert.equal(toolGroupFor({ name: 'worknode_message' }).label, '画布');
   const push = GIT_TOOLS.find(
     (definition) => definition.function.name === 'git_push'
   );

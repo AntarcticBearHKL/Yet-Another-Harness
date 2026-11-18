@@ -8,9 +8,19 @@
 (function (root) {
   const TOOL_GROUPS = [
     {
-      id: 'agile',
-      label: 'Agile',
-      pattern: /^agile_/i,
+      id: 'system',
+      label: '系统',
+      pattern: /shell|exec|command|process|terminal|system|bash/i,
+    },
+    {
+      id: 'file',
+      label: '文件',
+      pattern: /file|read|write|edit|glob|grep|directory|path|patch/i,
+    },
+    {
+      id: 'search',
+      label: '网络',
+      pattern: /search|web|browse|fetch|http|url/i,
     },
     {
       id: 'git',
@@ -18,39 +28,29 @@
       pattern: /^(git_|worktree_)/i,
     },
     {
-      id: 'search',
-      label: '搜索',
-      pattern: /search|web|browse|fetch|http|url/i,
-    },
-    {
-      id: 'file',
-      label: '文件',
-      pattern: /file|read|write|edit|list|glob|grep|directory|path|patch/i,
-    },
-    {
       id: 'view',
-      label: '交互显示',
-      pattern: /view|code|pdf/i,
-    },
-    {
-      id: 'browser',
-      label: '浏览器',
-      pattern: /chrome|browser|devtools|playwright/i,
-    },
-    {
-      id: 'system',
-      label: '系统',
-      pattern: /shell|exec|command|process|terminal|system|bash/i,
+      label: '交互',
+      pattern: /view|code|pdf|chrome|browser|devtools|playwright/i,
     },
     {
       id: 'background',
-      label: '后台',
+      label: '任务',
       pattern: /background|monitor/i,
     },
     {
       id: 'subagent',
-      label: '子代理',
+      label: 'subagent',
       pattern: /^(subagent|delegate_task|call_omo_agent)/i,
+    },
+    {
+      id: 'agile',
+      label: 'Agile',
+      pattern: /^agile_/i,
+    },
+    {
+      id: 'canvas',
+      label: '画布',
+      pattern: /^worknode_|^team_layout$/i,
     },
     {
       id: 'agent',
@@ -82,7 +82,7 @@
     ['code_view', 'view'],
     ['pdf_view', 'view'],
     ['html_view', 'view'],
-    ['chrome', 'browser'],
+    ['chrome', 'view'],
     ['background_start', 'background'],
     ['background_list', 'background'],
     ['background_stop', 'background'],
@@ -160,7 +160,7 @@
       TOOL_GROUPS.find((group) => group.pattern.test(name)) ||
       TOOL_GROUPS.find((group) => group.pattern.test(description)) || {
         id: 'other',
-        label: '其他',
+        label: '画布',
       }
     );
   }
