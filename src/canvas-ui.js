@@ -1368,7 +1368,7 @@ function buildCanvasSystemNode(node) {
       clickTimer = setTimeout(() => {
         clickTimer = null;
         openSystemNodeWindow(node.id);
-      }, 240);
+      }, 350);
       return;
     }
     openSystemNodeWindow(node.id);
