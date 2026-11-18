@@ -48,21 +48,19 @@
       pattern: /^agile_/i,
     },
     {
-      id: 'canvas',
-      label: '画布',
-      pattern: /^worknode_|^team_layout$/i,
-    },
-    {
       id: 'agent',
       label: '代理',
-      hidden: true,
       pattern: /agent|task|subagent|skill|mcp|team|goal|question|model|worktree|look_at/i,
     },
     {
       id: 'session',
       label: '会话',
-      hidden: true,
       pattern: /session/i,
+    },
+    {
+      id: 'canvas',
+      label: '画布',
+      pattern: /^worknode_|^team_layout$/i,
     },
   ];
 
@@ -147,6 +145,20 @@
   ];
   for (const name of GIT_TOOL_NAMES) {
     TOOL_GROUP_BY_NAME.set(name, 'git');
+  }
+
+  const CANVAS_TOOL_NAMES = [
+    'worknode_create',
+    'worknode_adopt',
+    'worknode_update',
+    'worknode_start',
+    'worknode_status',
+    'worknode_message',
+    'worknode_stop',
+    'team_layout',
+  ];
+  for (const name of CANVAS_TOOL_NAMES) {
+    TOOL_GROUP_BY_NAME.set(name, 'canvas');
   }
 
   function toolGroupFor(fn) {
