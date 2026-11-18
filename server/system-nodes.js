@@ -206,6 +206,26 @@ function createSystemNodeService({
     );
   }
 
+  function appendStep(node, message, extra = {}) {
+    if (!node?.id) return node;
+    const current = store.getSystemNode(node.id);
+    if (!current) return node;
+    const steps = Array.isArray(current.payload?.steps)
+      ? current.payload.steps
+      : [];
+    steps.push({
+      at: Date.now(),
+      message: String(message || ''),
+      ...extra,
+    });
+    return updateNode(current.id, {
+      payload: {
+        ...(current.payload || {}),
+        steps: steps.slice(-100),
+      },
+    });
+  }
+
   function managerSession(managerId) {
     const session = store.getSession(managerId);
     return session && session.nodeRole === 'manager' ? session : null;
@@ -224,6 +244,12 @@ function createSystemNodeService({
           wipLimit: 2,
           retryLimit: 2,
           boardIds: [],
+          steps: [
+            {
+              at: Date.now(),
+              message: '调度器已启动，等待 mission',
+            },
+          ],
         },
       });
     }
@@ -249,6 +275,12 @@ function createSystemNodeService({
           taskIds: [...taskIds],
           counts: { total: taskIds.length, finished: 0, blocked: 0, active: 0 },
           reportMarkdown: '',
+          steps: [
+            {
+              at: Date.now(),
+              message: `Report Hub 已创建：${goal || taskIds.length + ' 个任务'}`,
+            },
+          ],
         },
       });
     } else if (
@@ -260,9 +292,17 @@ function createSystemNodeService({
         payload: { ...(node.payload || {}), goal, taskIds: [...taskIds] },
       });
     } else if (taskIds.length > 0) {
-      node = updateNode(node.id, {
-        payload: { ...(node.payload || {}), taskIds: [...taskIds] },
-      });
+      const currentIds = Array.isArray(node.payload?.taskIds)
+        ? node.payload.taskIds
+        : [];
+      const same =
+        currentIds.length === taskIds.length &&
+        currentIds.every((id, index) => id === taskIds[index]);
+      if (!same) {
+        node = updateNode(node.id, {
+          payload: { ...(node.payload || {}), taskIds: [...taskIds] },
+        });
+      }
     }
     return node;
   }
@@ -282,6 +322,7 @@ function createSystemNodeService({
     orchestrator = updateNode(orchestrator.id, {
       payload: { ...(orchestrator.payload || {}), boardIds, goals },
     });
+    appendStep(orchestrator, `Mission 已写入 Agile：${goal || boardId}`);
     const report = ensureReport(manager, boardId, goal, taskIds);
     return { orchestrator, report };
   }
@@ -327,7 +368,7 @@ function createSystemNodeService({
     const nextGoal = goal || node.payload?.goal || 'Mission';
     const reportMarkdown = buildReportMarkdown(nextGoal, tasks);
     const status = terminal ? 'ready' : 'collecting';
-    return updateNode(node.id, {
+    const updated = updateNode(node.id, {
       status,
       payload: {
         ...(node.payload || {}),
@@ -339,6 +380,12 @@ function createSystemNodeService({
         generatedAt: terminal ? Date.now() : null,
       },
     });
+    if (terminal && node.status !== 'ready') {
+      return appendStep(updated, '报告已生成或更新，等待阅读', {
+        kind: 'report',
+      });
+    }
+    return updated;
   }
 
   function markWorkNodeFailed(session, reason) {
@@ -365,6 +412,10 @@ function createSystemNodeService({
         workerActor
       );
       const report = reportNodeForTask({ ...task, managerId: session.managerId });
+      appendStep(report, `任务失败：${task.title}`, {
+        kind: 'error',
+        taskId: task.id,
+      });
       refreshReport(report, task.boardId, report?.payload?.goal || null);
     } catch (error) {
       console.error('mark work node failed', error);
@@ -429,7 +480,13 @@ function createSystemNodeService({
       );
     }
     report = reportNodeForTask({ ...task, managerId: session.managerId, reportId: report?.id });
-    if (report) refreshReport(report, task.boardId, report.payload?.goal || null);
+    if (report) {
+      appendStep(report, `收到任务结果：${task.title}（${status}）`, {
+        kind: 'result',
+        taskId: task.id,
+      });
+      refreshReport(report, task.boardId, report.payload?.goal || null);
+    }
     return { ok: true, taskId, status, reportId: report?.id || null };
   }
 
@@ -459,6 +516,14 @@ function createSystemNodeService({
         allowedDirs: strings(payload.allowedDirs, 50),
         requestedAt: Date.now(),
         sourceTitle: session.title || '',
+        steps: [
+          {
+            at: Date.now(),
+            message: `请求审批：${String(payload.tool || 'action')}${
+              payload.path ? ` · ${payload.path}` : ''
+            }`,
+          },
+        ],
       },
     });
   }
@@ -491,6 +556,12 @@ function createSystemNodeService({
         timeoutSeconds,
         requestedAt: Date.now(),
         sourceTitle: session.title || '',
+        steps: [
+          {
+            at: Date.now(),
+            message: `已发送 ${Array.isArray(payload.questions) ? payload.questions.length : 0} 个问题`,
+          },
+        ],
       },
     });
     if (mode === 'timed' && timeoutSeconds > 0) {
@@ -521,6 +592,12 @@ function createSystemNodeService({
           reason: String(payload.reason || ''),
         },
       });
+      const updated = store.getSystemNode(node.id);
+      appendStep(
+        updated,
+        payload.approved === true ? '审批已通过' : '审批已拒绝',
+        { kind: 'decision' }
+      );
     }
   }
 
@@ -548,6 +625,16 @@ function createSystemNodeService({
           timedOut: payload.timedOut === true,
         },
       });
+      const updated = store.getSystemNode(node.id);
+      appendStep(
+        updated,
+        payload.cancelled === true
+          ? '问卷已关闭'
+          : payload.timedOut === true
+            ? '问卷已过期'
+            : '问卷已回答',
+        { kind: 'decision' }
+      );
     }
   }
 
@@ -675,6 +762,11 @@ function createSystemNodeService({
           });
           watchWorkNode(created.workNode, report.id);
           active += 1;
+          appendStep(
+            orchestrator,
+            `已分发任务：${task.title} → ${agentName}`,
+            { kind: 'dispatch', taskId: task.id }
+          );
         } catch (error) {
           try {
             agile.moveTask(task.id, 'blocked', {
@@ -688,6 +780,11 @@ function createSystemNodeService({
           } catch {
             /* ignore failure recovery */
           }
+          appendStep(
+            orchestrator,
+            `任务阻塞：${task.title} · ${error.message}`,
+            { kind: 'error', taskId: task.id }
+          );
           refreshReport(report, boardId, report?.payload?.goal || 'Mission');
         }
       }
@@ -704,7 +801,10 @@ function createSystemNodeService({
           (session) => session.nodeRole === 'manager' && !session.archivedAt
         );
       for (const manager of managers) {
-        const orchestrator = findNode(manager.id, 'orchestrator');
+        let orchestrator = findNode(manager.id, 'orchestrator');
+        if (!orchestrator) {
+          orchestrator = ensureOrchestrator(manager);
+        }
         if (!orchestrator || orchestrator.status !== 'running') continue;
         try {
           await tickManager(manager, orchestrator);
@@ -749,13 +849,15 @@ function createSystemNodeService({
     const name = String(actionName || '').trim();
     if (node.type === 'report') {
       if (name === 'read') {
-        return updateNode(node.id, {
+        const updated = updateNode(node.id, {
           status: 'read',
           payload: { ...(node.payload || {}), readAt: Date.now() },
         });
+        return appendStep(updated, '报告已阅读', { kind: 'read' });
       }
       if (name === 'archive') {
-        return updateNode(node.id, { status: 'archived' });
+        const updated = updateNode(node.id, { status: 'archived' });
+        return appendStep(updated, '报告已归档', { kind: 'archive' });
       }
       if (name === 'build') {
         return refreshReport(node, node.missionId, node.payload?.goal);
@@ -801,9 +903,14 @@ function createSystemNodeService({
     }
     if (node.type === 'orchestrator') {
       if (name === 'pause' || name === 'resume') {
-        return updateNode(node.id, {
+        const updated = updateNode(node.id, {
           status: name === 'pause' ? 'paused' : 'running',
         });
+        return appendStep(
+          updated,
+          name === 'pause' ? '调度器已暂停' : '调度器已恢复',
+          { kind: 'control' }
+        );
       }
       throw new Error(`unknown orchestrator action: ${name}`);
     }

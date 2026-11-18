@@ -1035,6 +1035,32 @@ function systemNodeButton(label, action) {
   return button;
 }
 
+function systemNodeSteps(node) {
+  const steps = Array.isArray(node?.payload?.steps)
+    ? node.payload.steps
+    : [];
+  if (steps.length === 0) return null;
+  const section = el('section', 'system-node-steps-section');
+  section.append(el('div', 'system-node-section-label', '执行步骤'));
+  const list = el('div', 'system-node-steps');
+  for (const step of steps.slice(-100)) {
+    const row = el('div', 'system-node-step');
+    row.append(el('span', `system-node-step-dot ${step.kind || ''}`));
+    const body = el('div', 'system-node-step-body');
+    body.append(el('div', 'system-node-step-message', step.message || ''));
+    const meta = [];
+    if (step.at) meta.push(new Date(step.at).toLocaleTimeString());
+    if (step.taskId) meta.push(step.taskId);
+    if (meta.length) {
+      body.append(el('div', 'system-node-step-meta', meta.join(' · ')));
+    }
+    row.append(body);
+    list.append(row);
+  }
+  section.append(list);
+  return section;
+}
+
 function openSystemNode(nodeId) {
   const node = canvasState.systemNodes.find((item) => item.id === nodeId);
   if (!node) return;
@@ -1054,12 +1080,33 @@ function openSystemNode(nodeId) {
   meta.append(el('span', `system-node-state ${status.tone}`, status.label));
   if (node.missionId) meta.append(el('span', '', `Mission ${node.missionId}`));
   card.append(meta);
+  const steps = systemNodeSteps(node);
+  if (steps) card.append(steps);
 
   if (node.type === 'report') {
-    const body = el('pre', 'system-node-report');
-    body.textContent =
+    const counts = node.payload?.counts || {};
+    const summary = el('div', 'system-node-fields');
+    for (const [label, value] of [
+      ['目标', node.payload?.goal],
+      ['任务', `${counts.finished || 0}/${counts.total || 0} 完成`],
+      ['阻塞', String(counts.blocked || 0)],
+    ]) {
+      if (!value) continue;
+      const row = el('div', 'system-node-field');
+      row.append(el('span', 'system-node-field-label', label));
+      row.append(el('span', 'system-node-field-value', String(value)));
+      summary.append(row);
+    }
+    card.append(summary);
+    const body = el('div', 'system-node-report system-node-report-rendered');
+    const markdown =
       node.payload?.reportMarkdown ||
       '报告还在收集中。任务完成后会自动生成。';
+    if (typeof window.renderMarkdownContent === 'function') {
+      window.renderMarkdownContent(body, markdown);
+    } else {
+      body.textContent = markdown;
+    }
     card.append(body);
     const foot = el('div', 'system-node-modal-actions');
     if (node.status === 'ready') {
@@ -1080,6 +1127,7 @@ function openSystemNode(nodeId) {
       ['路径', payload.path],
       ['允许目录', Array.isArray(payload.allowedDirs) ? payload.allowedDirs.join(' · ') : ''],
       ['来源', payload.sourceTitle],
+      ['原因', payload.reason],
     ]) {
       if (!value) continue;
       const row = el('div', 'system-node-field');
@@ -1156,15 +1204,28 @@ function openSystemNode(nodeId) {
           closeSystemNodeModal();
         })
       );
-      foot.append(
-        systemNodeButton('关闭', async () => closeSystemNodeModal())
-      );
+      foot.append(systemNodeButton('关闭', async () => closeSystemNodeModal()));
       card.append(foot);
     }
-  } else {
-    const body = el('pre', 'system-node-report');
-    body.textContent = JSON.stringify(node.payload || {}, null, 2);
-    card.append(body);
+  } else if (node.type === 'orchestrator') {
+    const payload = node.payload || {};
+    const info = el('div', 'system-node-fields');
+    const roleMap = payload.roleMap || {};
+    for (const [label, value] of [
+      ['Mission', String(Array.isArray(payload.boardIds) ? payload.boardIds.length : 0)],
+      ['WIP', String(payload.wipLimit || 2)],
+      ['角色映射', Object.entries(roleMap).map(([role, name]) => `${role}→${name}`).join(' · ')],
+    ]) {
+      if (!value) continue;
+      const row = el('div', 'system-node-field');
+      row.append(el('span', 'system-node-field-label', label));
+      row.append(el('span', 'system-node-field-value', String(value)));
+      info.append(row);
+    }
+    card.append(info);
+    const foot = el('div', 'system-node-modal-actions');
+    foot.append(systemNodeButton('关闭', async () => closeSystemNodeModal()));
+    card.append(foot);
   }
   overlay.append(card);
   overlay.addEventListener('pointerdown', (event) => {

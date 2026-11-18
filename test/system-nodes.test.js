@@ -147,6 +147,16 @@ test('mission dispatch drives Agile, orchestrator and report hub', async () => {
     assert.match(ready.payload.reportMarkdown, /Login flow verified/);
     const read = service.action(ready.id, 'read');
     assert.equal(read.status, 'read');
+    const status = JSON.parse(
+      mission.missionStatus({}, { sessionId: 'm1' })
+    );
+    assert.equal(status.missions.length, 1);
+    assert.equal(status.missions[0].counts.finished, 2);
+    const reportResult = JSON.parse(
+      mission.missionReport({}, { sessionId: 'm1' })
+    );
+    assert.equal(reportResult.status, 'read');
+    assert.match(reportResult.reportMarkdown, /Login flow verified/);
 
     const approval = service.createNode({
       managerId: 'm1',

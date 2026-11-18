@@ -226,6 +226,12 @@ const TOOL_I18N = {
   worknode_create: t('创建对话', '在当前管理 node 下创建一个画布对话，按工作类型选择 Agent（通用、信息收集、程序员、测试员、文档写作、代码审查），并可收窄工具、技能或 MCP。'),
   worknode_close: t('关闭对话', '关闭一个画布对话：停止运行、归档会话并从画布移除。'),
   mission_dispatch: t('下达任务', '把任务直接写入 Agile：创建或复用迭代，写入带角色、依赖和验收标准的 Backlog 任务，并确保调度器和 Report Hub 系统 node。'),
+  mission_status: t('任务状态', '查看 mission 的各列任务数、任务角色与依赖、Report Hub 状态和调度器最近步骤。', {
+    boardId: 'mission / 迭代 ID（省略时查看全部）',
+  }),
+  mission_report: t('读取报告', '读取 mission 的 Report Hub：状态、计数、步骤日志和完整 Markdown 报告。', {
+    boardId: 'mission / 迭代 ID（省略时读取最新报告）',
+  }),
   worknode_result: t('提交任务结果', '提交 work node 的结构化结果；Report Hub 用它更新 Agile 任务并生成报告。', {
     taskId: 'Agile 任务 ID（默认当前任务）',
     status: '结果状态：done、failed 或 blocked',

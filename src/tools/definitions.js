@@ -1105,6 +1105,20 @@ const WORKNODE_TOOLS = [
     ['goal', 'tasks']
   ),
   fn(
+    'mission_status',
+    'Manager only. Inspect missions written by mission_dispatch: task counts by column, task roles and dependencies, Report Hub status, and recent orchestrator steps.',
+    {
+      boardId: str('Optional mission/Agile iteration id; omit for all missions this manager dispatched'),
+    }
+  ),
+  fn(
+    'mission_report',
+    'Manager only. Read the Report Hub for a mission: status, counts, step log and the full Markdown report describing how the work was completed.',
+    {
+      boardId: str('Mission/Agile iteration id; omit for the latest report'),
+    }
+  ),
+  fn(
     'worknode_result',
     'Submit the structured result of a work node. Call this when the task is complete, then stop. The Report Hub uses it to mark the Agile task finished or blocked and to build the mission report.',
     {

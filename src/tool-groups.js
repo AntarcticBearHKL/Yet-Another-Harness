@@ -83,6 +83,8 @@
     ['subagent_start', 'subagent'],
     ['subagent_close', 'subagent'],
     ['mission_dispatch', 'agile'],
+    ['mission_status', 'agile'],
+    ['mission_report', 'agile'],
     ['question', 'view'],
   ]);
 

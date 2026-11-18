@@ -274,8 +274,8 @@ const ROLE_SUBAGENTS = [
 ];
 
 const MANAGER_AGENT_PROMPT =
-  'You are the manager node in YAH. You analyze the user request, choose the Agent profiles that best match the work, and dispatch a mission into Agile with mission_dispatch. The orchestrator node reads the Agile Backlog, creates Agent work nodes by role, and a Report Hub node collects every structured result and builds the final report. Use worknode_create only for a manual override. Available Agent profiles: 通用 (full work toolset), 信息收集, 程序员, 测试员, 文档写作, 代码审查. Use the Agile tools to inspect or adjust the mission. Keep the user informed with concise progress summaries. Only dispatch when it helps; simple questions can be answered directly.' +
-  '\n\nRules:\n- Prefer mission_dispatch for multi-step work. It writes tasks into Agile Backlog; do not create every work node yourself.\n- Choose task roles by the type of work: research for 信息收集, programmer for 程序员, tester for 测试员, writer for 文档写作, reviewer for 代码审查.\n- Add dependencies and acceptance criteria so the orchestrator can respect order and the Report Hub can verify completion.\n- You may narrow a work node to a subset of the chosen Agent tools, skills or MCP servers, but never grant beyond it.\n- Work nodes share the manager working directories. Keep tasks scoped to those directories.\n- Do not create duplicate tasks or missions for the same request.\n- When the Report Hub is ready, summarize the mission status and point the user to the report node.';
+  'You are the manager node in YAH. You do not do the work yourself: you analyze the user request, choose the Agent profiles that best match the work, and dispatch a mission into Agile with mission_dispatch. The orchestrator node reads the Agile Backlog, creates Agent work nodes by role, and the Report Hub collects every structured result and builds the final report. Use mission_status to inspect progress and mission_report to read the finished report. Available Agent profiles: 通用, 信息收集, 程序员, 测试员, 文档写作, 代码审查. Keep the user informed with concise progress summaries. Only dispatch when it helps; simple questions can be answered directly.' +
+  '\n\nRules:\n- You do not read files, search the web, run commands, or implement work directly. All work goes through mission_dispatch and the Agent nodes.\n- Prefer mission_dispatch for multi-step work. It writes tasks into Agile Backlog; do not create every work node yourself.\n- Choose task roles by the type of work: research for 信息收集, programmer for 程序员, tester for 测试员, writer for 文档写作, reviewer for 代码审查.\n- Add dependencies and acceptance criteria so the orchestrator can respect order and the Report Hub can verify completion.\n- Use mission_status to check progress and mission_report when the user asks for the report.\n- Use worknode_close only to stop a stuck work node. Use question only when a decision is genuinely needed from the user.\n- Do not create duplicate tasks or missions for the same request.\n- When the Report Hub is ready, summarize the mission status and point the user to the report page.';
 
 const MANAGER_AGENT = {
   id: MANAGER_AGENT_ID,
@@ -284,44 +284,10 @@ const MANAGER_AGENT = {
   prompt: MANAGER_AGENT_PROMPT,
   tools: [
     'mission_dispatch',
-    'worknode_create',
+    'mission_status',
+    'mission_report',
     'worknode_close',
-    'agile_list_boards',
-    'agile_get_board',
-    'agile_create_board',
-    'agile_delete_board',
-    'agile_list_tasks',
-    'agile_get_task',
-    'agile_create_task',
-    'agile_create_tasks',
-    'agile_update_task',
-    'agile_move_task',
-    'agile_move_tasks',
-    'agile_delete_task',
-    'agile_set_blocked_reason',
-    'agile_claim_task',
-    'agile_release_task',
-    'agile_heartbeat_task',
-    'agile_claim_next',
-    'agile_digest_notes',
-    'agile_undigest_notes',
-    'agile_list_columns',
-    'agile_get_board_snapshot',
-    'agile_list_events',
-    'agile_wait_for_event',
-    'agile_list_roadmap',
-    'agile_list_skills',
-    'agile_get_skill',
-    'agile_create_skill',
-    'agile_update_skill',
-    'agile_delete_skill',
     'question',
-    'read',
-    'glob',
-    'grep',
-    'systeminfo',
-    'websearch',
-    'webfetch',
   ],
   builtin: true,
 };

@@ -89,6 +89,8 @@ async function execute(name, args, context = null) {
       worknode_close: worknodeTools.worknodeClose,
       worknode_result: missionTools.worknodeResult,
       mission_dispatch: missionTools.missionDispatch,
+      mission_status: missionTools.missionStatus,
+      mission_report: missionTools.missionReport,
       agile_list_boards: agileTools.agileListBoards,
       agile_get_board: agileTools.agileGetBoard,
       agile_create_board: agileTools.agileCreateBoard,
@@ -247,6 +249,9 @@ function statusLabel(name, args) {
   }
   if (name === 'mission_dispatch') {
     return value.goal ? `mission_dispatch: ${String(value.goal).slice(0, 50)}` : 'mission_dispatch';
+  }
+  if (name === 'mission_status' || name === 'mission_report') {
+    return value.boardId ? `${name}: ${value.boardId}` : name;
   }
   if (name === 'worknode_result') {
     return value.taskId ? `worknode_result: ${value.taskId}` : 'worknode_result';

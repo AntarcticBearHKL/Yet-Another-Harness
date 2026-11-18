@@ -69,7 +69,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - `/fork` 系统 Skill：在当前工作目录把当前对话分叉成新的可编辑对话，命名 `#n-对话名`，原对话保持不变；在输入框输入 `/fork [名字]` 或从斜杠列表选择
 - Agile 工作区：从 Tab 工作区空白处的右键菜单打开；桌面端打开一个独立窗口（网页端回退为全屏页面），窗口位置和大小会记住。固定四列 Backlog / In Progress / Blocked / Finished；左侧分组和迭代，支持折叠、改名、新建、删除；卡片可以打开任务表单，标题和描述只读，备注仍可添加，备注在 In Progress 期间锁定；Finished 任务被加备注会自动回到 Backlog 并标记返工。支持任务搜索、WIP 上限、迭代日期/目标、显示更新时间和默认 OpenAgile Skill。看板数据存在 `%APPDATA%\yah\agile.json`；Manager 通过 `mission_dispatch` 写任务，调度器负责发放
 - Agile 原生工具：工具面板新增「Agile」分类，`agile_*` 工具替代原 OpenAgile MCP 的看板、分组、迭代、任务、批量移动、备注消化、认领/释放、阻塞、WIP 设置、事件等待和技能接口；工具遵循固定四列、未消化备注不能开工、Finished 不能删除、只有每组最后一个迭代可以删除等规则
-- 系统 node：Manager group 右侧显示非聊天的方块，包括调度器、Report Hub、审批和问卷。调度器每 1.5 秒扫描 mission 的 Agile Backlog，按角色、依赖、WIP 和领取状态创建 Agent work node；Report Hub 接收 `worknode_result` 的结构化结果，更新 Agile 并生成可读报告；审批和问卷复用 runner 的 `tool.approval` / `tool.question`，在 group 中等待操作后回传
+- 系统 node：Manager group 右侧显示非聊天的方块，包括调度器、Report Hub、审批和问卷。每个 Manager 启动后自动出现调度器；mission 创建后自动出现 Report Hub，审批和问卷在需要时出现。点击任意系统 node 会打开统一风格的详情页，显示状态、执行步骤和该类型的专属内容（报告正文、审批详情或问卷表单）。调度器每 1.5 秒扫描 mission 的 Agile Backlog，按角色、依赖、WIP 和领取状态创建 Agent work node；Report Hub 接收 `worknode_result` 的结构化结果，更新 Agile 并生成可读报告；审批和问卷复用 runner 的 `tool.approval` / `tool.question`，在 group 中等待操作后回传
 - 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
 - 输入框（Space）里：新对话（还没有任何消息）上方只显示 MCP 摘要按钮；已有消息的对话上方只显示排队消息框。生成中仍可继续输入，消息按顺序排队、一行一条，左侧拖动排序，行尾是编辑 / 立即发送 / 删除三个纯图标按钮；当前生成结束后自动按顺序处理队列；这两块都是和输入框同宽的圆角矩形
 - 新建对话默认关闭所有 MCP 服务器：MCP 摘要显示 `0/总数`，需要时在对话顶部的 MCP 配置页里手动打开；开关按会话持久化
@@ -83,6 +83,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧按「管理 / Agent / Subagent」分组列出固定配置，右侧显示名称、提示词和工具权限；内置角色包括通用、信息收集、程序员、测试员、文档写作、代码审查，Subagent 提供对应的角色配置和通用 Build；配置完全只读，不能新增、删除或修改
 - Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；每个角色只勾选与其工作类型匹配的工具，Agent 角色保留 `subagent_start` / `subagent_close` 以便把局部任务交给 Subagent；工具权限和工具目录一样左右分栏：左列第一行是「允许所有工具」，下面是分类，右列第一行是搜索框，下面是当前分类的工具；可以浏览分类和搜索，但复选框只展示状态、不响应点击，显示保持原样不做灰色禁用；MCP 工具不进入 Agent 工具权限，也不受 Agent 工具勾选限制，仍由对话的 MCP 开关控制，并继续在 tool 面板里查看
 - Manager 的主流程是 `mission_dispatch`：把目标、任务、角色、依赖和验收标准直接写入 Agile，创建调度器和 Report Hub；Work node 完成后调用 `worknode_result`，Report Hub 汇总结果并把任务移到 Finished 或 Blocked
+- Manager 的工具权限被收窄为 `mission_dispatch`、`mission_status`、`mission_report`、`worknode_close`、`question`；它不读文件、不搜索、不执行命令，也不直接写代码，所有执行都交给 Agent / Subagent
 - 输入框底部从左到右是：当前 Agent 名字（如 `Build`，琥珀色、左对齐，可点击展开暖色磨砂下拉菜单）、写死的模型名 `deepseek-v4.1-flash-1017`（带下拉箭头，目前只有这一个选项）、思考强度滑条、极简回车图标发送按钮；输入框默认不显示 placeholder。每个对话必须有一个 Agent，新对话默认使用「Build」；按对话保存选择，新对话继承同项目上一个对话的 Agent；对话开始（有第一条消息）后 Agent 固定，选择器变灰锁定，不能再切换；排队消息会保存自己的 Agent
 - 思考强度滑条是一条极简平面细线 + 小圆点，不显示「思考强度」文字和 low/high/max 挡位文字，鼠标指针保持默认；拖动时圆点自由跟随指针、没有吸附阈限，松开后自动吸附到最近的 `low` / `high` / `max` 挡位；也可以用方向键切换，选择保存在 `settings.json`，发送时作为 `reasoning_effort` 传给 DeepSeek
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
@@ -252,7 +253,7 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 - Git（结构化、无 shell，统一放在工具的 Git 菜单）：`git_status`、`git_diff`、`git_log`、`git_show`、`git_blame`、`git_branch`、`git_checkout`、`git_add`、`git_commit`、`git_stash`、`git_fetch`、`git_pull`、`git_push`、`git_merge`、`git_remote`、`git_tag`、`git_restore`、`git_reset`、`git_revert`、`git_cherry_pick`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）
 - OMO 常驻 / 条件工具：`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`subagent_start/close`
-- 任务闭环：`mission_dispatch`（Manager 写 Agile）、`worknode_result`（work node 提交结构化结果）
+- 任务闭环：`mission_dispatch`（Manager 写 Agile）、`mission_status` / `mission_report`（Manager 查看进度和报告）、`worknode_result`（work node 提交结构化结果）
 - 兼容别名：`hashline_edit`；`read_file`、`web_search`、`interactive_bash`、`SystemInfo`、`system_info` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
 - `background_*`、`monitor_*` 是长驻进程管理，不再把完成输出塞回对话；`subagent_start` 启动带完整工具的子代理，完成后把结果塞回父对话，`subagent_close` 停止并关闭它；`interactive_bash` 已合并为 `shell` 的隐藏别名

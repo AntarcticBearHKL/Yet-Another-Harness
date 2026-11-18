@@ -1727,6 +1727,78 @@ body.canvas-space .canvas-stage.panning {
   color: #9d3f35;
 }
 
+.system-node-steps-section {
+  margin: 0 18px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(252, 246, 238, 0.45);
+}
+
+.system-node-section-label {
+  margin-bottom: 7px;
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.system-node-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.system-node-step {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.system-node-step-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #b7a999;
+}
+
+.system-node-step-dot.dispatch {
+  background: #5b8def;
+}
+
+.system-node-step-dot.result {
+  background: #6f9b68;
+}
+
+.system-node-step-dot.error {
+  background: #d46b5f;
+}
+
+.system-node-step-dot.decision,
+.system-node-step-dot.report {
+  background: #b96f3d;
+}
+
+.system-node-step-body {
+  min-width: 0;
+}
+
+.system-node-step-message {
+  color: var(--text-soft);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.system-node-step-meta {
+  margin-top: 2px;
+  color: var(--faint);
+  font-size: 9px;
+}
+
 .system-node-report {
   overflow: auto;
   flex: 1;
@@ -1738,6 +1810,16 @@ body.canvas-space .canvas-stage.panning {
   color: var(--text-soft);
   font: 12px/1.65 var(--mono);
   white-space: pre-wrap;
+}
+
+.system-node-report-rendered {
+  font: inherit;
+  white-space: normal;
+}
+
+.system-node-report-rendered .md-body {
+  font-size: 12px;
+  line-height: 1.65;
 }
 
 .system-node-fields,

@@ -171,8 +171,141 @@ function worknodeResult(args = {}, context = null) {
   }
 }
 
+function missionStatus(args = {}, context = null) {
+  const manager = managerFor(context || args.context);
+  if (!manager) return error('only a manager node can inspect a mission');
+  if (typeof providers.getAgileStore !== 'function') {
+    return error('Agile store is not configured');
+  }
+  if (!providers.systemNodeService) {
+    return error('system node service is not configured');
+  }
+  const nodes = providers.systemNodeService.list(manager.id);
+  const orchestrator = nodes.find((node) => node.type === 'orchestrator');
+  const wanted = text(args.boardId);
+  const boardIds = wanted
+    ? [wanted]
+    : Array.isArray(orchestrator?.payload?.boardIds)
+      ? orchestrator.payload.boardIds
+      : [];
+  if (boardIds.length === 0) {
+    return JSON.stringify(
+      {
+        ok: true,
+        managerId: manager.id,
+        orchestrator: orchestrator
+          ? {
+              id: orchestrator.id,
+              status: orchestrator.status,
+              steps: orchestrator.payload?.steps || [],
+            }
+          : null,
+        missions: [],
+      },
+      null,
+      2
+    );
+  }
+  let agile;
+  try {
+    agile = providers.getAgileStore(manager.id);
+  } catch (statusError) {
+    return error(statusError.message);
+  }
+  const missions = [];
+  for (const boardId of boardIds) {
+    try {
+      const snapshot = agile.snapshot(boardId);
+      const tasks = snapshot.tasks || [];
+      const report = nodes.find(
+        (node) => node.type === 'report' && node.missionId === boardId
+      );
+      missions.push({
+        boardId,
+        goal: report?.payload?.goal || snapshot.board?.goal || '',
+        board: snapshot.board,
+        counts: {
+          total: tasks.length,
+          backlog: tasks.filter((task) => task.column === 'backlog').length,
+          progress: tasks.filter((task) => task.column === 'progress').length,
+          blocked: tasks.filter((task) => task.column === 'blocked').length,
+          finished: tasks.filter((task) => task.column === 'finished').length,
+        },
+        report: report
+          ? {
+              id: report.id,
+              status: report.status,
+              counts: report.payload?.counts || null,
+            }
+          : null,
+        tasks: tasks.map((task) => ({
+          id: task.id,
+          title: task.title,
+          role: task.role,
+          column: task.column,
+          workNodeId: task.workNodeId || null,
+          dependsOn: task.dependsOn || [],
+          result: task.result ? task.result.status : null,
+        })),
+      });
+    } catch {
+      /* skip a board that no longer exists */
+    }
+  }
+  return JSON.stringify(
+    {
+      ok: true,
+      managerId: manager.id,
+      orchestrator: orchestrator
+        ? {
+            id: orchestrator.id,
+            status: orchestrator.status,
+            steps: orchestrator.payload?.steps || [],
+          }
+        : null,
+      missions,
+    },
+    null,
+    2
+  );
+}
+
+function missionReport(args = {}, context = null) {
+  const manager = managerFor(context || args.context);
+  if (!manager) return error('only a manager node can read a mission report');
+  if (!providers.systemNodeService) {
+    return error('system node service is not configured');
+  }
+  const boardId = text(args.boardId);
+  const reports = providers.systemNodeService
+    .list(manager.id)
+    .filter((node) => node.type === 'report')
+    .sort((left, right) => (right.updatedAt || 0) - (left.updatedAt || 0));
+  const report = boardId
+    ? reports.find((node) => node.missionId === boardId)
+    : reports[0];
+  if (!report) return error('report not found');
+  return JSON.stringify(
+    {
+      ok: true,
+      id: report.id,
+      boardId: report.missionId,
+      title: report.title,
+      status: report.status,
+      counts: report.payload?.counts || null,
+      goal: report.payload?.goal || '',
+      reportMarkdown: report.payload?.reportMarkdown || '',
+      steps: report.payload?.steps || [],
+    },
+    null,
+    2
+  );
+}
+
 module.exports = {
   configure,
   missionDispatch,
+  missionStatus,
+  missionReport,
   worknodeResult,
 };
