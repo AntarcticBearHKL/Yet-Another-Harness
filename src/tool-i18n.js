@@ -28,7 +28,6 @@ const TOOL_I18N = {
   }),
   web_search: t('网页搜索', '使用 DuckDuckGo 搜索公开网页。'),
   patch: t('应用补丁', '使用 git apply 把统一 diff 补丁应用到工作区。'),
-  session_rename: t('重命名会话', '重命名 YAH 会话；省略 sessionID 时重命名当前会话。'),
   SystemInfo: t('系统信息', '获取本地系统快照：日期、时间、大致位置、系统、终端、项目工作目录及其权限规则、系统语言。'),
   systeminfo: t('系统信息', '获取本地系统快照：日期、时间、大致位置、系统、终端、项目工作目录及其权限规则、系统语言。'),
   mouse: t('鼠标控制', '控制真实的 Windows 鼠标，坐标使用物理屏幕像素，可移动、点击、双击、拖动和滚动。', {
@@ -205,10 +204,6 @@ const TOOL_I18N = {
   }),
   edit: t('编辑文件', '使用读取结果中的 LINE#ID 锚点精确编辑文件；支持批量修改、删除、重命名，也支持简单的 oldString/newString 编辑。'),
   hashline_edit: t('编辑文件', '使用 LINE#ID 锚点精确编辑文件。'),
-  session_list: t('会话列表', '列出 YAH 会话的 ID、标题和消息数。'),
-  session_read: t('读取会话', '读取 YAH 会话的消息；省略 sessionID 时读取当前会话。'),
-  session_search: t('搜索会话', '在所有 YAH 会话的消息中搜索文本。'),
-  session_info: t('会话信息', '显示会话的项目、消息数、MCP 开关、折叠状态和队列。'),
   background_start: t('启动后台任务', '启动长时间运行的后台进程（开发服务器、监听器等），立即返回 ID、备注和启动信息。'),
   background_list: t('后台任务列表', '列出当前对话的后台任务及状态、耗时、备注和命令。'),
   background_stop: t('停止后台任务', '按 ID 停止正在运行的后台任务。'),

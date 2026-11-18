@@ -4,7 +4,6 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const store = require('../store');
 
 const DATA_DIR = path.join(
   process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
@@ -54,90 +53,6 @@ function loadTeams() {
 
 function saveTeams(teams) {
   writeJson(TEAMS_FILE, { teams });
-}
-
-function chats() {
-  return store.loadChats();
-}
-
-function findSession(sessionId) {
-  const data = chats();
-  const id = String(sessionId || '').trim();
-  if (id) return data.sessions.find((session) => session.id === id) || null;
-  return data.sessions[data.current] || null;
-}
-
-function sessionList() {
-  const data = chats();
-  return data.sessions
-    .map(
-      (session, index) =>
-        `${index === data.current ? '*' : ' '} ${session.id}  ${session.title}  (${session.msgs.length} messages)`
-    )
-    .join('\n');
-}
-
-function sessionRead(args) {
-  const session = findSession(args.sessionID || args.sessionId);
-  if (!session) return 'tool error: session not found';
-  const offset = Math.max(0, Number(args.offset) || 0);
-  const limit = Math.max(1, Math.min(100, Number(args.limit) || 30));
-  const page = session.msgs.slice(offset, offset + limit);
-  const body = page
-    .map((msg, index) => {
-      const role = String(msg.role || '').toUpperCase();
-      const text = String(msg.text || '').trim();
-      return `--- ${offset + index} ${role} ---\n${text || '(empty)'}`;
-    })
-    .join('\n\n');
-  return `${session.title} (${session.id})\n${body}${
-    offset + page.length < session.msgs.length
-      ? `\n\n… truncated; use offset=${offset + page.length}`
-      : ''
-  }`;
-}
-
-function sessionSearch(args) {
-  const query = String(args.query || '').trim();
-  if (!query) return 'tool error: session_search requires "query"';
-  const needle = query.toLowerCase();
-  const data = chats();
-  const hits = [];
-  for (const session of data.sessions) {
-    for (let index = 0; index < session.msgs.length; index += 1) {
-      const msg = session.msgs[index];
-      const text = String(msg.text || '');
-      if (!text.toLowerCase().includes(needle)) continue;
-      const at = text.toLowerCase().indexOf(needle);
-      hits.push(
-        `${session.title} (${session.id}) #${index} ${msg.role}\n  …${text
-          .slice(Math.max(0, at - 80), at + 160)
-          .replace(/\s+/g, ' ')}…`
-      );
-      if (hits.length >= 20) break;
-    }
-    if (hits.length >= 20) break;
-  }
-  return hits.length ? hits.join('\n\n') : `No matches for "${query}".`;
-}
-
-function sessionInfo(args) {
-  const session = findSession(args.sessionID || args.sessionId);
-  if (!session) return 'tool error: session not found';
-  const project = chats().projects.find((item) => item.id === session.projectId);
-  return JSON.stringify(
-    {
-      id: session.id,
-      title: session.title,
-      project: project?.name || session.projectId,
-      messages: session.msgs.length,
-      mcpDisabled: session.mcpDisabled || [],
-      foldState: session.foldState || null,
-      pendingQueue: session.pendingQueue || [],
-    },
-    null,
-    2
-  );
 }
 
 function taskCreate(args) {
@@ -352,10 +267,6 @@ function teamMemberStatus(args, status) {
 }
 
 module.exports = {
-  sessionList,
-  sessionRead,
-  sessionSearch,
-  sessionInfo,
   taskCreate,
   taskGet,
   taskList,

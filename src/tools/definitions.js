@@ -148,28 +148,6 @@ const PATCH = fn(
   ['patchText']
 );
 
-const SESSION_LIST = fn('session_list', 'List YAH sessions with id, title, and message count.', {});
-const SESSION_READ = fn(
-  'session_read',
-  'Read messages from a YAH session. Omit sessionID for the current session.',
-  {
-    sessionID: str('Session id'),
-    offset: num('0-based message offset'),
-    limit: num('Maximum messages (default 30, max 100)'),
-  }
-);
-const SESSION_SEARCH = fn(
-  'session_search',
-  'Search message text across YAH sessions.',
-  { query: str('Text to search for'), sessionID: str('Optional session id') },
-  ['query']
-);
-const SESSION_INFO = fn(
-  'session_info',
-  'Show metadata for a YAH session: project, message count, MCP switches, fold state, queue.',
-  { sessionID: str('Session id') }
-);
-
 const BACKGROUND_START = fn(
   'background_start',
   'Start a long-running background process (dev server, watcher, npm run dev, a server that must stay up) and return immediately with its id, note and startup info. The process keeps running so it can keep serving; it is not a way to run a task and get a result. Use subagent_start for tasks whose result should come back to the conversation. Manage it with background_list, background_output and background_stop.',
@@ -533,12 +511,6 @@ QUESTION.function.parameters.properties.mode.enum = ['blocking', 'timed'];
 QUESTION.function.parameters.properties.timeout_seconds.minimum = 5;
 QUESTION.function.parameters.properties.timeout_seconds.maximum = 600;
 
-const SESSION_RENAME = fn(
-  'session_rename',
-  'Rename a YAH session. Omit sessionID to rename the current session.',
-  { sessionID: str('Session id'), title: str('New session title') },
-  ['title']
-);
 const HTML_VIEW = fn(
   'html_view',
   'Create an interactive HTML presentation and open it in a separate viewer window. HTML, CSS and JavaScript run, and forms, modals and same-origin assets are available. The page gets YAH cream typography by default and can use CSS variables such as --background, --surface-card, --text, --dim, --faint, --line, --accent, --accent-deep, --radius, --font and --mono.',
@@ -1020,7 +992,6 @@ const OPENCODE = [
   WEBFETCH,
   WEBSEARCH,
   PATCH,
-  SESSION_RENAME,
   SYSTEM_INFO,
   MOUSE,
   CODE_VIEW,
@@ -1034,10 +1005,6 @@ const OMO = [
   GLOB,
   GREP,
   EDIT,
-  SESSION_LIST,
-  SESSION_READ,
-  SESSION_SEARCH,
-  SESSION_INFO,
   BACKGROUND_START,
   BACKGROUND_LIST,
   BACKGROUND_STOP,

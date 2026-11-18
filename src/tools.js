@@ -7,7 +7,6 @@ const { guardPath } = require('./tools/guard');
 const { mergedDefinitions } = require('./tools/definitions');
 const files = require('./tools/files');
 const processTools = require('./tools/process');
-const stateTools = require('./tools/state');
 const agentTools = require('./tools/agent');
 const webTools = require('./tools/web');
 const systemTools = require('./tools/system-info');
@@ -77,11 +76,6 @@ async function execute(name, args, context = null) {
       shell: processTools.shellTool,
       interactive_bash: processTools.shellTool,
       webfetch: webTools.webfetchTool,
-      session_list: stateTools.sessionList,
-      session_read: stateTools.sessionRead,
-      session_search: stateTools.sessionSearch,
-      session_info: stateTools.sessionInfo,
-      session_rename: agentTools.sessionRename,
       background_start: processTools.backgroundStart,
       background_list: processTools.backgroundList,
       background_stop: processTools.backgroundStop,
@@ -262,14 +256,6 @@ function statusLabel(name, args) {
     return detail ? `${name}: ${detail}` : name;
   }
   if (name === 'patch') return 'patch';
-  if (name === 'session_list') return 'session_list';
-  if (name === 'session_read' || name === 'session_info' || name === 'session_rename') {
-    return value.sessionID ? `${name}: ${value.sessionID}` : name;
-  }
-  if (name === 'session_search') {
-    const query = String(value.query ?? '').slice(0, 40);
-    return query ? `session_search: ${query}` : 'session_search';
-  }
   if (name.startsWith('background_') || name.startsWith('monitor_')) {
     const label = value.id || value.command;
     return label ? `${name}: ${String(label).slice(0, 40)}` : name;

@@ -84,7 +84,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 输入框底部从左到右是：当前 Agent 名字（如 `Build`，琥珀色、左对齐，可点击展开暖色磨砂下拉菜单）、写死的模型名 `deepseek-v4.1-flash-1017`（带下拉箭头，目前只有这一个选项）、思考强度滑条、极简回车图标发送按钮；输入框默认不显示 placeholder。每个对话必须有一个 Agent，新对话默认使用「Build」；按对话保存选择，新对话继承同项目上一个对话的 Agent；对话开始（有第一条消息）后 Agent 固定，选择器变灰锁定，不能再切换；排队消息会保存自己的 Agent
 - 思考强度滑条是一条极简平面细线 + 小圆点，不显示「思考强度」文字和 low/high/max 挡位文字，鼠标指针保持默认；拖动时圆点自由跟随指针、没有吸附阈限，松开后自动吸附到最近的 `low` / `high` / `max` 挡位；也可以用方向键切换，选择保存在 `settings.json`，发送时作为 `reasoning_effort` 传给 DeepSeek
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
-- tool 和 Skill 面板是无标题的左右分栏：tool 页左侧按分类列出内置工具（搜索 / 文件 / 系统），代理和会话类工具不在 tool 面板显示（仍可用于 Agent），右侧每个工具是一张独立卡片，默认折叠，只显示名称、参数数量和 chevron；点击展开说明和参数，一次最多只展开一个工具。Skill 页使用同样的分类侧栏和折叠卡片：左侧平铺系统、本地分类（内置 / 用户 / 绘画等，由 frontmatter `category` 决定）和 MCP 服务器（显示为 `MCP · 名称`），右侧每个 Skill 是一张和工具相同的卡片，默认折叠，展开后显示说明、固定指令和 MCP 参数；MCP 工具只出现在独立的 MCP 工作区，不混进 tool 面板；MCP 工作区左侧服务器、右侧概览 / 工具 / 资源 / 提示词 / 日志，概览是第一个 tab；没有内容时显示空状态
+- tool 和 Skill 面板是无标题的左右分栏：tool 页左侧按分类列出内置工具（搜索 / 文件 / 系统），代理类工具不在 tool 面板显示（仍可用于 Agent），右侧每个工具是一张独立卡片，默认折叠，只显示名称、参数数量和 chevron；点击展开说明和参数，一次最多只展开一个工具。Skill 页使用同样的分类侧栏和折叠卡片：左侧平铺系统、本地分类（内置 / 用户 / 绘画等，由 frontmatter `category` 决定）和 MCP 服务器（显示为 `MCP · 名称`），右侧每个 Skill 是一张和工具相同的卡片，默认折叠，展开后显示说明、固定指令和 MCP 参数；MCP 工具只出现在独立的 MCP 工作区，不混进 tool 面板；MCP 工作区左侧服务器、右侧概览 / 工具 / 资源 / 提示词 / 日志，概览是第一个 tab；没有内容时显示空状态
 - Agent、tool、Skill、MCP 四个工作区共用一套字体层级：15px 标题、13.5px 条目名称、13px 正文、12px 紧凑说明、11px 次要信息和 10.5px 分组标签；侧栏、卡片圆角、悬停和选中态使用同一套样式
 - 聊天里的 MCP 工具调用显示为「MCP 调用」，不会和内置工具的「工具调用」混在一起；调用参数和返回结果仍然合并在同一个卡片里；工具返回后右侧显示 `ok` / `error` 圆角标签，错误卡片带红色侧边和浅红背景，过程组标题会汇总错误数量
 - 所有空状态（无对话、无消息、无工具/Skill/MCP、raw 为空、全文为空）统一在可用区域居中，颜色比正文淡一档
@@ -157,7 +157,7 @@ src/main.js        Electron 壳：窗口、拖动/缩放、全文窗口、拉起
 src/preload.js     只暴露窗口拖动/缩放和全文窗口能力
 src/deepseek.js    OpenCode Go SSE + tool_calls 累积 + agent loop（后端）
 src/tools.js       工具注册表：OpenCode + OMO 合并、MCP 路由、渲染标签
-src/tools/         hashline、文件/搜索、shell/后台、会话/任务/目标、子模型、web、agile、git 工具模块
+src/tools/         hashline、文件/搜索、shell/后台、任务/目标、子模型、web、agile、git 工具模块
 src/tools/git.js   结构化 Git 工具（execFile + argv，禁用 shell 拼接；危险操作需 confirm）
 src/tool-groups.js 工具目录分组（敏捷、Git、搜索、文件、系统等）
 src/tools/guard.js 项目目录路径守卫：越界时暂停工具并等待人工审批
@@ -243,10 +243,10 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 
 YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（OMO）的工具；同名工具按 OMO 优先覆盖 OpenCode。
 
-- OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`systeminfo`、`session_rename`
+- OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`systeminfo`
 - Git（结构化、无 shell，统一放在工具的 Git 菜单）：`git_status`、`git_diff`、`git_log`、`git_show`、`git_blame`、`git_branch`、`git_checkout`、`git_add`、`git_commit`、`git_stash`、`git_fetch`、`git_pull`、`git_push`、`git_merge`、`git_remote`、`git_tag`、`git_restore`、`git_reset`、`git_revert`、`git_cherry_pick`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）
-- OMO 常驻 / 条件工具：`session_list/read/search/info`、`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`subagent_start/close`
+- OMO 常驻 / 条件工具：`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`subagent_start/close`
 - 兼容别名：`hashline_edit`；`read_file`、`web_search`、`interactive_bash`、`SystemInfo`、`system_info` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
 - `background_*`、`monitor_*` 是长驻进程管理，不再把完成输出塞回对话；`subagent_start` 启动带完整工具的子代理，完成后把结果塞回父对话，`subagent_close` 停止并关闭它；`interactive_bash` 已合并为 `shell` 的隐藏别名

@@ -97,12 +97,10 @@ test('git tools are registered and grouped under the Git category', () => {
       'view',
       'background',
       'agile',
-      'session',
       'canvas',
       'subagent',
     ]
   );
-  assert.equal(TOOL_GROUPS.find((item) => item.id === 'session').label, '会话');
   assert.equal(TOOL_GROUPS.find((item) => item.id === 'canvas').label, 'Agent');
   assert.equal(toolGroupFor({ name: 'question' }).id, 'view');
   assert.ok(!TOOL_GROUPS.some((item) => item.id === 'browser'));

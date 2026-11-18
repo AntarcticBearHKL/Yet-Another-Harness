@@ -1,7 +1,5 @@
 'use strict';
 
-const store = require('../store');
-
 let providers = {
   skillService: null,
   mcpManager: null,
@@ -149,28 +147,10 @@ async function questionTool(args, context = null) {
   return `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`;
 }
 
-function sessionRename(args) {
-  const chats = store.loadChats();
-  const id = String(args.sessionID || '').trim();
-  const session = id
-    ? chats.sessions.find((item) => item.id === id)
-    : chats.sessions[chats.current];
-  if (!session) return 'tool error: session not found';
-  if (session.nodeRole === 'manager') {
-    return 'tool error: the manager node title is fixed to Manager';
-  }
-  const title = String(args.title || '').trim();
-  if (!title) return 'tool error: title is required';
-  session.title = title;
-  store.saveStructure(chats);
-  return `Renamed ${session.id} to "${title}"`;
-}
-
 module.exports = {
   configure,
   subagentStartTool,
   subagentCloseTool,
   questionTool,
   normalizeQuestions,
-  sessionRename,
 };

@@ -107,7 +107,6 @@ test('merged catalog includes OMO-priority and OpenCode tools', () => {
     'shell',
     'webfetch',
     'question',
-    'session_list',
     'monitor_start',
     'background_start',
     'background_list',

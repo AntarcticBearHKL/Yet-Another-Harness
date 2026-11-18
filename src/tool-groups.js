@@ -43,11 +43,6 @@
       pattern: /^agile_/i,
     },
     {
-      id: 'session',
-      label: '会话',
-      pattern: /session/i,
-    },
-    {
       id: 'canvas',
       label: 'Agent',
       pattern: /^worknode_/i,
@@ -88,11 +83,6 @@
     ['subagent_start', 'subagent'],
     ['subagent_close', 'subagent'],
     ['question', 'view'],
-    ['session_list', 'session'],
-    ['session_read', 'session'],
-    ['session_search', 'session'],
-    ['session_info', 'session'],
-    ['session_rename', 'session'],
   ]);
 
   const GIT_TOOL_NAMES = [
