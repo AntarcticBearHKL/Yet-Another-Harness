@@ -437,6 +437,7 @@ const api = {
   dragEnd: () => shell?.dragEnd?.(),
   isMaximized: () => shell?.isMaximized?.() ?? Promise.resolve(false),
   openAgileWindow: (managerId) => shell?.openAgileWindow?.(managerId),
+  openSystemNodeWindow: (nodeId) => shell?.openSystemNodeWindow?.(nodeId),
   openConfigWindow: (kind) => shell?.openConfigWindow?.(kind),
   openArchiveWindow: (sessionId) => shell?.openArchiveWindow?.(sessionId),
   openChatWindow: (sessionId, options) =>
@@ -11135,6 +11136,7 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   const panelKind = String(params.get('panel') || '').trim();
   const archiveSessionId = String(params.get('archive') || '').trim();
+  const systemNodeId = String(params.get('systemNode') || '').trim();
   if (archiveSessionId) {
     state.archiveWindow = true;
     document.body.classList.add('archive-window');
@@ -11158,7 +11160,7 @@ async function boot() {
     );
     if (index >= 0) state.current = index;
     setupChatWindow();
-  } else if (api.isElectron) {
+  } else if (api.isElectron && !systemNodeId) {
     state.homeWindow = true;
     document.body.classList.add('home-window');
   }
@@ -11168,6 +11170,12 @@ async function boot() {
   if (!state.archiveWindow) connectBackgroundEvents();
   applySettings();
   await loadAgents();
+  if (systemNodeId) {
+    document.body.classList.add('system-node-window');
+    document.title = 'YAH - Node';
+    setTimeout(() => window.openSystemNodePage?.(systemNodeId), 0);
+    return;
+  }
   if (state.archiveWindow) {
     setTimeout(() => window.openArchivePage?.(archiveSessionId), 0);
     return;

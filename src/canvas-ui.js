@@ -1074,11 +1074,14 @@ function systemNodeSteps(node) {
   return section;
 }
 
-function openSystemNode(nodeId) {
-  const node = canvasState.systemNodes.find((item) => item.id === nodeId);
-  if (!node) return;
-  closeSystemNodeModal();
-  const overlay = el('div', 'system-node-overlay');
+function buildSystemNodeCard(node, options = {}) {
+  const onClose =
+    typeof options.onClose === 'function'
+      ? options.onClose
+      : closeSystemNodeModal;
+  function closeSystemNodeModal() {
+    onClose();
+  }
   const card = el('div', 'system-node-modal');
   const head = el('header', 'system-node-modal-head');
   head.append(el('div', 'system-node-modal-kicker', canvasSystemNodeType(node)));
@@ -1264,11 +1267,50 @@ function openSystemNode(nodeId) {
     foot.append(systemNodeButton('关闭', async () => closeSystemNodeModal()));
     card.append(foot);
   }
-  overlay.append(card);
-  overlay.addEventListener('pointerdown', (event) => {
-    if (event.target === overlay) closeSystemNodeModal();
-  });
-  document.body.append(overlay);
+  return card;
+}
+
+function closeSystemNodeWindow() {
+  if (api.isElectron) {
+    api.close();
+    return;
+  }
+  document.querySelector('.system-node-page')?.remove();
+}
+
+function openSystemNodeWindow(nodeId) {
+  const id = String(nodeId || '').trim();
+  if (!id) return;
+  if (api.isElectron) {
+    if (api.openSystemNodeWindow) {
+      void api.openSystemNodeWindow(id);
+    } else {
+      console.error('system node window is not available in this build');
+    }
+    return;
+  }
+  void openSystemNodePage(id);
+}
+
+async function openSystemNodePage(nodeId) {
+  let node = null;
+  try {
+    const data = await requestJson(
+      `/api/system-nodes/${encodeURIComponent(nodeId)}`
+    );
+    node = data?.node || null;
+  } catch (error) {
+    console.error('load system node failed', error);
+  }
+  if (!node) return;
+  document.querySelector('.system-node-page')?.remove();
+  const page = el('div', 'system-node-page');
+  page.append(
+    buildSystemNodeCard(node, {
+      onClose: closeSystemNodeWindow,
+    })
+  );
+  document.body.append(page);
 }
 
 function buildCanvasSystemNode(node) {
@@ -1305,22 +1347,22 @@ function buildCanvasSystemNode(node) {
     );
   } else if (node.type === 'questionnaire' && node.status === 'pending') {
     actions.append(
-      systemNodeButton('回答', async () => openSystemNode(node.id))
+      systemNodeButton('回答', async () => openSystemNodeWindow(node.id))
     );
   } else if (node.type === 'report' && node.status !== 'collecting') {
     actions.append(
-      systemNodeButton('打开报告', async () => openSystemNode(node.id))
+      systemNodeButton('打开报告', async () => openSystemNodeWindow(node.id))
     );
   } else {
     actions.append(
-      systemNodeButton('查看', async () => openSystemNode(node.id))
+      systemNodeButton('查看', async () => openSystemNodeWindow(node.id))
     );
   }
   article.append(actions);
   article.addEventListener('pointerdown', (event) => event.stopPropagation());
   article.addEventListener('click', (event) => {
     if (event.target.closest('button')) return;
-    openSystemNode(node.id);
+    openSystemNodeWindow(node.id);
   });
   return article;
 }
@@ -2860,6 +2902,8 @@ window.refreshCanvas = refreshCanvas;
 window.reloadCanvas = reloadCanvas;
 window.createCanvasManagerNode = createCanvasManagerNode;
 window.openCanvasNodeMenu = openCanvasNodeMenu;
+window.openSystemNodePage = openSystemNodePage;
+window.openSystemNodeWindow = openSystemNodeWindow;
 window.openCanvasFrameMenu = openCanvasFrameMenu;
 window.openCanvasWorkspaceMenu = openCanvasWorkspaceMenu;
 

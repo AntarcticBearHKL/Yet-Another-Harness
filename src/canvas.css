@@ -1650,15 +1650,62 @@ body.canvas-space .canvas-stage.panning {
   background: rgba(185, 111, 61, 0.16);
 }
 
-.system-node-overlay {
+body.system-node-window {
+  background: transparent;
+}
+
+body.system-node-window #app {
+  display: none;
+}
+
+.system-node-page {
   position: fixed;
+  inset: var(--window-inset, 0px);
+  z-index: 4000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 18px 20px;
+  border: 1px solid rgba(74, 54, 40, 0.16);
+  border-radius: 18px;
+  background: var(--solid);
+  box-shadow:
+    var(--window-shadow),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+body.web .system-node-page,
+body.maximized .system-node-page {
   inset: 0;
-  z-index: 3200;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(40, 29, 21, 0.26);
-  backdrop-filter: blur(9px);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.system-node-page .system-node-modal {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  max-height: none;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.system-node-page .system-node-modal-head {
+  padding: 0 0 12px;
+  -webkit-app-region: drag;
+}
+
+.system-node-page .system-node-close,
+.system-node-page .system-node-modal-actions,
+.system-node-page .system-node-modal-actions button {
+  -webkit-app-region: no-drag;
 }
 
 .system-node-modal {

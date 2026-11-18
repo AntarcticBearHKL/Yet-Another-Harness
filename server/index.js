@@ -816,6 +816,21 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && pathname.startsWith('/api/system-nodes/')) {
+    const nodeId = decodeURIComponent(
+      pathname.slice('/api/system-nodes/'.length)
+    );
+    const node = systemNodeService
+      .list()
+      .find((item) => item.id === nodeId);
+    if (!node) {
+      sendJson(res, 404, { error: 'system node not found' });
+      return true;
+    }
+    sendJson(res, 200, { node });
+    return true;
+  }
+
   if (
     req.method === 'POST' &&
     pathname.startsWith('/api/system-nodes/') &&

@@ -52,6 +52,7 @@ const contentWindows = new Map();
 const chatWindows = new Map();
 const configWindows = new Map();
 const archiveWindows = new Map();
+const systemNodeWindows = new Map();
 const windowBoundsTargets = new Map();
 const windowBoundsTimers = new Map();
 let windowBoundsStore = null;
@@ -490,6 +491,68 @@ function openConfigWindow(kind) {
   return win.id;
 }
 
+function openSystemNodeWindow(nodeId) {
+  const id = String(nodeId || '').trim();
+  if (!id) return null;
+  const existing = systemNodeWindows.get(id);
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore();
+    existing.show();
+    existing.focus();
+    return existing.id;
+  }
+
+  const boundsKey = `system-node:${id}`;
+  const bounds = boundsForWindow(boundsKey, {
+    width: 760,
+    height: 760,
+    minWidth: 520,
+    minHeight: 520,
+  });
+  const win = new BrowserWindow({
+    ...bounds,
+    minWidth: 520,
+    minHeight: 520,
+    title: 'YAH - Node',
+    icon: path.join(__dirname, '..', 'assets', 'yah.ico'),
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    roundedCorners: false,
+    thickFrame: true,
+    hasShadow: false,
+    show: false,
+    resizable: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      spellcheck: false,
+    },
+  });
+  attachWindowBounds(boundsKey, win);
+
+  systemNodeWindows.set(id, win);
+  win.loadURL(
+    `${LOCAL_URL}/?systemNode=${encodeURIComponent(id)}&shell=electron`
+  );
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed()) win.show();
+  });
+  win.on('closed', () => {
+    if (systemNodeWindows.get(id) === win) systemNodeWindows.delete(id);
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event) => {
+    event.preventDefault();
+  });
+  return win.id;
+}
+
 function openArchiveWindow(sessionId) {
   const id = String(sessionId || '').trim();
   if (!id) return null;
@@ -721,6 +784,10 @@ function createWindow() {
       if (!win.isDestroyed()) win.close();
     }
     configWindows.clear();
+    for (const win of [...systemNodeWindows.values()]) {
+      if (!win.isDestroyed()) win.close();
+    }
+    systemNodeWindows.clear();
     for (const win of [...archiveWindows.values()]) {
       if (!win.isDestroyed()) win.close();
     }
@@ -801,6 +868,9 @@ if (gotLock) {
       return true;
     });
     ipcMain.handle('agile:open', (_event, managerId) => openAgileWindow(managerId));
+    ipcMain.handle('system-node:open', (_event, nodeId) =>
+      openSystemNodeWindow(nodeId)
+    );
     ipcMain.handle('config:open', (_event, kind) => openConfigWindow(kind));
     ipcMain.handle('archive:open', (_event, sessionId) =>
       openArchiveWindow(sessionId)

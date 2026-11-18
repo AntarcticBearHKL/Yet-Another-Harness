@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('yah', {
   openContent: (payload) => ipcRenderer.invoke('content:open', payload),
   askViewer: (payload) => ipcRenderer.invoke('viewer:ask', payload),
   openAgileWindow: (managerId) => ipcRenderer.invoke('agile:open', managerId),
+  openSystemNodeWindow: (nodeId) =>
+    ipcRenderer.invoke('system-node:open', nodeId),
   openConfigWindow: (kind) => ipcRenderer.invoke('config:open', kind),
   openArchiveWindow: (sessionId) =>
     ipcRenderer.invoke('archive:open', sessionId),
