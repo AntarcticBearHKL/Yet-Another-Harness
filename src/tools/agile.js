@@ -73,6 +73,10 @@ function agileCreateTask(args = {}, context = null) {
       title: args.title,
       description: args.description,
       assignee: args.assignee,
+      role: args.role,
+      acceptance: args.acceptance,
+      dependsOn: args.dependsOn,
+      autoDispatch: args.autoDispatch,
       actor: actorFor(args),
     })
   );
@@ -94,6 +98,10 @@ function agileUpdateTask(args = {}, context = null) {
       title: args.title,
       description: args.description,
       assignee: args.assignee,
+      role: args.role,
+      acceptance: args.acceptance,
+      dependsOn: args.dependsOn,
+      autoDispatch: args.autoDispatch,
       blockedReason: args.blockedReason,
       actor: actorFor(args),
     })

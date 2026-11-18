@@ -579,6 +579,8 @@ const api = {
   onGoalUpdated: (callback) => subscribeEvent('goal.updated', callback),
   onWorknodesChanged: (callback) =>
     subscribeEvent('worknodes.changed', callback),
+  onSystemNodesChanged: (callback) =>
+    subscribeEvent('systemnodes.changed', callback),
   onCompaction: (callback) => subscribeEvent('compaction.done', callback),
   onChatDone: (callback) => subscribeEvent('run.done', callback),
   onChatError: (callback) => subscribeEvent('run.error', callback),
@@ -11192,6 +11194,9 @@ async function boot() {
   void loadUsage();
   void loadMcpServers();
   if (state.homeWindow) {
+    setTimeout(() => window.openCanvas?.(), 0);
+  }
+  if (params.get('canvas') === '1') {
     setTimeout(() => window.openCanvas?.(), 0);
   }
 }

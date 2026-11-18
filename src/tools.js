@@ -15,11 +15,13 @@ const chromeTools = require('./tools/chrome');
 const viewerTools = require('./tools/viewer');
 const agileTools = require('./tools/agile');
 const worknodeTools = require('./tools/worknode');
+const missionTools = require('./tools/mission');
 const gitTools = require('./tools/git');
 
 function configure(next = {}) {
   agentTools.configure(next);
   worknodeTools.configure(next);
+  missionTools.configure(next);
 }
 
 // 免费 websearch：DuckDuckGo 公开 HTML 端点，不需要 API key。
@@ -85,6 +87,8 @@ async function execute(name, args, context = null) {
       subagent_close: agentTools.subagentCloseTool,
       worknode_create: worknodeTools.worknodeCreate,
       worknode_close: worknodeTools.worknodeClose,
+      worknode_result: missionTools.worknodeResult,
+      mission_dispatch: missionTools.missionDispatch,
       agile_list_boards: agileTools.agileListBoards,
       agile_get_board: agileTools.agileGetBoard,
       agile_create_board: agileTools.agileCreateBoard,
@@ -240,6 +244,12 @@ function statusLabel(name, args) {
   }
   if (name === 'subagent_start' || name === 'subagent_close') {
     return value.sessionId ? `${name}: ${value.sessionId}` : name;
+  }
+  if (name === 'mission_dispatch') {
+    return value.goal ? `mission_dispatch: ${String(value.goal).slice(0, 50)}` : 'mission_dispatch';
+  }
+  if (name === 'worknode_result') {
+    return value.taskId ? `worknode_result: ${value.taskId}` : 'worknode_result';
   }
   if (name.startsWith('git_') || name.startsWith('worktree_')) {
     const detail = String(

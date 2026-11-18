@@ -14,6 +14,7 @@ let providers = {
   skillService: null,
   mcpManager: null,
   notify: null,
+  systemNodeService: null,
 };
 
 const WORKNODE_WIDTH = 300;
@@ -290,34 +291,34 @@ async function startWorkNode(workNode, task) {
   }
 }
 
-async function worknodeCreate(args = {}, context = null) {
-  const manager = managerFor(context || args.context);
-  if (!manager) return error('only a manager node can create work nodes');
-  const title = asText(args.title) || 'Work node';
-  const task = asText(args.task);
-  const agent = resolveAgent(args.agentId || AGENT_AGENT_ID);
+async function createManagedWorkNode(manager, options = {}) {
+  const title = asText(options.title) || 'Work node';
+  const task = asText(options.task);
+  const agent = resolveAgent(options.agentId || AGENT_AGENT_ID);
   if (!agent) {
-    return error(
-      `agent not found: ${args.agentId || AGENT_AGENT_ID}. Choose an Agent profile.`
+    throw new Error(
+      `agent not found: ${options.agentId || AGENT_AGENT_ID}. Choose an Agent profile.`
     );
   }
   if (agent.kind !== 'agent') {
-    return error('work nodes require an Agent profile');
+    throw new Error('work nodes require an Agent profile');
   }
   if (isManagerAgent(agent)) {
-    return error('manager Agents cannot run as work nodes');
+    throw new Error('manager Agents cannot run as work nodes');
   }
-  const tools = normalizeToolsForAgent(agent, args.tools);
-  const skills = normalizeSkills(args.skills);
-  const mcpDisabled = mcpDisabledFor(args.mcp) || [];
+  const tools = normalizeToolsForAgent(agent, options.tools);
+  const skills = normalizeSkills(options.skills);
+  const mcpDisabled = mcpDisabledFor(options.mcp) || [];
   const nodeConfig = {
     kind: 'work',
     directories: managerDirectories(manager),
     files: managerFiles(manager),
     task,
+    taskId: options.taskId ? String(options.taskId) : null,
+    reportId: options.reportId ? String(options.reportId) : null,
     tools,
     skills,
-    mcp: Array.isArray(args.mcp) ? args.mcp.map(String) : null,
+    mcp: Array.isArray(options.mcp) ? options.mcp.map(String) : null,
   };
   const id = crypto.randomUUID();
   store.createSession({
@@ -338,26 +339,50 @@ async function worknodeCreate(args = {}, context = null) {
   } catch (canvasError) {
     console.error('work node canvas placement failed', canvasError);
   }
+  providers.systemNodeService?.watchWorkNode?.(
+    workNode,
+    options.reportId || null
+  );
   let started = null;
-  if (args.start !== false && task) {
+  if (options.start !== false && task) {
     started = await startWorkNode(workNode, task);
   }
   notify({ managerId: manager.id, nodeId: id });
-  return JSON.stringify(
-    {
-      ok: true,
-      id,
-      title: workNode.title,
-      agent: agent.name,
-      tools: tools.length,
-      skills: Array.isArray(skills) ? skills.length : null,
-      mcpDisabled: mcpDisabled || [],
-      status: nodeStatus(store.getSession(id)),
-      started,
-    },
-    null,
-    2
-  );
+  return {
+    ok: true,
+    id,
+    title: workNode.title,
+    agent: agent.name,
+    agentId: agent.id,
+    tools: tools.length,
+    skills: Array.isArray(skills) ? skills.length : null,
+    mcpDisabled: mcpDisabled || [],
+    status: nodeStatus(store.getSession(id)),
+    started,
+    workNode,
+  };
+}
+
+async function worknodeCreate(args = {}, context = null) {
+  const manager = managerFor(context || args.context);
+  if (!manager) return error('only a manager node can create work nodes');
+  try {
+    const created = await createManagedWorkNode(manager, {
+      title: args.title,
+      task: args.task,
+      agentId: args.agentId,
+      tools: args.tools,
+      skills: args.skills,
+      mcp: args.mcp,
+      start: args.start,
+      taskId: args.taskId,
+      reportId: args.reportId,
+    });
+    const { workNode, ...payload } = created;
+    return JSON.stringify(payload, null, 2);
+  } catch (createError) {
+    return error(createError.message);
+  }
 }
 
 function worknodeClose(args = {}, context = null) {
@@ -369,6 +394,7 @@ function worknodeClose(args = {}, context = null) {
   const ids = store.sessionSubtreeIds(workNode.id);
   const stoppedIds = [];
   for (const id of ids) {
+    providers.systemNodeService?.unwatchWorkNode?.(id);
     const runId = providers.runner?.activeRunForSession?.(id);
     if (runId && providers.runner?.cancelRun?.(runId)) stoppedIds.push(id);
   }
@@ -409,6 +435,7 @@ function worknodeClose(args = {}, context = null) {
 
 module.exports = {
   configure,
+  createManagedWorkNode,
   worknodeCreate,
   worknodeClose,
 };

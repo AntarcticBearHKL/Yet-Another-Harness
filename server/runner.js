@@ -161,6 +161,11 @@ function resolveApproval(approvalId, approved) {
     approved: allowed,
     reason: allowed ? 'approved' : 'denied',
   });
+  publishLive(entry.sessionId, 'tool.approval.resolved', {
+    id: String(approvalId),
+    approved: allowed,
+    reason: allowed ? 'approved' : 'denied',
+  });
   return true;
 }
 
@@ -190,6 +195,12 @@ function armQuestionTimer(questionId, entry) {
       answers: [],
       timedOut: true,
       timeoutSeconds: entry.timeoutSeconds,
+    });
+    publishLive(entry.sessionId, 'tool.question.resolved', {
+      id: String(questionId),
+      answers: [],
+      cancelled: false,
+      timedOut: true,
     });
   }, questionTimeoutMs(entry.timeoutSeconds));
 }
@@ -249,6 +260,12 @@ function resolveQuestions(questionId, body) {
     cancelled: body?.cancelled === true,
     timedOut: body?.timedOut === true,
     timeoutSeconds: entry.timeoutSeconds,
+  });
+  publishLive(entry.sessionId, 'tool.question.resolved', {
+    id,
+    answers: Array.isArray(body?.answers) ? body.answers : [],
+    cancelled: body?.cancelled === true,
+    timedOut: body?.timedOut === true,
   });
   return true;
 }

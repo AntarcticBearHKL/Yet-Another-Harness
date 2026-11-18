@@ -45,6 +45,7 @@ const canvasState = {
   view: { x: 0, y: 0, k: 1 },
   nodes: {},
   frames: [],
+  systemNodes: [],
   selectedId: null,
   selectedChildId: null,
   selectedIds: new Set(),
@@ -935,6 +936,309 @@ function buildCanvasManagerPanel(manager, team, node) {
   return panelEl;
 }
 
+function canvasSystemNodeStatus(node) {
+  const status = String(node?.status || '');
+  if (node?.type === 'orchestrator') {
+    if (status === 'running') return { label: '运行中', tone: 'running' };
+    if (status === 'paused') return { label: '已暂停', tone: 'idle' };
+    return { label: status || '空闲', tone: 'error' };
+  }
+  if (node?.type === 'report') {
+    const counts = node.payload?.counts || {};
+    if (status === 'ready') return { label: '待阅读', tone: 'done' };
+    if (status === 'read') return { label: '已阅读', tone: 'idle' };
+    if (status === 'archived') return { label: '已归档', tone: 'idle' };
+    return {
+      label: `收集中 ${counts.finished || 0}/${counts.total || 0}`,
+      tone: 'running',
+    };
+  }
+  if (node?.type === 'approval') {
+    if (status === 'pending') return { label: '待批准', tone: 'waiting' };
+    if (status === 'approved') return { label: '已批准', tone: 'done' };
+    if (status === 'denied') return { label: '已拒绝', tone: 'error' };
+    if (status === 'expired') return { label: '已过期', tone: 'idle' };
+    return { label: status || '审批', tone: 'idle' };
+  }
+  if (node?.type === 'questionnaire') {
+    if (status === 'pending') return { label: '待回答', tone: 'waiting' };
+    if (status === 'answered') return { label: '已回答', tone: 'done' };
+    if (status === 'dismissed') return { label: '已关闭', tone: 'idle' };
+    if (status === 'expired') return { label: '已过期', tone: 'idle' };
+    return { label: status || '问卷', tone: 'idle' };
+  }
+  return { label: status || '系统', tone: 'idle' };
+}
+
+function canvasSystemNodeType(node) {
+  if (node?.type === 'orchestrator') return '调度器';
+  if (node?.type === 'report') return 'Report Hub';
+  if (node?.type === 'approval') return '审批';
+  if (node?.type === 'questionnaire') return '问卷';
+  return '系统';
+}
+
+function canvasSystemNodeSummary(node) {
+  if (node?.type === 'orchestrator') {
+    const payload = node.payload || {};
+    const boards = Array.isArray(payload.boardIds) ? payload.boardIds.length : 0;
+    return boards
+      ? `${boards} 个 mission · Actor 按角色分发`
+      : '等待 Manager 下达 mission';
+  }
+  if (node?.type === 'report') {
+    const counts = node.payload?.counts || {};
+    return `${counts.finished || 0}/${counts.total || 0} 完成 · ${
+      counts.blocked || 0
+    } 阻塞`;
+  }
+  if (node?.type === 'approval') {
+    const payload = node.payload || {};
+    return payload.path || payload.tool || '等待批准';
+  }
+  if (node?.type === 'questionnaire') {
+    const questions = Array.isArray(node.payload?.questions)
+      ? node.payload.questions
+      : [];
+    return questions[0]?.question || '等待回答';
+  }
+  return '';
+}
+
+async function systemNodeAction(nodeId, action, payload = {}) {
+  try {
+    await requestJson(`/api/system-nodes/${encodeURIComponent(nodeId)}/action`, {
+      method: 'POST',
+      body: { action, ...payload },
+    });
+    await reloadCanvas();
+    return true;
+  } catch (error) {
+    console.error('system node action failed', error);
+    return false;
+  }
+}
+
+function closeSystemNodeModal() {
+  document.querySelector('.system-node-overlay')?.remove();
+}
+
+function systemNodeButton(label, action) {
+  const button = el('button', 'system-node-action', label);
+  button.type = 'button';
+  button.addEventListener('pointerdown', (event) => event.stopPropagation());
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void action();
+  });
+  return button;
+}
+
+function openSystemNode(nodeId) {
+  const node = canvasState.systemNodes.find((item) => item.id === nodeId);
+  if (!node) return;
+  closeSystemNodeModal();
+  const overlay = el('div', 'system-node-overlay');
+  const card = el('div', 'system-node-modal');
+  const head = el('header', 'system-node-modal-head');
+  head.append(el('div', 'system-node-modal-kicker', canvasSystemNodeType(node)));
+  head.append(el('h3', 'system-node-modal-title', node.title || '系统 node'));
+  const close = el('button', 'system-node-close', '×');
+  close.type = 'button';
+  close.addEventListener('click', closeSystemNodeModal);
+  head.append(close);
+  card.append(head);
+  const status = canvasSystemNodeStatus(node);
+  const meta = el('div', 'system-node-modal-meta');
+  meta.append(el('span', `system-node-state ${status.tone}`, status.label));
+  if (node.missionId) meta.append(el('span', '', `Mission ${node.missionId}`));
+  card.append(meta);
+
+  if (node.type === 'report') {
+    const body = el('pre', 'system-node-report');
+    body.textContent =
+      node.payload?.reportMarkdown ||
+      '报告还在收集中。任务完成后会自动生成。';
+    card.append(body);
+    const foot = el('div', 'system-node-modal-actions');
+    if (node.status === 'ready') {
+      foot.append(
+        systemNodeButton('标记已读', async () => {
+          await systemNodeAction(node.id, 'read');
+          closeSystemNodeModal();
+        })
+      );
+    }
+    foot.append(systemNodeButton('关闭', async () => closeSystemNodeModal()));
+    card.append(foot);
+  } else if (node.type === 'approval') {
+    const payload = node.payload || {};
+    const info = el('div', 'system-node-fields');
+    for (const [label, value] of [
+      ['工具', payload.tool],
+      ['路径', payload.path],
+      ['允许目录', Array.isArray(payload.allowedDirs) ? payload.allowedDirs.join(' · ') : ''],
+      ['来源', payload.sourceTitle],
+    ]) {
+      if (!value) continue;
+      const row = el('div', 'system-node-field');
+      row.append(el('span', 'system-node-field-label', label));
+      row.append(el('span', 'system-node-field-value', String(value)));
+      info.append(row);
+    }
+    card.append(info);
+    if (node.status === 'pending') {
+      const foot = el('div', 'system-node-modal-actions');
+      foot.append(
+        systemNodeButton('允许', async () => {
+          await systemNodeAction(node.id, 'approve');
+          closeSystemNodeModal();
+        })
+      );
+      foot.append(
+        systemNodeButton('拒绝', async () => {
+          await systemNodeAction(node.id, 'deny');
+          closeSystemNodeModal();
+        })
+      );
+      card.append(foot);
+    }
+  } else if (node.type === 'questionnaire') {
+    const payload = node.payload || {};
+    const questions = Array.isArray(payload.questions) ? payload.questions : [];
+    const form = el('div', 'system-node-questionnaire');
+    const controls = [];
+    for (const [index, question] of questions.entries()) {
+      const field = el('div', 'system-node-question');
+      field.append(el('div', 'system-node-question-title', question.question));
+      const options = Array.isArray(question.options) ? question.options : [];
+      if (options.length > 0) {
+        const group = el('div', 'system-node-options');
+        for (const option of options) {
+          const label = el('label', 'system-node-option');
+          const input = document.createElement('input');
+          input.type = question.multiple ? 'checkbox' : 'radio';
+          input.name = `system-node-q-${index}`;
+          input.value = option.label;
+          label.append(input, el('span', '', option.label));
+          if (option.description) {
+            label.append(el('span', 'system-node-option-desc', option.description));
+          }
+          group.append(label);
+        }
+        field.append(group);
+        controls.push({ index, kind: 'options', group, multiple: question.multiple });
+      } else {
+        const input = el('textarea', 'system-node-input');
+        input.rows = 3;
+        field.append(input);
+        controls.push({ index, kind: 'text', input });
+      }
+      form.append(field);
+    }
+    card.append(form);
+    if (node.status === 'pending') {
+      const foot = el('div', 'system-node-modal-actions');
+      foot.append(
+        systemNodeButton('提交回答', async () => {
+          const answers = [];
+          for (const control of controls) {
+            if (control.kind === 'text') {
+              answers[control.index] = [control.input.value.trim()].filter(Boolean);
+            } else {
+              answers[control.index] = [
+                ...control.group.querySelectorAll('input:checked'),
+              ].map((input) => input.value);
+            }
+          }
+          await systemNodeAction(node.id, 'answer', { answers });
+          closeSystemNodeModal();
+        })
+      );
+      foot.append(
+        systemNodeButton('关闭', async () => closeSystemNodeModal())
+      );
+      card.append(foot);
+    }
+  } else {
+    const body = el('pre', 'system-node-report');
+    body.textContent = JSON.stringify(node.payload || {}, null, 2);
+    card.append(body);
+  }
+  overlay.append(card);
+  overlay.addEventListener('pointerdown', (event) => {
+    if (event.target === overlay) closeSystemNodeModal();
+  });
+  document.body.append(overlay);
+}
+
+function buildCanvasSystemNode(node) {
+  const status = canvasSystemNodeStatus(node);
+  const article = el(
+    'article',
+    `canvas-system-node type-${node.type} status-${node.status}`
+  );
+  const head = el('header', 'canvas-system-node-head');
+  head.append(el('span', `canvas-system-node-state ${status.tone}`));
+  head.append(el('span', 'canvas-system-node-type', canvasSystemNodeType(node)));
+  head.append(el('span', 'canvas-system-node-status', status.label));
+  article.append(head);
+  article.append(el('div', 'canvas-system-node-title', node.title || '系统 node'));
+  const summary = canvasSystemNodeSummary(node);
+  if (summary) article.append(el('div', 'canvas-system-node-summary', summary));
+  const actions = el('div', 'canvas-system-node-actions');
+  if (node.type === 'approval' && node.status === 'pending') {
+    actions.append(
+      systemNodeButton('允许', async () => {
+        await systemNodeAction(node.id, 'approve');
+      })
+    );
+    actions.append(
+      systemNodeButton('拒绝', async () => {
+        await systemNodeAction(node.id, 'deny');
+      })
+    );
+  } else if (node.type === 'questionnaire' && node.status === 'pending') {
+    actions.append(
+      systemNodeButton('回答', async () => openSystemNode(node.id))
+    );
+  } else if (node.type === 'report' && node.status !== 'collecting') {
+    actions.append(
+      systemNodeButton('打开报告', async () => openSystemNode(node.id))
+    );
+  } else {
+    actions.append(
+      systemNodeButton('查看', async () => openSystemNode(node.id))
+    );
+  }
+  article.append(actions);
+  article.addEventListener('pointerdown', (event) => event.stopPropagation());
+  article.addEventListener('click', (event) => {
+    if (event.target.closest('button')) return;
+    openSystemNode(node.id);
+  });
+  return article;
+}
+
+function canvasSystemNodesFor(managerId) {
+  const order = {
+    approval: 0,
+    questionnaire: 1,
+    report: 2,
+    orchestrator: 3,
+  };
+  return canvasState.systemNodes
+    .filter((node) => node.managerId === managerId)
+    .filter((node) => node.status !== 'archived')
+    .slice()
+    .sort((left, right) => {
+      const leftOrder = order[left.type] ?? 9;
+      const rightOrder = order[right.type] ?? 9;
+      return leftOrder - rightOrder || (left.createdAt || 0) - (right.createdAt || 0);
+    });
+}
+
 function buildCanvasManagerGroup(manager, team, node) {
   const groupEl = el('div', 'canvas-manager-group');
   groupEl.dataset.sessionId = manager.id;
@@ -955,6 +1259,16 @@ function buildCanvasManagerGroup(manager, team, node) {
       groupEl
     );
   });
+  const systemNodes = canvasSystemNodesFor(manager.id);
+  if (systemNodes.length > 0) {
+    const lane = el('div', 'canvas-system-lane');
+    lane.addEventListener('pointerdown', (event) => event.stopPropagation());
+    lane.addEventListener('click', (event) => event.stopPropagation());
+    for (const systemNode of systemNodes) {
+      lane.append(buildCanvasSystemNode(systemNode));
+    }
+    groupEl.append(lane);
+  }
   return groupEl;
 }
 
@@ -2220,6 +2534,7 @@ function openCanvasWorkspaces() {
 function closeCanvas() {
   if (state.homeWindow) return;
   if (!canvasDom.overlay) return;
+  closeSystemNodeModal();
   canvasState.open = false;
   canvasState.pageOpen = false;
   canvasState.runsRequest += 1;
@@ -2282,6 +2597,9 @@ async function reloadCanvas() {
     canvasState.nodes =
       data?.nodes && typeof data.nodes === 'object' ? data.nodes : {};
     canvasState.frames = [];
+    canvasState.systemNodes = Array.isArray(data?.systemNodes)
+      ? data.systemNodes
+      : [];
     canvasState.loaded = true;
     renderCanvas();
     clearTimeout(canvasState.saveTimer);
@@ -2333,6 +2651,9 @@ async function loadCanvas() {
     data?.nodes && typeof data.nodes === 'object'
       ? { ...data.nodes }
       : {};
+  canvasState.systemNodes = Array.isArray(data?.systemNodes)
+    ? data.systemNodes
+    : [];
   canvasState.frames = Array.isArray(data?.frames)
     ? data.frames
         .map((frame) => {
@@ -2473,6 +2794,11 @@ async function syncWorknodes() {
 
 api.onWorknodesChanged?.(() => {
   void syncWorknodes();
+});
+
+api.onSystemNodesChanged?.(() => {
+  if (!canvasOverlayOpen()) return;
+  void reloadCanvas();
 });
 
 api.onSubagentStarted((payload) => {

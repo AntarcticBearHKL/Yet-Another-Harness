@@ -82,6 +82,7 @@
     ['monitor_output', 'background'],
     ['subagent_start', 'subagent'],
     ['subagent_close', 'subagent'],
+    ['mission_dispatch', 'agile'],
     ['question', 'view'],
   ]);
 

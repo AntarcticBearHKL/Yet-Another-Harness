@@ -21,7 +21,7 @@ const {
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
 const CHATS_DB = 'chats.db';
-const SCHEMA_VERSION = 18;
+const SCHEMA_VERSION = 19;
 
 let dataDir = null;
 let legacyDir = null;
@@ -590,6 +590,20 @@ CREATE TABLE IF NOT EXISTS archive_jobs (
   created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS system_nodes (
+  id TEXT PRIMARY KEY,
+  manager_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  title TEXT NOT NULL,
+  mission_id TEXT,
+  task_id TEXT,
+  session_id TEXT,
+  payload TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS app_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   current_session_id TEXT,
@@ -607,6 +621,7 @@ CREATE INDEX IF NOT EXISTS idx_requests_message ON requests(session_id, message_
 CREATE INDEX IF NOT EXISTS idx_runs_session ON runs(session_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id, seq);
 CREATE INDEX IF NOT EXISTS idx_archive_jobs_session ON archive_jobs(session_id, ended_at);
+CREATE INDEX IF NOT EXISTS idx_system_nodes_manager ON system_nodes(manager_id, type, created_at);
 `;
 
 function close() {
@@ -2270,6 +2285,150 @@ function interruptRuns() {
     .run(Date.now());
 }
 
+function normalizeSystemNode(row) {
+  if (!row) return null;
+  let payload = {};
+  try {
+    payload = row.payload ? JSON.parse(row.payload) : {};
+  } catch {
+    payload = {};
+  }
+  return {
+    id: String(row.id),
+    managerId: String(row.manager_id || ''),
+    type: String(row.type || ''),
+    status: String(row.status || ''),
+    title: String(row.title || ''),
+    missionId: row.mission_id ? String(row.mission_id) : null,
+    taskId: row.task_id ? String(row.task_id) : null,
+    sessionId: row.session_id ? String(row.session_id) : null,
+    payload: payload && typeof payload === 'object' ? payload : {},
+    createdAt: Number(row.created_at) || 0,
+    updatedAt: Number(row.updated_at) || 0,
+  };
+}
+
+function createSystemNode(node) {
+  const source = node && typeof node === 'object' ? node : {};
+  const id =
+    String(source.id || '').trim() ||
+    `sys-${crypto.randomUUID()}`;
+  const managerId = String(source.managerId || '').trim();
+  if (!managerId) throw new Error('system node managerId is required');
+  const type = String(source.type || '').trim();
+  if (!type) throw new Error('system node type is required');
+  const now = Date.now();
+  openDb()
+    .prepare(
+      `INSERT INTO system_nodes
+       (id, manager_id, type, status, title, mission_id, task_id, session_id, payload, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      id,
+      managerId,
+      type,
+      String(source.status || 'idle'),
+      String(source.title || type).slice(0, 300),
+      source.missionId ? String(source.missionId) : null,
+      source.taskId ? String(source.taskId) : null,
+      source.sessionId ? String(source.sessionId) : null,
+      JSON.stringify(source.payload && typeof source.payload === 'object' ? source.payload : {}),
+      now,
+      now
+    );
+  return getSystemNode(id);
+}
+
+function getSystemNode(id) {
+  const key = String(id || '').trim();
+  if (!key) return null;
+  const row = openDb()
+    .prepare('SELECT * FROM system_nodes WHERE id = ?')
+    .get(key);
+  return normalizeSystemNode(row);
+}
+
+function listSystemNodes(managerId = '') {
+  const key = String(managerId || '').trim();
+  const database = openDb();
+  const rows = key
+    ? database
+        .prepare(
+          'SELECT * FROM system_nodes WHERE manager_id = ? ORDER BY created_at ASC'
+        )
+        .all(key)
+    : database
+        .prepare('SELECT * FROM system_nodes ORDER BY created_at ASC')
+        .all();
+  return rows.map(normalizeSystemNode).filter(Boolean);
+}
+
+function updateSystemNode(id, patch = {}) {
+  const key = String(id || '').trim();
+  const current = getSystemNode(key);
+  if (!current) return null;
+  const source = patch && typeof patch === 'object' ? patch : {};
+  const next = {
+    status:
+      source.status === undefined ? current.status : String(source.status),
+    title:
+      source.title === undefined
+        ? current.title
+        : String(source.title).slice(0, 300),
+    missionId:
+      source.missionId === undefined
+        ? current.missionId
+        : source.missionId
+          ? String(source.missionId)
+          : null,
+    taskId:
+      source.taskId === undefined
+        ? current.taskId
+        : source.taskId
+          ? String(source.taskId)
+          : null,
+    sessionId:
+      source.sessionId === undefined
+        ? current.sessionId
+        : source.sessionId
+          ? String(source.sessionId)
+          : null,
+    payload:
+      source.payload === undefined
+        ? current.payload
+        : source.payload && typeof source.payload === 'object'
+          ? source.payload
+          : {},
+  };
+  openDb()
+    .prepare(
+      `UPDATE system_nodes
+       SET status = ?, title = ?, mission_id = ?, task_id = ?, session_id = ?, payload = ?, updated_at = ?
+       WHERE id = ?`
+    )
+    .run(
+      next.status,
+      next.title,
+      next.missionId,
+      next.taskId,
+      next.sessionId,
+      JSON.stringify(next.payload),
+      Date.now(),
+      key
+    );
+  return getSystemNode(key);
+}
+
+function deleteSystemNode(id) {
+  const key = String(id || '').trim();
+  if (!key) return false;
+  const result = openDb()
+    .prepare('DELETE FROM system_nodes WHERE id = ?')
+    .run(key);
+  return Number(result.changes) > 0;
+}
+
 module.exports = {
   DEFAULT_SYSTEM_PROMPT,
   init,
@@ -2315,4 +2474,9 @@ module.exports = {
   activeRunForSession,
   listActiveRuns,
   interruptRuns,
+  createSystemNode,
+  getSystemNode,
+  listSystemNodes,
+  updateSystemNode,
+  deleteSystemNode,
 };

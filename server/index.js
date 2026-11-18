@@ -20,6 +20,7 @@ const { McpManager } = require('./mcp/manager');
 const { createSkillService } = require('./skills');
 const { loadAgents, getAgent, getSubagent, BUILTIN_AGENT } = require('./agents');
 const { createSubagentService } = require('./subagents');
+const { createSystemNodeService } = require('./system-nodes');
 const { ensureAgentsMd, readAgentsMd } = require('./context');
 const { normalizeGoal } = require('../src/goal');
 const { normalizeReasoningEffort } = require('../src/reasoning');
@@ -154,10 +155,21 @@ const skillService = createSkillService({
 const subagentService = createSubagentService({
   resolveAgent: (agentId) => getSubagent(AGENTS_FILE, agentId),
 });
+const systemNodeService = createSystemNodeService({
+  store,
+  runner,
+  getAgileStore: (managerId) => resolveAgileStore(managerId),
+  createWorkNode: (manager, options) =>
+    worknodeTools.createManagedWorkNode(manager, options),
+  getAgent: (agentId) => getAgent(AGENTS_FILE, agentId),
+  notify: (event) => runner.publishGlobal(event),
+});
 tools.configure({
   skillService,
   mcpManager,
   subagentService,
+  systemNodeService,
+  getAgileStore: (managerId) => resolveAgileStore(managerId),
   store,
   canvasStore,
   runner,
@@ -798,6 +810,35 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && pathname === '/api/system-nodes') {
+    const managerId = String(url.searchParams.get('managerId') || '');
+    sendJson(res, 200, { nodes: systemNodeService.list(managerId) });
+    return true;
+  }
+
+  if (
+    req.method === 'POST' &&
+    pathname.startsWith('/api/system-nodes/') &&
+    pathname.endsWith('/action')
+  ) {
+    const nodeId = decodeURIComponent(
+      pathname.slice('/api/system-nodes/'.length, -'/action'.length)
+    );
+    readJson(req)
+      .then((body) => {
+        const node = systemNodeService.action(
+          nodeId,
+          body?.action,
+          body || {}
+        );
+        sendJson(res, 200, { ok: true, node });
+      })
+      .catch((error) =>
+        sendJson(res, error.status || 400, { error: error.message })
+      );
+    return true;
+  }
+
   if (req.method === 'GET' && pathname === '/api/agents') {
     sendJson(res, 200, { agents: loadAgents(AGENTS_FILE) });
     return true;
@@ -975,7 +1016,10 @@ function handleApi(req, res, url) {
   }
 
   if (req.method === 'GET' && pathname === '/api/canvas') {
-    sendJson(res, 200, canvasStore.state());
+    sendJson(res, 200, {
+      ...canvasStore.state(),
+      systemNodes: systemNodeService.list(),
+    });
     return true;
   }
 
@@ -1016,29 +1060,6 @@ function handleApi(req, res, url) {
           case 'select_board':
             result = agileStore.selectBoard(body.boardId);
             break;
-          case 'create_task':
-            result = agileStore.createTask({
-              boardId: body.boardId,
-              column: 'human',
-              title: body.title,
-              description: body.description,
-              actor: { type: 'human', id: null },
-            });
-            break;
-          case 'update_task': {
-            const task = agileStore.getTask(body.taskId);
-            if (task.column !== 'human') {
-              throw new Error(
-                'Only tasks in Human In The Loop can be edited by the human'
-              );
-            }
-            result = agileStore.updateTask(body.taskId, {
-              title: body.title,
-              description: body.description,
-              actor: { type: 'human', id: null },
-            });
-            break;
-          }
           case 'delete_task':
             result = agileStore.deleteTask(body.taskId, {
               actor: { type: 'human', id: null },
@@ -1468,6 +1489,7 @@ localServer.listen(LOCAL_PORT, HOST, () => {
   store.loadChats();
   store.interruptRuns();
   store.archiveUnfinishedSubagents();
+  systemNodeService.start();
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(PID_FILE, String(process.pid), 'utf8');
   pidWritten = true;
@@ -1478,6 +1500,7 @@ localServer.listen(LOCAL_PORT, HOST, () => {
 });
 
 function shutdown() {
+  systemNodeService.stop();
   mcpManager.closeAll();
   try {
     if (remoteServer) remoteServer.close();

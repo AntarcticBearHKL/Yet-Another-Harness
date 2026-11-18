@@ -19,7 +19,7 @@ test('agile native tools cover boards, notes, digest and moves', async () => {
     );
     assert.deepEqual(
       columns.map((column) => column.id),
-      ['backlog', 'human', 'progress', 'blocked', 'finished']
+      ['backlog', 'progress', 'blocked', 'finished']
     );
 
     const board = JSON.parse(

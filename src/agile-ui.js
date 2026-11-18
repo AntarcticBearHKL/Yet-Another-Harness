@@ -36,7 +36,6 @@ const agileState = {
     }
   })(),
   taskId: null,
-  taskDraft: null,
   boardPan: null,
   request: 0,
   toastTimer: null,
@@ -219,14 +218,6 @@ function renderAgileBoard() {
     const count = el('span', 'agile-column-count', String(allColumnTasks.length));
     count.title = column.hint || '';
     head.append(count);
-    if (column.id === 'human') {
-      const add = el('button', 'agile-column-add', '+');
-      add.type = 'button';
-      add.title = '新建任务';
-      add.setAttribute('aria-label', '在 Human In The Loop 新建任务');
-      add.addEventListener('click', () => openAgileTask(null, 'human'));
-      head.append(add);
-    }
     section.append(head);
     const list = el('div', 'agile-tasks');
     if (columnTasks.length === 0) {
@@ -290,48 +281,23 @@ async function agileAction(action, payload = {}) {
 }
 
 function agileTask() {
-  if (!agileState.data) return null;
-  if (agileState.taskId) {
-    return (
-      agileState.data.tasks.find((task) => task.id === agileState.taskId) ||
-      null
-    );
-  }
-  return agileState.taskDraft;
+  if (!agileState.data || !agileState.taskId) return null;
+  return (
+    agileState.data.tasks.find((task) => task.id === agileState.taskId) || null
+  );
 }
 
-function openAgileTask(taskId, draftColumn = 'human') {
-  const task = taskId
-    ? agileState.data?.tasks.find((item) => item.id === taskId)
-    : null;
-  agileState.taskId = task ? task.id : null;
-  agileState.taskDraft = task
-    ? null
-    : {
-        id: null,
-        column: draftColumn,
-        title: '',
-        description: '',
-        keyPoints: [],
-        needsDigest: false,
-        isRework: false,
-        claimedBy: '',
-        claimedAt: null,
-        blockedReason: '',
-        blockedAt: null,
-        assignee: '',
-        updatedAt: null,
-        createdAt: null,
-      };
+function openAgileTask(taskId) {
+  const task = agileState.data?.tasks.find((item) => item.id === taskId);
+  if (!task) return;
+  agileState.taskId = task.id;
   renderAgileTaskModal();
   agileDom.taskModal.classList.remove('hidden');
   agileDom.taskModal.setAttribute('aria-hidden', 'false');
-  requestAnimationFrame(() => agileDom.taskTitle?.focus());
 }
 
 function closeAgileTask() {
   agileState.taskId = null;
-  agileState.taskDraft = null;
   if (!agileDom.taskModal) return;
   agileDom.taskModal.classList.add('hidden');
   agileDom.taskModal.setAttribute('aria-hidden', 'true');
@@ -344,7 +310,7 @@ function renderAgileTaskModal() {
     (item) => item.id === task.column
   );
   const columnName = column?.name || task.column;
-  const editable = task.column === 'human';
+  const editable = false;
   const inProgress = task.column === 'progress';
   if (agileDom.taskKicker) {
     agileDom.taskKicker.textContent = columnName.toUpperCase();
@@ -367,7 +333,7 @@ function renderAgileTaskModal() {
       agileDom.taskReadonlyNote.classList.remove('hidden');
     } else if (!editable) {
       agileDom.taskReadonlyNote.textContent =
-        '只有 Human In The Loop 的任务可以编辑标题和描述；备注仍可添加。';
+        '任务由 Manager 和 Agent 管理，标题和描述只读；备注仍可添加。';
       agileDom.taskReadonlyNote.classList.remove('hidden');
     } else {
       agileDom.taskReadonlyNote.classList.add('hidden');
@@ -426,6 +392,11 @@ function renderAgileTaskModal() {
   if (agileDom.taskInfo) {
     const info = [];
     info.push(`状态：${columnName}`);
+    if (task.role) info.push(`角色：${task.role}`);
+    if (task.acceptance) info.push(`验收：${task.acceptance}`);
+    if (Array.isArray(task.dependsOn) && task.dependsOn.length > 0) {
+      info.push(`依赖：${task.dependsOn.join(', ')}`);
+    }
     if (task.assignee) info.push(`Assignee：${task.assignee}`);
     info.push(`认领：${task.claimedBy || '未认领'}`);
     if (task.claimedAt) info.push(`认领时间：${agileDate(task.claimedAt, true)}`);
@@ -459,7 +430,6 @@ function openAgile(managerId) {
       agileState.managerId = next;
       agileState.data = null;
       agileState.taskId = null;
-      agileState.taskDraft = null;
     }
   }
   agileState.open = true;
@@ -488,31 +458,6 @@ function handleAgileEscape() {
   if (agileDom.taskModal && !agileDom.taskModal.classList.contains('hidden')) {
     closeAgileTask();
   }
-}
-
-async function saveAgileTask() {
-  const task = agileTask();
-  if (!task) return;
-  const title = agileDom.taskTitle.value.trim();
-  if (!title) {
-    agileToast('任务标题不能为空', 'error');
-    return;
-  }
-  if (!task.id) {
-    const result = await agileAction('create_task', {
-      boardId: agileState.data?.board?.id,
-      title,
-      description: agileDom.taskDescription.value,
-    });
-    if (result) closeAgileTask();
-    return;
-  }
-  const result = await agileAction('update_task', {
-    taskId: task.id,
-    title,
-    description: agileDom.taskDescription.value,
-  });
-  if (result) closeAgileTask();
 }
 
 async function addAgileNote() {
@@ -597,7 +542,6 @@ function bindAgileEvents() {
   });
   agileDom.taskClose?.addEventListener('click', closeAgileTask);
   agileDom.taskCancel?.addEventListener('click', closeAgileTask);
-  agileDom.taskSave?.addEventListener('click', () => void saveAgileTask());
   agileDom.taskDelete?.addEventListener('click', deleteAgileTask);
   agileDom.noteSubmit?.addEventListener('click', () => void addAgileNote());
   agileDom.noteInput?.addEventListener('keydown', (event) => {

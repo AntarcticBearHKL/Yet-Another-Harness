@@ -67,8 +67,9 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 后台进程：LLM 用 `background_start` 启动长时间挂载的进程（dev server、watcher、`npm run dev` 等）并附 `note` 备注，工具立即返回 id、备注、命令和启动信息；进程会一直运行，让端口 / 服务持续可用，不用来执行任务拿结果。对话右上角显示当前对话运行中的后台任务数量，点击打开面板查看每个任务的备注、命令、状态、耗时、输出并停止任务；`background_list` / `background_output` / `background_stop` 用于列出、读取和停止任务；工具面板里是「后台」分类
 - 子代理：`subagent_start` 在独立只读对话里跑一个完整任务（`fork: true` 可先分叉当前对话），可选择角色配置（信息收集、程序员、测试员、文档写作、代码审查、Build），工具立即返回；任务完成后把结果像后台完成提示一样排入当前对话队列，当前回合结束后自动继续。子代理对话命名 `#n-对话名`，在 Tab 列表里显示「子代理」徽章，只能看不能输入；`subagent_close` 停止并关闭它；工具面板里是「Subagent」分类
 - `/fork` 系统 Skill：在当前工作目录把当前对话分叉成新的可编辑对话，命名 `#n-对话名`，原对话保持不变；在输入框输入 `/fork [名字]` 或从斜杠列表选择
-- Agile 工作区：从 Tab 工作区空白处的右键菜单打开；桌面端打开一个独立窗口（网页端回退为全屏页面），窗口位置和大小会记住。固定五列 Backlog / Human In The Loop / In Progress / Blocked / Finished；左侧分组和迭代，支持折叠、改名、新建、删除；卡片可以打开任务表单，Human In The Loop 可编辑标题和描述，其他列只读，备注在 In Progress 期间锁定；Finished 任务被加备注会自动回到 Backlog 并标记返工。支持任务搜索、WIP 上限、迭代日期/目标、显示更新时间和默认 OpenAgile Skill。看板数据存在 `%APPDATA%\yah\agile.json`；人只写备注，卡片移动由 Agent 工具完成
-- Agile 原生工具：工具面板新增「Agile」分类，`agile_*` 工具替代原 OpenAgile MCP 的看板、分组、迭代、任务、批量移动、备注消化、认领/释放、阻塞、WIP 设置、事件等待和技能接口；工具遵循固定五列、未消化备注不能开工、Finished 不能删除、只有每组最后一个迭代可以删除等规则
+- Agile 工作区：从 Tab 工作区空白处的右键菜单打开；桌面端打开一个独立窗口（网页端回退为全屏页面），窗口位置和大小会记住。固定四列 Backlog / In Progress / Blocked / Finished；左侧分组和迭代，支持折叠、改名、新建、删除；卡片可以打开任务表单，标题和描述只读，备注仍可添加，备注在 In Progress 期间锁定；Finished 任务被加备注会自动回到 Backlog 并标记返工。支持任务搜索、WIP 上限、迭代日期/目标、显示更新时间和默认 OpenAgile Skill。看板数据存在 `%APPDATA%\yah\agile.json`；Manager 通过 `mission_dispatch` 写任务，调度器负责发放
+- Agile 原生工具：工具面板新增「Agile」分类，`agile_*` 工具替代原 OpenAgile MCP 的看板、分组、迭代、任务、批量移动、备注消化、认领/释放、阻塞、WIP 设置、事件等待和技能接口；工具遵循固定四列、未消化备注不能开工、Finished 不能删除、只有每组最后一个迭代可以删除等规则
+- 系统 node：Manager group 右侧显示非聊天的方块，包括调度器、Report Hub、审批和问卷。调度器每 1.5 秒扫描 mission 的 Agile Backlog，按角色、依赖、WIP 和领取状态创建 Agent work node；Report Hub 接收 `worknode_result` 的结构化结果，更新 Agile 并生成可读报告；审批和问卷复用 runner 的 `tool.approval` / `tool.question`，在 group 中等待操作后回传
 - 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
 - 输入框（Space）里：新对话（还没有任何消息）上方只显示 MCP 摘要按钮；已有消息的对话上方只显示排队消息框。生成中仍可继续输入，消息按顺序排队、一行一条，左侧拖动排序，行尾是编辑 / 立即发送 / 删除三个纯图标按钮；当前生成结束后自动按顺序处理队列；这两块都是和输入框同宽的圆角矩形
 - 新建对话默认关闭所有 MCP 服务器：MCP 摘要显示 `0/总数`，需要时在对话顶部的 MCP 配置页里手动打开；开关按会话持久化
@@ -81,6 +82,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 已连接且当前对话启用的 MCP 服务器会把 prompts 暴露为临时 Skill；切换 MCP 开关后列表实时更新
 - Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧按「管理 / Agent / Subagent」分组列出固定配置，右侧显示名称、提示词和工具权限；内置角色包括通用、信息收集、程序员、测试员、文档写作、代码审查，Subagent 提供对应的角色配置和通用 Build；配置完全只读，不能新增、删除或修改
 - Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；每个角色只勾选与其工作类型匹配的工具，Agent 角色保留 `subagent_start` / `subagent_close` 以便把局部任务交给 Subagent；工具权限和工具目录一样左右分栏：左列第一行是「允许所有工具」，下面是分类，右列第一行是搜索框，下面是当前分类的工具；可以浏览分类和搜索，但复选框只展示状态、不响应点击，显示保持原样不做灰色禁用；MCP 工具不进入 Agent 工具权限，也不受 Agent 工具勾选限制，仍由对话的 MCP 开关控制，并继续在 tool 面板里查看
+- Manager 的主流程是 `mission_dispatch`：把目标、任务、角色、依赖和验收标准直接写入 Agile，创建调度器和 Report Hub；Work node 完成后调用 `worknode_result`，Report Hub 汇总结果并把任务移到 Finished 或 Blocked
 - 输入框底部从左到右是：当前 Agent 名字（如 `Build`，琥珀色、左对齐，可点击展开暖色磨砂下拉菜单）、写死的模型名 `deepseek-v4.1-flash-1017`（带下拉箭头，目前只有这一个选项）、思考强度滑条、极简回车图标发送按钮；输入框默认不显示 placeholder。每个对话必须有一个 Agent，新对话默认使用「Build」；按对话保存选择，新对话继承同项目上一个对话的 Agent；对话开始（有第一条消息）后 Agent 固定，选择器变灰锁定，不能再切换；排队消息会保存自己的 Agent
 - 思考强度滑条是一条极简平面细线 + 小圆点，不显示「思考强度」文字和 low/high/max 挡位文字，鼠标指针保持默认；拖动时圆点自由跟随指针、没有吸附阈限，松开后自动吸附到最近的 `low` / `high` / `max` 挡位；也可以用方向键切换，选择保存在 `settings.json`，发送时作为 `reasoning_effort` 传给 DeepSeek
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
@@ -142,6 +144,8 @@ server/index.js    本地后端：HTTP API、SSE、静态页面、远程 Basic A
 server/usage.js    OpenCode Go 额度查询（/api/usage，60 秒缓存）
 server/runner.js   agent 主循环、工具执行、消息/事件持久化
 server/subagents.js 子代理服务：新建/分叉只读对话、启动 run、完成后把结果排回父对话
+server/system-nodes.js 系统 node 服务：调度器、Report Hub、审批、问卷、Agile 分发循环
+src/tools/mission.js Manager 的 mission_dispatch 和 work node 的 worknode_result
 server/skills.js   Skill 发现（skills/ + %APPDATA%\yah\skills）与 MCP prompts 转 Skill
 server/agents.js   Agent 配置：固定内置角色列表，只读，不接受新增、删除或修改
 src/agent-defaults.js 内置 Manager / Agent / Subagent 角色的 id、名称、提示词和工具权限
@@ -205,6 +209,7 @@ agent 循环、工具、SQLite、API key 都在本地后端。`contextIsolation:
   - `steps`：工具调用/返回、文本片段、轮次、工具耗时和 LLM 首 token/tok-s 指标
   - `requests`：每条助手消息每轮的原始请求 body（gzip 压缩的 JSON BLOB）
   - `runs`：一次 agent 执行的状态
+  - `system_nodes`：调度器、Report Hub、审批、问卷等非聊天 node
   - `events`：按会话递增的事件日志，用于 SSE 断线重连补发
   - `app_state`：当前会话 id 和标题序号
   - 运行时还会出现 `chats.db-wal` / `chats.db-shm`；备份时不要只复制 `chats.db`
@@ -247,6 +252,7 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 - Git（结构化、无 shell，统一放在工具的 Git 菜单）：`git_status`、`git_diff`、`git_log`、`git_show`、`git_blame`、`git_branch`、`git_checkout`、`git_add`、`git_commit`、`git_stash`、`git_fetch`、`git_pull`、`git_push`、`git_merge`、`git_remote`、`git_tag`、`git_restore`、`git_reset`、`git_revert`、`git_cherry_pick`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）
 - OMO 常驻 / 条件工具：`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`subagent_start/close`
+- 任务闭环：`mission_dispatch`（Manager 写 Agile）、`worknode_result`（work node 提交结构化结果）
 - 兼容别名：`hashline_edit`；`read_file`、`web_search`、`interactive_bash`、`SystemInfo`、`system_info` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
 - `background_*`、`monitor_*` 是长驻进程管理，不再把完成输出塞回对话；`subagent_start` 启动带完整工具的子代理，完成后把结果塞回父对话，`subagent_close` 停止并关闭它；`interactive_bash` 已合并为 `shell` 的隐藏别名

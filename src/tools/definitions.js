@@ -238,7 +238,7 @@ const AGILE_LIST_TASKS = fn(
     search: str('Text to search in title and description'),
     claimedBy: str('Exact agent id; empty string selects unclaimed tasks'),
     needsDigest: bool('Only tasks with (or without) undigested notes'),
-    ready: bool('Only ready tasks (Backlog/Human, notes digested, unclaimed)'),
+    ready: bool('Only ready Backlog tasks (notes digested, unclaimed)'),
   }
 );
 const AGILE_GET_TASK = fn(
@@ -254,6 +254,10 @@ const AGILE_CREATE_TASK = fn(
     title: str('Task title'),
     description: str('Task description'),
     assignee: str('Optional assignee'),
+    role: str('Work role used by the orchestrator: research, programmer, tester, writer, reviewer or general'),
+    acceptance: str('Acceptance criteria used by the Report Hub'),
+    dependsOn: arr('Dependency task ids', { type: 'string' }),
+    autoDispatch: bool('Allow the orchestrator to dispatch this task (default true)'),
     boardId: str('Iteration id (defaults to the active iteration)'),
     agent: str('Calling agent identity'),
   },
@@ -270,6 +274,10 @@ const AGILE_CREATE_TASKS = fn(
         title: str('Task title'),
         description: str('Task description'),
         assignee: str('Optional assignee'),
+        role: str('Work role: research, programmer, tester, writer, reviewer or general'),
+        acceptance: str('Acceptance criteria'),
+        dependsOn: arr('Dependency task ids', { type: 'string' }),
+        autoDispatch: bool('Allow the orchestrator to dispatch this task (default true)'),
       },
       required: ['title'],
     }),
@@ -279,12 +287,16 @@ const AGILE_CREATE_TASKS = fn(
 );
 const AGILE_UPDATE_TASK = fn(
   'agile_update_task',
-  'Update a task title, description, assignee or blocked reason. This cannot change notes or clear needsDigest.',
+  'Update a task title, description, assignee, role, acceptance criteria, dependencies or blocked reason. This cannot change notes or clear needsDigest.',
   {
     taskId: str('Task id'),
     title: str('New title'),
     description: str('New description'),
     assignee: str('New assignee'),
+    role: str('New work role'),
+    acceptance: str('New acceptance criteria'),
+    dependsOn: arr('New dependency task ids', { type: 'string' }),
+    autoDispatch: bool('Allow the orchestrator to dispatch this task'),
     blockedReason: str('Blocked reason; empty string clears it'),
     agent: str('Calling agent identity'),
   },
@@ -292,10 +304,10 @@ const AGILE_UPDATE_TASK = fn(
 );
 const AGILE_MOVE_TASK = fn(
   'agile_move_task',
-  'Move a task to one of the five fixed columns. Moving into In Progress is refused while the task has undigested notes; an unclaimed task moved there is claimed by the caller.',
+  'Move a task to one of the four fixed columns. Moving into In Progress is refused while the task has undigested notes; an unclaimed task moved there is claimed by the caller.',
   {
     taskId: str('Task id'),
-    column: str('Column id or name: backlog, human, progress, blocked, finished'),
+    column: str('Column id or name: backlog, progress, blocked, finished'),
     position: num('0-based position in the target column (default appends)'),
     agent: str('Calling agent identity'),
   },
@@ -303,10 +315,10 @@ const AGILE_MOVE_TASK = fn(
 );
 const AGILE_MOVE_TASKS = fn(
   'agile_move_tasks',
-  'Move several tasks into one of the five fixed columns. Refused per task while it has undigested notes (In Progress), and unclaimed tasks moved there are claimed by the caller.',
+  'Move several tasks into one of the four fixed columns. Refused per task while it has undigested notes (In Progress), and unclaimed tasks moved there are claimed by the caller.',
   {
     taskIds: arr('Task ids to move', { type: 'string' }),
-    column: str('Column id or name: backlog, human, progress, blocked, finished'),
+    column: str('Column id or name: backlog, progress, blocked, finished'),
     position: num('0-based position in the target column (default appends)'),
     agent: str('Calling agent identity'),
   },
@@ -348,7 +360,7 @@ const AGILE_HEARTBEAT_TASK = fn(
 );
 const AGILE_CLAIM_NEXT = fn(
   'agile_claim_next',
-  'Claim the next ready task (Backlog before Human In The Loop, notes digested, unclaimed or expired).',
+  'Claim the next ready task (Backlog, notes digested, unclaimed or expired).',
   { boardId: str('Iteration id'), agent: str('Agent identity') }
 );
 const AGILE_DIGEST_NOTES = fn(
@@ -377,7 +389,7 @@ const AGILE_UNDIGEST_NOTES = fn(
 );
 const AGILE_LIST_COLUMNS = fn(
   'agile_list_columns',
-  'List the five fixed agile columns and their WIP limits.',
+  'List the four fixed agile columns and their WIP limits.',
   {}
 );
 const AGILE_GET_BOARD_SNAPSHOT = fn(
@@ -1067,6 +1079,56 @@ const WORKNODE_TOOLS = [
     'Close a conversation work node: stop its active run, archive the conversation and remove it from the canvas.',
     { id: str('Work node id') },
     ['id']
+  ),
+  fn(
+    'mission_dispatch',
+    'Manager only. Write a mission directly into Agile: create or reuse an iteration, create Backlog tasks with role, dependencies and acceptance criteria, then ensure the orchestrator and Report Hub system nodes. The orchestrator dispatches tasks to Agent work nodes by role.',
+    {
+      goal: str('Mission goal shown in the report and task context'),
+      boardId: str('Existing Agile iteration id; omit to create a new iteration'),
+      tasks: arr('Tasks to write into Agile Backlog', {
+        type: 'object',
+        properties: {
+          title: str('Task title'),
+          description: str('Task description and context'),
+          role: str('Work role: research, programmer, tester, writer, reviewer or general'),
+          acceptance: str('Acceptance criteria used by the Report Hub'),
+          dependsOn: arr('Dependency task ids, titles or 0-based indexes', {
+            type: 'string',
+          }),
+          autoDispatch: bool('Allow the orchestrator to dispatch this task (default true)'),
+        },
+        required: ['title'],
+      }),
+      autoDispatch: bool('Default auto-dispatch value for all tasks'),
+    },
+    ['goal', 'tasks']
+  ),
+  fn(
+    'worknode_result',
+    'Submit the structured result of a work node. Call this when the task is complete, then stop. The Report Hub uses it to mark the Agile task finished or blocked and to build the mission report.',
+    {
+      taskId: str('Agile task id; defaults to this work node task'),
+      status: str('done, failed or blocked (default done)'),
+      summary: str('What was accomplished'),
+      how: arr('Steps describing how the task was completed', { type: 'string' }),
+      files: arr('Files created or changed', { type: 'string' }),
+      commands: arr('Commands run', { type: 'string' }),
+      tests: arr('Tests and outcomes', {
+        type: 'object',
+        properties: {
+          name: str('Test name'),
+          status: str('passed, failed or skipped'),
+        },
+      }),
+      artifacts: arr('Artifacts such as screenshots, reports or URLs', {
+        type: 'string',
+      }),
+      blockers: arr('Blockers that remain', { type: 'string' }),
+      followUps: arr('Suggested follow-up work', { type: 'string' }),
+      durationMs: num('Elapsed time in milliseconds'),
+    },
+    ['summary']
   ),
 ];
 

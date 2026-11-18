@@ -10,35 +10,28 @@ const COLUMNS = [
     name: 'Backlog',
     order: 1,
     color: '#5b8def',
-    hint: 'Agent 提出的待办',
-  },
-  {
-    id: 'human',
-    name: 'Human In The Loop',
-    order: 2,
-    color: '#9a7bea',
-    hint: '人手动添加任务的唯一入口',
+    hint: 'Manager 写入的待办',
   },
   {
     id: 'progress',
     name: 'In Progress',
-    order: 3,
+    order: 2,
     color: '#d69a4a',
-    hint: 'Agent 正在处理，表单只读',
+    hint: '调度器已分配，Agent 正在处理',
   },
   {
     id: 'blocked',
     name: 'Blocked',
-    order: 4,
+    order: 3,
     color: '#d46b5f',
     hint: '需要人决定或资源冲突',
   },
   {
     id: 'finished',
     name: 'Finished',
-    order: 5,
+    order: 4,
     color: '#6f9b68',
-    hint: '已完成',
+    hint: '已完成并由 Report Hub 校验',
     done: true,
   },
 ];
@@ -52,7 +45,6 @@ const COLUMN_ALIASES = new Map([
   ['inprogress', 'progress'],
   ['in-progress', 'progress'],
   ['done', 'finished'],
-  ['human in the loop', 'human'],
 ]);
 
 function normalizeColumn(value) {
@@ -164,6 +156,19 @@ function normalizeTask(raw) {
     title: normalizeText(raw.title || raw.text, 200) || 'Untitled task',
     description: normalizeText(raw.description, 20000),
     assignee: normalizeText(raw.assignee, 120),
+    role: normalizeText(raw.role, 40),
+    acceptance: normalizeText(raw.acceptance, 4000),
+    dependsOn: Array.isArray(raw.dependsOn)
+      ? [...new Set(raw.dependsOn.map(String).filter(Boolean))].slice(0, 50)
+      : [],
+    autoDispatch: raw.autoDispatch !== false,
+    workNodeId: normalizeText(raw.workNodeId, 120),
+    reportId: normalizeText(raw.reportId, 120),
+    attempts: Number.isFinite(Number(raw.attempts))
+      ? Math.max(0, Number(raw.attempts))
+      : 0,
+    result:
+      raw.result && typeof raw.result === 'object' ? clone(raw.result) : null,
     keyPoints,
     needsDigest,
     isRework: raw.isRework === true,
@@ -278,15 +283,15 @@ function createAgileStore(file) {
         {
           id: id('skl'),
           name: 'OpenAgile',
-          description: 'How to work the five-column board with the human.',
+          description: 'How the Manager, orchestrator and Agent nodes work the four-column board.',
           content: [
             '# OpenAgile',
             '',
-            '- Five fixed columns: Backlog, Human In The Loop, In Progress, Blocked, Finished.',
-            '- Agent-created work starts in Backlog. The human adds tasks only in Human In The Loop.',
-            '- The task description belongs to the agent. Notes (keyPoints) belong to the human.',
-            '- Call agile_digest_notes before claiming a task or moving it into In Progress when it has undigested notes.',
-            '- Use agile_move_task to advance work; the human cannot drag cards.',
+            '- Four fixed columns: Backlog, In Progress, Blocked, Finished.',
+            '- Manager writes tasks into Backlog; the orchestrator node dispatches them by role.',
+            '- The task description belongs to the Manager and Agent. Notes (keyPoints) belong to the human.',
+            '- Call agile_digest_notes before a task moves into In Progress when it has undigested notes.',
+            '- The orchestrator uses agile_move_task and claimTask; the human cannot drag cards.',
             '- Add a blocked reason when work cannot continue and needs a human decision.',
           ].join('\n'),
           createdAt,
@@ -682,6 +687,10 @@ function createAgileStore(file) {
       title,
       description: args.description,
       assignee: args.assignee,
+      role: args.role,
+      acceptance: args.acceptance,
+      dependsOn: args.dependsOn,
+      autoDispatch: args.autoDispatch,
       order,
       columnHistory: [{ column, at: nowIso() }],
     });
@@ -744,6 +753,35 @@ function createAgileStore(file) {
     if (typeof patch.assignee === 'string') {
       task.assignee = normalizeText(patch.assignee, 120);
     }
+    if (typeof patch.role === 'string') {
+      task.role = normalizeText(patch.role, 40);
+    }
+    if (typeof patch.acceptance === 'string') {
+      task.acceptance = normalizeText(patch.acceptance, 4000);
+    }
+    if (Array.isArray(patch.dependsOn)) {
+      task.dependsOn = [...new Set(patch.dependsOn.map(String).filter(Boolean))].slice(
+        0,
+        50
+      );
+    }
+    if (typeof patch.autoDispatch === 'boolean') {
+      task.autoDispatch = patch.autoDispatch;
+    }
+    if (typeof patch.workNodeId === 'string') {
+      task.workNodeId = normalizeText(patch.workNodeId, 120);
+    }
+    if (typeof patch.reportId === 'string') {
+      task.reportId = normalizeText(patch.reportId, 120);
+    }
+    if (Number.isFinite(Number(patch.attempts))) {
+      task.attempts = Math.max(0, Number(patch.attempts));
+    }
+    if (patch.result === null) {
+      task.result = null;
+    } else if (patch.result && typeof patch.result === 'object') {
+      task.result = clone(patch.result);
+    }
     if (typeof patch.blockedReason === 'string') {
       task.blockedReason = normalizeText(patch.blockedReason, 2000);
       task.blockedAt = task.blockedReason ? nowIso() : null;
@@ -788,7 +826,7 @@ function createAgileStore(file) {
       task.claimedAt = task.updatedAt;
       if (!task.assignee) task.assignee = task.claimedBy;
     }
-    if (column === 'backlog' || column === 'human' || column === 'finished') {
+    if (column === 'backlog' || column === 'finished') {
       task.claimedBy = '';
       task.claimedAt = null;
     }
@@ -1032,7 +1070,7 @@ function createAgileStore(file) {
       .filter(
         (task) =>
           task.boardId === board.id &&
-          (task.column === 'backlog' || task.column === 'human') &&
+          task.column === 'backlog' &&
           !task.needsDigest
       )
       .sort((left, right) => {
@@ -1086,7 +1124,7 @@ function createAgileStore(file) {
     if (filters.ready === true) {
       tasks = tasks.filter(
         (task) =>
-          (task.column === 'backlog' || task.column === 'human') &&
+          task.column === 'backlog' &&
           !task.needsDigest &&
           (!task.claimedBy ||
             Date.now() - new Date(task.lastActivityAt).getTime() > 5 * 60 * 1000)
