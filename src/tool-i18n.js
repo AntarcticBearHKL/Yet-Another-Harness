@@ -218,8 +218,16 @@ const TOOL_I18N = {
   monitor_stop: t('停止监控', '停止被监控的后台命令。'),
   monitor_list: t('监控列表', '列出被监控的后台命令。'),
   monitor_output: t('监控输出', '读取被监控后台命令的输出。'),
-  subagent_start: t('启动 Subagent', '在独立只读会话中启动 Subagent 并立即返回；Subagent 可使用工具完整运行。'),
-  subagent_close: t('关闭 Subagent', '停止正在运行的 Subagent 并关闭其会话。'),
+  subagent_start: t('启动 Subagent', '在独立只读会话中启动 Subagent 并立即返回；Subagent 可使用工具完整运行。', {
+    prompt: '任务提示词',
+    name: 'Subagent 会话名称',
+    fork: '把当前对话 fork 给 Subagent',
+    agent: 'Subagent 配置 ID 或名称（默认 Build）',
+    note: '结果显示的简短备注',
+  }),
+  subagent_close: t('关闭 Subagent', '停止正在运行的 Subagent 并关闭其会话。', {
+    sessionId: 'Subagent 会话 ID',
+  }),
   worknode_create: t('创建对话', '在当前管理 node 下创建一个画布对话，选择 Agent、任务，并可收窄工具、技能或 MCP。'),
   worknode_close: t('关闭对话', '关闭一个画布对话：停止运行、归档会话并从画布移除。'),
 
