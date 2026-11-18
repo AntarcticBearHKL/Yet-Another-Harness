@@ -445,12 +445,12 @@ const AGILE_DELETE_SKILL = fn(
 );
 const SUBAGENT_START = fn(
   'subagent_start',
-  'Start a Subagent in its own read-only conversation and return immediately. The Subagent runs the full agent loop with tools; when it finishes, its result is queued back into this conversation as a follow-up prompt. Use fork=true to copy the current conversation into the Subagent first; otherwise it starts a fresh conversation. Use subagent_close to stop and close it, and use background_start for long-running processes that should keep running.',
+  'Start a Subagent in its own read-only conversation and return immediately. The Subagent runs the full agent loop with tools; when it finishes, its result is queued back into this conversation as a follow-up prompt. Use fork=true to copy the current conversation into the Subagent first; otherwise it starts a fresh conversation. Choose a role profile such as 程序员, 测试员, 信息收集, 文档写作 or 代码审查; omit agent to use the general Build worker. Use subagent_close to stop and close it, and use background_start for long-running processes that should keep running.',
   {
     prompt: str('The task for the Subagent'),
     name: str('Short name for the Subagent conversation'),
     fork: bool('Fork the current conversation into the Subagent conversation'),
-    agent: str('Subagent profile id or label (defaults to Build)'),
+    agent: str('Subagent profile id or name (程序员, 测试员, 信息收集, 文档写作, 代码审查, Build); defaults to Build'),
     note: str('Short note shown in the result'),
   },
   ['prompt']
@@ -1050,11 +1050,11 @@ const OMO = [
 const WORKNODE_TOOLS = [
   fn(
     'worknode_create',
-    'Create a conversation work node under this manager node. Choose an Agent profile (defaults to the built-in Agent), give it a title and task, and optionally narrow its tools, skills or MCP servers. Set start=false to create it idle. The Agent delegates actual work to Subagents.',
+    'Create a conversation work node under this manager node. Choose the Agent profile that matches the work: 通用 (full toolset), 信息收集, 程序员, 测试员, 文档写作 or 代码审查. Give the node a title and task, and optionally narrow its tools, skills or MCP servers. Set start=false to create it idle. The Agent works directly with its role tools and may delegate focused parts to Subagents.',
     {
       title: str('Short conversation title'),
       task: str('Task prompt for the conversation'),
-      agentId: str('Agent profile id; defaults to the built-in Agent'),
+      agentId: str('Agent profile id or name (通用, 信息收集, 程序员, 测试员, 文档写作, 代码审查); defaults to 通用'),
       tools: arr('Optional subset of the Agent tools'),
       skills: arr('Optional subset of skill ids'),
       mcp: arr('Optional subset of MCP server ids'),

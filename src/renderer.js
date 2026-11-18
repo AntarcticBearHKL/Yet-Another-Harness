@@ -6,9 +6,7 @@ const DEFAULT_AGENT_ID = 'basic';
 const DEFAULT_AGENT_NAME = 'Build';
 const MANAGER_AGENT_ID = 'manager';
 const MANAGER_AGENT_NAME = 'Manager';
-const AGENT_AGENT_ID = 'agent';
-const AGENT_AGENT_NAME = 'Agent';
-const SUBAGENT_TOOL_NAMES = ['subagent_start', 'subagent_close'];
+const AGENT_AGENT_NAME = '通用';
 const EFFORT_LEVELS = ['low', 'high', 'max'];
 const DEFAULT_EFFORT = 'high';
 const NO_KEY_HINT = 'No API key. Open Settings to add one.';
@@ -214,10 +212,7 @@ const state = {
   agents: [],
   agentsLoading: false,
   agentsFetchedAt: 0,
-  agentSaveTimer: null,
   agentToolGroup: null,
-  agentDeleteArmed: null,
-  agentDeleteTimer: null,
   agentMenuOpen: false,
   agentMenuIndex: -1,
   attachedSkills: [],
@@ -474,8 +469,6 @@ const api = {
     requestJson(
       `/api/system-info?sessionId=${encodeURIComponent(sessionId)}`
     ),
-  saveAgents: (agents) =>
-    requestJson('/api/agents', { method: 'POST', body: { agents } }),
   resolveApproval: (id, approved) =>
     requestJson(`/api/approvals/${encodeURIComponent(id)}`, {
       method: 'POST',
@@ -5744,7 +5737,11 @@ function agentMenuEntries() {
       ? state.agents
       : [{ id: DEFAULT_AGENT_ID, name: DEFAULT_AGENT_NAME }];
   return agents
-    .filter((agent) => agent.id !== MANAGER_AGENT_ID)
+    .filter(
+      (agent) =>
+        agent.id !== MANAGER_AGENT_ID &&
+        (agent.kind === 'agent' || agent.id === DEFAULT_AGENT_ID)
+    )
     .map((agent) => ({
       id: agent.id || DEFAULT_AGENT_ID,
       name: agent.name || DEFAULT_AGENT_NAME,
@@ -8959,12 +8956,6 @@ function renderCatalogCategories(data, selectedKind, page) {
           )
         );
       }
-      const add = el('button', 'catalog-category catalog-add catalog-add-row');
-      add.type = 'button';
-      add.setAttribute('aria-label', `新建 ${label}`);
-      add.append(el('span', 'catalog-add-plus', '+'));
-      add.addEventListener('click', () => createAgent(kind));
-      section.append(add);
       dom.catalogCategories.append(section);
     }
     return;
@@ -9305,92 +9296,6 @@ function renderCatalogContent(kind) {
   );
 }
 
-function saveAgentsSoon() {
-  clearTimeout(state.agentSaveTimer);
-  state.agentSaveTimer = setTimeout(() => void saveAgentsNow(), 350);
-}
-
-async function saveAgentsNow() {
-  clearTimeout(state.agentSaveTimer);
-  state.agentSaveTimer = null;
-  const payload = state.agents.map((agent) => ({
-    id: agent.id,
-    name: agent.name,
-    kind: agent.kind === 'agent' ? 'agent' : 'subagent',
-    prompt: agent.prompt,
-    tools: Array.isArray(agent.tools) ? agent.tools : null,
-  }));
-  try {
-    const data = await api.saveAgents(payload);
-    if (!Array.isArray(data?.agents)) {
-      console.error('save agents failed: invalid response');
-    }
-    state.agentsFetchedAt = Date.now();
-    renderAgentPicker();
-    refreshContextBlocks();
-    if (state.catalogOpen && state.catalogKind?.startsWith('agent:')) {
-      renderCatalogCategories(state.catalogData, state.catalogKind, 'agents');
-    }
-  } catch (error) {
-    console.error('save agents failed', error);
-  }
-}
-
-function createAgent(kind = 'agent') {
-  const normalizedKind = kind === 'subagent' ? 'subagent' : 'agent';
-  const customCount = state.agents.filter(
-    (agent) =>
-      agent.id !== DEFAULT_AGENT_ID &&
-      agent.id !== MANAGER_AGENT_ID &&
-      agent.id !== AGENT_AGENT_ID &&
-      (agent.kind === 'agent' ? 'agent' : 'subagent') === normalizedKind
-  ).length;
-  const agent = {
-    id: makeId(),
-    name: `${normalizedKind === 'agent' ? 'Agent' : 'Subagent'} ${customCount + 1}`,
-    kind: normalizedKind,
-    prompt: '',
-    tools:
-      normalizedKind === 'agent' ? [...SUBAGENT_TOOL_NAMES] : null,
-  };
-  state.agents.push(agent);
-  state.catalogKind = `agent:${agent.id}`;
-  saveAgentsSoon();
-  renderCatalogCategories(state.catalogData, state.catalogKind, 'agents');
-  renderCatalogContent(state.catalogKind);
-}
-
-function deleteAgent(agentId) {
-  if (
-    agentId === DEFAULT_AGENT_ID ||
-    agentId === MANAGER_AGENT_ID ||
-    agentId === AGENT_AGENT_ID
-  ) {
-    return;
-  }
-  const index = state.agents.findIndex((agent) => agent.id === agentId);
-  if (index < 0) return;
-  state.agents.splice(index, 1);
-  state.agentDeleteArmed = null;
-  clearTimeout(state.agentDeleteTimer);
-  let changed = false;
-  for (const session of state.sessions) {
-    if (session.agentId === agentId) {
-      session.agentId = DEFAULT_AGENT_ID;
-      changed = true;
-    }
-  }
-  if (changed) saveChatsSoon();
-  saveAgentsSoon();
-  state.catalogKind = state.agents[0]
-    ? `agent:${state.agents[0].id}`
-    : 'agent:none';
-  renderAgentPicker();
-  refreshContextBlocks();
-  renderCatalogCategories(state.catalogData, state.catalogKind, 'agents');
-  renderCatalogContent(state.catalogKind);
-}
-
 function agentToolGroups(allTools) {
   const groups = [];
   for (const group of TOOL_GROUPS) {
@@ -9429,22 +9334,24 @@ function renderAgentToolsEditor(agent, allTools, options = {}) {
     state.agentToolGroup = groups[0]?.id || null;
   }
 
-  const saveTools = () => {
-    if (selected.size === allNames.length) agent.tools = null;
-    else agent.tools = allNames.filter((name) => selected.has(name));
-    saveAgentsSoon();
-  };
-
   const layout = el('div', 'agent-tools-layout');
+  if (readOnly) layout.classList.add('readonly');
   const side = el('div', 'agent-tools-side');
   const sideList = el('div', 'agent-tools-side-list');
   const main = el('div', 'agent-tools-main');
+
+  const lockCheckbox = (checkbox) => {
+    if (!readOnly) return;
+    checkbox.tabIndex = -1;
+    checkbox.addEventListener('click', (event) => event.preventDefault());
+    checkbox.addEventListener('keydown', (event) => event.preventDefault());
+  };
 
   const head = el('div', 'agent-tools-head');
   const allLabel = el('label', 'agent-toggle');
   const allCheckbox = document.createElement('input');
   allCheckbox.type = 'checkbox';
-  allCheckbox.disabled = readOnly;
+  lockCheckbox(allCheckbox);
   allLabel.append(allCheckbox);
   allLabel.append(el('span', 'agent-toggle-label', '允许所有工具'));
   head.append(allLabel);
@@ -9511,14 +9418,15 @@ function renderAgentToolsEditor(agent, allTools, options = {}) {
       const row = el('label', 'agent-tool-row');
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
-      checkbox.disabled = readOnly;
+      lockCheckbox(checkbox);
       checkbox.checked = selected.has(tool.name);
-      checkbox.addEventListener('change', () => {
-        if (checkbox.checked) selected.add(tool.name);
-        else selected.delete(tool.name);
-        saveTools();
-        updateState();
-      });
+      if (!readOnly) {
+        checkbox.addEventListener('change', () => {
+          if (checkbox.checked) selected.add(tool.name);
+          else selected.delete(tool.name);
+          updateState();
+        });
+      }
       const displayName = tool.name;
       const displayDescription =
         window.toolDisplayDescription?.(tool.name, tool.description) || '';
@@ -9542,17 +9450,18 @@ function renderAgentToolsEditor(agent, allTools, options = {}) {
     const row = el('div', 'agent-tools-category');
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
-    checkbox.disabled = readOnly;
+    lockCheckbox(checkbox);
     checkbox.addEventListener('click', (event) => event.stopPropagation());
-    checkbox.addEventListener('change', () => {
-      if (checkbox.checked) {
-        for (const tool of group.tools) selected.add(tool.name);
-      } else {
-        for (const tool of group.tools) selected.delete(tool.name);
-      }
-      saveTools();
-      updateState();
-    });
+    if (!readOnly) {
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+          for (const tool of group.tools) selected.add(tool.name);
+        } else {
+          for (const tool of group.tools) selected.delete(tool.name);
+        }
+        updateState();
+      });
+    }
     row.append(checkbox);
     const name = el('button', 'agent-tools-category-name', group.label);
     name.type = 'button';
@@ -9572,12 +9481,12 @@ function renderAgentToolsEditor(agent, allTools, options = {}) {
   }
 
   allCheckbox.addEventListener('change', () => {
+    if (readOnly) return;
     if (allCheckbox.checked) {
       for (const name of allNames) selected.add(name);
     } else {
       selected.clear();
     }
-    saveTools();
     updateState();
   });
 
@@ -9611,112 +9520,25 @@ function renderAgentEditor(agentId) {
     const fn = tool.function || tool;
     return !String(fn.name || '').startsWith('mcp__');
   });
-  const builtin = agent.builtin === true;
-  const readOnly = agent.id === MANAGER_AGENT_ID;
+  const readOnly = true;
   const editor = el('div', 'agent-editor');
   const head = el('div', 'agent-editor-head');
-  const name = el('input', 'agent-name-input');
-  name.type = 'text';
-  name.value = agent.name;
-  name.placeholder = 'Agent 名称';
-  name.disabled = readOnly;
-  if (!readOnly) {
-    name.addEventListener('input', () => {
-      agent.name = name.value.slice(0, 80);
-      saveAgentsSoon();
-    });
-  }
+  const name = el('div', 'agent-name-input agent-name-static', agent.name);
   head.append(name);
-
-  if (builtin) {
-    head.append(
-      el(
-        'span',
-        'agent-builtin-badge',
-        agent.id === MANAGER_AGENT_ID ? '管理' : '内置'
-      )
-    );
-  } else {
-    const del = el('button', 'pill agent-delete');
-    del.type = 'button';
-    const armed = state.agentDeleteArmed === agent.id;
-    del.textContent = armed ? '确认删除' : '删除';
-    if (armed) del.classList.add('danger-solid');
-    del.addEventListener('click', () => {
-      if (state.agentDeleteArmed === agent.id) {
-        deleteAgent(agent.id);
-        return;
-      }
-      state.agentDeleteArmed = agent.id;
-      clearTimeout(state.agentDeleteTimer);
-      state.agentDeleteTimer = setTimeout(() => {
-        state.agentDeleteArmed = null;
-        if (state.catalogOpen && state.catalogKind === `agent:${agent.id}`) {
-          renderAgentEditor(agent.id);
-        }
-      }, 3200);
-      renderAgentEditor(agent.id);
-    });
-    head.append(del);
-  }
   editor.append(head);
-
-  if (!builtin && !readOnly) {
-    const kindField = el('div', 'agent-field');
-    kindField.append(el('div', 'agent-field-label', '类型'));
-    const toggle = el('div', 'agent-kind-toggle');
-    for (const option of [
-      { kind: 'agent', label: 'Agent' },
-      { kind: 'subagent', label: 'Subagent' },
-    ]) {
-      const button = el('button', 'pill agent-kind-option', option.label);
-      button.type = 'button';
-      if ((agent.kind === 'agent' ? 'agent' : 'subagent') === option.kind) {
-        button.classList.add('active');
-      }
-      button.addEventListener('click', () => {
-        agent.kind = option.kind;
-        agent.tools =
-          option.kind === 'agent' ? [...SUBAGENT_TOOL_NAMES] : null;
-        saveAgentsSoon();
-        renderCatalogCategories(
-          state.catalogData,
-          `agent:${agent.id}`,
-          'agents'
-        );
-        renderAgentEditor(agent.id);
-      });
-      toggle.append(button);
-    }
-    kindField.append(toggle);
-    editor.append(kindField);
-  }
 
   const promptField = el('div', 'agent-field');
   promptField.append(el('div', 'agent-field-label', '提示词'));
-  const prompt = el('textarea', 'agent-prompt');
+  const prompt = el('textarea', 'agent-prompt agent-prompt-static');
   prompt.rows = 8;
-  prompt.placeholder =
-    '会注入 system prompt';
+  prompt.placeholder = '会注入 system prompt';
   prompt.value = agent.prompt || '';
-  prompt.readOnly = readOnly;
-  if (!readOnly) {
-    prompt.addEventListener('input', () => {
-      agent.prompt = prompt.value;
-      saveAgentsSoon();
-    });
-  }
+  prompt.readOnly = true;
+  prompt.tabIndex = -1;
   promptField.append(prompt);
   editor.append(promptField);
 
-  const kind = agent.kind === 'agent' ? 'agent' : 'subagent';
-  const allowedTools =
-    kind === 'agent'
-      ? allTools.filter((tool) => {
-          const fn = tool.function || tool;
-          return SUBAGENT_TOOL_NAMES.includes(String(fn.name || ''));
-        })
-      : allTools;
+  const allowedTools = allTools;
   editor.append(renderAgentToolsEditor(agent, allowedTools, { readOnly }));
   dom.catalogList.append(editor);
 }

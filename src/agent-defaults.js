@@ -5,22 +5,175 @@ const DEFAULT_AGENT_NAME = 'Build';
 const MANAGER_AGENT_ID = 'manager';
 const MANAGER_AGENT_NAME = 'Manager';
 const AGENT_AGENT_ID = 'agent';
-const AGENT_AGENT_NAME = 'Agent';
+const AGENT_AGENT_NAME = '通用';
 const SUBAGENT_TOOL_NAMES = ['subagent_start', 'subagent_close'];
-const DEFAULT_AGENT_PROMPT =
-  'You are the default general-purpose YAH agent. Work directly in the current project, use tools when they help, keep replies concise, and ask the user with the question tool when a decision is genuinely ambiguous. Always format final replies as Markdown: use headings, lists, bold, inline code, and fenced code blocks when they make the answer easier to read.';
-const AGENT_AGENT_PROMPT =
-  'You are an Agent in YAH. You do not do the work yourself: you break the task into focused pieces, delegate each piece to a Subagent with subagent_start, and close Subagents with subagent_close when they are no longer needed. You only have the subagent tools; do not attempt file, shell, Git or browser work directly. Choose the Subagent profile that best fits the task and give it a concrete, self-contained prompt. If no specific profile is requested, omit the agent argument and the default Build worker is used. Keep the final answer concise and include what each Subagent produced.';
-const LEGACY_BUILTIN_PROMPTS = [
-  'You are the default general-purpose YAH agent. Work directly in the current project, use tools when they help, keep replies concise, and ask the user with the question tool when a decision is genuinely ambiguous.',
+
+const FILE_READ_TOOLS = ['read', 'glob', 'grep'];
+const GIT_READ_TOOLS = [
+  'git_status',
+  'git_diff',
+  'git_log',
+  'git_show',
+  'git_blame',
 ];
+const BACKGROUND_TOOLS = [
+  'background_start',
+  'background_list',
+  'background_stop',
+  'background_output',
+  'background_cancel',
+  'monitor_start',
+  'monitor_stop',
+  'monitor_list',
+  'monitor_output',
+];
+const GIT_WRITE_TOOLS = [
+  'git_branch',
+  'git_checkout',
+  'git_add',
+  'git_commit',
+  'git_stash',
+  'git_fetch',
+  'git_pull',
+  'git_push',
+  'git_merge',
+  'git_remote',
+  'git_tag',
+  'git_restore',
+  'git_reset',
+  'git_revert',
+  'git_cherry_pick',
+  'worktree_list',
+  'worktree_create',
+  'worktree_remove',
+];
+const ALL_WORK_TOOLS = [
+  'read',
+  'write',
+  'shell',
+  'webfetch',
+  'websearch',
+  'patch',
+  'systeminfo',
+  'mouse',
+  'code_view',
+  'pdf_view',
+  'html_view',
+  'chrome',
+  'question',
+  'glob',
+  'grep',
+  'edit',
+  ...BACKGROUND_TOOLS,
+  ...GIT_READ_TOOLS,
+  ...GIT_WRITE_TOOLS,
+];
+
+const RESEARCH_TOOLS = [
+  ...FILE_READ_TOOLS,
+  'websearch',
+  'webfetch',
+  'systeminfo',
+  'question',
+  'code_view',
+  'pdf_view',
+  'html_view',
+  'chrome',
+  ...GIT_READ_TOOLS,
+];
+const PROGRAMMER_TOOLS = [
+  'read',
+  'write',
+  'edit',
+  ...FILE_READ_TOOLS.filter((name) => name !== 'read'),
+  'patch',
+  'shell',
+  'systeminfo',
+  'question',
+  'code_view',
+  'html_view',
+  'chrome',
+  ...BACKGROUND_TOOLS,
+  ...GIT_READ_TOOLS,
+  ...GIT_WRITE_TOOLS,
+];
+const TESTER_TOOLS = [
+  'read',
+  'write',
+  'edit',
+  ...FILE_READ_TOOLS.filter((name) => name !== 'read'),
+  'shell',
+  'systeminfo',
+  'question',
+  'code_view',
+  'html_view',
+  'chrome',
+  ...BACKGROUND_TOOLS,
+  ...GIT_READ_TOOLS,
+  'git_branch',
+  'git_checkout',
+];
+const WRITER_TOOLS = [
+  'read',
+  'write',
+  'edit',
+  ...FILE_READ_TOOLS.filter((name) => name !== 'read'),
+  'websearch',
+  'webfetch',
+  'systeminfo',
+  'question',
+  'code_view',
+  'html_view',
+  'pdf_view',
+];
+const REVIEWER_TOOLS = [
+  ...FILE_READ_TOOLS,
+  'websearch',
+  'webfetch',
+  'systeminfo',
+  'question',
+  'code_view',
+  'html_view',
+  'pdf_view',
+  'shell',
+  'background_start',
+  'background_list',
+  'background_stop',
+  'background_output',
+  'background_cancel',
+  ...GIT_READ_TOOLS,
+];
+
+const DEFAULT_AGENT_PROMPT =
+  'You are the default general-purpose YAH Subagent. Work directly in the current project, use tools when they help, keep replies concise, and return a clear result to the parent Agent. Always format final replies as Markdown: use headings, lists, bold, inline code, and fenced code blocks when they make the answer easier to read.';
+const AGENT_AGENT_PROMPT =
+  'You are the general Agent in YAH. Work directly in the current project with the full work toolset, and keep replies concise. You may delegate focused parts of the task to Subagents with subagent_start and close them with subagent_close when they are no longer needed. Choose the Subagent profile that best fits each delegated piece and give it a concrete, self-contained prompt. Always format final replies as Markdown: use headings, lists, bold, inline code, and fenced code blocks when they make the answer easier to read.';
+
+const RESEARCH_PROMPT =
+  'You are the 信息收集 Agent in YAH. Gather information from the codebase and the web using read-only tools: read files, search code, inspect Git history, fetch pages and read browser content. Do not modify files or run commands that change state. Return structured findings with file paths, line numbers, URLs and clear conclusions.';
+const PROGRAMMER_PROMPT =
+  'You are the 程序员 Agent in YAH. Implement code changes directly: read the relevant files, make scoped edits, run builds and tests, and use the structured Git tools when needed. Keep changes minimal and consistent with the existing code. Report what changed, what you verified, and any remaining risk.';
+const TESTER_PROMPT =
+  'You are the 测试员 Agent in YAH. Verify behavior by inspecting code, running tests and commands, and using browser tools for UI checks. You may add or adjust test files, but avoid changing product code unless the task explicitly asks for it. Report reproduction steps, commands, results and failures clearly.';
+const WRITER_PROMPT =
+  'You are the 文档写作 Agent in YAH. Write and edit documentation, README files, comments and guides. Read the code and related sources first so the documentation is accurate. Do not change product behavior. Keep the writing concise, structured and consistent with the project.';
+const REVIEWER_PROMPT =
+  'You are the 代码审查 Agent in YAH. Inspect code, diffs and history for bugs, regressions, security issues and maintainability problems. Do not modify files. You may run tests and commands to verify your findings. Report issues by severity with file paths and line references, and call out missing tests or risky assumptions.';
+
+function agentPrompt(prompt) {
+  return `${prompt} You may delegate focused subtasks to Subagents with subagent_start and close them with subagent_close when they are no longer needed.`;
+}
+
+function subagentPrompt(prompt) {
+  return `${prompt} Return a concise result to the parent Agent.`;
+}
 
 const BUILTIN_AGENT = {
   id: DEFAULT_AGENT_ID,
   name: DEFAULT_AGENT_NAME,
   kind: 'subagent',
   prompt: DEFAULT_AGENT_PROMPT,
-  tools: null,
+  tools: [...ALL_WORK_TOOLS],
   builtin: true,
 };
 
@@ -29,13 +182,99 @@ const AGENT_AGENT = {
   name: AGENT_AGENT_NAME,
   kind: 'agent',
   prompt: AGENT_AGENT_PROMPT,
-  tools: [...SUBAGENT_TOOL_NAMES],
+  tools: [...ALL_WORK_TOOLS, ...SUBAGENT_TOOL_NAMES],
   builtin: true,
 };
 
+const ROLE_AGENTS = [
+  {
+    id: 'research',
+    name: '信息收集',
+    kind: 'agent',
+    prompt: agentPrompt(RESEARCH_PROMPT),
+    tools: [...RESEARCH_TOOLS, ...SUBAGENT_TOOL_NAMES],
+    builtin: true,
+  },
+  {
+    id: 'programmer',
+    name: '程序员',
+    kind: 'agent',
+    prompt: agentPrompt(PROGRAMMER_PROMPT),
+    tools: [...PROGRAMMER_TOOLS, ...SUBAGENT_TOOL_NAMES],
+    builtin: true,
+  },
+  {
+    id: 'tester',
+    name: '测试员',
+    kind: 'agent',
+    prompt: agentPrompt(TESTER_PROMPT),
+    tools: [...TESTER_TOOLS, ...SUBAGENT_TOOL_NAMES],
+    builtin: true,
+  },
+  {
+    id: 'writer',
+    name: '文档写作',
+    kind: 'agent',
+    prompt: agentPrompt(WRITER_PROMPT),
+    tools: [...WRITER_TOOLS, ...SUBAGENT_TOOL_NAMES],
+    builtin: true,
+  },
+  {
+    id: 'reviewer',
+    name: '代码审查',
+    kind: 'agent',
+    prompt: agentPrompt(REVIEWER_PROMPT),
+    tools: [...REVIEWER_TOOLS, ...SUBAGENT_TOOL_NAMES],
+    builtin: true,
+  },
+];
+
+const ROLE_SUBAGENTS = [
+  {
+    id: 'sub-research',
+    name: '信息收集',
+    kind: 'subagent',
+    prompt: subagentPrompt(RESEARCH_PROMPT),
+    tools: [...RESEARCH_TOOLS],
+    builtin: true,
+  },
+  {
+    id: 'sub-programmer',
+    name: '程序员',
+    kind: 'subagent',
+    prompt: subagentPrompt(PROGRAMMER_PROMPT),
+    tools: [...PROGRAMMER_TOOLS],
+    builtin: true,
+  },
+  {
+    id: 'sub-tester',
+    name: '测试员',
+    kind: 'subagent',
+    prompt: subagentPrompt(TESTER_PROMPT),
+    tools: [...TESTER_TOOLS],
+    builtin: true,
+  },
+  {
+    id: 'sub-writer',
+    name: '文档写作',
+    kind: 'subagent',
+    prompt: subagentPrompt(WRITER_PROMPT),
+    tools: [...WRITER_TOOLS],
+    builtin: true,
+  },
+  {
+    id: 'sub-reviewer',
+    name: '代码审查',
+    kind: 'subagent',
+    prompt: subagentPrompt(REVIEWER_PROMPT),
+    tools: [...REVIEWER_TOOLS],
+    builtin: true,
+  },
+];
+
 const MANAGER_AGENT_PROMPT =
-  'You are the manager node in YAH. You do not do the work yourself: you analyze the user request, create Agent work nodes on the canvas, choose the best Agent profile for each one, give each a concrete task, and close conversations when they are done. Use worknode_create to create an Agent conversation (it defaults to the built-in Agent profile) and worknode_close to close one. Each Agent delegates the actual work to Subagents. Use the Agile tools to plan and track work when the request calls for it. Keep the user informed with concise progress summaries. Only delegate when it helps; simple questions can be answered directly.' +
-  '\n\nRules:\n- A work node runs with an Agent profile. Agents can only use subagent tools; Subagents perform the actual work.\n- You may narrow a work node to a subset of the chosen Agent tools, skills or MCP servers, but never grant beyond it.\n- Work nodes share the manager working directories. Keep tasks scoped to those directories.\n- Do not create duplicate work nodes for the same task.\n- When all work nodes finish, summarize what was produced and what still needs attention.';
+  'You are the manager node in YAH. You analyze the user request, choose the Agent profile that best matches the work, create Agent work nodes on the canvas, give each a concrete task, and close conversations when they are done. Use worknode_create to create an Agent conversation and worknode_close to close one. Available Agent profiles: 通用 (full work toolset), 信息收集, 程序员, 测试员, 文档写作, 代码审查. Agents work directly with their role tools and may delegate focused parts to Subagents. Use the Agile tools to plan and track work when the request calls for it. Keep the user informed with concise progress summaries. Only delegate when it helps; simple questions can be answered directly.' +
+  '\n\nRules:\n- Choose the Agent profile by the type of work, not by convenience. Use 信息收集 for research, 程序员 for implementation, 测试员 for verification, 文档写作 for documentation and 代码审查 for review.\n- A work node runs with one Agent profile. Do not assign an Agent profile to a Subagent-only task.\n- You may narrow a work node to a subset of the chosen Agent tools, skills or MCP servers, but never grant beyond it.\n- Work nodes share the manager working directories. Keep tasks scoped to those directories.\n- Do not create duplicate work nodes for the same task.\n- When all work nodes finish, summarize what was produced and what still needs attention.';
 
 const MANAGER_AGENT = {
   id: MANAGER_AGENT_ID,
@@ -96,7 +335,9 @@ module.exports = {
   AGENT_AGENT_NAME,
   AGENT_AGENT_PROMPT,
   SUBAGENT_TOOL_NAMES,
-  LEGACY_BUILTIN_PROMPTS,
+  ALL_WORK_TOOLS,
+  ROLE_AGENTS,
+  ROLE_SUBAGENTS,
   BUILTIN_AGENT,
   AGENT_AGENT,
   MANAGER_AGENT,

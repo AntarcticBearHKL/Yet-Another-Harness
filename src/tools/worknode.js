@@ -302,17 +302,14 @@ async function worknodeCreate(args = {}, context = null) {
     );
   }
   if (agent.kind !== 'agent') {
-    return error('work nodes require an Agent profile; Subagents perform the work');
+    return error('work nodes require an Agent profile');
   }
   if (isManagerAgent(agent)) {
     return error('manager Agents cannot run as work nodes');
   }
   const tools = normalizeToolsForAgent(agent, args.tools);
   const skills = normalizeSkills(args.skills);
-  const mcpDisabled =
-    agent.kind === 'agent'
-      ? ['*']
-      : mcpDisabledFor(args.mcp) || [];
+  const mcpDisabled = mcpDisabledFor(args.mcp) || [];
   const nodeConfig = {
     kind: 'work',
     directories: managerDirectories(manager),
@@ -320,7 +317,7 @@ async function worknodeCreate(args = {}, context = null) {
     task,
     tools,
     skills,
-    mcp: agent.kind === 'agent' ? null : Array.isArray(args.mcp) ? args.mcp.map(String) : null,
+    mcp: Array.isArray(args.mcp) ? args.mcp.map(String) : null,
   };
   const id = crypto.randomUUID();
   store.createSession({

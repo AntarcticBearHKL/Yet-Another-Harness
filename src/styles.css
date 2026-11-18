@@ -4605,37 +4605,10 @@ body.ring-open #messages {
   text-align: center;
 }
 
-.catalog-add {
-  color: var(--accent);
-}
-
 .catalog-agent-section {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.catalog-add-row {
-  justify-content: center;
-  border: 1px dashed var(--line);
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--accent);
-}
-
-.catalog-add-row:hover {
-  border-color: rgba(185, 111, 61, 0.35);
-  background: var(--hover);
-}
-
-.catalog-add-plus {
-  font-size: 18px;
-  font-weight: 400;
-  line-height: 1;
-}
-
-.catalog-add .catalog-category-name {
-  font-weight: 600;
 }
 
 .agent-editor {
@@ -4668,33 +4641,11 @@ body.ring-open #messages {
   font-weight: 600;
 }
 
-.agent-name-input:focus {
-  outline: 0;
-  border-color: var(--accent);
-}
-
-.agent-editor-head .agent-delete {
-  flex: none;
-  height: 38px;
-  color: #b23a2f;
-}
-
-.agent-builtin-badge {
-  flex: none;
-  padding: 3px 8px;
-  border: 1px solid rgba(185, 111, 61, 0.28);
-  border-radius: 999px;
-  background: rgba(185, 111, 61, 0.1);
-  color: var(--accent-deep);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.agent-name-input:disabled,
-.agent-prompt:read-only {
-  opacity: 0.72;
+.agent-name-static {
+  display: flex;
+  align-items: center;
   cursor: default;
+  user-select: none;
 }
 
 .agent-field {
@@ -4708,32 +4659,6 @@ body.ring-open #messages {
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
-}
-
-.agent-kind-toggle {
-  display: flex;
-  gap: 6px;
-}
-
-.agent-kind-option {
-  min-height: 32px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--dim);
-}
-
-.agent-kind-option.active {
-  border-color: rgba(185, 111, 61, 0.4);
-  background: var(--selected);
-  color: var(--text);
-}
-
-.agent-tool-row input:disabled,
-.agent-tools-category input:disabled,
-.agent-toggle input:disabled {
-  opacity: 0.55;
-  cursor: default;
 }
 
 .agent-prompt {
@@ -4753,6 +4678,16 @@ body.ring-open #messages {
 .agent-prompt:focus {
   outline: 0;
   border-color: var(--accent);
+}
+
+.agent-prompt-static {
+  resize: none;
+  cursor: default;
+}
+
+.agent-tools-layout.readonly input[type='checkbox'] {
+  pointer-events: none;
+  cursor: default;
 }
 
 .agent-tools-layout {
@@ -8394,7 +8329,6 @@ body:has(#action-menu:not(.hidden)) #window-controls {
   font-weight: 600;
 }
 
-.agent-builtin-badge,
 .catalog-param-required,
 .mcp-badge,
 .mcp-transport,

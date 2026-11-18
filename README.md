@@ -65,7 +65,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 对话面板里按 Space 总是打开输入框（焦点在按钮 / 消息块上时也一样，不会触发折叠或按钮点击）；输入框为空或只有空格、且没有挂 Skill 时，再按 Space 关闭输入框；有文字或已挂 Skill 时 Space 才作为空格
 - 所有带确认按钮的弹窗按 Space 等于点击确认按钮：删除确认的 `Delete`、重命名的 `Save`、项目的 `Create / Save`、Goal 的 `Start Goal`、Skill 参数的 `Attach`、工具授权的 `允许一次`、设置的 `Done`、MCP 服务器表单的 `Save`；焦点在输入框 / 文本域 / 下拉框里时 Space 仍然是空格，项目目录拖放区这类自己处理 Space 的控件保持原行为
 - 后台进程：LLM 用 `background_start` 启动长时间挂载的进程（dev server、watcher、`npm run dev` 等）并附 `note` 备注，工具立即返回 id、备注、命令和启动信息；进程会一直运行，让端口 / 服务持续可用，不用来执行任务拿结果。对话右上角显示当前对话运行中的后台任务数量，点击打开面板查看每个任务的备注、命令、状态、耗时、输出并停止任务；`background_list` / `background_output` / `background_stop` 用于列出、读取和停止任务；工具面板里是「后台」分类
-- 子代理：`subagent_start` 在独立只读对话里跑一个完整 Agent 任务（`fork: true` 可先分叉当前对话），工具立即返回；任务完成后把结果像后台完成提示一样排入当前对话队列，当前回合结束后自动继续。子代理对话命名 `#n-对话名`，在 Tab 列表里显示「子代理」徽章，只能看不能输入；`subagent_list` / `subagent_output` / `subagent_stop` 用于管理；工具面板里是「子代理」分类
+- 子代理：`subagent_start` 在独立只读对话里跑一个完整任务（`fork: true` 可先分叉当前对话），可选择角色配置（信息收集、程序员、测试员、文档写作、代码审查、Build），工具立即返回；任务完成后把结果像后台完成提示一样排入当前对话队列，当前回合结束后自动继续。子代理对话命名 `#n-对话名`，在 Tab 列表里显示「子代理」徽章，只能看不能输入；`subagent_close` 停止并关闭它；工具面板里是「Subagent」分类
 - `/fork` 系统 Skill：在当前工作目录把当前对话分叉成新的可编辑对话，命名 `#n-对话名`，原对话保持不变；在输入框输入 `/fork [名字]` 或从斜杠列表选择
 - Agile 工作区：从 Tab 工作区空白处的右键菜单打开；桌面端打开一个独立窗口（网页端回退为全屏页面），窗口位置和大小会记住。固定五列 Backlog / Human In The Loop / In Progress / Blocked / Finished；左侧分组和迭代，支持折叠、改名、新建、删除；卡片可以打开任务表单，Human In The Loop 可编辑标题和描述，其他列只读，备注在 In Progress 期间锁定；Finished 任务被加备注会自动回到 Backlog 并标记返工。支持任务搜索、WIP 上限、迭代日期/目标、显示更新时间和默认 OpenAgile Skill。看板数据存在 `%APPDATA%\yah\agile.json`；人只写备注，卡片移动由 Agent 工具完成
 - Agile 原生工具：工具面板新增「Agile」分类，`agile_*` 工具替代原 OpenAgile MCP 的看板、分组、迭代、任务、批量移动、备注消化、认领/释放、阻塞、WIP 设置、事件等待和技能接口；工具遵循固定五列、未消化备注不能开工、Finished 不能删除、只有每组最后一个迭代可以删除等规则
@@ -79,8 +79,8 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 在输入框开头输入 `/` 会在光标位置弹出搜索式 Skill 联想：按名称、描述、关键词匹配当前对话可用的 Skill，上下键移动、回车或点击选择；输入完整的 Skill 名称或 id 后会自动识别并关闭联想，后面可以直接跟空格、参数或正文，不需要回车选择；只有部分匹配时才需要上下键 / 回车选择。选中后输入框本身不变色，只在输入框上方显示一个带颜色的 `/ Skill` 标记，按 Backspace 或点 × 整体删除；带参数的 MCP Skill 会先弹出参数表单
 - 附加的 Skill 在发送时解析并注入该次请求的 system prompt（`# Active Skills`），不会写进用户输入；排队消息会一起保存自己的 Skill
 - 已连接且当前对话启用的 MCP 服务器会把 prompts 暴露为临时 Skill；切换 MCP 开关后列表实时更新
-- Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧列出 Agent 和一个只有 `+` 的新建行，右侧配置名称、提示词和工具权限；内置「Build」始终存在，可以修改但不可删除，自定义 Agent 配置保存在 `%APPDATA%\yah\agents.json`
-- Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；内置 `Build` 的提示词要求所有最终回复使用 Markdown；工具权限和工具目录一样左右分栏：左列第一行是「允许所有工具」，下面是分类（搜索 / 文件 / 系统 / 代理 / 会话），右列第一行是搜索框，下面是当前分类的工具；可以勾选所有工具、整类工具，也可以逐个勾选，不显示任何数量统计；「允许所有工具」和分类项使用同一缩进、字号和行高，右侧工具列表固定高度，工具少时不缩短、超出时内部滚动；顶部名称输入框和删除按钮同高对齐；MCP 工具不进入 Agent 工具权限，也不受 Agent 工具勾选限制，仍由对话的 MCP 开关控制，并继续在 tool 面板里查看；不勾选则不能调用工具
+- Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧按「管理 / Agent / Subagent」分组列出固定配置，右侧显示名称、提示词和工具权限；内置角色包括通用、信息收集、程序员、测试员、文档写作、代码审查，Subagent 提供对应的角色配置和通用 Build；配置完全只读，不能新增、删除或修改
+- Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；每个角色只勾选与其工作类型匹配的工具，Agent 角色保留 `subagent_start` / `subagent_close` 以便把局部任务交给 Subagent；工具权限和工具目录一样左右分栏：左列第一行是「允许所有工具」，下面是分类，右列第一行是搜索框，下面是当前分类的工具；可以浏览分类和搜索，但复选框只展示状态、不响应点击，显示保持原样不做灰色禁用；MCP 工具不进入 Agent 工具权限，也不受 Agent 工具勾选限制，仍由对话的 MCP 开关控制，并继续在 tool 面板里查看
 - 输入框底部从左到右是：当前 Agent 名字（如 `Build`，琥珀色、左对齐，可点击展开暖色磨砂下拉菜单）、写死的模型名 `deepseek-v4.1-flash-1017`（带下拉箭头，目前只有这一个选项）、思考强度滑条、极简回车图标发送按钮；输入框默认不显示 placeholder。每个对话必须有一个 Agent，新对话默认使用「Build」；按对话保存选择，新对话继承同项目上一个对话的 Agent；对话开始（有第一条消息）后 Agent 固定，选择器变灰锁定，不能再切换；排队消息会保存自己的 Agent
 - 思考强度滑条是一条极简平面细线 + 小圆点，不显示「思考强度」文字和 low/high/max 挡位文字，鼠标指针保持默认；拖动时圆点自由跟随指针、没有吸附阈限，松开后自动吸附到最近的 `low` / `high` / `max` 挡位；也可以用方向键切换，选择保存在 `settings.json`，发送时作为 `reasoning_effort` 传给 DeepSeek
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
@@ -143,8 +143,8 @@ server/usage.js    OpenCode Go 额度查询（/api/usage，60 秒缓存）
 server/runner.js   agent 主循环、工具执行、消息/事件持久化
 server/subagents.js 子代理服务：新建/分叉只读对话、启动 run、完成后把结果排回父对话
 server/skills.js   Skill 发现（skills/ + %APPDATA%\yah\skills）与 MCP prompts 转 Skill
-server/agents.js   Agent 配置（%APPDATA%\yah\agents.json）：内置 Build + 自定义提示词与工具权限
-src/agent-defaults.js 内置 Build 的 id、名称和提示词
+server/agents.js   Agent 配置：固定内置角色列表，只读，不接受新增、删除或修改
+src/agent-defaults.js 内置 Manager / Agent / Subagent 角色的 id、名称、提示词和工具权限
 server/context.js  项目 AGENTS.md / agent.md 读取与一次性快照
 skills/            内置 Skill Markdown（含 test-skill.md）
 server/mcp/config.js   MCP 自定义配置存储、JSON 配置解析
@@ -210,7 +210,7 @@ agent 循环、工具、SQLite、API key 都在本地后端。`contextIsolation:
   - 运行时还会出现 `chats.db-wal` / `chats.db-shm`；备份时不要只复制 `chats.db`
 - `%APPDATA%\yah\settings.json`：API key（后端读取，网页端拿不到）
 - `%APPDATA%\yah\mcp.json`：YAH 自己添加的 MCP 服务器配置（STDIO 命令/参数/环境变量，或远程 URL/Headers）
-- `%APPDATA%\yah\agents.json`：自定义 Agent 和内置 `Build` 的修改；内置 `Build` 始终可用、不可删除
+- `%APPDATA%\yah\agents.json`：旧版 Agent 配置备份；当前 Agent 角色由代码固定，界面只读
 - `%APPDATA%\yah\agile.json`：Agile 看板数据（分组、迭代、任务、备注、WIP、技能、事件日志），由原生 `agile_*` 工具和 Agile 页面共用
 - `%APPDATA%\yah\agile-window.json`：独立 Agile 窗口的位置和大小
 - OpenCode 的 `opencode.json(c)`：MCP 服务器会自动继承，不在 YAH 的 `mcp.json` 里复制

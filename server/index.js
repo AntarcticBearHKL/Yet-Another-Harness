@@ -18,7 +18,7 @@ const runner = require('./runner');
 const usage = require('./usage');
 const { McpManager } = require('./mcp/manager');
 const { createSkillService } = require('./skills');
-const { loadAgents, saveAgents, getAgent, BUILTIN_AGENT } = require('./agents');
+const { loadAgents, getAgent, getSubagent, BUILTIN_AGENT } = require('./agents');
 const { createSubagentService } = require('./subagents');
 const { ensureAgentsMd, readAgentsMd } = require('./context');
 const { normalizeGoal } = require('../src/goal');
@@ -152,7 +152,7 @@ const skillService = createSkillService({
   mcpManager,
 });
 const subagentService = createSubagentService({
-  resolveAgent: (agentId) => getAgent(AGENTS_FILE, agentId) || BUILTIN_AGENT,
+  resolveAgent: (agentId) => getSubagent(AGENTS_FILE, agentId),
 });
 tools.configure({
   skillService,
@@ -804,14 +804,7 @@ function handleApi(req, res, url) {
   }
 
   if (req.method === 'POST' && pathname === '/api/agents') {
-    readJson(req)
-      .then((body) => {
-        const agents = saveAgents(AGENTS_FILE, body?.agents);
-        sendJson(res, 200, { ok: true, agents });
-      })
-      .catch((error) =>
-        sendJson(res, error.status || 400, { error: error.message })
-      );
+    sendJson(res, 403, { error: 'agent profiles are read-only' });
     return true;
   }
 

@@ -77,9 +77,12 @@ test('canvas work nodes can be created and closed', async () => {
         { id: 'basic', name: 'Build', kind: 'subagent', tools: ['read', 'grep'] },
         {
           id: 'agent',
-          name: 'Agent',
+          name: '通用',
           kind: 'agent',
           tools: [
+            'read',
+            'write',
+            'shell',
             'subagent_start',
             'subagent_close',
           ],
@@ -89,9 +92,12 @@ test('canvas work nodes can be created and closed', async () => {
         if (id === 'agent') {
           return {
             id: 'agent',
-            name: 'Agent',
+            name: '通用',
             kind: 'agent',
             tools: [
+              'read',
+              'write',
+              'shell',
               'subagent_start',
               'subagent_close',
             ],
@@ -135,7 +141,11 @@ test('canvas work nodes can be created and closed', async () => {
     assert.equal(work.nodeRole, 'work');
     assert.equal(work.agentId, 'agent');
     assert.equal(work.nodeConfig.task, 'do it');
+    assert.deepEqual(work.mcpDisabled, []);
     assert.deepEqual(work.nodeConfig.tools, [
+      'read',
+      'write',
+      'shell',
       'subagent_start',
       'subagent_close',
     ]);

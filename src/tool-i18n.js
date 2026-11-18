@@ -213,17 +213,17 @@ const TOOL_I18N = {
   monitor_stop: t('停止监控', '停止被监控的后台命令。'),
   monitor_list: t('监控列表', '列出被监控的后台命令。'),
   monitor_output: t('监控输出', '读取被监控后台命令的输出。'),
-  subagent_start: t('启动 Subagent', '在独立只读会话中启动 Subagent 并立即返回；Subagent 可使用工具完整运行。', {
+  subagent_start: t('启动 Subagent', '在独立只读会话中启动 Subagent 并立即返回；Subagent 可选择角色配置并使用对应工具完整运行。', {
     prompt: '任务提示词',
     name: 'Subagent 会话名称',
     fork: '把当前对话 fork 给 Subagent',
-    agent: 'Subagent 配置 ID 或名称（默认 Build）',
+    agent: 'Subagent 配置 ID 或名称（信息收集、程序员、测试员、文档写作、代码审查、Build）',
     note: '结果显示的简短备注',
   }),
   subagent_close: t('关闭 Subagent', '停止正在运行的 Subagent 并关闭其会话。', {
     sessionId: 'Subagent 会话 ID',
   }),
-  worknode_create: t('创建对话', '在当前管理 node 下创建一个画布对话，选择 Agent、任务，并可收窄工具、技能或 MCP。'),
+  worknode_create: t('创建对话', '在当前管理 node 下创建一个画布对话，按工作类型选择 Agent（通用、信息收集、程序员、测试员、文档写作、代码审查），并可收窄工具、技能或 MCP。'),
   worknode_close: t('关闭对话', '关闭一个画布对话：停止运行、归档会话并从画布移除。'),
 
   agile_list_boards: t('敏捷迭代列表', '列出所有迭代及任务数和日期。'),
@@ -265,8 +265,8 @@ const TOOL_I18N = {
 
 const PARAM_I18N = {
   action: '操作类型',
-  agent: 'Agent',
-  agentId: 'Agent ID',
+  agent: 'Agent 配置 ID 或名称',
+  agentId: 'Agent 配置 ID 或名称',
   arguments: '参数',
   assignee: '负责人',
   awaitPromise: '等待 Promise 返回（默认 true）',
