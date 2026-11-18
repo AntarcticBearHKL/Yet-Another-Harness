@@ -787,14 +787,18 @@ function startRun({
   const sessionToolOverride = Array.isArray(session.nodeConfig?.tools)
     ? session.nodeConfig.tools.map(String).filter(Boolean)
     : null;
+  const effectiveMcpDisabled =
+    resolvedAgentConfig?.kind === 'agent'
+      ? ['*']
+      : Array.isArray(session.mcpDisabled)
+        ? session.mcpDisabled
+        : [];
   deepseek
     .runAgent({
       apiKey,
       system,
       history,
-      mcpDisabled: Array.isArray(session.mcpDisabled)
-        ? session.mcpDisabled
-        : [],
+      mcpDisabled: effectiveMcpDisabled,
       allowedTools:
         sessionToolOverride ||
         (Array.isArray(resolvedAgentConfig?.tools)

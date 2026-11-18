@@ -9,6 +9,9 @@ const {
   LEGACY_BUILTIN_PROMPTS,
   MANAGER_AGENT_ID,
   MANAGER_AGENT,
+  AGENT_AGENT_ID,
+  AGENT_AGENT,
+  SUBAGENT_TOOL_NAMES,
 } = require('../src/agent-defaults');
 
 const MAX_AGENTS = 50;
@@ -47,11 +50,16 @@ function normalizeAgent(raw, index) {
   const name =
     String(raw.name || fallbackName).trim().slice(0, MAX_NAME) || fallbackName;
   const prompt = String(raw.prompt || '').slice(0, MAX_PROMPT);
+  const kind = raw.kind === 'agent' ? 'agent' : 'subagent';
   return {
     id,
     name,
+    kind,
     prompt,
-    tools: normalizeTools(raw.tools),
+    tools:
+      kind === 'agent'
+        ? [...SUBAGENT_TOOL_NAMES]
+        : normalizeTools(raw.tools),
   };
 }
 
@@ -78,7 +86,16 @@ function builtinAgent(raw) {
     ...BUILTIN_AGENT,
     ...source,
     id: DEFAULT_AGENT_ID,
+    kind: 'subagent',
     prompt: useDefaultPrompt ? BUILTIN_AGENT.prompt : prompt,
+    builtin: true,
+  };
+}
+
+function agentAgent() {
+  return {
+    ...AGENT_AGENT,
+    tools: [...SUBAGENT_TOOL_NAMES],
     builtin: true,
   };
 }
@@ -100,11 +117,13 @@ function loadAgents(file) {
     );
     const custom = normalized.filter(
       (agent) =>
-        agent.id !== DEFAULT_AGENT_ID && agent.id !== MANAGER_AGENT_ID
+        agent.id !== DEFAULT_AGENT_ID &&
+        agent.id !== MANAGER_AGENT_ID &&
+        agent.id !== AGENT_AGENT_ID
     );
-    return [builtinAgent(stored), managerAgent(), ...custom];
+    return [builtinAgent(stored), managerAgent(), agentAgent(), ...custom];
   } catch {
-    return [BUILTIN_AGENT, managerAgent()];
+    return [BUILTIN_AGENT, managerAgent(), agentAgent()];
   }
 }
 
@@ -115,11 +134,14 @@ function saveAgents(file, agents) {
   );
   const custom = normalized.filter(
     (agent) =>
-      agent.id !== DEFAULT_AGENT_ID && agent.id !== MANAGER_AGENT_ID
+      agent.id !== DEFAULT_AGENT_ID &&
+      agent.id !== MANAGER_AGENT_ID &&
+      agent.id !== AGENT_AGENT_ID
   );
   const output = [
     builtinAgent(stored),
     managerAgent(),
+    agentAgent(),
     ...custom,
   ];
   const payload = output.map(({ builtin, ...agent }) => agent);
@@ -139,12 +161,14 @@ function getAgent(file, id) {
   if (!key || key === DEFAULT_AGENT_ID) {
     return loadAgents(file)[0] || BUILTIN_AGENT;
   }
+  if (key === AGENT_AGENT_ID) return agentAgent();
   return loadAgents(file).find((agent) => agent.id === key) || null;
 }
 
 module.exports = {
   BUILTIN_AGENT,
   DEFAULT_AGENT_ID,
+  AGENT_AGENT_ID,
   normalizeAgents,
   loadAgents,
   saveAgents,

@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const store = require('../src/store');
 const runner = require('./runner');
 const { normalizeReasoningEffort } = require('../src/reasoning');
+const { DEFAULT_AGENT_ID } = require('../src/agent-defaults');
 
 const MAX_RESULT = 20_000;
 const MAX_ENTRIES = 100;
@@ -107,6 +108,21 @@ function createSubagentService({ resolveAgent } = {}) {
     if (!text) throw new Error('prompt is required');
     const parent = store.getSession(parentSessionId);
     if (!parent) throw new Error('parent session not found');
+    const requestedId = String(agentId || '').trim();
+    const requested =
+      requestedId && resolveAgent ? resolveAgent(requestedId) : null;
+    if (requestedId && !requested) {
+      throw new Error(`subagent profile not found: ${requestedId}`);
+    }
+    if (requested?.kind === 'agent') {
+      throw new Error('choose a Subagent profile, not an Agent profile');
+    }
+    const subagentAgent =
+      requested || (resolveAgent ? resolveAgent(DEFAULT_AGENT_ID) : null);
+    const workerAgentId = subagentAgent?.id || DEFAULT_AGENT_ID;
+    const parentAgent = resolveAgent ? resolveAgent(parent.agentId) : null;
+    const workerMcpDisabled =
+      parentAgent?.kind === 'agent' ? [] : parent.mcpDisabled;
     const title = store.nextSessionTitle(
       name || promptLabel(text, parent.title)
     );
@@ -117,6 +133,8 @@ function createSubagentService({ resolveAgent } = {}) {
         frozen: true,
         subagent: true,
         parentSessionId: parent.id,
+        agentId: workerAgentId,
+        mcpDisabled: workerMcpDisabled,
         dropTrailingAgent: true,
         compaction: false,
       });
@@ -127,12 +145,12 @@ function createSubagentService({ resolveAgent } = {}) {
         title,
         system: parent.system,
         agentsMd: parent.agentsMd,
-        agentId: parent.agentId,
+        agentId: workerAgentId,
         projectId: parent.projectId,
         frozen: true,
         subagent: true,
         parentSessionId: parent.id,
-        mcpDisabled: parent.mcpDisabled,
+        mcpDisabled: workerMcpDisabled,
       });
       session = store.getSession(id);
     }
@@ -157,9 +175,7 @@ function createSubagentService({ resolveAgent } = {}) {
         sessionId: session.id,
         text,
         runId,
-        agentConfig: resolveAgent
-          ? resolveAgent(agentId || parent.agentId)
-          : null,
+        agentConfig: subagentAgent || null,
         reasoningEffort: normalizeReasoningEffort(
           store.loadSettings().reasoningEffort
         ),

@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const store = require('../store');
 const { mergedDefinitions } = require('./definitions');
 const { DEFAULT_SYSTEM_PROMPT } = store;
+const { AGENT_AGENT_ID } = require('../agent-defaults');
 
 let providers = {
   canvasStore: null,
@@ -294,18 +295,24 @@ async function worknodeCreate(args = {}, context = null) {
   if (!manager) return error('only a manager node can create work nodes');
   const title = asText(args.title) || 'Work node';
   const task = asText(args.task);
-  const agent = resolveAgent(args.agentId);
+  const agent = resolveAgent(args.agentId || AGENT_AGENT_ID);
   if (!agent) {
     return error(
-      `agent not found: ${args.agentId || '(missing)'}. Choose an available Agent id.`
+      `agent not found: ${args.agentId || AGENT_AGENT_ID}. Choose an Agent profile.`
     );
+  }
+  if (agent.kind !== 'agent') {
+    return error('work nodes require an Agent profile; Subagents perform the work');
   }
   if (isManagerAgent(agent)) {
     return error('manager Agents cannot run as work nodes');
   }
   const tools = normalizeToolsForAgent(agent, args.tools);
   const skills = normalizeSkills(args.skills);
-  const mcpDisabled = mcpDisabledFor(args.mcp);
+  const mcpDisabled =
+    agent.kind === 'agent'
+      ? ['*']
+      : mcpDisabledFor(args.mcp) || [];
   const nodeConfig = {
     kind: 'work',
     directories: managerDirectories(manager),
@@ -313,7 +320,7 @@ async function worknodeCreate(args = {}, context = null) {
     task,
     tools,
     skills,
-    mcp: Array.isArray(args.mcp) ? args.mcp.map(String) : null,
+    mcp: agent.kind === 'agent' ? null : Array.isArray(args.mcp) ? args.mcp.map(String) : null,
   };
   const id = crypto.randomUUID();
   store.createSession({

@@ -4710,6 +4710,25 @@ body.ring-open #messages {
   letter-spacing: 0.08em;
 }
 
+.agent-kind-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.agent-kind-option {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--dim);
+}
+
+.agent-kind-option.active {
+  border-color: rgba(185, 111, 61, 0.4);
+  background: var(--selected);
+  color: var(--text);
+}
+
 .agent-tool-row input:disabled,
 .agent-tools-category input:disabled,
 .agent-toggle input:disabled {

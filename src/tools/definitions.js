@@ -522,7 +522,7 @@ const SUBAGENT_START = fn(
     prompt: str('The task for the subagent'),
     name: str('Short name for the subagent conversation'),
     fork: bool('Fork the current conversation into the subagent conversation'),
-    agent: str('Agent id or label for the subagent'),
+    agent: str('Subagent profile id or label (defaults to Build)'),
     note: str('Short note shown in the result'),
   },
   ['prompt']
@@ -1150,17 +1150,17 @@ const OMO = [
 const WORKNODE_TOOLS = [
   fn(
     'worknode_create',
-    'Create a conversation work node under this manager node. Choose an Agent, give it a title and task, and optionally narrow its tools, skills or MCP servers. Set start=false to create it idle.',
+    'Create a conversation work node under this manager node. Choose an Agent profile (defaults to the built-in Agent), give it a title and task, and optionally narrow its tools, skills or MCP servers. Set start=false to create it idle. The Agent delegates actual work to Subagents.',
     {
       title: str('Short conversation title'),
       task: str('Task prompt for the conversation'),
-      agentId: str('Agent id to assign'),
+      agentId: str('Agent profile id; defaults to the built-in Agent'),
       tools: arr('Optional subset of the Agent tools'),
       skills: arr('Optional subset of skill ids'),
       mcp: arr('Optional subset of MCP server ids'),
       start: bool('Start the task immediately (default true)'),
     },
-    ['title', 'agentId', 'task']
+    ['title', 'task']
   ),
   fn(
     'worknode_close',

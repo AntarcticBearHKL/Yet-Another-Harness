@@ -1934,7 +1934,7 @@ function forkSession(sourceId, options = {}) {
     title: String(options.title || source.title || 'Chat'),
     system: source.system,
     agentsMd: source.agentsMd,
-    agentId: source.agentId,
+    agentId: options.agentId || source.agentId,
     projectId: options.projectId || source.projectId,
     frozen: options.frozen === true,
     subagent: options.subagent === true,

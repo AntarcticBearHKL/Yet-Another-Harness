@@ -6,6 +6,14 @@ const DEFAULT_AGENT_ID = 'basic';
 const DEFAULT_AGENT_NAME = 'Build';
 const MANAGER_AGENT_ID = 'manager';
 const MANAGER_AGENT_NAME = 'Manager';
+const AGENT_AGENT_ID = 'agent';
+const AGENT_AGENT_NAME = 'Agent';
+const SUBAGENT_TOOL_NAMES = [
+  'subagent_start',
+  'subagent_list',
+  'subagent_output',
+  'subagent_stop',
+];
 const EFFORT_LEVELS = ['low', 'high', 'max'];
 const DEFAULT_EFFORT = 'high';
 const NO_KEY_HINT = 'No API key. Open Settings to add one.';
@@ -7689,7 +7697,7 @@ const RING_ITEMS = [
     action: () => openConfigPage('agents'),
   },
   {
-    label: 'tool',
+    label: 'Tool',
     icon: '<path d="M14.5 6.5a3.5 3.5 0 0 0-4.9 4.9L4 17v3h3l5.6-5.6a3.5 3.5 0 0 0 4.9-4.9l-2.1 2.1-2.1-2.1 2.1-2.1Z"/>',
     action: () => openConfigPage('tools'),
   },
@@ -8918,8 +8926,11 @@ function renderCatalogCategories(data, selectedKind, page) {
     const management = state.agents.filter(
       (agent) => agent.id === MANAGER_AGENT_ID
     );
-    const regular = state.agents.filter(
-      (agent) => agent.id !== MANAGER_AGENT_ID
+    const agents = state.agents.filter(
+      (agent) => agent.id !== MANAGER_AGENT_ID && agent.kind === 'agent'
+    );
+    const subagents = state.agents.filter(
+      (agent) => agent.id !== MANAGER_AGENT_ID && agent.kind !== 'agent'
     );
     if (management.length > 0) {
       const managementSection = el(
@@ -8939,23 +8950,28 @@ function renderCatalogCategories(data, selectedKind, page) {
       }
       dom.catalogCategories.append(managementSection);
     }
-    const section = el('div', 'catalog-section catalog-agent-section');
-    section.append(el('div', 'catalog-section-label', 'Agent'));
-    for (const agent of regular) {
-      section.append(
-        catalogCategoryButton(
-          { id: `agent:${agent.id}`, label: agent.name, count: null },
-          selectedKind
-        )
-      );
+    for (const [label, kind, entries] of [
+      ['Agent', 'agent', agents],
+      ['Subagent', 'subagent', subagents],
+    ]) {
+      const section = el('div', 'catalog-section catalog-agent-section');
+      section.append(el('div', 'catalog-section-label', label));
+      for (const agent of entries) {
+        section.append(
+          catalogCategoryButton(
+            { id: `agent:${agent.id}`, label: agent.name, count: null },
+            selectedKind
+          )
+        );
+      }
+      const add = el('button', 'catalog-category catalog-add catalog-add-row');
+      add.type = 'button';
+      add.setAttribute('aria-label', `新建 ${label}`);
+      add.append(el('span', 'catalog-add-plus', '+'));
+      add.addEventListener('click', () => createAgent(kind));
+      section.append(add);
+      dom.catalogCategories.append(section);
     }
-    const add = el('button', 'catalog-category catalog-add catalog-add-row');
-    add.type = 'button';
-    add.setAttribute('aria-label', '新建 Agent');
-    add.append(el('span', 'catalog-add-plus', '+'));
-    add.addEventListener('click', createAgent);
-    section.append(add);
-    dom.catalogCategories.append(section);
     return;
   }
 
@@ -9305,6 +9321,7 @@ async function saveAgentsNow() {
   const payload = state.agents.map((agent) => ({
     id: agent.id,
     name: agent.name,
+    kind: agent.kind === 'agent' ? 'agent' : 'subagent',
     prompt: agent.prompt,
     tools: Array.isArray(agent.tools) ? agent.tools : null,
   }));
@@ -9324,16 +9341,22 @@ async function saveAgentsNow() {
   }
 }
 
-function createAgent() {
+function createAgent(kind = 'agent') {
+  const normalizedKind = kind === 'subagent' ? 'subagent' : 'agent';
   const customCount = state.agents.filter(
     (agent) =>
-      agent.id !== DEFAULT_AGENT_ID && agent.id !== MANAGER_AGENT_ID
+      agent.id !== DEFAULT_AGENT_ID &&
+      agent.id !== MANAGER_AGENT_ID &&
+      agent.id !== AGENT_AGENT_ID &&
+      (agent.kind === 'agent' ? 'agent' : 'subagent') === normalizedKind
   ).length;
   const agent = {
     id: makeId(),
-    name: `Agent ${customCount + 1}`,
+    name: `${normalizedKind === 'agent' ? 'Agent' : 'Subagent'} ${customCount + 1}`,
+    kind: normalizedKind,
     prompt: '',
-    tools: null,
+    tools:
+      normalizedKind === 'agent' ? [...SUBAGENT_TOOL_NAMES] : null,
   };
   state.agents.push(agent);
   state.catalogKind = `agent:${agent.id}`;
@@ -9343,7 +9366,13 @@ function createAgent() {
 }
 
 function deleteAgent(agentId) {
-  if (agentId === DEFAULT_AGENT_ID || agentId === MANAGER_AGENT_ID) return;
+  if (
+    agentId === DEFAULT_AGENT_ID ||
+    agentId === MANAGER_AGENT_ID ||
+    agentId === AGENT_AGENT_ID
+  ) {
+    return;
+  }
   const index = state.agents.findIndex((agent) => agent.id === agentId);
   if (index < 0) return;
   state.agents.splice(index, 1);
@@ -9637,6 +9666,37 @@ function renderAgentEditor(agentId) {
   }
   editor.append(head);
 
+  if (!builtin && !readOnly) {
+    const kindField = el('div', 'agent-field');
+    kindField.append(el('div', 'agent-field-label', '类型'));
+    const toggle = el('div', 'agent-kind-toggle');
+    for (const option of [
+      { kind: 'agent', label: 'Agent' },
+      { kind: 'subagent', label: 'Subagent' },
+    ]) {
+      const button = el('button', 'pill agent-kind-option', option.label);
+      button.type = 'button';
+      if ((agent.kind === 'agent' ? 'agent' : 'subagent') === option.kind) {
+        button.classList.add('active');
+      }
+      button.addEventListener('click', () => {
+        agent.kind = option.kind;
+        agent.tools =
+          option.kind === 'agent' ? [...SUBAGENT_TOOL_NAMES] : null;
+        saveAgentsSoon();
+        renderCatalogCategories(
+          state.catalogData,
+          `agent:${agent.id}`,
+          'agents'
+        );
+        renderAgentEditor(agent.id);
+      });
+      toggle.append(button);
+    }
+    kindField.append(toggle);
+    editor.append(kindField);
+  }
+
   const promptField = el('div', 'agent-field');
   promptField.append(el('div', 'agent-field-label', '提示词'));
   const prompt = el('textarea', 'agent-prompt');
@@ -9654,7 +9714,15 @@ function renderAgentEditor(agentId) {
   promptField.append(prompt);
   editor.append(promptField);
 
-  editor.append(renderAgentToolsEditor(agent, allTools, { readOnly }));
+  const kind = agent.kind === 'agent' ? 'agent' : 'subagent';
+  const allowedTools =
+    kind === 'agent'
+      ? allTools.filter((tool) => {
+          const fn = tool.function || tool;
+          return SUBAGENT_TOOL_NAMES.includes(String(fn.name || ''));
+        })
+      : allTools;
+  editor.append(renderAgentToolsEditor(agent, allowedTools, { readOnly }));
   dom.catalogList.append(editor);
 }
 
@@ -9670,7 +9738,7 @@ async function openCatalog(kind) {
         ? 'MCP'
         : page === 'agents'
           ? 'Agent'
-          : 'tool';
+          : 'Tool';
   dom.catalog.setAttribute('aria-label', label);
   if (state.panelWindow) document.title = `YAH - ${label}`;
   state.catalogOpen = true;

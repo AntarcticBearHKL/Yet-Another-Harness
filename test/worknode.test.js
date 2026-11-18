@@ -74,12 +74,42 @@ test('canvas work nodes can be created and closed', async () => {
         },
       },
       listAgents: () => [
-        { id: 'basic', name: 'Build', tools: ['read', 'grep'] },
+        { id: 'basic', name: 'Build', kind: 'subagent', tools: ['read', 'grep'] },
+        {
+          id: 'agent',
+          name: 'Agent',
+          kind: 'agent',
+          tools: [
+            'subagent_start',
+            'subagent_list',
+            'subagent_output',
+            'subagent_stop',
+          ],
+        },
       ],
-      getAgent: (id) =>
-        id === 'basic'
-          ? { id: 'basic', name: 'Build', tools: ['read', 'grep'] }
-          : null,
+      getAgent: (id) => {
+        if (id === 'agent') {
+          return {
+            id: 'agent',
+            name: 'Agent',
+            kind: 'agent',
+            tools: [
+              'subagent_start',
+              'subagent_list',
+              'subagent_output',
+              'subagent_stop',
+            ],
+          };
+        }
+        return id === 'basic'
+          ? {
+              id: 'basic',
+              name: 'Build',
+              kind: 'subagent',
+              tools: ['read', 'grep'],
+            }
+          : null;
+      },
       skillService: {
         list: () => [],
         resolveMany: async () => ({ text: '' }),
@@ -98,7 +128,7 @@ test('canvas work nodes can be created and closed', async () => {
         JSON.stringify({
           title: 'Work',
           task: 'do it',
-          agentId: 'basic',
+          agentId: 'agent',
         }),
         { sessionId: 'm1' }
       )
@@ -107,8 +137,14 @@ test('canvas work nodes can be created and closed', async () => {
     const work = store.getSession(created.id);
     assert.equal(work.managerId, 'm1');
     assert.equal(work.nodeRole, 'work');
+    assert.equal(work.agentId, 'agent');
     assert.equal(work.nodeConfig.task, 'do it');
-    assert.deepEqual(work.nodeConfig.tools, ['read', 'grep']);
+    assert.deepEqual(work.nodeConfig.tools, [
+      'subagent_start',
+      'subagent_list',
+      'subagent_output',
+      'subagent_stop',
+    ]);
     assert.equal(runs.length, 1);
     assert.equal(runs[0].sessionId, work.id);
     assert.ok(canvas.nodes[work.id]);

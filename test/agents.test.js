@@ -29,11 +29,31 @@ test('agents normalize names, prompts and tool limits', () => {
   assert.deepEqual(agents[0], {
     id: 'a1',
     name: 'Coder',
+    kind: 'subagent',
     prompt: 'be terse',
     tools: ['read', 'grep'],
   });
   assert.equal(agents[1].name, 'Agent 2');
   assert.equal(agents[1].tools, null);
+});
+
+test('agent profiles are restricted to subagent tools', () => {
+  const agents = normalizeAgents([
+    {
+      id: 'a1',
+      name: 'Worker',
+      kind: 'agent',
+      prompt: 'delegate',
+      tools: ['read', 'write', 'subagent_start'],
+    },
+  ]);
+  assert.equal(agents[0].kind, 'agent');
+  assert.deepEqual(agents[0].tools, [
+    'subagent_start',
+    'subagent_list',
+    'subagent_output',
+    'subagent_stop',
+  ]);
 });
 
 test('legacy web_search permissions migrate to websearch', () => {
@@ -81,9 +101,11 @@ test('agents round-trip through the JSON file', () => {
     const loaded = loadAgents(file);
     assert.equal(loaded[0].id, 'basic');
     assert.equal(loaded[1].id, 'manager');
-    assert.equal(loaded[2].name, 'A');
-    assert.deepEqual(getAgent(file, 'a1'), loaded[2]);
+    assert.equal(loaded[2].id, 'agent');
+    assert.equal(loaded[3].name, 'A');
+    assert.deepEqual(getAgent(file, 'a1'), loaded[3]);
     assert.equal(getAgent(file, 'basic').name, 'Build');
+    assert.equal(getAgent(file, 'agent').kind, 'agent');
     assert.equal(getAgent(file, 'missing'), null);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -123,7 +145,7 @@ test('the built-in agent is always present, editable, and cannot be deleted', ()
   try {
     assert.deepEqual(
       loadAgents(file).map((agent) => agent.id),
-      ['basic', 'manager']
+      ['basic', 'manager', 'agent']
     );
     assert.equal(getAgent(file, '').id, 'basic');
     assert.equal(getAgent(file, '').name, 'Build');
@@ -134,14 +156,14 @@ test('the built-in agent is always present, editable, and cannot be deleted', ()
     ]);
     assert.deepEqual(
       saved.map((agent) => agent.id),
-      ['basic', 'manager', 'a1']
+      ['basic', 'manager', 'agent', 'a1']
     );
     assert.equal(saved[0].name, 'Build X');
     assert.deepEqual(saved[0].tools, ['read']);
     const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
     assert.deepEqual(
       stored.agents.map((agent) => agent.id),
-      ['basic', 'manager', 'a1']
+      ['basic', 'manager', 'agent', 'a1']
     );
     assert.equal(stored.agents[0].name, 'Build X');
 
