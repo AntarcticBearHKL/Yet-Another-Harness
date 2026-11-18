@@ -256,6 +256,71 @@ function createSystemNodeService({
     return node;
   }
 
+  function ensureAgileNode(manager) {
+    let node = findNode(manager.id, 'agile');
+    if (!node) {
+      node = createNode({
+        managerId: manager.id,
+        type: 'agile',
+        status: 'running',
+        title: 'Agile',
+        payload: {
+          boardId: null,
+          boardLabel: '',
+          counts: { total: 0, backlog: 0, progress: 0, blocked: 0, finished: 0 },
+          steps: [
+            {
+              at: Date.now(),
+              message: 'Agile 管理 node 已就绪',
+            },
+          ],
+        },
+      });
+    }
+    return node;
+  }
+
+  function refreshAgileNode(manager) {
+    let node = ensureAgileNode(manager);
+    try {
+      const agile = getAgileStore(manager.id);
+      const snapshot = agile.snapshot();
+      const tasks = Array.isArray(snapshot.tasks) ? snapshot.tasks : [];
+      const counts = {
+        total: tasks.length,
+        backlog: tasks.filter((task) => task.column === 'backlog').length,
+        progress: tasks.filter((task) => task.column === 'progress').length,
+        blocked: tasks.filter((task) => task.column === 'blocked').length,
+        finished: tasks.filter((task) => task.column === 'finished').length,
+      };
+      const boardId = snapshot.board?.id || null;
+      const boardLabel = snapshot.board?.label || '';
+      const current = node.payload?.counts || {};
+      const same =
+        node.payload?.boardId === boardId &&
+        node.payload?.boardLabel === boardLabel &&
+        current.total === counts.total &&
+        current.backlog === counts.backlog &&
+        current.progress === counts.progress &&
+        current.blocked === counts.blocked &&
+        current.finished === counts.finished;
+      if (!same) {
+        node = updateNode(node.id, {
+          status: 'running',
+          payload: {
+            ...(node.payload || {}),
+            boardId,
+            boardLabel,
+            counts,
+          },
+        });
+      }
+    } catch {
+      /* Agile node stays with its last snapshot if the store is unavailable */
+    }
+    return node;
+  }
+
   function ensureReport(manager, boardId, goal, taskIds = []) {
     let node = findNode(
       manager.id,
@@ -323,8 +388,12 @@ function createSystemNodeService({
       payload: { ...(orchestrator.payload || {}), boardIds, goals },
     });
     appendStep(orchestrator, `Mission 已写入 Agile：${goal || boardId}`);
+    const agileNode = refreshAgileNode(manager);
+    appendStep(agileNode, `Mission 已写入：${goal || boardId}`, {
+      kind: 'dispatch',
+    });
     const report = ensureReport(manager, boardId, goal, taskIds);
-    return { orchestrator, report };
+    return { orchestrator, report, agile: agileNode };
   }
 
   function reportNodeForTask(task) {
@@ -801,6 +870,7 @@ function createSystemNodeService({
           (session) => session.nodeRole === 'manager' && !session.archivedAt
         );
       for (const manager of managers) {
+        refreshAgileNode(manager);
         let orchestrator = findNode(manager.id, 'orchestrator');
         if (!orchestrator) {
           orchestrator = ensureOrchestrator(manager);
@@ -808,6 +878,7 @@ function createSystemNodeService({
         if (!orchestrator || orchestrator.status !== 'running') continue;
         try {
           await tickManager(manager, orchestrator);
+          refreshAgileNode(manager);
         } catch (error) {
           console.error('orchestrator tick failed', error);
         }

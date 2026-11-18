@@ -98,6 +98,10 @@ test('mission dispatch drives Agile, orchestrator and report hub', async () => {
     assert.equal(result.tasks.length, 2);
     assert.equal(result.orchestratorId !== null, true);
     assert.equal(result.reportId !== null, true);
+    assert.equal(result.agileId !== null, true);
+    const agileNode = service.list('m1').find((node) => node.type === 'agile');
+    assert.equal(agileNode.payload.counts.total, 2);
+    assert.equal(agileNode.payload.counts.backlog, 1);
     const board = agile.snapshot(result.boardId);
     assert.equal(board.tasks.length, 2);
     const first = board.tasks.find((task) => task.title === 'Implement login');

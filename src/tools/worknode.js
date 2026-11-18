@@ -21,6 +21,7 @@ const WORKNODE_WIDTH = 300;
 const WORKNODE_HEIGHT = 220;
 const MANAGER_WIDTH = 300;
 const MANAGER_HEIGHT = 150;
+const MANAGER_GROUP_HEIGHT = 420;
 const WORKNODE_GAP_X = 36;
 const WORKNODE_GAP_Y = 34;
 const WORKNODE_COLUMNS = 2;
@@ -211,7 +212,10 @@ function placeWorkNode(manager, workNode, { reposition = false } = {}) {
     column * (WORKNODE_WIDTH + WORKNODE_GAP_X);
   const startY =
     (Number(managerNode.y) || 0) +
-    (Number(managerNode.height) || MANAGER_HEIGHT) +
+    Math.max(
+      Number(managerNode.height) || MANAGER_HEIGHT,
+      MANAGER_GROUP_HEIGHT
+    ) +
     WORKNODE_GAP_Y +
     row * (WORKNODE_HEIGHT + WORKNODE_GAP_Y);
   const spot = freeWorkNodePosition(

@@ -147,6 +147,7 @@ async function missionDispatch(args = {}, context = null) {
       })),
       orchestratorId: mission.orchestrator?.id || null,
       reportId: mission.report?.id || null,
+      agileId: mission.agile?.id || null,
     },
     null,
     2

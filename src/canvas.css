@@ -787,6 +787,7 @@ body.canvas-space .canvas-stage.panning {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface-card);
@@ -816,7 +817,7 @@ body.canvas-space .canvas-stage.panning {
   align-items: center;
   gap: 9px;
   min-width: 0;
-  padding: 14px 16px 13px;
+  padding: 0 0 10px;
 }
 
 .canvas-manager-panel-icon {
@@ -859,6 +860,22 @@ body.canvas-space .canvas-stage.panning {
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: canvas-group-spin 0.8s linear infinite;
+}
+
+.canvas-manager-panel .canvas-manager-meta {
+  margin-top: 7px;
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.canvas-manager-panel .canvas-manager-progress {
+  margin-top: 7px;
+}
+
+.canvas-manager-panel .canvas-manager-foot {
+  margin-top: auto;
+  color: var(--faint);
+  font-size: 8.5px;
 }
 
 .canvas-manager-panel-actions {
@@ -1498,23 +1515,29 @@ body.canvas-space .canvas-stage.panning {
 /* Manager system lane: orchestrator, report hub, approvals and questionnaires */
 .canvas-system-lane {
   position: absolute;
-  top: 16px;
-  left: 324px;
-  right: 16px;
-  bottom: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  top: 20px;
+  left: 216px;
+  right: 20px;
+  bottom: 20px;
+  display: grid;
+  grid-template-columns: repeat(2, 180px);
+  grid-auto-rows: 180px;
+  align-content: start;
+  gap: 12px;
   overflow-y: auto;
   padding-right: 2px;
   scrollbar-width: thin;
 }
 
 .canvas-system-node {
-  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: 180px;
+  height: 180px;
+  overflow: hidden;
   padding: 10px 11px;
   border: 1px solid rgba(74, 54, 40, 0.14);
-  border-radius: 12px;
+  border-radius: 16px;
   background: rgba(252, 246, 238, 0.92);
   box-shadow: 0 4px 12px rgba(74, 54, 40, 0.06);
   cursor: pointer;
@@ -1609,8 +1632,10 @@ body.canvas-space .canvas-stage.panning {
 
 .canvas-system-node-actions {
   display: flex;
-  gap: 6px;
-  margin-top: 8px;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: auto;
+  padding-top: 7px;
 }
 
 .system-node-action {
