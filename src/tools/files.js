@@ -47,7 +47,7 @@ async function readTool(args, context = null) {
 
   const buffer = await fs.promises.readFile(abs);
   if (isBinary(buffer.subarray(0, 8192))) {
-    return `tool error: binary file, use look_at for images: ${args.path}`;
+    return `tool error: binary file: ${args.path}`;
   }
   const text = buffer.toString('utf8').replace(/^\uFEFF/, '');
   const lines = text.split('\n');

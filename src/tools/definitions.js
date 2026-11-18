@@ -148,27 +148,6 @@ const PATCH = fn(
   ['patchText']
 );
 
-const SKILL = fn(
-  'skill',
-  'Load a Skill by name and return its instructions. Use without leading slash. Skills may come from files or MCP prompts.',
-  {
-    name: str("The skill name (e.g. 'test-skill' or 'Character Design')"),
-    arguments: obj('Optional MCP Skill arguments'),
-    sessionID: str('Optional session id; defaults to the current session'),
-  },
-  ['name']
-);
-
-const SKILL_MCP = fn(
-  'skill_mcp',
-  'List MCP tools, or call one MCP tool by server and tool name.',
-  {
-    server: str('MCP server id or name'),
-    tool: str('MCP tool name'),
-    arguments: obj('Tool arguments'),
-  }
-);
-
 const SESSION_LIST = fn('session_list', 'List YAH sessions with id, title, and message count.', {});
 const SESSION_READ = fn(
   'session_read',
@@ -189,38 +168,6 @@ const SESSION_INFO = fn(
   'session_info',
   'Show metadata for a YAH session: project, message count, MCP switches, fold state, queue.',
   { sessionID: str('Session id') }
-);
-
-const TASK_CREATE = fn(
-  'task_create',
-  'Create a task in the local YAH task list.',
-  {
-    subject: str('Short task subject'),
-    description: str('Task details'),
-    status: str('pending | in_progress | completed | cancelled'),
-    priority: str('low | medium | high'),
-    depends_on: arr('Task ids that must complete first', { type: 'string' }),
-  },
-  ['subject']
-);
-const TASK_GET = fn('task_get', 'Get a local task by id.', { id: str('Task id') }, ['id']);
-const TASK_LIST = fn(
-  'task_list',
-  'List local tasks, optionally filtered by status.',
-  { status: str('Filter by status') }
-);
-const TASK_UPDATE = fn(
-  'task_update',
-  'Update a local task.',
-  {
-    id: str('Task id'),
-    subject: str('New subject'),
-    description: str('New description'),
-    status: str('New status'),
-    priority: str('New priority'),
-    depends_on: arr('New dependency ids', { type: 'string' }),
-  },
-  ['id']
 );
 
 const BACKGROUND_START = fn(
@@ -598,28 +545,6 @@ const SUBAGENT_STOP = fn(
   ['sessionId']
 );
 
-const CREATE_GOAL = fn(
-  'create_goal',
-  'Create a local goal with an objective.',
-  { objective: str('Goal objective'), status: str('active | completed | cancelled'), progress: str('Progress note') },
-  ['objective']
-);
-const UPDATE_GOAL = fn(
-  'update_goal',
-  'Update a local goal.',
-  { id: str('Goal id'), objective: str('New objective'), status: str('New status'), progress: str('New progress') },
-  ['id']
-);
-const GET_GOAL = fn('get_goal', 'Get the latest goal, or a goal by id.', { id: str('Goal id') });
-
-const LIST_MCP_RESOURCES = fn('list_mcp_resources', 'List resources exposed by connected MCP servers.', {});
-const READ_MCP_RESOURCE = fn(
-  'read_mcp_resource',
-  'Read an MCP resource by server and URI.',
-  { server: str('MCP server id or name'), uri: str('Resource URI') },
-  ['server', 'uri']
-);
-
 const QUESTION = fn(
   'question',
   `Ask the user up to 5 questions when you need a decision, preference, or clarification. A question sheet rises from the bottom of the chat; the user can pick an option, select several options, or type their own answer. Use this instead of guessing or asking in prose when the answer changes what you do next.
@@ -669,23 +594,11 @@ QUESTION.function.parameters.properties.mode.enum = ['blocking', 'timed'];
 QUESTION.function.parameters.properties.timeout_seconds.minimum = 5;
 QUESTION.function.parameters.properties.timeout_seconds.maximum = 600;
 
-const LOOK_AT = fn(
-  'look_at',
-  'Inspect an image with the multimodal model and return a description.',
-  { path: str('Image path'), prompt: str('What to look for') },
-  ['path']
-);
-
 const SESSION_RENAME = fn(
   'session_rename',
   'Rename a YAH session. Omit sessionID to rename the current session.',
   { sessionID: str('Session id'), title: str('New session title') },
   ['title']
-);
-const MODELS = fn(
-  'models',
-  'Search available models.',
-  { query: str('Text to search in model names and ids'), provider: str('Provider filter'), limit: num('Max results') }
 );
 const HTML_VIEW = fn(
   'html_view',
@@ -1161,73 +1074,6 @@ const GIT_TOOLS = [
   WORKTREE_REMOVE,
 ];
 
-const TEAM_CREATE = fn(
-  'team_create',
-  'Create a local team record with optional members.',
-  {
-    name: str('Team name'),
-    members: arr('Members', {
-      type: 'object',
-      properties: { name: str('Member name'), role: str('Member role') },
-      required: ['name'],
-    }),
-  },
-  ['name']
-);
-const TEAM_DELETE = fn('team_delete', 'Delete a local team record.', { name: str('Team name') }, ['name']);
-const TEAM_LIST = fn('team_list', 'List local team records.', {});
-const TEAM_STATUS = fn('team_status', 'Show a local team record.', { name: str('Team name') }, ['name']);
-const TEAM_SEND_MESSAGE = fn(
-  'team_send_message',
-  'Append a message to a local team mailbox.',
-  { team: str('Team name'), from: str('Sender'), to: str('Recipient'), message: str('Message') },
-  ['team', 'message']
-);
-const TEAM_TASK_CREATE = fn(
-  'team_task_create',
-  'Create a task in a local team record.',
-  { team: str('Team name'), subject: str('Subject'), description: str('Details'), assignee: str('Assignee') },
-  ['team', 'subject']
-);
-const TEAM_TASK_LIST = fn('team_task_list', 'List tasks in a local team record.', { team: str('Team name') }, ['team']);
-const TEAM_TASK_UPDATE = fn(
-  'team_task_update',
-  'Update a task in a local team record.',
-  {
-    team: str('Team name'),
-    id: str('Task id'),
-    subject: str('New subject'),
-    description: str('New details'),
-    assignee: str('New assignee'),
-    status: str('New status'),
-  },
-  ['team', 'id']
-);
-const TEAM_TASK_GET = fn(
-  'team_task_get',
-  'Get a task from a local team record.',
-  { team: str('Team name'), id: str('Task id') },
-  ['team', 'id']
-);
-const TEAM_SHUTDOWN_REQUEST = fn(
-  'team_shutdown_request',
-  'Mark a local team member as shutdown-requested.',
-  { team: str('Team name'), member: str('Member name or id') },
-  ['team', 'member']
-);
-const TEAM_APPROVE_SHUTDOWN = fn(
-  'team_approve_shutdown',
-  'Mark a local team member as shut down.',
-  { team: str('Team name'), member: str('Member name or id') },
-  ['team', 'member']
-);
-const TEAM_REJECT_SHUTDOWN = fn(
-  'team_reject_shutdown',
-  'Return a local team member to active status.',
-  { team: str('Team name'), member: str('Member name or id') },
-  ['team', 'member']
-);
-
 const OPENCODE = [
   READ,
   WRITE,
@@ -1236,7 +1082,6 @@ const OPENCODE = [
   WEBSEARCH,
   PATCH,
   SESSION_RENAME,
-  MODELS,
   SYSTEM_INFO,
   MOUSE,
   CODE_VIEW,
@@ -1245,24 +1090,16 @@ const OPENCODE = [
   CHROME,
   QUESTION,
   SUBAGENT,
-  LIST_MCP_RESOURCES,
-  READ_MCP_RESOURCE,
 ];
 
 const OMO = [
   GLOB,
   GREP,
   EDIT,
-  SKILL,
-  SKILL_MCP,
   SESSION_LIST,
   SESSION_READ,
   SESSION_SEARCH,
   SESSION_INFO,
-  TASK_CREATE,
-  TASK_GET,
-  TASK_LIST,
-  TASK_UPDATE,
   BACKGROUND_START,
   BACKGROUND_LIST,
   BACKGROUND_STOP,
@@ -1308,22 +1145,6 @@ const OMO = [
   SUBAGENT_LIST,
   SUBAGENT_OUTPUT,
   SUBAGENT_STOP,
-  CREATE_GOAL,
-  UPDATE_GOAL,
-  GET_GOAL,
-  LOOK_AT,
-  TEAM_CREATE,
-  TEAM_DELETE,
-  TEAM_LIST,
-  TEAM_STATUS,
-  TEAM_SEND_MESSAGE,
-  TEAM_TASK_CREATE,
-  TEAM_TASK_LIST,
-  TEAM_TASK_UPDATE,
-  TEAM_TASK_GET,
-  TEAM_SHUTDOWN_REQUEST,
-  TEAM_APPROVE_SHUTDOWN,
-  TEAM_REJECT_SHUTDOWN,
 ];
 
 const WORKNODE_TOOLS = [

@@ -77,20 +77,11 @@ async function execute(name, args, context = null) {
       shell: processTools.shellTool,
       interactive_bash: processTools.shellTool,
       webfetch: webTools.webfetchTool,
-      skill: agentTools.skillTool,
-      skill_mcp: agentTools.skillMcpTool,
       session_list: stateTools.sessionList,
       session_read: stateTools.sessionRead,
       session_search: stateTools.sessionSearch,
       session_info: stateTools.sessionInfo,
       session_rename: agentTools.sessionRename,
-      task_create: stateTools.taskCreate,
-      task_get: stateTools.taskGet,
-      task_list: stateTools.taskList,
-      task_update: stateTools.taskUpdate,
-      create_goal: stateTools.createGoal,
-      update_goal: stateTools.updateGoal,
-      get_goal: stateTools.getGoal,
       background_start: processTools.backgroundStart,
       background_list: processTools.backgroundList,
       background_stop: processTools.backgroundStop,
@@ -145,9 +136,7 @@ async function execute(name, args, context = null) {
       subagent: agentTools.subagentTool,
       call_omo_agent: agentTools.subagentTool,
       delegate_task: agentTools.subagentTool,
-      look_at: agentTools.lookAtTool,
       question: agentTools.questionTool,
-      models: agentTools.modelsTool,
       systeminfo: systemTools.systemInfoTool,
       SystemInfo: systemTools.systemInfoTool,
       system_info: systemTools.systemInfoTool,
@@ -179,20 +168,6 @@ async function execute(name, args, context = null) {
       worktree_list: gitTools.worktreeList,
       worktree_create: gitTools.worktreeCreate,
       worktree_remove: gitTools.worktreeRemove,
-      list_mcp_resources: agentTools.listMcpResources,
-      read_mcp_resource: agentTools.readMcpResource,
-      team_create: stateTools.teamCreate,
-      team_delete: stateTools.teamDelete,
-      team_list: stateTools.teamList,
-      team_status: stateTools.teamStatus,
-      team_send_message: stateTools.teamSendMessage,
-      team_task_create: stateTools.teamTaskCreate,
-      team_task_list: stateTools.teamTaskList,
-      team_task_update: stateTools.teamTaskUpdate,
-      team_task_get: stateTools.teamTaskGet,
-      team_shutdown_request: stateTools.teamShutdownRequest,
-      team_approve_shutdown: stateTools.teamApproveShutdown,
-      team_reject_shutdown: stateTools.teamRejectShutdown,
     };
     const handler = handlers[name];
     if (handler) return await handler(value, context);
@@ -299,14 +274,6 @@ function statusLabel(name, args) {
     return detail ? `${name}: ${detail}` : name;
   }
   if (name === 'patch') return 'patch';
-  if (name === 'skill_mcp') {
-    const parts = [value.server, value.tool].filter(Boolean);
-    return parts.length ? `skill_mcp: ${parts.join('/')}` : 'skill_mcp';
-  }
-  if (name === 'look_at') {
-    const filePath = String(value.path ?? '');
-    return filePath ? `look_at: ${path.basename(filePath)}` : 'look_at';
-  }
   if (name === 'session_list') return 'session_list';
   if (name === 'session_read' || name === 'session_info' || name === 'session_rename') {
     return value.sessionID ? `${name}: ${value.sessionID}` : name;
@@ -314,25 +281,6 @@ function statusLabel(name, args) {
   if (name === 'session_search') {
     const query = String(value.query ?? '').slice(0, 40);
     return query ? `session_search: ${query}` : 'session_search';
-  }
-  if (name === 'task_create' || name === 'task_get' || name === 'task_update') {
-    const label = value.subject || value.id;
-    return label ? `${name}: ${label}` : name;
-  }
-  if (name === 'task_list') return value.status ? `task_list: ${value.status}` : 'task_list';
-  if (name === 'create_goal') {
-    const objective = String(value.objective ?? '').slice(0, 48);
-    return objective ? `create_goal: ${objective}` : 'create_goal';
-  }
-  if (name === 'update_goal' || name === 'get_goal') {
-    return value.id ? `${name}: ${value.id}` : name;
-  }
-  if (name === 'team_create' || name === 'team_delete' || name === 'team_status') {
-    return value.name ? `${name}: ${value.name}` : name;
-  }
-  if (name.startsWith('team_')) {
-    const team = value.team || value.name;
-    return team ? `${name}: ${team}` : name;
   }
   if (name.startsWith('background_') || name.startsWith('monitor_')) {
     const label = value.id || value.command;
@@ -342,9 +290,6 @@ function statusLabel(name, args) {
     const first = Array.isArray(value.questions) ? value.questions[0] : null;
     const text = String(first?.question || first || '').slice(0, 48);
     return text ? `question: ${text}` : 'question';
-  }
-  if (name === 'models') {
-    return value.query ? `models: ${value.query}` : 'models';
   }
   if (name === 'systeminfo' || name === 'SystemInfo' || name === 'system_info') {
     return 'systeminfo';
@@ -357,11 +302,6 @@ function statusLabel(name, args) {
     return dir ? `worktree_remove: ${path.basename(dir)}` : 'worktree_remove';
   }
   if (name === 'worktree_list') return 'worktree_list';
-  if (name === 'list_mcp_resources') return 'list_mcp_resources';
-  if (name === 'read_mcp_resource') {
-    const parts = [value.server, value.uri].filter(Boolean);
-    return parts.length ? `read_mcp_resource: ${parts.join(' ')}` : 'read_mcp_resource';
-  }
   if (mcp.isMcpTool(name)) {
     return mcp.statusLabel(name, args);
   }

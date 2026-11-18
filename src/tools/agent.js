@@ -1,9 +1,6 @@
 'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
 const store = require('../store');
-const { guardPath } = require('./guard');
 
 let providers = {
   skillService: null,
@@ -114,39 +111,6 @@ function subagentStopTool(args = {}) {
       : `Subagent ${sessionId} is not running.`;
   } catch (error) {
     return `tool error: subagent_stop failed: ${error.message}`;
-  }
-}
-
-async function lookAtTool(args, context = null) {
-  const raw = String(args.path || '').trim();
-  if (!raw) return 'tool error: look_at requires "path"';
-  const abs = path.resolve(raw);
-  await guardPath(abs, context, { tool: 'look_at' });
-  const stat = await fs.promises.stat(abs).catch(() => null);
-  if (!stat || !stat.isFile()) return `tool error: image not found: ${raw}`;
-  if (stat.size > 10 * 1024 * 1024) return 'tool error: image is larger than 10 MB';
-  const ext = path.extname(abs).toLowerCase();
-  const mime =
-    ext === '.jpg' || ext === '.jpeg'
-      ? 'image/jpeg'
-      : ext === '.webp'
-        ? 'image/webp'
-        : ext === '.gif'
-          ? 'image/gif'
-          : 'image/png';
-  const key = apiKey();
-  if (!key) return 'tool error: no API key configured';
-  const data = await fs.promises.readFile(abs);
-  try {
-    const deepseek = require('../deepseek');
-    const text = await deepseek.runVisionSubagent({
-      apiKey: key,
-      prompt: String(args.prompt || 'Describe this image in detail.'),
-      imageUrl: `data:${mime};base64,${data.toString('base64')}`,
-    });
-    return text || '(no description)';
-  } catch (error) {
-    return `tool error: look_at failed: ${error.message}`;
   }
 }
 
@@ -264,145 +228,6 @@ function sessionRename(args) {
   return `Renamed ${session.id} to "${title}"`;
 }
 
-function modelsTool(args) {
-  const models = [
-    {
-      id: 'opencode-go/deepseek-v4.1-flash',
-      name: 'DeepSeek V4.1 Flash 1017',
-      provider: 'opencode-go',
-      context: 1_000_000,
-      maxTokens: 384_000,
-    },
-  ];
-  const query = String(args.query || '').toLowerCase();
-  const provider = String(args.provider || '').toLowerCase();
-  const filtered = models.filter(
-    (model) =>
-      (!query || `${model.id} ${model.name}`.toLowerCase().includes(query)) &&
-      (!provider || model.provider.toLowerCase().includes(provider))
-  );
-  return JSON.stringify({ models: filtered, total: filtered.length }, null, 2);
-}
-
-async function skillTool(args, context = null) {
-  const service = providers.skillService;
-  if (!service) return 'tool error: skill service is not configured';
-  const name = String(args.name || '').trim();
-  if (!name) return 'tool error: skill requires "name"';
-  const chats = store.loadChats();
-  const sessionId =
-    String(context?.sessionId || args.sessionID || '').trim() ||
-    chats.sessions[chats.current]?.id;
-  const session = sessionId
-    ? chats.sessions.find((item) => item.id === sessionId)
-    : null;
-  const disabled = Array.isArray(session?.mcpDisabled)
-    ? session.mcpDisabled
-    : [];
-  const allowed = Array.isArray(session?.nodeConfig?.skills)
-    ? new Set(session.nodeConfig.skills.map(String))
-    : null;
-  const skills = service
-    .list({ mcpDisabled: disabled })
-    .filter(
-      (skill) =>
-        !allowed ||
-        skill.sourceKind === 'system' ||
-        skill.system === true ||
-        allowed.has(String(skill.id))
-    );
-  const needle = name.replace(/^\//, '').toLowerCase();
-  const match =
-    skills.find((skill) => skill.id.toLowerCase() === needle) ||
-    skills.find((skill) => skill.name.toLowerCase() === needle) ||
-    skills.find((skill) => skill.name.toLowerCase().includes(needle)) ||
-    skills.find((skill) => skill.id.toLowerCase().includes(needle));
-  if (!match) {
-    return `tool error: skill "${name}" not found. Available: ${skills
-      .map((skill) => skill.name)
-      .join(', ')}`;
-  }
-  try {
-    const result = await service.resolveMany(
-      [{ id: match.id, arguments: args.arguments || {} }],
-      disabled
-    );
-    return result.text || '(empty skill)';
-  } catch (error) {
-    return `tool error: ${error.message}`;
-  }
-}
-
-function resolveServerId(manager, value) {
-  const key = String(value || '').trim();
-  if (!key) return '';
-  const server = manager.allServers().find(
-    (item) => item.id === key || item.name === key
-  );
-  return server ? server.id : key;
-}
-
-async function skillMcpTool(args) {
-  const manager = providers.mcpManager;
-  if (!manager) return 'tool error: MCP manager is not configured';
-  const server = resolveServerId(manager, args.server);
-  const tool = String(args.tool || '').trim();
-  if (server && tool) {
-    try {
-      const result = await manager.callTool(
-        server,
-        tool,
-        args.arguments && typeof args.arguments === 'object'
-          ? args.arguments
-          : {}
-      );
-      return result.text || JSON.stringify(result);
-    } catch (error) {
-      return `tool error: ${error.message}`;
-    }
-  }
-  const tools = manager.toolList();
-  return tools.length
-    ? tools
-        .map(
-          (entry) =>
-            `${entry.serverName}  ${entry.tool.name}  ${entry.tool.description || ''}`
-        )
-        .join('\n')
-    : 'No MCP tools connected.';
-}
-
-function listMcpResources() {
-  const manager = providers.mcpManager;
-  if (!manager) return 'tool error: MCP manager is not configured';
-  const resources =
-    typeof manager.resourceList === 'function' ? manager.resourceList() : [];
-  return resources.length
-    ? resources
-        .map(
-          (entry) =>
-            `${entry.serverName}  ${entry.resource.uri}  ${
-              entry.resource.name || entry.resource.description || ''
-            }`
-        )
-        .join('\n')
-    : 'No MCP resources connected.';
-}
-
-async function readMcpResource(args) {
-  const manager = providers.mcpManager;
-  if (!manager) return 'tool error: MCP manager is not configured';
-  const server = resolveServerId(manager, args.server);
-  const uri = String(args.uri || '').trim();
-  if (!server || !uri) return 'tool error: read_mcp_resource requires server and uri';
-  try {
-    const result = await manager.readResource(server, uri);
-    return result.text || JSON.stringify(result);
-  } catch (error) {
-    return `tool error: ${error.message}`;
-  }
-}
-
 module.exports = {
   configure,
   subagentTool,
@@ -410,13 +235,7 @@ module.exports = {
   subagentListTool,
   subagentOutputTool,
   subagentStopTool,
-  lookAtTool,
   questionTool,
   normalizeQuestions,
   sessionRename,
-  modelsTool,
-  skillTool,
-  skillMcpTool,
-  listMcpResources,
-  readMcpResource,
 };

@@ -68,7 +68,6 @@ const MANAGER_AGENT = {
     'read',
     'glob',
     'grep',
-    'skill',
     'websearch',
     'webfetch',
   ],

@@ -59,7 +59,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - Tab 工作区按住右键弹出同样的竖向菜单：项目上显示「改名 / 配置目录 / 删除」，具体对话上只显示「改名 / 删除」（MCP 只在对话顶部的 MCP 块里配置），空白处显示「设置 / 最小化 / 放大 / 关闭」，关闭为红色；设置不再放在左下角，每个操作都是独立按钮，不再放在同一个框里
 - Tab 工作区左侧栏只显示项目名和对话名，名字后面不放任何图标；删除通过右键菜单完成
 - 新建项目会弹出文件夹对话框：虚线框中间只保留一个文件夹图标，可以把任意多个文件夹拖进去，也可以点击虚线框选择；没有目录时不再显示提示文字；项目名称输入框和拖放框使用同一套磨砂玻璃背景，至少有一个开发目录才能创建项目。右键项目可以随时「配置目录」
-- 项目目录保存在 SQLite 的 `projects.directories`；`read`、`write`、`edit`、`glob`、`grep`、`patch`、`look_at` 只允许访问当前项目目录下的文件。越界时工具调用会暂停，从底部弹出和 question 同一套样式的 `FILE ACCESS` 毛玻璃抽屉：点「允许一次」继续，点「拒绝」会明确返回 `User denied access ...`，让模型选择其他做法或向你确认。审核没有超时，只要不回答 run 就一直停在这一步；连续出现的审核会排队，拒绝当前审核后下一个审核仍会显示
+- 项目目录保存在 SQLite 的 `projects.directories`；`read`、`write`、`edit`、`glob`、`grep`、`patch` 只允许访问当前项目目录下的文件。越界时工具调用会暂停，从底部弹出和 question 同一套样式的 `FILE ACCESS` 毛玻璃抽屉：点「允许一次」继续，点「拒绝」会明确返回 `User denied access ...`，让模型选择其他做法或向你确认。审核没有超时，只要不回答 run 就一直停在这一步；连续出现的审核会排队，拒绝当前审核后下一个审核仍会显示
 - 所有删除都是两步：松开「删除」按钮后先弹出确认框，确认后才真正删除；不会因为鼠标拖到删除项就删除
 - 删除项目会一次性删除项目本身以及里面的所有对话记录；删除最后一个项目后保持无项目状态，不会自动创建默认项目，需要重新点 `+` 新建；删除对话、排队消息、MCP 服务器也都遵循同样的两步确认
 - 对话面板里按 Space 总是打开输入框（焦点在按钮 / 消息块上时也一样，不会触发折叠或按钮点击）；输入框为空或只有空格、且没有挂 Skill 时，再按 Space 关闭输入框；有文字或已挂 Skill 时 Space 才作为空格
@@ -243,13 +243,13 @@ Manager。这里存的是 OpenCode Go 的 key，不是 DeepSeek 官方 API key�
 
 YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（OMO）的工具；同名工具按 OMO 优先覆盖 OpenCode。
 
-- OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`systeminfo`、`list_mcp_resources`、`read_mcp_resource`、`session_rename`、`models`
+- OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`systeminfo`、`session_rename`
 - Git（结构化、无 shell，统一放在工具的 Git 菜单）：`git_status`、`git_diff`、`git_log`、`git_show`、`git_blame`、`git_branch`、`git_checkout`、`git_add`、`git_commit`、`git_stash`、`git_fetch`、`git_pull`、`git_push`、`git_merge`、`git_remote`、`git_tag`、`git_restore`、`git_reset`、`git_revert`、`git_cherry_pick`、`worktree_*`
-- OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）、`skill`
-- OMO 常驻 / 条件工具：`session_list/read/search/info`、`task_create/get/list/update`、`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`subagent_start/list/output/stop`、`task/subagent/call_omo_agent/delegate_task`、`create_goal/update_goal/get_goal`、`skill_mcp`、`look_at`、`team_*`
+- OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）
+- OMO 常驻 / 条件工具：`session_list/read/search/info`、`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`subagent_start/list/output/stop`、`task/subagent/call_omo_agent/delegate_task`
 - 兼容别名：`hashline_edit`；`read_file`、`web_search`、`interactive_bash`、`SystemInfo`、`system_info` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
-- OMO 的 `team_*`、`background_*`、`monitor_*` 在 YAH 里是本地记录 / 进程管理版本；`background_*` 是长驻进程管理，不再把完成输出塞回对话；`task`/`subagent`/`call_omo_agent`/`delegate_task` 是单次子模型调用；`subagent_*` 是带只读对话、可 fork、完成后把结果塞回父对话的完整子代理；`interactive_bash` 已合并为 `shell` 的隐藏别名
+- `background_*`、`monitor_*` 是长驻进程管理，不再把完成输出塞回对话；`task`/`subagent`/`call_omo_agent`/`delegate_task` 是单次子模型调用；`subagent_*` 是带只读对话、可 fork、完成后把结果塞回父对话的完整子代理；`interactive_bash` 已合并为 `shell` 的隐藏别名
 
 ## Tool calling
 
