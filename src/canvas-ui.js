@@ -869,7 +869,7 @@ function buildCanvasManagerPanel(manager, team, node) {
   icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${CANVAS_MANAGER_ICON}</svg>`;
   head.append(icon);
   head.append(
-    el('span', 'canvas-manager-panel-title', manager.title || '管理 node')
+    el('span', 'canvas-manager-panel-title', manager.title || 'Manager')
   );
   if (running) {
     const loading = el('span', 'canvas-manager-panel-loading');
@@ -896,7 +896,7 @@ function buildCanvasManagerPanel(manager, team, node) {
   actions.append(agileButton);
   panelEl.append(actions);
 
-  panelEl.title = manager.title || '管理 node';
+  panelEl.title = manager.title || 'Manager';
   panelEl.addEventListener('pointerdown', (event) => {
     startCanvasManagerDrag(event, manager, panelEl, node, team);
   });
@@ -990,7 +990,7 @@ function buildCanvasManager(manager, team, node) {
   managerEl.append(head);
 
   managerEl.append(
-    el('div', 'canvas-manager-title', manager.title || '管理 node')
+    el('div', 'canvas-manager-title', manager.title || 'Manager')
   );
 
   const done = team.filter((session) => {
@@ -1050,7 +1050,7 @@ function buildCanvasManager(manager, team, node) {
   );
   managerEl.append(foot);
 
-  managerEl.title = `${manager.title || '管理 node'} · ${canvasAgentName(manager)}`;
+  managerEl.title = `${manager.title || 'Manager'} · ${canvasAgentName(manager)}`;
   managerEl.addEventListener('pointerdown', (event) => {
     startCanvasManagerDrag(event, manager, managerEl, node, team);
   });

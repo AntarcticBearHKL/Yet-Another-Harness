@@ -529,8 +529,6 @@ const api = {
   },
   sendChat: (payload) =>
     requestJson('/api/send', { method: 'POST', body: payload }),
-  generateTitle: (payload) =>
-    requestJson('/api/title', { method: 'POST', body: payload }),
   loadCatalog: () => requestJson('/api/catalog'),
   loadArchive: (sessionId) =>
     requestJson(`/api/archive?sessionId=${encodeURIComponent(sessionId)}`),
@@ -644,11 +642,11 @@ function ensureProjects() {
 
 let managerComposerState = null;
 
-function managerComposerDefaultName() {
+function managerComposerDefaultProjectName() {
   const count = state.sessions.filter(
     (session) => session.nodeRole === 'manager'
   ).length;
-  return `管理 node ${count + 1}`;
+  return `项目 ${count + 1}`;
 }
 
 function managerAgentDisplayName() {
@@ -693,6 +691,9 @@ function openManagerComposer(managerId = null) {
             session.id === managerId && session.nodeRole === 'manager'
         )
       : null;
+  const managerProject = manager
+    ? state.projects.find((item) => item.id === manager.projectId)
+    : null;
   managerComposerState = {
     editingId: manager?.id || null,
     directories: manager
@@ -710,8 +711,8 @@ function openManagerComposer(managerId = null) {
   }
   if (dom.managerName) {
     dom.managerName.value = manager
-      ? manager.title || '管理 node'
-      : managerComposerDefaultName();
+      ? managerProject?.name || '项目'
+      : managerComposerDefaultProjectName();
   }
   if (dom.managerFixedAgent) {
     dom.managerFixedAgent.textContent = `${managerAgentDisplayName()} · 管理类`;
@@ -757,9 +758,9 @@ async function addManagerComposerDirectories(paths) {
 
 async function createManagerFromComposer() {
   if (!managerComposerState) return;
-  const name =
+  const projectName =
     String(dom.managerName?.value || '').trim() ||
-    managerComposerDefaultName();
+    managerComposerDefaultProjectName();
   const agentId = MANAGER_AGENT_ID;
   const directories = managerComposerState.directories.slice();
   const editingId = managerComposerState.editingId;
@@ -779,7 +780,7 @@ async function createManagerFromComposer() {
       closeManagerComposer();
       return;
     }
-    manager.title = name;
+    manager.title = 'Manager';
     manager.agentId = MANAGER_AGENT_ID;
     manager.nodeConfig = {
       ...(manager.nodeConfig || {}),
@@ -791,7 +792,7 @@ async function createManagerFromComposer() {
       (item) => item.id === manager.projectId
     );
     if (project) {
-      project.name = name;
+      project.name = projectName;
       project.directories = directories.slice();
     }
     await saveChatsNow();
@@ -803,13 +804,13 @@ async function createManagerFromComposer() {
   const projectId = makeId();
   state.projects.push({
     id: projectId,
-    name,
+    name: projectName,
     directories: directories.slice(),
   });
   const id = makeId();
   const session = {
     id,
-    title: name,
+    title: 'Manager',
     system: DEFAULT_SYSTEM_PROMPT,
     agentsMd: null,
     agentId,
@@ -4245,7 +4246,7 @@ function openRename(kind, id) {
     current = project.name;
   } else {
     const session = state.sessions.find((item) => item.id === id);
-    if (!session) return;
+    if (!session || session.nodeRole === 'manager') return;
     current = session.title;
   }
   renameTarget = { kind, id };
@@ -5309,21 +5310,6 @@ function deleteSession(index) {
   renderAll();
 }
 
-async function requestSessionTitle(session, text) {
-  try {
-    const result = await api.generateTitle({ chatId: session.id, text });
-    const title = String(result?.title || '').trim();
-    if (!title) return;
-    const current = state.sessions.find((item) => item.id === session.id);
-    if (!current) return;
-    current.title = title;
-    saveChatsSoon();
-    if (state.switcherOpen) renderSwitcher();
-  } catch (error) {
-    console.error('generate chat title failed', error);
-  }
-}
-
 async function startPrompt(
   session,
   text,
@@ -5344,7 +5330,6 @@ async function startPrompt(
   session.agentId = effectiveAgentId;
   state.foldRestored = false;
   state.foldSessionId = session.id;
-  const firstMessage = session.msgs.length === 0;
   session.msgs.push({
     role: 'User',
     text,
@@ -5360,9 +5345,6 @@ async function startPrompt(
   state.followBottom = true;
   if (clearInput) dom.input.value = '';
   updateSendState();
-  if (firstMessage && text && !/^#\d+-/.test(String(session.title || ''))) {
-    requestSessionTitle(session, text);
-  }
 
   if (!state.settings.hasApiKey) {
     agent.text = NO_KEY_HINT;
@@ -8128,24 +8110,22 @@ function openSwitcherActionMenu(target, x, y) {
     const sessionId = card.dataset.sessionId;
     const session = state.sessions.find((item) => item.id === sessionId);
     if (!session) return;
-    openActionMenu({
-      x,
-      y,
-      items: [
-        {
-          label: '改名',
-          icon: RING_ICONS.rename,
-          action: () => openRename('session', sessionId),
-        },
-        {
-          label: '删除',
-          icon: RING_ICONS.trash,
-          action: () => deleteSessionById(sessionId),
-          confirm: true,
-          confirmText: `删除「${session.title}」？不可恢复。`,
-        },
-      ],
+    const items = [];
+    if (session.nodeRole !== 'manager') {
+      items.push({
+        label: '改名',
+        icon: RING_ICONS.rename,
+        action: () => openRename('session', sessionId),
+      });
+    }
+    items.push({
+      label: '删除',
+      icon: RING_ICONS.trash,
+      action: () => deleteSessionById(sessionId),
+      confirm: true,
+      confirmText: `删除「${session.title}」？不可恢复。`,
     });
+    openActionMenu({ x, y, items });
     return;
   }
 

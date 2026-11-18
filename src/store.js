@@ -307,6 +307,14 @@ function normalizeProjects(raw) {
   return projects;
 }
 
+const MANAGER_SESSION_TITLE = 'Manager';
+
+function titleForNode(title, nodeRole) {
+  return nodeRole === 'manager'
+    ? MANAGER_SESSION_TITLE
+    : String(title || 'Chat');
+}
+
 function normalizeChats(raw) {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.sessions)) {
     return defaultChats();
@@ -369,7 +377,7 @@ function normalizeChats(raw) {
 
       return {
         id: String(session.id || crypto.randomUUID()),
-        title: String(session.title || `Chat ${index + 1}`),
+        title: titleForNode(session.title || `Chat ${index + 1}`, nodeRole),
         system: String(session.system ?? DEFAULT_SYSTEM_PROMPT),
         agentsMd:
           typeof session.agentsMd === 'string' ? session.agentsMd : null,
@@ -957,7 +965,7 @@ function readChats() {
         row.id,
         {
           id: row.id,
-          title: row.title,
+          title: titleForNode(row.title, nodeRole),
           system: row.system,
           agentsMd:
             row.agents_md === null || row.agents_md === undefined
@@ -1827,8 +1835,9 @@ function createSession(session) {
         ? 'work'
         : null;
   const nodeConfig = normalizeNodeConfig(source.nodeConfig);
+  const title = titleForNode(source.title || 'Chat', nodeRole);
   const hash = metadataHash({
-    title: source.title,
+    title,
     system: source.system,
     agentId: source.agentId,
     projectId: source.projectId,
@@ -1848,7 +1857,7 @@ function createSession(session) {
     )
     .run(
       id,
-      String(source.title || 'Chat'),
+      title,
       String(source.system ?? DEFAULT_SYSTEM_PROMPT),
       source.agentsMd === null || source.agentsMd === undefined
         ? null
@@ -1993,6 +2002,7 @@ function updateSessionNode(sessionId, patch = {}) {
         ? patch.mcpDisabled.map(String).filter(Boolean)
         : []
       : current.mcpDisabled || [];
+  const title = titleForNode(next.title, nodeRole);
   openDb()
     .prepare(
       `UPDATE sessions
@@ -2000,7 +2010,7 @@ function updateSessionNode(sessionId, patch = {}) {
        WHERE id = ?`
     )
     .run(
-      String(next.title || 'Chat'),
+      title,
       String(next.agentId || DEFAULT_AGENT_ID),
       next.projectId || null,
       nodeRole,

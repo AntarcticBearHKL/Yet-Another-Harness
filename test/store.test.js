@@ -1176,7 +1176,7 @@ test('manager and work node fields round-trip through sqlite', () => {
       sessions: [
         {
           id: 'm1',
-          title: 'Manager',
+          title: 'Renamed by chat',
           system: 'sys',
           agentId: 'manager',
           projectId: 'p1',
@@ -1213,6 +1213,7 @@ test('manager and work node fields round-trip through sqlite', () => {
     const manager = store.getSession('m1');
     const work = store.getSession('w1');
     assert.equal(manager.nodeRole, 'manager');
+    assert.equal(manager.title, 'Manager');
     assert.equal(manager.managerId, null);
     assert.deepEqual(manager.nodeConfig.directories, [
       path.resolve('C:\\work'),
@@ -1230,6 +1231,10 @@ test('manager and work node fields round-trip through sqlite', () => {
       nodeConfig: { ...work.nodeConfig, task: 'next task' },
     });
     assert.equal(store.getSession('w1').nodeConfig.task, 'next task');
+    assert.equal(
+      store.updateSessionNode('m1', { title: 'Another name' }).title,
+      'Manager'
+    );
     assert.equal(store.detachWorkNodes('m1'), 1);
     assert.equal(store.getSession('w1').managerId, null);
   });

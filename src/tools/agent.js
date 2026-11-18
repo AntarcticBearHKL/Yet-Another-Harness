@@ -254,6 +254,9 @@ function sessionRename(args) {
     ? chats.sessions.find((item) => item.id === id)
     : chats.sessions[chats.current];
   if (!session) return 'tool error: session not found';
+  if (session.nodeRole === 'manager') {
+    return 'tool error: the manager node title is fixed to Manager';
+  }
   const title = String(args.title || '').trim();
   if (!title) return 'tool error: title is required';
   session.title = title;
