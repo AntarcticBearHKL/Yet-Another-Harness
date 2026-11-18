@@ -7850,7 +7850,7 @@ body:has(#action-menu:not(.hidden)) #window-controls {
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   background: var(--glass-menu);
-  box-shadow: var(--shadow-float);
+  box-shadow: none;
   -webkit-backdrop-filter: blur(24px) saturate(1.1);
   backdrop-filter: blur(24px) saturate(1.1);
   color: var(--dim);
@@ -7866,6 +7866,7 @@ body:has(#action-menu:not(.hidden)) #window-controls {
   border-color: rgba(185, 111, 61, 0.36);
   background: var(--selected);
   color: var(--text);
+  box-shadow: none;
 }
 
 .action-menu-item:focus-visible {
