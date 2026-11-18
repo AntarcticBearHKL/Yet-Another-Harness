@@ -14,7 +14,6 @@ const {
 const {
   MANAGER_AGENT,
   AGENT_AGENT,
-  ROLE_AGENTS,
   ROLE_SUBAGENTS,
 } = require('../src/agent-defaults');
 
@@ -22,11 +21,6 @@ const BUILTIN_IDS = [
   'basic',
   'manager',
   'agent',
-  'research',
-  'programmer',
-  'tester',
-  'writer',
-  'reviewer',
   'sub-research',
   'sub-programmer',
   'sub-tester',
@@ -46,48 +40,24 @@ test('agent profiles are a fixed built-in list', () => {
     assert.ok(loaded.every((agent) => agent.builtin === true));
     assert.equal(loaded[0].name, 'Build');
     assert.equal(loaded[1].name, 'Manager');
-    assert.equal(loaded[2].name, '通用');
+    assert.equal(loaded[2].name, '项目协调');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('agent roles carry their own tools and may delegate', () => {
-  assert.ok(AGENT_AGENT.tools.includes('write'));
-  assert.ok(AGENT_AGENT.tools.includes('shell'));
+test('the Agent is a project-aware coordinator with no write tools', () => {
+  assert.equal(AGENT_AGENT.name, '项目协调');
+  assert.ok(AGENT_AGENT.prompt.startsWith('Before doing anything else, inspect the entire project'));
+  assert.ok(AGENT_AGENT.tools.includes('read'));
+  assert.ok(AGENT_AGENT.tools.includes('glob'));
+  assert.ok(AGENT_AGENT.tools.includes('grep'));
   assert.ok(AGENT_AGENT.tools.includes('subagent_start'));
   assert.ok(AGENT_AGENT.tools.includes('subagent_close'));
-
-  const research = ROLE_AGENTS.find((agent) => agent.id === 'research');
-  assert.equal(research.name, '信息收集');
-  assert.ok(research.tools.includes('websearch'));
-  assert.ok(research.tools.includes('read'));
-  assert.ok(!research.tools.includes('write'));
-  assert.ok(!research.tools.includes('shell'));
-  assert.ok(research.tools.includes('subagent_start'));
-
-  const programmer = ROLE_AGENTS.find((agent) => agent.id === 'programmer');
-  assert.equal(programmer.name, '程序员');
-  assert.ok(programmer.tools.includes('write'));
-  assert.ok(programmer.tools.includes('edit'));
-  assert.ok(programmer.tools.includes('shell'));
-  assert.ok(programmer.tools.includes('git_commit'));
-
-  const tester = ROLE_AGENTS.find((agent) => agent.id === 'tester');
-  assert.equal(tester.name, '测试员');
-  assert.ok(tester.tools.includes('shell'));
-  assert.ok(tester.tools.includes('chrome'));
-
-  const writer = ROLE_AGENTS.find((agent) => agent.id === 'writer');
-  assert.equal(writer.name, '文档写作');
-  assert.ok(writer.tools.includes('write'));
-  assert.ok(writer.tools.includes('websearch'));
-
-  const reviewer = ROLE_AGENTS.find((agent) => agent.id === 'reviewer');
-  assert.equal(reviewer.name, '代码审查');
-  assert.ok(reviewer.tools.includes('git_diff'));
-  assert.ok(!reviewer.tools.includes('write'));
-  assert.ok(!reviewer.tools.includes('git_commit'));
+  assert.ok(AGENT_AGENT.tools.includes('worknode_result'));
+  assert.ok(!AGENT_AGENT.tools.includes('write'));
+  assert.ok(!AGENT_AGENT.tools.includes('edit'));
+  assert.ok(!AGENT_AGENT.tools.includes('shell'));
 });
 
 test('subagent roles mirror the work roles without delegation tools', () => {
@@ -103,6 +73,11 @@ test('subagent roles mirror the work roles without delegation tools', () => {
   );
   for (const agent of ROLE_SUBAGENTS) {
     assert.equal(agent.kind, 'subagent');
+    assert.ok(
+      agent.prompt.startsWith(
+        'Before doing anything else, inspect the entire project'
+      )
+    );
     assert.ok(!agent.tools.includes('subagent_start'));
     assert.ok(!agent.tools.includes('subagent_close'));
   }
@@ -121,14 +96,14 @@ test('getAgent resolves ids and role names', () => {
     assert.equal(getAgent(file, 'basic').name, 'Build');
     assert.equal(getAgent(file, 'agent').kind, 'agent');
     assert.equal(getAgent(file, '程序員'), null);
-    assert.equal(getAgent(file, '程序员').id, 'programmer');
-    assert.equal(getAgent(file, '测试员').id, 'tester');
+    assert.equal(getAgent(file, '程序员').id, 'sub-programmer');
+    assert.equal(getAgent(file, '测试员').id, 'sub-tester');
     assert.equal(getAgent(file, 'sub-programmer').id, 'sub-programmer');
     assert.equal(getAgent(file, 'missing'), null);
     assert.equal(getSubagent(file, '').id, 'basic');
     assert.equal(getSubagent(file, '程序员').id, 'sub-programmer');
     assert.equal(getSubagent(file, '代码审查').id, 'sub-reviewer');
-    assert.equal(getSubagent(file, 'programmer').kind, 'agent');
+    assert.equal(getSubagent(file, 'programmer'), null);
     assert.equal(getSubagent(file, 'missing'), null);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

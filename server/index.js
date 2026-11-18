@@ -21,6 +21,7 @@ const { createSkillService } = require('./skills');
 const { loadAgents, getAgent, getSubagent, BUILTIN_AGENT } = require('./agents');
 const { createSubagentService } = require('./subagents');
 const { createSystemNodeService } = require('./system-nodes');
+const { createGitWorktreeService } = require('./git-worktrees');
 const { ensureAgentsMd, readAgentsMd } = require('./context');
 const { normalizeGoal } = require('../src/goal');
 const { normalizeReasoningEffort } = require('../src/reasoning');
@@ -37,6 +38,9 @@ const AGENTS_FILE = path.join(DATA_DIR, 'agents.json');
 attachments.init(path.join(DATA_DIR, 'attachments'));
 const AGILE_FILE = path.join(DATA_DIR, 'agile.json');
 const AGILE_DIR = path.join(DATA_DIR, 'agile');
+const gitWorktrees = createGitWorktreeService({
+  root: path.join(DATA_DIR, 'worktrees'),
+});
 const agileStores = new Map();
 let legacyAgileClaimed = false;
 
@@ -106,6 +110,22 @@ function resolveAgileStore(managerId) {
   return managerAgileStore(id);
 }
 
+function ensureChatGitRepos(chats) {
+  const directories = new Set();
+  for (const project of chats?.projects || []) {
+    for (const directory of project.directories || []) {
+      directories.add(directory);
+    }
+  }
+  for (const session of chats?.sessions || []) {
+    if (session.nodeRole !== 'manager') continue;
+    for (const directory of session.nodeConfig?.directories || []) {
+      directories.add(directory);
+    }
+  }
+  gitWorktrees.ensureRepositories([...directories]);
+}
+
 function sessionAgileManagerId(context) {
   const direct = String(context?.managerId || '').trim();
   if (direct) return direct;
@@ -154,6 +174,9 @@ const skillService = createSkillService({
 });
 const subagentService = createSubagentService({
   resolveAgent: (agentId) => getSubagent(AGENTS_FILE, agentId),
+  prepareWorktree: gitWorktrees.prepareWorktree,
+  commitWorktree: gitWorktrees.commitWorktree,
+  branchSummary: gitWorktrees.branchSummary,
 });
 const systemNodeService = createSystemNodeService({
   store,
@@ -170,6 +193,8 @@ tools.configure({
   subagentService,
   systemNodeService,
   getAgileStore: (managerId) => resolveAgileStore(managerId),
+  prepareWorktree: gitWorktrees.prepareWorktree,
+  branchSummary: gitWorktrees.branchSummary,
   store,
   canvasStore,
   runner,
@@ -553,6 +578,7 @@ function handleApi(req, res, url) {
       .then((body) => {
         store.saveStructure(body);
         sendJson(res, 200, { ok: true });
+        setTimeout(() => ensureChatGitRepos(store.loadChats()), 50);
       })
       .catch((error) =>
         sendJson(res, error.status || 400, { error: error.message })
@@ -1504,6 +1530,7 @@ localServer.listen(LOCAL_PORT, HOST, () => {
   store.loadChats();
   store.interruptRuns();
   store.archiveUnfinishedSubagents();
+  setTimeout(() => ensureChatGitRepos(store.loadChats()), 1000);
   systemNodeService.start();
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(PID_FILE, String(process.pid), 'utf8');

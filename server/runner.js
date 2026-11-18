@@ -764,6 +764,20 @@ function startRun({
                 ? nodeConfig.skills.length
                 : 'Agent default'
             }`,
+            `Workspace: ${
+              Array.isArray(nodeConfig.directories) && nodeConfig.directories.length
+                ? nodeConfig.directories.join(' · ')
+                : 'none'
+            }`,
+            `Branches: ${
+              Array.isArray(nodeConfig.branches) && nodeConfig.branches.length
+                ? nodeConfig.branches
+                    .map((branch) => branch?.branch || '')
+                    .filter(Boolean)
+                    .join(' · ')
+                : 'none'
+            }`,
+            'Before delegating, inspect the entire project and its development conventions. Each Subagent works on its own branch.',
           ].join('\n')
         : '';
   const system = [
@@ -780,9 +794,18 @@ function startRun({
   const project = chats.projects.find(
     (item) => item.id === session.projectId
   );
-  const allowedDirs = Array.isArray(project?.directories)
+  const projectDirs = Array.isArray(project?.directories)
     ? project.directories
     : [];
+  const nodeDirs = Array.isArray(session.nodeConfig?.directories)
+    ? session.nodeConfig.directories
+    : [];
+  const allowedDirs =
+    session.nodeRole === 'manager'
+      ? projectDirs
+      : nodeDirs.length > 0
+        ? nodeDirs
+        : projectDirs;
   const toolContext = {
     enforceProjectRoots: true,
     sessionId,

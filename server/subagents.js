@@ -17,7 +17,7 @@ function promptLabel(prompt, fallback) {
   return (line || fallback || 'Subagent').slice(0, 60);
 }
 
-function resultPrompt(entry, status, text) {
+function resultPrompt(entry, status, text, branches = []) {
   const lines = [
     '[Subagent completed]',
     `Task: ${entry.note || String(entry.prompt || '').slice(0, 200)}`,
@@ -26,6 +26,9 @@ function resultPrompt(entry, status, text) {
   ];
   const duration = Math.max(0, (entry.endedAt || Date.now()) - entry.startedAt);
   lines.push(`Duration: ${Math.round(duration / 1000)}s`);
+  if (branches.length > 0) {
+    lines.push(`Branches: ${branches.join(' · ')}`);
+  }
   const output = String(text || '').trim();
   if (output) {
     const shown =
@@ -45,7 +48,12 @@ function resultPrompt(entry, status, text) {
   return lines.join('\n');
 }
 
-function createSubagentService({ resolveAgent } = {}) {
+function createSubagentService({
+  resolveAgent,
+  prepareWorktree,
+  commitWorktree,
+  branchSummary,
+} = {}) {
   const entries = new Map();
 
   function remember(entry) {
@@ -71,8 +79,23 @@ function createSubagentService({ resolveAgent } = {}) {
       entry.unsubscribe = null;
     }
     const parent = store.getSession(entry.parentSessionId);
+    const session = store.getSession(entry.sessionId);
+    if (status === 'done' && session && commitWorktree) {
+      try {
+        commitWorktree(
+          session.nodeConfig?.directories || [],
+          `yah: ${entry.title}`
+        );
+      } catch (commitError) {
+        console.error('subagent worktree commit failed', commitError);
+      }
+    }
+    const branches =
+      typeof branchSummary === 'function'
+        ? branchSummary(session?.nodeConfig?.branches || [])
+        : [];
     const queueItem = {
-      text: resultPrompt(entry, status, entry.result),
+      text: resultPrompt(entry, status, entry.result, branches),
       skills: [],
       agentId: parent?.agentId || '',
       subagent: true,
@@ -155,6 +178,41 @@ function createSubagentService({ resolveAgent } = {}) {
       session = store.getSession(id);
     }
     if (!session) throw new Error('failed to create subagent session');
+    let worktree = null;
+    if (typeof prepareWorktree === 'function') {
+      try {
+        worktree = prepareWorktree({
+          baseDirectories: parent.nodeConfig?.directories || [],
+          sessionId: session.id,
+          label: title,
+        });
+      } catch (worktreeError) {
+        console.error('subagent worktree failed', worktreeError);
+      }
+    }
+    if (
+      Array.isArray(worktree?.directories) &&
+      worktree.directories.length > 0
+    ) {
+      store.updateSessionNode(session.id, {
+        nodeConfig: {
+          ...(session.nodeConfig || {}),
+          directories: worktree.directories,
+          branches: worktree.branches || [],
+          parentSessionId: parent.id,
+        },
+      });
+      session = store.getSession(session.id);
+    }
+    const branchLines =
+      typeof branchSummary === 'function'
+        ? branchSummary(session?.nodeConfig?.branches || worktree?.branches || [])
+        : [];
+    const promptText = branchLines.length
+      ? `${text}\n\nWork branches:\n${branchLines
+          .map((line) => `- ${line}`)
+          .join('\n')}`
+      : text;
     const runId = crypto.randomUUID();
     const entry = {
       sessionId: session.id,
@@ -173,7 +231,7 @@ function createSubagentService({ resolveAgent } = {}) {
     try {
       runner.startRun({
         sessionId: session.id,
-        text,
+        text: promptText,
         runId,
         agentConfig: subagentAgent || null,
         reasoningEffort: normalizeReasoningEffort(

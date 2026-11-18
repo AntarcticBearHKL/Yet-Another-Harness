@@ -241,6 +241,7 @@ const TOOL_I18N = {
     commands: '执行过的命令',
     tests: '测试及结果',
     artifacts: '截图、报告或链接等产物',
+    branches: 'Subagent 使用的 Git 分支',
     blockers: '仍然存在的阻塞',
     followUps: '建议的后续工作',
     durationMs: '耗时（毫秒）',

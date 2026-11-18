@@ -80,9 +80,11 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 在输入框开头输入 `/` 会在光标位置弹出搜索式 Skill 联想：按名称、描述、关键词匹配当前对话可用的 Skill，上下键移动、回车或点击选择；输入完整的 Skill 名称或 id 后会自动识别并关闭联想，后面可以直接跟空格、参数或正文，不需要回车选择；只有部分匹配时才需要上下键 / 回车选择。选中后输入框本身不变色，只在输入框上方显示一个带颜色的 `/ Skill` 标记，按 Backspace 或点 × 整体删除；带参数的 MCP Skill 会先弹出参数表单
 - 附加的 Skill 在发送时解析并注入该次请求的 system prompt（`# Active Skills`），不会写进用户输入；排队消息会一起保存自己的 Skill
 - 已连接且当前对话启用的 MCP 服务器会把 prompts 暴露为临时 Skill；切换 MCP 开关后列表实时更新
-- Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧按「管理 / Agent / Subagent」分组列出固定配置，右侧显示名称、提示词和工具权限；内置角色包括通用、信息收集、程序员、测试员、文档写作、代码审查，Subagent 提供对应的角色配置和通用 Build；配置完全只读，不能新增、删除或修改
-- Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；每个角色只勾选与其工作类型匹配的工具，Agent 角色保留 `subagent_start` / `subagent_close` 以便把局部任务交给 Subagent；工具权限和工具目录一样左右分栏：左列第一行是「允许所有工具」，下面是分类，右列第一行是搜索框，下面是当前分类的工具；可以浏览分类和搜索，但复选框只展示状态、不响应点击，显示保持原样不做灰色禁用；MCP 工具不进入 Agent 工具权限，也不受 Agent 工具勾选限制，仍由对话的 MCP 开关控制，并继续在 tool 面板里查看
-- Manager 的主流程是 `mission_dispatch`：把目标、任务、角色、依赖和验收标准直接写入 Agile，创建调度器和 Report Hub；Work node 完成后调用 `worknode_result`，Report Hub 汇总结果并把任务移到 Finished 或 Blocked
+- Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧按「管理 / Agent / Subagent」分组列出固定配置，右侧显示名称、提示词和工具权限；Agent 只有一个「项目协调」，负责理解项目并分配任务；具体工作角色全部在 Subagent：信息收集、程序员、测试员、文档写作、代码审查和通用 Build；配置完全只读，不能新增、删除或修改
+- Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；每个角色的提示词第一句都是先阅读整个项目目录、README、AGENTS.md、依赖清单和关键源码，理解开发方式后再开始工作。项目协调 Agent 只有只读检查工具和 `subagent_start` / `subagent_close` / `worknode_result`，不直接改代码；Subagent 使用各自的工作工具；工具权限和工具目录一样左右分栏：左列第一行是「允许所有工具」，下面是分类，右列第一行是搜索框，下面是当前分类的工具；可以浏览分类和搜索，但复选框只展示状态、不响应点击，显示保持原样不做灰色禁用；MCP 工具不进入 Agent 工具权限，也不受 Agent 工具勾选限制，仍由对话的 MCP 开关控制，并继续在 tool 面板里查看
+- Manager 的主流程是 `mission_dispatch`：把目标、任务、角色、依赖和验收标准直接写入 Agile，创建调度器和 Report Hub；调度器循环每 1.5 秒扫描 Agile，把任务摘要交给当前 Manager group 的项目协调 Agent，Agent 再选择对应 Subagent 执行；Work node 完成后调用 `worknode_result`，Report Hub 汇总结果并把任务移到 Finished 或 Blocked
+- 调度器详情页会记录每次扫描的 Backlog / 进行中 / 阻塞 / 完成数量，以及每个任务的分发和阻塞步骤；端口不消耗模型
+- 每个管理 group 导入目录时自动检查 Git：目录已有 Git 就复用，没有就执行 `git init` 并建立初始提交；项目协调 Agent 和每个 Subagent 都在独立 worktree / branch（`yah/...`）上工作，Subagent 完成时自动提交自己的变更，报告里会列出使用的分支
 - Manager 的工具权限被收窄为 `mission_dispatch`、`mission_status`、`mission_report`、`worknode_close`、`question`；它不读文件、不搜索、不执行命令，也不直接写代码，所有执行都交给 Agent / Subagent
 - 输入框底部从左到右是：当前 Agent 名字（如 `Build`，琥珀色、左对齐，可点击展开暖色磨砂下拉菜单）、写死的模型名 `deepseek-v4.1-flash-1017`（带下拉箭头，目前只有这一个选项）、思考强度滑条、极简回车图标发送按钮；输入框默认不显示 placeholder。每个对话必须有一个 Agent，新对话默认使用「Build」；按对话保存选择，新对话继承同项目上一个对话的 Agent；对话开始（有第一条消息）后 Agent 固定，选择器变灰锁定，不能再切换；排队消息会保存自己的 Agent
 - 思考强度滑条是一条极简平面细线 + 小圆点，不显示「思考强度」文字和 low/high/max 挡位文字，鼠标指针保持默认；拖动时圆点自由跟随指针、没有吸附阈限，松开后自动吸附到最近的 `low` / `high` / `max` 挡位；也可以用方向键切换，选择保存在 `settings.json`，发送时作为 `reasoning_effort` 传给 DeepSeek
@@ -146,6 +148,7 @@ server/usage.js    OpenCode Go 额度查询（/api/usage，60 秒缓存）
 server/runner.js   agent 主循环、工具执行、消息/事件持久化
 server/subagents.js 子代理服务：新建/分叉只读对话、启动 run、完成后把结果排回父对话
 server/system-nodes.js 系统 node 服务：调度器、Report Hub、审批、问卷、Agile 分发循环
+server/git-worktrees.js Git 仓库初始化、专家 worktree 和分支、完成时提交
 src/tools/mission.js Manager 的 mission_dispatch 和 work node 的 worknode_result
 server/skills.js   Skill 发现（skills/ + %APPDATA%\yah\skills）与 MCP prompts 转 Skill
 server/agents.js   Agent 配置：固定内置角色列表，只读，不接受新增、删除或修改

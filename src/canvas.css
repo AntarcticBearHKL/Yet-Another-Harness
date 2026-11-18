@@ -1837,6 +1837,10 @@ body.maximized .system-node-page {
   background: #5b8def;
 }
 
+.system-node-step-dot.scan {
+  background: #8a6f9e;
+}
+
 .system-node-step-dot.result {
   background: #6f9b68;
 }

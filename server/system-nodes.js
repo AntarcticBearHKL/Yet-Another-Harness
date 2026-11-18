@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { AGENT_AGENT_ID } = require('../src/agent-defaults');
 
 const DEFAULT_ROLE_MAP = {
   research: '信息收集',
@@ -38,11 +39,12 @@ function systemNodeId() {
   return `sys-${crypto.randomUUID()}`;
 }
 
-function taskPrompt(task, goal) {
+function taskPrompt(task, goal, roleName = '') {
   const lines = [
     `Mission: ${goal || task.title}`,
     `Task: ${task.title}`,
     task.role ? `Role: ${task.role}` : '',
+    roleName ? `Delegate to Subagent: ${roleName}` : '',
     '',
     task.description || '(no description)',
   ];
@@ -57,7 +59,7 @@ function taskPrompt(task, goal) {
   }
   lines.push(
     '',
-    'When the task is complete, call worknode_result with taskId, status, summary, how, files, commands, tests, artifacts, blockers and followUps.',
+    'When the task is complete, call worknode_result with taskId, status, summary, how, files, commands, tests, artifacts, branches, blockers and followUps.',
     `taskId: ${task.id}`
   );
   return lines.filter((line) => line !== null).join('\n');
@@ -118,6 +120,13 @@ function buildReportMarkdown(goal, tasks) {
         '',
         '### 产物',
         ...result.artifacts.map((item) => `- ${item}`)
+      );
+    }
+    if (Array.isArray(result.branches) && result.branches.length > 0) {
+      lines.push(
+        '',
+        '### Git 分支',
+        ...result.branches.map((item) => `- ${item}`)
       );
     }
     if (Array.isArray(result.blockers) && result.blockers.length > 0) {
@@ -244,6 +253,7 @@ function createSystemNodeService({
           wipLimit: 2,
           retryLimit: 2,
           boardIds: [],
+          lastScanAt: 0,
           steps: [
             {
               at: Date.now(),
@@ -513,6 +523,7 @@ function createSystemNodeService({
       commands: strings(input.commands, 200),
       tests: Array.isArray(input.tests) ? input.tests.slice(0, 100) : [],
       artifacts: strings(input.artifacts, 200),
+      branches: strings(input.branches, 100),
       blockers: strings(input.blockers, 80),
       followUps: strings(input.followUps, 80),
       durationMs: Number(input.durationMs) || 0,
@@ -768,6 +779,25 @@ function createSystemNodeService({
         continue;
       }
       if (tasks.length === 0) continue;
+      const now = Date.now();
+      if (now - (Number(payload.lastScanAt) || 0) >= 10000) {
+        const counts = {
+          backlog: tasks.filter((task) => task.column === 'backlog').length,
+          progress: tasks.filter((task) => task.column === 'progress').length,
+          blocked: tasks.filter((task) => task.column === 'blocked').length,
+          finished: tasks.filter((task) => task.column === 'finished').length,
+        };
+        const goal = payload.goals?.[boardId] || boardId;
+        const updated = appendStep(
+          orchestrator,
+          `扫描 ${goal}：Backlog ${counts.backlog} · 进行 ${counts.progress} · 阻塞 ${counts.blocked} · 完成 ${counts.finished}`,
+          { kind: 'scan' }
+        );
+        updateNode(updated.id, {
+          payload: { ...(updated.payload || {}), lastScanAt: now },
+        });
+        payload.lastScanAt = now;
+      }
       let active = tasks.filter((task) => task.column === 'progress').length;
       for (const task of tasks) {
         if (task.column !== 'progress') continue;
@@ -809,15 +839,19 @@ function createSystemNodeService({
             actor: { type: 'agent', id: orchestrator.id },
           });
           const role = String(task.role || 'general');
-          const agentName = roleMap[role] || role || '通用';
-          const agent = getAgent?.(agentName);
+          const roleName = roleMap[role] || role || '通用';
+          const agent = getAgent?.(AGENT_AGENT_ID);
           if (!agent || agent.kind !== 'agent') {
-            throw new Error(`Agent profile not found: ${agentName}`);
+            throw new Error('project coordinator Agent profile not found');
           }
           const created = await createWorkNode(manager, {
             title: task.title,
-            task: taskPrompt(task, report?.payload?.goal || 'Mission'),
-            agentId: agentName,
+            task: taskPrompt(
+              task,
+              report?.payload?.goal || 'Mission',
+              roleName
+            ),
+            agentId: AGENT_AGENT_ID,
             taskId: task.id,
             reportId: report.id,
             start: true,
@@ -833,7 +867,7 @@ function createSystemNodeService({
           active += 1;
           appendStep(
             orchestrator,
-            `已分发任务：${task.title} → ${agentName}`,
+            `已分发任务：${task.title} → 项目协调 → ${roleName}`,
             { kind: 'dispatch', taskId: task.id }
           );
         } catch (error) {

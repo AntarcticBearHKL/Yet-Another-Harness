@@ -1120,7 +1120,7 @@ const WORKNODE_TOOLS = [
   ),
   fn(
     'worknode_result',
-    'Submit the structured result of a work node. Call this when the task is complete, then stop. The Report Hub uses it to mark the Agile task finished or blocked and to build the mission report.',
+    'Submit the structured result of a work node. Call this when the task is complete, then stop. The Report Hub uses it to mark the Agile task finished or blocked and to build the mission report. Include the Subagent branch names in branches.',
     {
       taskId: str('Agile task id; defaults to this work node task'),
       status: str('done, failed or blocked (default done)'),
@@ -1138,6 +1138,7 @@ const WORKNODE_TOOLS = [
       artifacts: arr('Artifacts such as screenshots, reports or URLs', {
         type: 'string',
       }),
+      branches: arr('Git branches used by the Subagents', { type: 'string' }),
       blockers: arr('Blockers that remain', { type: 'string' }),
       followUps: arr('Suggested follow-up work', { type: 'string' }),
       durationMs: num('Elapsed time in milliseconds'),

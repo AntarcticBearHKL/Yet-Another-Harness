@@ -15,6 +15,8 @@ let providers = {
   mcpManager: null,
   notify: null,
   systemNodeService: null,
+  prepareWorktree: null,
+  branchSummary: null,
 };
 
 const WORKNODE_WIDTH = 300;
@@ -313,9 +315,28 @@ async function createManagedWorkNode(manager, options = {}) {
   const tools = normalizeToolsForAgent(agent, options.tools);
   const skills = normalizeSkills(options.skills);
   const mcpDisabled = mcpDisabledFor(options.mcp) || [];
+  const id = crypto.randomUUID();
+  let worktree = null;
+  if (typeof providers.prepareWorktree === 'function') {
+    try {
+      worktree = providers.prepareWorktree({
+        baseDirectories: managerDirectories(manager),
+        sessionId: id,
+        label: `${title}-${agent.name}`,
+      });
+    } catch (worktreeError) {
+      console.error('prepare worktree failed', worktreeError);
+    }
+  }
+  const directories =
+    Array.isArray(worktree?.directories) && worktree.directories.length > 0
+      ? worktree.directories
+      : managerDirectories(manager);
+  const branches = Array.isArray(worktree?.branches) ? worktree.branches : [];
   const nodeConfig = {
     kind: 'work',
-    directories: managerDirectories(manager),
+    directories,
+    branches,
     files: managerFiles(manager),
     task,
     taskId: options.taskId ? String(options.taskId) : null,
@@ -324,7 +345,15 @@ async function createManagedWorkNode(manager, options = {}) {
     skills,
     mcp: Array.isArray(options.mcp) ? options.mcp.map(String) : null,
   };
-  const id = crypto.randomUUID();
+  const branchLines =
+    typeof providers.branchSummary === 'function'
+      ? providers.branchSummary(branches)
+      : [];
+  const taskText = branchLines.length
+    ? `${task}\n\nWork branches:\n${branchLines
+        .map((line) => `- ${line}`)
+        .join('\n')}`
+    : task;
   store.createSession({
     id,
     title: title.slice(0, 120),
@@ -348,8 +377,8 @@ async function createManagedWorkNode(manager, options = {}) {
     options.reportId || null
   );
   let started = null;
-  if (options.start !== false && task) {
-    started = await startWorkNode(workNode, task);
+  if (options.start !== false && taskText) {
+    started = await startWorkNode(workNode, taskText);
   }
   notify({ managerId: manager.id, nodeId: id });
   return {
