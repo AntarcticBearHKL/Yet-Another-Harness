@@ -8068,8 +8068,15 @@ function endActionMenuPress(event) {
   if (event.button !== 2) return;
   const press = actionMenuPress;
   if (!press) return;
-  if (press.timer) clearTimeout(press.timer);
   actionMenuPress = null;
+  if (press.timer) {
+    // A normal quick right-click: open the menu on release instead of making
+    // the user hold for ACTION_MENU_HOLD_MS. The menu stays open for a click.
+    clearTimeout(press.timer);
+    press.timer = null;
+    openActionMenuForPress(press);
+    return;
+  }
   if (!state.ringOpen) return;
   const hovered = document.elementFromPoint(event.clientX, event.clientY);
   const active =
