@@ -1360,9 +1360,26 @@ function buildCanvasSystemNode(node) {
   }
   article.append(actions);
   article.addEventListener('pointerdown', (event) => event.stopPropagation());
+  let clickTimer = null;
   article.addEventListener('click', (event) => {
     if (event.target.closest('button')) return;
+    if (node.type === 'agile') {
+      clearTimeout(clickTimer);
+      clickTimer = setTimeout(() => {
+        clickTimer = null;
+        openSystemNodeWindow(node.id);
+      }, 240);
+      return;
+    }
     openSystemNodeWindow(node.id);
+  });
+  article.addEventListener('dblclick', (event) => {
+    if (node.type !== 'agile') return;
+    event.preventDefault();
+    event.stopPropagation();
+    clearTimeout(clickTimer);
+    clickTimer = null;
+    openManagerAgile(node.managerId);
   });
   return article;
 }
