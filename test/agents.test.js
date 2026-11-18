@@ -48,6 +48,25 @@ test('legacy web_search permissions migrate to websearch', () => {
   assert.deepEqual(agents[0].tools, ['websearch', 'read']);
 });
 
+test('legacy shell and system info permissions migrate to canonical names', () => {
+  const agents = normalizeAgents([
+    {
+      id: 'a2',
+      name: 'B',
+      prompt: 'p',
+      tools: [
+        'read_file',
+        'interactive_bash',
+        'SystemInfo',
+        'system_info',
+        'shell',
+        'systeminfo',
+      ],
+    },
+  ]);
+  assert.deepEqual(agents[0].tools, ['read', 'shell', 'systeminfo']);
+});
+
 test('agents round-trip through the JSON file', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-agents-'));
   const file = path.join(dir, 'agents.json');
