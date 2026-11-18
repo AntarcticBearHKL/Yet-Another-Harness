@@ -170,7 +170,9 @@ function canvasSessionPreview(session) {
 /* ------------------------------- 分组模型 ------------------------------- */
 
 function canvasGroupIndex() {
-  const sessions = Array.isArray(state.sessions) ? state.sessions : [];
+  const sessions = Array.isArray(state.sessions)
+    ? state.sessions.filter((session) => !session.archivedAt)
+    : [];
   const byId = new Map(sessions.map((session) => [session.id, session]));
   let dirty = false;
   for (const session of sessions) {

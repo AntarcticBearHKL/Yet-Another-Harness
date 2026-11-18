@@ -1150,10 +1150,10 @@ const OMO = [
 const WORKNODE_TOOLS = [
   fn(
     'worknode_create',
-    'Create a work node conversation under this manager node. Choose an Agent, give it a concrete task, and optionally narrow its tools, skills or MCP servers. Set start=false to create it idle.',
+    'Create a conversation work node under this manager node. Choose an Agent, give it a title and task, and optionally narrow its tools, skills or MCP servers. Set start=false to create it idle.',
     {
-      title: str('Short work node title'),
-      task: str('Task prompt for the work node'),
+      title: str('Short conversation title'),
+      task: str('Task prompt for the conversation'),
       agentId: str('Agent id to assign'),
       tools: arr('Optional subset of the Agent tools'),
       skills: arr('Optional subset of skill ids'),
@@ -1163,58 +1163,10 @@ const WORKNODE_TOOLS = [
     ['title', 'agentId', 'task']
   ),
   fn(
-    'worknode_adopt',
-    'Attach an existing conversation node to this manager as a work node. The conversation keeps its messages; use worknode_update to change its Agent or task afterward.',
-    {
-      id: str('Existing root conversation id'),
-    },
+    'worknode_close',
+    'Close a conversation work node: stop its active run, archive the conversation and remove it from the canvas.',
+    { id: str('Work node id') },
     ['id']
-  ),
-  fn(
-    'worknode_update',
-    'Update a work node assignment. Only works while it is not running. Values must stay within the chosen Agent permissions.',
-    {
-      id: str('Work node id'),
-      agentId: str('New Agent id'),
-      task: str('New task prompt'),
-      tools: arr('New tool subset'),
-      skills: arr('New skill subset'),
-      mcp: arr('New MCP server subset'),
-    },
-    ['id']
-  ),
-  fn(
-    'worknode_start',
-    'Start a work node with its task, or with a new task prompt. The node must be idle.',
-    {
-      id: str('Work node id'),
-      task: str('Optional task prompt to use instead of the stored task'),
-    },
-    ['id']
-  ),
-  fn(
-    'worknode_status',
-    'Check status, current run, task and last output for one work node, or all work nodes when id is omitted.',
-    { id: str('Optional work node id') }
-  ),
-  fn(
-    'worknode_message',
-    'Send a follow-up prompt to a work node. It must be idle.',
-    {
-      id: str('Work node id'),
-      text: str('Follow-up prompt'),
-    },
-    ['id', 'text']
-  ),
-  fn(
-    'worknode_stop',
-    'Stop the running work node, or every running work node under this manager when id is omitted.',
-    { id: str('Optional work node id') }
-  ),
-  fn(
-    'team_layout',
-    'Arrange all work nodes under this manager into a tidy grid on the canvas.',
-    {}
   ),
 ];
 

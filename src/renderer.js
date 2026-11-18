@@ -841,9 +841,7 @@ async function createManagerFromComposer() {
 
 function sessionsInProject(projectId = state.switcherProjectId) {
   return state.sessions.filter(
-    (session) =>
-      session.projectId === projectId &&
-      !(session.subagent && session.archivedAt)
+    (session) => session.projectId === projectId && !session.archivedAt
   );
 }
 

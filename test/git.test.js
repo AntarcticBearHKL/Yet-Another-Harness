@@ -107,9 +107,9 @@ test('git tools are registered and grouped under the Git category', () => {
   assert.equal(toolGroupFor({ name: 'question' }).id, 'view');
   assert.ok(!TOOL_GROUPS.some((item) => item.id === 'browser'));
   assert.equal(toolGroupFor({ name: 'chrome' }).id, 'view');
-  assert.equal(toolGroupFor({ name: 'worknode_message' }).id, 'canvas');
-  assert.equal(toolGroupFor({ name: 'team_layout' }).id, 'canvas');
-  assert.equal(toolGroupFor({ name: 'worknode_message' }).label, '画布');
+  assert.equal(toolGroupFor({ name: 'worknode_create' }).id, 'canvas');
+  assert.equal(toolGroupFor({ name: 'worknode_close' }).id, 'canvas');
+  assert.equal(toolGroupFor({ name: 'worknode_create' }).label, '画布');
   const push = GIT_TOOLS.find(
     (definition) => definition.function.name === 'git_push'
   );

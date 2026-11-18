@@ -55,7 +55,7 @@
     {
       id: 'canvas',
       label: '画布',
-      pattern: /^worknode_|^team_layout$/i,
+      pattern: /^worknode_/i,
     },
   ];
 
@@ -130,16 +130,7 @@
     TOOL_GROUP_BY_NAME.set(name, 'git');
   }
 
-  const CANVAS_TOOL_NAMES = [
-    'worknode_create',
-    'worknode_adopt',
-    'worknode_update',
-    'worknode_start',
-    'worknode_status',
-    'worknode_message',
-    'worknode_stop',
-    'team_layout',
-  ];
+  const CANVAS_TOOL_NAMES = ['worknode_create', 'worknode_close'];
   for (const name of CANVAS_TOOL_NAMES) {
     TOOL_GROUP_BY_NAME.set(name, 'canvas');
   }

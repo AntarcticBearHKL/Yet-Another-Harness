@@ -24,21 +24,13 @@ async function withStoreDir(run) {
   }
 }
 
-test('worknode tools create, assign and place a work node', async () => {
+test('canvas work nodes can be created and closed', async () => {
   await withStoreDir(async () => {
     store.saveStructure({
       projects: [
         { id: 'p1', name: 'Project', directories: ['C:\\work'] },
       ],
       sessions: [
-        {
-          id: 'legacy-1',
-          title: 'Legacy',
-          system: 'sys',
-          agentId: 'basic',
-          projectId: 'p1',
-          msgs: [{ role: 'User', text: 'old task' }],
-        },
         {
           id: 'm1',
           title: 'Manager',
@@ -62,19 +54,20 @@ test('worknode tools create, assign and place a work node', async () => {
       frames: [],
       wires: [],
     };
-    let savedCanvas = null;
     const runs = [];
+    const cancelled = [];
+    let activeId = null;
     const providers = {
       canvasStore: {
         state: () => canvas,
-        save: (next) => {
-          savedCanvas = next;
-          return next;
-        },
+        save: (next) => next,
       },
       runner: {
-        activeRunForSession: () => null,
-        cancelRun: () => true,
+        activeRunForSession: (id) => (id === activeId ? 'run-1' : null),
+        cancelRun: (id) => {
+          cancelled.push(id);
+          return true;
+        },
         startRun: (payload) => {
           runs.push(payload);
           return { runId: payload.runId };
@@ -118,25 +111,23 @@ test('worknode tools create, assign and place a work node', async () => {
     assert.deepEqual(work.nodeConfig.tools, ['read', 'grep']);
     assert.equal(runs.length, 1);
     assert.equal(runs[0].sessionId, work.id);
-    assert.ok(savedCanvas.nodes[work.id]);
-    const adopted = JSON.parse(
+    assert.ok(canvas.nodes[work.id]);
+
+    activeId = work.id;
+    const closed = JSON.parse(
       await tools.execute(
-        'worknode_adopt',
-        JSON.stringify({ id: 'legacy-1' }),
+        'worknode_close',
+        JSON.stringify({ id: work.id }),
         { sessionId: 'm1' }
       )
     );
-    assert.equal(adopted.ok, true);
-    assert.equal(store.getSession('legacy-1').managerId, 'm1');
-    const list = JSON.parse(
-      await worknode.worknodeStatus({}, { sessionId: 'm1' })
-    );
-    assert.equal(list.length, 2);
-    assert.ok(list.some((item) => item.id === work.id));
-    assert.ok(list.some((item) => item.id === 'legacy-1'));
-    const status = JSON.parse(
-      await worknode.worknodeStatus({ id: work.id }, { sessionId: 'm1' })
-    );
-    assert.equal(status.id, work.id);
+    assert.equal(closed.ok, true);
+    assert.equal(closed.closed, true);
+    assert.equal(closed.stopped, true);
+    assert.deepEqual(cancelled, ['run-1']);
+    assert.equal(canvas.nodes[work.id], undefined);
+    const archived = store.getSession(work.id);
+    assert.ok(archived.archivedAt);
+    assert.equal(archived.archivedStatus, 'closed');
   });
 });

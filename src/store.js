@@ -1599,6 +1599,18 @@ function sessionSubtreeIds(sessionId) {
   return ids;
 }
 
+function archiveSession(sessionId, status = 'closed') {
+  const id = String(sessionId || '').trim();
+  if (!id) return null;
+  const now = Date.now();
+  const result = openDb()
+    .prepare(
+      'UPDATE sessions SET archived_at = ?, archived_status = ?, updated_at = ? WHERE id = ?'
+    )
+    .run(now, String(status || 'closed'), now, id);
+  return Number(result.changes) > 0 ? getSession(id) : null;
+}
+
 function archiveSubagent(sessionId, status = 'done') {
   const id = String(sessionId || '');
   if (!id) return false;
@@ -2273,6 +2285,7 @@ module.exports = {
   saveStructure,
   deleteSession,
   sessionSubtreeIds,
+  archiveSession,
   archiveSubagent,
   archiveUnfinishedSubagents,
   archiveBackgroundJob,
