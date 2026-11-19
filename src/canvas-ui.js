@@ -1501,13 +1501,22 @@ function canvasRectsOverlap(left, right, gap = CANVAS_COLLISION_GAP) {
   );
 }
 
-function canvasNodeCollides(candidate, ignoreIds = new Set()) {
+function canvasCollidingIds(rect, ignoreIds = new Set()) {
+  const ids = [];
   for (const [id, node] of Object.entries(canvasState.nodes)) {
     if (ignoreIds.has(id)) continue;
     if (!node || typeof node !== 'object') continue;
-    if (canvasRectsOverlap(candidate, node)) return true;
+    if (canvasRectsOverlap(rect, node)) ids.push(id);
   }
-  return false;
+  return ids;
+}
+
+function canvasMoveBlocked(current, candidate, ignoreIds = new Set()) {
+  if (!current) return false;
+  const currentIds = new Set(canvasCollidingIds(current, ignoreIds));
+  return canvasCollidingIds(candidate, ignoreIds).some(
+    (id) => !currentIds.has(id)
+  );
 }
 
 function canvasManagerMemberIds(managerId, systemNodes = null) {
@@ -2271,6 +2280,7 @@ function startCanvasSystemNodeDrag(event, systemNode, systemEl) {
   const layout = canvasState.nodes[systemNode.id];
   if (!layout) return;
   event.stopPropagation();
+  systemEl.classList.add('dragging');
   canvasState.systemNodeDrag = {
     systemNode,
     systemEl,
@@ -2342,7 +2352,8 @@ function onCanvasPointerMove(event) {
       y: drag.originY + dy,
     };
     if (
-      canvasNodeCollides(
+      canvasMoveBlocked(
+        drag.node,
         candidate,
         new Set([drag.systemNode.id])
       )
@@ -2370,14 +2381,17 @@ function onCanvasPointerMove(event) {
       return;
     }
     drag.moved = true;
-    const candidates = drag.origins.map((origin) => ({
-      ...origin.item.node,
-      x: origin.x + dx,
-      y: origin.y + dy,
-    }));
     if (
-      candidates.some((candidate) =>
-        canvasNodeCollides(candidate, drag.ignoreIds)
+      drag.origins.some((origin) =>
+        canvasMoveBlocked(
+          origin.item.node,
+          {
+            ...origin.item.node,
+            x: origin.x + dx,
+            y: origin.y + dy,
+          },
+          drag.ignoreIds
+        )
       )
     ) {
       return;
@@ -2446,7 +2460,7 @@ function onCanvasPointerMove(event) {
       x: drag.originX + dx,
       y: drag.originY + dy,
     };
-    if (canvasNodeCollides(candidate, drag.groupIds)) return;
+    if (canvasMoveBlocked(drag.node, candidate, drag.groupIds)) return;
     drag.node.x = candidate.x;
     drag.node.y = candidate.y;
     drag.groupEl.style.left = `${drag.node.x}px`;
@@ -2504,6 +2518,7 @@ function onCanvasPointerUp() {
     } catch {
       /* ignore */
     }
+    drag.systemEl.classList.remove('dragging');
     canvasState.systemNodeDrag = null;
   }
   if (canvasState.managerDrag) {
