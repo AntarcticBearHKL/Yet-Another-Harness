@@ -160,6 +160,7 @@ function reportCounts(tasks) {
 function createSystemNodeService({
   store,
   runner,
+  canvasStore,
   getAgileStore,
   createWorkNode,
   createEngineer,
@@ -1538,6 +1539,36 @@ function createSystemNodeService({
       if (name === 'archive') {
         const updated = updateNode(node.id, { status: 'archived' });
         return appendStep(updated, '报告已归档', { kind: 'archive' });
+      }
+      if (name === 'delete' || name === 'remove') {
+        const manager = managerSession(node.managerId);
+        if (manager) {
+          try {
+            const agile = getAgileStore(manager.id);
+            const tasks = agile.listTasks(node.missionId || null);
+            for (const task of tasks) {
+              if (task.reportId !== node.id) continue;
+              agile.updateTask(task.id, {
+                reportId: '',
+                actor: { type: 'human', id: null },
+              });
+            }
+          } catch (error) {
+            console.error('detach deleted report from tasks failed', error);
+          }
+        }
+        try {
+          const state = canvasStore?.state();
+          if (state?.nodes?.[node.id]) {
+            delete state.nodes[node.id];
+            canvasStore.save(state);
+          }
+        } catch (error) {
+          console.error('remove deleted report canvas node failed', error);
+        }
+        const deleted = store.deleteSystemNode(node.id);
+        publish(node.managerId, node.id);
+        return { ok: true, deleted, id: node.id, type: node.type };
       }
       if (name === 'build') {
         return refreshReport(node, node.missionId, node.payload?.goal);

@@ -280,6 +280,19 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
     const read = service.action(ready.id, 'read');
     assert.equal(read.status, 'read');
 
+    const deleted = service.action(ready.id, 'delete');
+    assert.equal(deleted.ok, true);
+    assert.equal(deleted.deleted, true);
+    assert.equal(
+      service.list('m1').some((node) => node.id === ready.id),
+      false
+    );
+    assert.ok(
+      agile
+        .snapshot(iteration.iterationId)
+        .tasks.every((task) => task.reportId !== ready.id)
+    );
+
     assert.match(
       tasks.taskBlock(
         { kind: 'approval', reason: 'not a worker' },

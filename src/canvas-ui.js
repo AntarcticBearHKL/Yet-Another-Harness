@@ -1408,6 +1408,13 @@ function openSystemNodeMenu(node, x, y) {
       icon: RING_ICONS.archive,
       action: () => void systemNodeAction(node.id, 'archive'),
     });
+    items.push({
+      label: '删除报告',
+      icon: RING_ICONS.trash,
+      danger: true,
+      confirm: true,
+      action: () => void systemNodeAction(node.id, 'delete'),
+    });
   }
   openActionMenu({ x, y, items });
 }

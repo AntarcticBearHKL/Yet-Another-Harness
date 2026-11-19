@@ -200,6 +200,7 @@ const subagentService = createSubagentService({
 const systemNodeService = createSystemNodeService({
   store,
   runner,
+  canvasStore,
   getAgileStore: (managerId) => resolveAgileStore(managerId),
   createWorkNode: (manager, options) =>
     worknodeTools.createManagedWorkNode(manager, options),
