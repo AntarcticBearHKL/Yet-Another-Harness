@@ -7966,6 +7966,7 @@ function onActionMenuMove(event) {
 
 function startActionMenuPress(event) {
   if (event.button !== 2) return;
+  if (state.systemNodeWindow) return;
   if (state.panelWindow || state.archiveWindow) return;
   if (state.chatWindow) return;
   if (
@@ -8196,6 +8197,14 @@ function handleContextMenu(event) {
 
 function handleRightClickBack() {
   if (Date.now() - lastActionMenuAt < 450) return;
+  if (state.systemNodeWindow) {
+    window.closeSystemNodeWindow?.();
+    return;
+  }
+  if (document.querySelector('.system-node-page')) {
+    window.closeSystemNodeWindow?.();
+    return;
+  }
   if (state.archiveWindow) {
     api.close();
     return;
@@ -11198,6 +11207,7 @@ async function boot() {
   applySettings();
   await loadAgents();
   if (systemNodeId) {
+    state.systemNodeWindow = true;
     document.body.classList.add('system-node-window');
     document.title = 'YAH - Node';
     setTimeout(() => window.openSystemNodePage?.(systemNodeId), 0);
