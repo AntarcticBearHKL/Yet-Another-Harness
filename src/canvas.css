@@ -1568,6 +1568,23 @@ body.canvas-space .canvas-stage.panning {
   background: rgba(185, 111, 61, 0.075);
 }
 
+.canvas-manager-divider {
+  position: absolute;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(185, 111, 61, 0.32) 12%,
+    rgba(185, 111, 61, 0.32) 88%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+.canvas-manager-divider.hidden {
+  display: none;
+}
+
 /* Manager system lane: orchestrator, report hub, approvals and questionnaires */
 .canvas-system-lane {
   position: absolute;

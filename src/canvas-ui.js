@@ -1446,8 +1446,11 @@ function ensureSystemNodeLayout(manager, systemNodes = []) {
     width: CANVAS_MANAGER_CARD_SIZE,
     height: CANVAS_MANAGER_CARD_SIZE,
   };
+  const rightTypes = new Set(['report', 'approval', 'questionnaire']);
+  let leftIndex = 0;
+  let rightIndex = 0;
   let changed = false;
-  systemNodes.forEach((systemNode, index) => {
+  systemNodes.forEach((systemNode) => {
     const existing = canvasState.nodes[systemNode.id];
     if (existing) {
       if (
@@ -1460,18 +1463,22 @@ function ensureSystemNodeLayout(manager, systemNodes = []) {
       }
       return;
     }
-    const column = index % 2;
-    const row = Math.floor(index / 2);
+    const onRight = rightTypes.has(systemNode.type);
+    const index = onRight ? rightIndex : leftIndex;
+    const column = onRight ? 0 : index % 2;
+    const row = onRight ? index : Math.floor(index / 2);
     canvasState.nodes[systemNode.id] = {
       x:
         (Number(managerNode.x) || 0) +
-        220 +
+        (onRight ? 760 : 220) +
         column * 200,
       y: (Number(managerNode.y) || 0) + row * 200,
       width: CANVAS_MANAGER_CARD_SIZE,
       height: CANVAS_MANAGER_CARD_SIZE,
       parentSessionId: null,
     };
+    if (onRight) rightIndex += 1;
+    else leftIndex += 1;
     changed = true;
   });
   if (changed) scheduleCanvasSave();
@@ -1548,6 +1555,57 @@ function canvasManagerMemberIds(managerId, systemNodes = null) {
   ]);
 }
 
+function canvasManagerGroupDivider(manager, team, systemNodes = []) {
+  const leftTypes = new Set(['agile', 'orchestrator']);
+  const leftSystem = systemNodes.filter((node) => leftTypes.has(node.type));
+  const rightSystem = systemNodes.filter((node) => !leftTypes.has(node.type));
+  if (rightSystem.length === 0) return null;
+  const leftIds = [
+    manager.id,
+    ...team.map((session) => session.id),
+    ...leftSystem.map((node) => node.id),
+  ];
+  const rightIds = rightSystem.map((node) => node.id);
+  const leftNodes = leftIds
+    .map((id) => canvasState.nodes[id])
+    .filter(Boolean);
+  const rightNodes = rightIds
+    .map((id) => canvasState.nodes[id])
+    .filter(Boolean);
+  if (leftNodes.length === 0 || rightNodes.length === 0) return null;
+  const leftMax = Math.max(
+    ...leftNodes.map(
+      (node) => (Number(node.x) || 0) + (Number(node.width) || 180)
+    )
+  );
+  const rightMin = Math.min(
+    ...rightNodes.map((node) => Number(node.x) || 0)
+  );
+  return { x: (leftMax + rightMin) / 2 };
+}
+
+function updateCanvasManagerDivider(
+  manager,
+  groupEl,
+  bounds,
+  team,
+  systemNodes
+) {
+  const divider = groupEl.querySelector('.canvas-manager-divider');
+  if (!divider) return;
+  const info = canvasManagerGroupDivider(manager, team, systemNodes);
+  if (!info) {
+    divider.classList.add('hidden');
+    return;
+  }
+  divider.classList.remove('hidden');
+  divider.style.left = `${info.x - bounds.x}px`;
+  divider.style.top = `${CANVAS_MANAGER_GROUP_PADDING}px`;
+  divider.style.height = `${
+    bounds.height - CANVAS_MANAGER_GROUP_PADDING * 2
+  }px`;
+}
+
 function applyCanvasManagerGroupBounds(managerId, groupEl = null) {
   const manager = state.sessions.find(
     (session) => session.id === managerId && session.nodeRole === 'manager'
@@ -1567,6 +1625,13 @@ function applyCanvasManagerGroupBounds(managerId, groupEl = null) {
   target.style.top = `${bounds.y}px`;
   target.style.width = `${bounds.width}px`;
   target.style.height = `${bounds.height}px`;
+  updateCanvasManagerDivider(
+    manager,
+    target,
+    bounds,
+    team,
+    systemNodes
+  );
   return bounds;
 }
 
@@ -1581,6 +1646,16 @@ function buildCanvasManagerGroup(manager, team, node) {
     groupEl.style.top = `${bounds.y}px`;
     groupEl.style.width = `${bounds.width}px`;
     groupEl.style.height = `${bounds.height}px`;
+  }
+  groupEl.append(el('div', 'canvas-manager-divider hidden'));
+  if (bounds) {
+    updateCanvasManagerDivider(
+      manager,
+      groupEl,
+      bounds,
+      team,
+      systemNodes
+    );
   }
   groupEl.addEventListener('pointerdown', (event) => {
     const managerCard = canvasDom.nodes?.querySelector(
