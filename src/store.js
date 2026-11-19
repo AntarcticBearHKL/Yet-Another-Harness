@@ -277,11 +277,32 @@ function normalizeNodeConfig(raw) {
   const tools = Array.isArray(raw.tools) ? list(raw.tools) : null;
   const skills = Array.isArray(raw.skills) ? list(raw.skills) : null;
   const mcp = Array.isArray(raw.mcp) ? list(raw.mcp) : null;
+  const branches = Array.isArray(raw.branches)
+    ? raw.branches
+        .map((branch) => ({
+          repo: text(branch?.repo, 1000),
+          branch: text(branch?.branch, 300),
+          worktree: text(branch?.worktree, 1000),
+        }))
+        .filter((branch) => branch.branch)
+        .slice(0, 50)
+    : [];
   return {
     kind,
     directories: normalizeDirectories(raw.directories),
     files: list(raw.files, 100),
     task: text(raw.task),
+    taskId: text(raw.taskId, 120) || null,
+    reportId: text(raw.reportId, 120) || null,
+    branches,
+    ...(kind === 'manager'
+      ? {
+          engineerCount: Math.max(
+            1,
+            Math.min(12, Math.round(Number(raw.engineerCount) || 1))
+          ),
+        }
+      : {}),
     tools,
     skills,
     mcp,

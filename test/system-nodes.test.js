@@ -27,7 +27,12 @@ test('mission dispatch drives Agile, orchestrator and report hub', async () => {
         agentId: 'manager',
         projectId: 'p1',
         nodeRole: 'manager',
-        nodeConfig: { directories: [dir], files: [] },
+        nodeConfig: {
+          kind: 'manager',
+          directories: [dir],
+          files: [],
+          engineerCount: 2,
+        },
         msgs: [],
       },
     ],
@@ -99,6 +104,11 @@ test('mission dispatch drives Agile, orchestrator and report hub', async () => {
     assert.equal(result.orchestratorId !== null, true);
     assert.equal(result.reportId !== null, true);
     assert.equal(result.agileId !== null, true);
+    const orchestrator = service
+      .list('m1')
+      .find((node) => node.type === 'orchestrator');
+    assert.equal(orchestrator.payload.engineerCount, 2);
+    assert.equal(orchestrator.payload.wipLimit, 2);
     const agileNode = service.list('m1').find((node) => node.type === 'agile');
     assert.equal(agileNode.payload.counts.total, 2);
     assert.equal(agileNode.payload.counts.backlog, 1);

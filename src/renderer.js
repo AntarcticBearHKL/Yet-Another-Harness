@@ -64,6 +64,7 @@ const dom = {
   managerComposer: $('manager-composer'),
   managerComposerTitle: $('manager-composer-title'),
   managerName: $('manager-name'),
+  managerEngineerCount: $('manager-engineer-count'),
   managerFixedAgent: $('manager-fixed-agent'),
   managerDrop: $('manager-drop'),
   managerDropEmpty: $('manager-drop-empty'),
@@ -701,6 +702,9 @@ function openManagerComposer(managerId = null) {
         : [...(state.projects.find((p) => p.id === manager.projectId)
             ?.directories || [])]
       : [],
+    engineerCount: manager
+      ? Math.max(1, Number(manager.nodeConfig?.engineerCount) || 1)
+      : 1,
   };
   if (dom.managerComposerError) dom.managerComposerError.hidden = true;
   if (dom.managerComposerTitle) {
@@ -712,6 +716,11 @@ function openManagerComposer(managerId = null) {
     dom.managerName.value = manager
       ? managerProject?.name || '项目'
       : managerComposerDefaultProjectName();
+  }
+  if (dom.managerEngineerCount) {
+    dom.managerEngineerCount.value = String(
+      managerComposerState.engineerCount
+    );
   }
   if (dom.managerFixedAgent) {
     dom.managerFixedAgent.textContent = `${managerAgentDisplayName()} · 管理类`;
@@ -762,6 +771,10 @@ async function createManagerFromComposer() {
     managerComposerDefaultProjectName();
   const agentId = MANAGER_AGENT_ID;
   const directories = managerComposerState.directories.slice();
+  const engineerCount = Math.max(
+    1,
+    Math.min(12, Math.round(Number(dom.managerEngineerCount?.value) || 1))
+  );
   const editingId = managerComposerState.editingId;
   if (directories.length === 0) {
     if (dom.managerComposerError) {
@@ -786,6 +799,7 @@ async function createManagerFromComposer() {
       kind: 'manager',
       directories,
       files: [],
+      engineerCount,
     };
     const project = state.projects.find(
       (item) => item.id === manager.projectId
@@ -823,6 +837,7 @@ async function createManagerFromComposer() {
       kind: 'manager',
       directories,
       files: [],
+      engineerCount,
     },
     mcpDisabled: [],
     foldState: null,

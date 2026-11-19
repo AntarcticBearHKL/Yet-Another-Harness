@@ -883,11 +883,15 @@ function buildCanvasManagerPanel(manager, team, node) {
   const runningCount = team.filter((session) =>
     canvasState.running.has(session.id)
   ).length;
+  const engineerCount = Math.max(
+    1,
+    Number(manager.nodeConfig?.engineerCount) || 1
+  );
   panelEl.append(
     el(
       'div',
       'canvas-management-card-subtitle',
-      `${team.length} 个 work node · ${runningCount} 运行 · ${done} 完成`
+      `${engineerCount} 个工程师 · ${team.length} 个 work node · ${runningCount} 运行 · ${done} 完成`
     )
   );
 
@@ -995,9 +999,10 @@ function canvasSystemNodeSummary(node) {
   if (node?.type === 'orchestrator') {
     const payload = node.payload || {};
     const boards = Array.isArray(payload.boardIds) ? payload.boardIds.length : 0;
-    return boards
-      ? `${boards} 个 mission · Actor 按角色分发`
-      : '等待 Manager 下达 mission';
+    const engineers = Number(payload.engineerCount) || Number(payload.wipLimit) || 1;
+    return `${engineers} 个工程师 · ${
+      boards ? `${boards} 个 mission` : '等待 Manager 下达 mission'
+    }`;
   }
   if (node?.type === 'report') {
     const counts = node.payload?.counts || {};

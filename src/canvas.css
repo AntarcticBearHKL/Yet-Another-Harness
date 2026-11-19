@@ -2111,6 +2111,39 @@ body.maximized .system-node-page {
   border-bottom-color: rgba(185, 111, 61, 0.6);
 }
 
+.manager-engineer-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.manager-engineer-label {
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.manager-engineer-count {
+  width: 72px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(252, 246, 238, 0.55);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.manager-engineer-count:focus {
+  outline: 0;
+  border-color: var(--accent);
+}
+
 .manager-drop {
   display: flex;
   flex-direction: column;

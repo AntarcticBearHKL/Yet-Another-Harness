@@ -240,7 +240,15 @@ function createSystemNodeService({
     return session && session.nodeRole === 'manager' ? session : null;
   }
 
+  function managerEngineerCount(manager) {
+    return Math.max(
+      1,
+      Math.min(12, Math.round(Number(manager?.nodeConfig?.engineerCount) || 1))
+    );
+  }
+
   function ensureOrchestrator(manager) {
+    const engineerCount = managerEngineerCount(manager);
     let node = findNode(manager.id, 'orchestrator');
     if (!node) {
       node = createNode({
@@ -250,16 +258,28 @@ function createSystemNodeService({
         title: '调度器',
         payload: {
           roleMap: { ...DEFAULT_ROLE_MAP },
-          wipLimit: 2,
+          engineerCount,
+          wipLimit: engineerCount,
           retryLimit: 2,
           boardIds: [],
           lastScanAt: 0,
           steps: [
             {
               at: Date.now(),
-              message: '调度器已启动，等待 mission',
+              message: `调度器已启动，${engineerCount} 个工程师待命`,
             },
           ],
+        },
+      });
+    } else if (
+      Number(node.payload?.engineerCount) !== engineerCount ||
+      Number(node.payload?.wipLimit) !== engineerCount
+    ) {
+      node = updateNode(node.id, {
+        payload: {
+          ...(node.payload || {}),
+          engineerCount,
+          wipLimit: engineerCount,
         },
       });
     }
@@ -776,7 +796,10 @@ function createSystemNodeService({
     if (boardIds.length === 0) return;
     const agile = getAgileStore(manager.id);
     const roleMap = payload.roleMap || DEFAULT_ROLE_MAP;
-    const wipLimit = Math.max(1, Number(payload.wipLimit) || 2);
+    const wipLimit = Math.max(
+      1,
+      Number(payload.engineerCount) || Number(payload.wipLimit) || 1
+    );
     for (const boardId of boardIds) {
       let tasks;
       try {
@@ -911,10 +934,7 @@ function createSystemNodeService({
         );
       for (const manager of managers) {
         refreshAgileNode(manager);
-        let orchestrator = findNode(manager.id, 'orchestrator');
-        if (!orchestrator) {
-          orchestrator = ensureOrchestrator(manager);
-        }
+        const orchestrator = ensureOrchestrator(manager);
         if (!orchestrator || orchestrator.status !== 'running') continue;
         try {
           await tickManager(manager, orchestrator);
