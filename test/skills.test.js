@@ -111,7 +111,7 @@ test('system skills are built in, read-only commands', async () => {
       .filter((skill) => skill.sourceKind === 'system');
     assert.deepEqual(
       system.map((skill) => skill.id),
-      ['system:compact', 'system:goal', 'system:fork']
+      ['system:compact', 'system:goal', 'system:fork', 'system:clear']
     );
     assert.ok(system.every((skill) => skill.readOnly === true));
     assert.ok(system.every((skill) => skill.command));
@@ -119,6 +119,8 @@ test('system skills are built in, read-only commands', async () => {
     assert.match(resolved.text, /System Skill · compact/);
     const fork = await service.resolveMany([{ id: 'system:fork' }]);
     assert.match(fork.text, /System Skill · fork/);
+    const clear = await service.resolveMany([{ id: 'system:clear' }]);
+    assert.match(clear.text, /System Skill · clear/);
   });
 });
 

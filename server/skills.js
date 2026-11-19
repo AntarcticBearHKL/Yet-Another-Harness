@@ -67,6 +67,23 @@ const SYSTEM_SKILLS = [
       '#n-<title>. The original conversation stays unchanged. This command ' +
       'is built in and cannot be edited.',
   },
+  {
+    id: 'system:clear',
+    name: 'clear',
+    description:
+      '清空当前对话的全部上下文，回到新对话状态。',
+    keywords: ['clear', '清空', '重置', '新对话', 'reset'],
+    category: '系统',
+    source: '系统',
+    sourceKind: 'system',
+    readOnly: true,
+    command: 'clear',
+    body:
+      '# System Skill · clear\n' +
+      'Clear all messages and transient state in the current conversation ' +
+      'and return it to a new conversation state. This command is built in ' +
+      'and cannot be edited.',
+  },
 ];
 
 function parseKeywords(value) {

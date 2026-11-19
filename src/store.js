@@ -1608,6 +1608,32 @@ function saveStructure(chats) {
   return normalized;
 }
 
+function clearSession(sessionId) {
+  const id = String(sessionId || '').trim();
+  if (!id) return false;
+  const database = openDb();
+  const row = database
+    .prepare('SELECT id FROM sessions WHERE id = ?')
+    .get(id);
+  if (!row) return false;
+  database.prepare('DELETE FROM steps WHERE session_id = ?').run(id);
+  database.prepare('DELETE FROM requests WHERE session_id = ?').run(id);
+  database.prepare('DELETE FROM messages WHERE session_id = ?').run(id);
+  database.prepare('DELETE FROM runs WHERE session_id = ?').run(id);
+  database.prepare('DELETE FROM events WHERE session_id = ?').run(id);
+  database.prepare('DELETE FROM archive_jobs WHERE session_id = ?').run(id);
+  database
+    .prepare(
+      `UPDATE sessions
+       SET title = '', pending_queue = '[]', goal = NULL, compaction = NULL,
+           fold_state = NULL, archived_at = NULL, archived_status = NULL,
+           updated_at = ?
+       WHERE id = ?`
+    )
+    .run(Date.now(), id);
+  return true;
+}
+
 function deleteSession(sessionId) {
   openDb().prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
 }
@@ -2535,6 +2561,7 @@ module.exports = {
   loadChats,
   saveChats,
   saveStructure,
+  clearSession,
   deleteSession,
   sessionSubtreeIds,
   archiveSession,

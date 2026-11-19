@@ -504,6 +504,11 @@ const api = {
       method: 'POST',
       body: { sessionId, goal },
     }),
+  clearSession: (id) =>
+    requestJson('/api/sessions/clear', {
+      method: 'POST',
+      body: { sessionId: id },
+    }),
   deleteSession: (id) =>
     requestJson(`/api/sessions/${encodeURIComponent(id)}`, {
       method: 'DELETE',
@@ -5261,6 +5266,37 @@ async function forkCurrentSession(session, args = '') {
   }
 }
 
+async function clearCurrentSession(session) {
+  if (!session || session.frozen || session.subagent) return;
+  try {
+    await api.clearSession(session.id);
+    session.msgs = [];
+    session.pendingQueue = [];
+    session.goal = null;
+    session.compaction = null;
+    session.foldState = null;
+    session.title = '';
+    state.streaming = false;
+    state.streamMessage = null;
+    state.requestId = null;
+    state.openCardKey = null;
+    state.viewMode = 'questions';
+    state.forceScroll = true;
+    state.followBottom = true;
+    state.foldRestored = false;
+    resetComposerSkills();
+    clearAttachedImages();
+    dom.input.value = '';
+    saveChatsSoon();
+    renderAll();
+    if (state.composerOpen) renderComposerContext();
+    window.refreshCanvas?.();
+    dom.input.focus();
+  } catch (error) {
+    console.error('clear session failed', error);
+  }
+}
+
 function deleteSessionById(sessionId) {
   const ids = new Set([String(sessionId || '')]);
   let changed = true;
@@ -5488,6 +5524,16 @@ async function sendMessage() {
       renderSlashPopup();
       clearAttachedSkills();
       await forkCurrentSession(session, command.args);
+      return;
+    }
+    if (command.command === 'clear') {
+      dom.input.value = '';
+      state.slashDismissed = false;
+      updateSendState();
+      renderSlashPopup();
+      clearAttachedSkills();
+      clearAttachedImages();
+      await clearCurrentSession(session);
       return;
     }
     if (command.skill) {
@@ -6799,6 +6845,14 @@ function parseSlashCommand(value) {
       args: fork[1].trim(),
     };
   }
+  const clear = text.match(/^\/clear\b([\s\S]*)$/i);
+  if (clear) {
+    return {
+      command: 'clear',
+      skill: state.skills.find((skill) => skill.command === 'clear') || null,
+      args: '',
+    };
+  }
   const match = matchSlashSkill(text);
   if (!match) return null;
   return {
@@ -7060,6 +7114,10 @@ function executeSystemSkill(skill, args = '') {
   }
   if (skill?.command === 'fork') {
     void forkCurrentSession(session, args);
+    return;
+  }
+  if (skill?.command === 'clear') {
+    void clearCurrentSession(session);
   }
 }
 

@@ -921,6 +921,42 @@ test('legacy chats.json migrates into sqlite and is kept as a backup', () => {
   });
 });
 
+test('clearSession removes messages and transient conversation state', () => {
+  withStoreDir(() => {
+    const id = store.createSession({
+      id: 'clear-me',
+      title: 'Clear Chat',
+      system: 'sys',
+      agentId: 'sub-programmer',
+      projectId: null,
+      pendingQueue: [],
+    });
+    store.appendMessage(id, 'User', 'hello', null);
+    store.appendMessage(id, 'Agent', 'hi there', null);
+    store.updateSessionGoal(id, {
+      id: 'g1',
+      objective: 'ship it',
+      status: 'active',
+    });
+    store.updateSessionCompaction(id, {
+      summary: 'summary',
+      recent: 'recent',
+      through: 1,
+    });
+    store.updateSessionPendingQueue(id, [
+      { text: 'queued', skills: [], agentId: 'sub-programmer' },
+    ]);
+    assert.equal(store.getSession(id).msgs.length, 2);
+    assert.equal(store.clearSession(id), true);
+    const session = store.getSession(id);
+    assert.deepEqual(session.msgs, []);
+    assert.equal(session.goal, null);
+    assert.equal(session.compaction, null);
+    assert.deepEqual(session.pendingQueue, []);
+    assert.equal(session.title, 'Chat');
+  });
+});
+
 test('goal and compaction state round-trip through sqlite', () => {
   withStoreDir(() => {
     const chats = store.defaultChats();

@@ -669,6 +669,26 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'POST' && pathname === '/api/sessions/clear') {
+    readJson(req)
+      .then((body) => {
+        const sessionId = String(body?.sessionId || '').trim();
+        const session = sessionId ? store.getSession(sessionId) : null;
+        if (!session) {
+          sendJson(res, 404, { error: 'session not found' });
+          return;
+        }
+        runner.cancelSessionRuns([session.id]);
+        processTools.forgetJobsForSession(session.id);
+        const cleared = store.clearSession(session.id);
+        sendJson(res, 200, { ok: cleared });
+      })
+      .catch((error) =>
+        sendJson(res, error.status || 400, { error: error.message })
+      );
+    return true;
+  }
+
   if (req.method === 'POST' && pathname === '/api/sessions/fork') {
     readJson(req)
       .then((body) => {
