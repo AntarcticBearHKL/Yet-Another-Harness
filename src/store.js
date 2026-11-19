@@ -2075,6 +2075,74 @@ function updateSessionNode(sessionId, patch = {}) {
   return getSession(sessionId);
 }
 
+const SESSION_META_COLUMNS =
+  'id, title, agent_id, project_id, node_role, manager_id, node_config, archived_at';
+
+function sessionMetaFromRow(row) {
+  let nodeConfig = null;
+  if (row.node_config) {
+    try {
+      nodeConfig = normalizeNodeConfig(JSON.parse(row.node_config));
+    } catch {
+      nodeConfig = null;
+    }
+  }
+  const managerId = row.manager_id ? String(row.manager_id) : null;
+  const nodeRole =
+    row.node_role === 'manager'
+      ? 'manager'
+      : row.node_role === 'work' || managerId
+        ? 'work'
+        : null;
+  return {
+    id: row.id,
+    title: titleForNode(row.title, nodeRole),
+    agentId: row.agent_id || DEFAULT_AGENT_ID,
+    projectId: row.project_id || null,
+    nodeRole,
+    managerId,
+    nodeConfig,
+    archivedAt:
+      row.archived_at === null || row.archived_at === undefined
+        ? null
+        : Number(row.archived_at),
+    msgs: [],
+  };
+}
+
+function getSessionMeta(sessionId) {
+  const id = String(sessionId || '').trim();
+  if (!id) return null;
+  const row = openDb()
+    .prepare(`SELECT ${SESSION_META_COLUMNS} FROM sessions WHERE id = ?`)
+    .get(id);
+  return row ? sessionMetaFromRow(row) : null;
+}
+
+function listManagerSessions() {
+  return openDb()
+    .prepare(
+      `SELECT ${SESSION_META_COLUMNS} FROM sessions
+       WHERE node_role = 'manager' AND archived_at IS NULL
+       ORDER BY sort_order ASC`
+    )
+    .all()
+    .map(sessionMetaFromRow);
+}
+
+function listWorkNodesMeta(managerId) {
+  const id = String(managerId || '').trim();
+  if (!id) return [];
+  return openDb()
+    .prepare(
+      `SELECT ${SESSION_META_COLUMNS} FROM sessions
+       WHERE manager_id = ? AND node_role != 'manager'
+       ORDER BY sort_order ASC`
+    )
+    .all(id)
+    .map(sessionMetaFromRow);
+}
+
 function listWorkNodes(managerId) {
   const id = String(managerId || '').trim();
   if (!id) return [];
@@ -2481,6 +2549,9 @@ module.exports = {
   getSession,
   updateSessionNode,
   listWorkNodes,
+  getSessionMeta,
+  listManagerSessions,
+  listWorkNodesMeta,
   detachWorkNodes,
   nextSessionTitle,
   forkSession,

@@ -54,13 +54,10 @@ function agileManagerFile(managerId) {
 function findManagerSession(managerId) {
   const id = String(managerId || '').trim();
   if (!id) return null;
-  return (
-    store
-      .loadChats()
-      .sessions.find(
-        (session) => session.id === id && session.nodeRole === 'manager'
-      ) || null
-  );
+  const session = store.getSessionMeta(id);
+  return session && session.nodeRole === 'manager' && !session.archivedAt
+    ? session
+    : null;
 }
 
 function managerAgileStore(managerId) {

@@ -255,7 +255,7 @@ function createSystemNodeService({
   async function ensureManagerEngineers(manager) {
     const count = managerEngineerCount(manager);
     let engineers = store
-      .listWorkNodes(manager.id)
+      .listWorkNodesMeta(manager.id)
       .filter(
         (session) =>
           session.nodeConfig?.engineer === true && !session.archivedAt
@@ -295,9 +295,8 @@ function createSystemNodeService({
     if (Array.isArray(engineerAgent?.tools)) {
       const nextTools = engineerAgent.tools.map(String);
       for (const engineer of engineers) {
-        const current = store.getSession(engineer.id) || engineer;
-        const currentTools = Array.isArray(current.nodeConfig?.tools)
-          ? current.nodeConfig.tools.map(String)
+        const currentTools = Array.isArray(engineer.nodeConfig?.tools)
+          ? engineer.nodeConfig.tools.map(String)
           : null;
         if (
           !currentTools ||
@@ -306,7 +305,7 @@ function createSystemNodeService({
         ) {
           store.updateSessionNode(engineer.id, {
             nodeConfig: {
-              ...(current.nodeConfig || {}),
+              ...(engineer.nodeConfig || {}),
               tools: nextTools,
             },
           });
@@ -314,7 +313,7 @@ function createSystemNodeService({
       }
     }
     const extras = store
-      .listWorkNodes(manager.id)
+      .listWorkNodesMeta(manager.id)
       .filter(
         (session) =>
           session.nodeConfig?.engineer === true &&
@@ -1499,11 +1498,7 @@ function createSystemNodeService({
     if (ticking) return;
     ticking = true;
     try {
-      const managers = store
-        .loadChats()
-        .sessions.filter(
-          (session) => session.nodeRole === 'manager' && !session.archivedAt
-        );
+      const managers = store.listManagerSessions();
       for (const manager of managers) {
         refreshAgileNode(manager);
         const orchestrator = ensureOrchestrator(manager);
