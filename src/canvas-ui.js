@@ -1070,6 +1070,35 @@ function systemNodeSteps(node) {
   return section;
 }
 
+function canvasReportTitle(node) {
+  const goal = String(node?.payload?.goal || '').trim();
+  if (goal && goal !== 'Mission') return goal;
+  const title = String(node?.title || '报告')
+    .replace(/^报告\s*·\s*/, '')
+    .trim();
+  return title || '报告';
+}
+
+function canvasReportSubtitle(node) {
+  let titles = Array.isArray(node?.payload?.taskTitles)
+    ? node.payload.taskTitles.map(String).filter(Boolean)
+    : [];
+  if (titles.length === 0) {
+    const markdown = String(node?.payload?.reportMarkdown || '');
+    titles = [...markdown.matchAll(/^##\s+\d+\.\s+(.+)$/gm)]
+      .map((match) => match[1].trim())
+      .filter(Boolean);
+  }
+  if (titles.length === 0) return '';
+  const shown = titles.slice(0, 3).join(' · ');
+  const extra = titles.length > 3 ? ` 等 ${titles.length} 个任务` : '';
+  return `Agile 任务：${shown}${extra}`;
+}
+
+function canvasReportMarkdown(markdown) {
+  return String(markdown || '').replace(/^\s*#{1,6}\s+[^\n]*\n+/, '');
+}
+
 function buildSystemNodeCard(node, options = {}) {
   const onClose =
     typeof options.onClose === 'function'
@@ -1077,6 +1106,35 @@ function buildSystemNodeCard(node, options = {}) {
       : closeSystemNodeModal;
   function closeSystemNodeModal() {
     onClose();
+  }
+  if (node.type === 'report') {
+    const reportCard = el(
+      'div',
+      'system-node-modal system-node-report-page'
+    );
+    const reportHead = el('header', 'system-node-report-head');
+    reportHead.append(
+      el('h1', 'system-node-report-title', canvasReportTitle(node))
+    );
+    const subtitle = canvasReportSubtitle(node);
+    if (subtitle) {
+      reportHead.append(
+        el('div', 'system-node-report-subtitle', subtitle)
+      );
+    }
+    reportCard.append(reportHead);
+    const reportBody = el(
+      'div',
+      'system-node-report system-node-report-rendered system-node-report-body'
+    );
+    const markdown = canvasReportMarkdown(node.payload?.reportMarkdown);
+    if (typeof window.renderMarkdownContent === 'function') {
+      window.renderMarkdownContent(reportBody, markdown);
+    } else {
+      reportBody.textContent = markdown;
+    }
+    reportCard.append(reportBody);
+    return reportCard;
   }
   const card = el('div', 'system-node-modal');
   const head = el('header', 'system-node-modal-head');
@@ -1117,42 +1175,6 @@ function buildSystemNodeCard(node, options = {}) {
         openManagerAgile(node.managerId);
       })
     );
-    foot.append(systemNodeButton('关闭', async () => closeSystemNodeModal()));
-    card.append(foot);
-  } else if (node.type === 'report') {
-    const counts = node.payload?.counts || {};
-    const summary = el('div', 'system-node-fields');
-    for (const [label, value] of [
-      ['目标', node.payload?.goal],
-      ['任务', `${counts.finished || 0}/${counts.total || 0} 完成`],
-      ['阻塞', String(counts.blocked || 0)],
-    ]) {
-      if (!value) continue;
-      const row = el('div', 'system-node-field');
-      row.append(el('span', 'system-node-field-label', label));
-      row.append(el('span', 'system-node-field-value', String(value)));
-      summary.append(row);
-    }
-    card.append(summary);
-    const body = el('div', 'system-node-report system-node-report-rendered');
-    const markdown =
-      node.payload?.reportMarkdown ||
-      '报告还在收集中。任务完成后会自动生成。';
-    if (typeof window.renderMarkdownContent === 'function') {
-      window.renderMarkdownContent(body, markdown);
-    } else {
-      body.textContent = markdown;
-    }
-    card.append(body);
-    const foot = el('div', 'system-node-modal-actions');
-    if (node.status === 'ready') {
-      foot.append(
-        systemNodeButton('标记已读', async () => {
-          await systemNodeAction(node.id, 'read');
-          closeSystemNodeModal();
-        })
-      );
-    }
     foot.append(systemNodeButton('关闭', async () => closeSystemNodeModal()));
     card.append(foot);
   } else if (node.type === 'approval') {
@@ -1312,7 +1334,10 @@ async function openSystemNodePage(nodeId) {
   }
   if (!node) return;
   document.querySelector('.system-node-page')?.remove();
-  const page = el('div', 'system-node-page');
+  const page = el(
+    'div',
+    `system-node-page${node.type === 'report' ? ' report-page' : ''}`
+  );
   page.append(
     buildSystemNodeCard(node, {
       onClose: closeSystemNodeWindow,

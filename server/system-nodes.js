@@ -438,6 +438,17 @@ function createSystemNodeService({
   }
 
   function ensureReport(manager, boardId, goal, taskIds = []) {
+    let taskTitles = [];
+    try {
+      const agile = getAgileStore(manager.id);
+      const wanted = new Set(taskIds);
+      taskTitles = agile
+        .listTasks(boardId)
+        .filter((task) => wanted.has(task.id))
+        .map((task) => task.title);
+    } catch {
+      taskTitles = [];
+    }
     let node = findNode(
       manager.id,
       'report',
@@ -454,6 +465,7 @@ function createSystemNodeService({
           boardId,
           goal: goal || 'Mission',
           taskIds: [...taskIds],
+          taskTitles,
           counts: { total: taskIds.length, finished: 0, blocked: 0, active: 0 },
           reportMarkdown: '',
           steps: [
@@ -470,18 +482,33 @@ function createSystemNodeService({
     ) {
       node = updateNode(node.id, {
         title: `报告 · ${goal}`,
-        payload: { ...(node.payload || {}), goal, taskIds: [...taskIds] },
+        payload: {
+          ...(node.payload || {}),
+          goal,
+          taskIds: [...taskIds],
+          taskTitles,
+        },
       });
     } else if (taskIds.length > 0) {
       const currentIds = Array.isArray(node.payload?.taskIds)
         ? node.payload.taskIds
         : [];
+      const currentTitles = Array.isArray(node.payload?.taskTitles)
+        ? node.payload.taskTitles
+        : [];
       const same =
         currentIds.length === taskIds.length &&
         currentIds.every((id, index) => id === taskIds[index]);
-      if (!same) {
+      const titlesSame =
+        currentTitles.length === taskTitles.length &&
+        currentTitles.every((title, index) => title === taskTitles[index]);
+      if (!same || !titlesSame) {
         node = updateNode(node.id, {
-          payload: { ...(node.payload || {}), taskIds: [...taskIds] },
+          payload: {
+            ...(node.payload || {}),
+            taskIds: [...taskIds],
+            taskTitles,
+          },
         });
       }
     }
@@ -514,7 +541,11 @@ function createSystemNodeService({
     appendStep(agileNode, `Mission 已写入：${goal || boardId}`, {
       kind: 'dispatch',
     });
-    const report = ensureReport(manager, boardId, goal, taskIds);
+    const report = refreshReport(
+      ensureReport(manager, boardId, goal, taskIds),
+      boardId,
+      goal
+    );
     return { orchestrator, report, agile: agileNode };
   }
 
@@ -566,6 +597,7 @@ function createSystemNodeService({
         boardId,
         goal: nextGoal,
         taskIds: tasks.map((task) => task.id),
+        taskTitles: tasks.map((task) => task.title),
         counts,
         reportMarkdown,
         generatedAt: terminal ? Date.now() : null,

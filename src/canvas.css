@@ -1768,6 +1768,10 @@ body.system-node-window #app {
   display: none;
 }
 
+body.system-node-window .mobile-compose {
+  display: none !important;
+}
+
 .system-node-page {
   position: fixed;
   inset: var(--window-inset, 0px);
@@ -2001,6 +2005,81 @@ body.maximized .system-node-page {
 .system-node-report-rendered .md-body {
   font-size: 12px;
   line-height: 1.65;
+}
+
+.system-node-page.report-page {
+  padding: 26px 30px 24px;
+}
+
+.system-node-report-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.system-node-report-head {
+  flex: none;
+  padding: 0 0 14px;
+  -webkit-app-region: drag;
+}
+
+.system-node-report-title {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.system-node-report-subtitle {
+  overflow: hidden;
+  margin-top: 6px;
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.system-node-report-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0 4px 0 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  white-space: normal;
+}
+
+.system-node-report-body .md-body {
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.system-node-report-body .md-body > :first-child {
+  margin-top: 0;
+}
+
+.system-node-report-body .md-body h1,
+.system-node-report-body .md-body h2,
+.system-node-report-body .md-body h3 {
+  margin-top: 1.1em;
 }
 
 .system-node-fields,

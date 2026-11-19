@@ -275,6 +275,11 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
     const ready = service.list('m1').find((node) => node.type === 'report');
     assert.equal(ready.status, 'ready');
     assert.equal(ready.payload.goal, 'Build login');
+    assert.deepEqual(
+      [...ready.payload.taskTitles].sort(),
+      ['Implement login', 'Test login'].sort()
+    );
+    assert.match(ready.payload.reportMarkdown, /^# Build login/);
     assert.match(ready.payload.reportMarkdown, /Added LoginForm/);
     assert.match(ready.payload.reportMarkdown, /Login flow verified/);
     const read = service.action(ready.id, 'read');
