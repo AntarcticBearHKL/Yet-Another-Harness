@@ -2051,9 +2051,7 @@ body.panel-window #background-badge {
   display: flex;
   justify-content: center;
   padding: clamp(48px, 11vh, 132px) 32px 40px;
-  background: rgba(251, 246, 239, 0.24);
-  -webkit-backdrop-filter: blur(12px) saturate(1.02);
-  backdrop-filter: blur(12px) saturate(1.02);
+  background: transparent;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -2061,6 +2059,21 @@ body.panel-window #background-badge {
   transition:
     opacity 180ms ease,
     visibility 0s linear 180ms;
+}
+
+/* The blur lives on a pseudo element so the Skill popup keeps its own
+   backdrop-filter. A backdrop-filtered ancestor (the composer itself) would
+   otherwise become the popup's backdrop root and stop it from blurring the
+   composer text behind it. */
+#composer::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(251, 246, 239, 0.24);
+  -webkit-backdrop-filter: blur(12px) saturate(1.02);
+  backdrop-filter: blur(12px) saturate(1.02);
+  z-index: -1;
+  pointer-events: none;
 }
 
 #composer.open {
@@ -2090,8 +2103,6 @@ body.panel-window #background-badge {
   border: 1px solid rgba(74, 54, 40, 0.16);
   border-radius: 14px;
   background: var(--glass-panel);
-  -webkit-backdrop-filter: blur(18px) saturate(1.04);
-  backdrop-filter: blur(18px) saturate(1.04);
   box-shadow: none;
   transform: translateY(8px);
   transition:
@@ -2496,9 +2507,13 @@ body.panel-window #background-badge {
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(251, 246, 239, 0.9);
-  -webkit-backdrop-filter: blur(16px) saturate(1.04);
-  backdrop-filter: blur(16px) saturate(1.04);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 252, 247, 0.86),
+    rgba(251, 246, 239, 0.76)
+  );
+  -webkit-backdrop-filter: blur(28px) saturate(1.12);
+  backdrop-filter: blur(28px) saturate(1.12);
   box-shadow: 0 16px 36px rgba(120, 80, 40, 0.16);
   overflow-y: auto;
 }
@@ -7152,6 +7167,15 @@ body.maximized .mcp {
 .skill-popup {
   width: min(300px, calc(100% - 24px));
   padding: 6px;
+  border-color: rgba(74, 54, 40, 0.16);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 252, 247, 0.86),
+    rgba(251, 246, 239, 0.76)
+  );
+  -webkit-backdrop-filter: blur(28px) saturate(1.12);
+  backdrop-filter: blur(28px) saturate(1.12);
+  box-shadow: 0 18px 40px rgba(74, 54, 40, 0.18);
 }
 
 .agent-menu {
