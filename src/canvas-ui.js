@@ -52,6 +52,7 @@ const canvasState = {
   selectedIds: new Set(),
   drag: null,
   managerDrag: null,
+  systemNodeDrag: null,
   frameDrag: null,
   marquee: null,
   pan: null,
@@ -235,7 +236,11 @@ function ensureCanvasGroups() {
     dirty = true;
   }
   for (const id of Object.keys(canvasState.nodes)) {
-    if (!ids.has(id)) {
+    const isSession = ids.has(id);
+    const isSystemNode = canvasState.systemNodes.some(
+      (node) => node.id === id && node.status !== 'archived'
+    );
+    if (!isSession && !isSystemNode) {
       delete canvasState.nodes[id];
       dirty = true;
     }
@@ -1339,9 +1344,16 @@ function buildCanvasSystemNode(node) {
   if (subtitle) {
     article.append(el('div', 'canvas-management-card-subtitle', subtitle));
   }
-  article.addEventListener('pointerdown', (event) => event.stopPropagation());
+  article.addEventListener('pointerdown', (event) => {
+    event.stopPropagation();
+    startCanvasSystemNodeDrag(event, node, article);
+  });
   article.addEventListener('click', (event) => event.stopPropagation());
   article.addEventListener('dblclick', (event) => {
+    if (canvasState.suppressClick) {
+      canvasState.suppressClick = false;
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     if (node.type === 'agile') openManagerAgile(node.managerId);
@@ -1424,13 +1436,94 @@ function canvasSystemNodesFor(managerId) {
     });
 }
 
+function ensureSystemNodeLayout(manager, systemNodes = []) {
+  const managerNode = canvasState.nodes[manager.id] || {
+    x: 80,
+    y: 80,
+    width: CANVAS_MANAGER_CARD_SIZE,
+    height: CANVAS_MANAGER_CARD_SIZE,
+  };
+  systemNodes.forEach((systemNode, index) => {
+    if (canvasState.nodes[systemNode.id]) return;
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+    canvasState.nodes[systemNode.id] = {
+      x:
+        (Number(managerNode.x) || 0) +
+        220 +
+        column * 200,
+      y: (Number(managerNode.y) || 0) + row * 200,
+      width: CANVAS_MANAGER_CARD_SIZE,
+      height: CANVAS_MANAGER_CARD_SIZE,
+      parentSessionId: null,
+    };
+  });
+}
+
+function canvasManagerGroupBounds(manager, team, systemNodes = []) {
+  const ids = [
+    manager.id,
+    ...team.map((session) => session.id),
+    ...systemNodes.map((node) => node.id),
+  ];
+  const nodes = ids
+    .map((id) => canvasState.nodes[id])
+    .filter(Boolean);
+  if (nodes.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const node of nodes) {
+    minX = Math.min(minX, Number(node.x) || 0);
+    minY = Math.min(minY, Number(node.y) || 0);
+    maxX = Math.max(maxX, (Number(node.x) || 0) + (Number(node.width) || 180));
+    maxY = Math.max(maxY, (Number(node.y) || 0) + (Number(node.height) || 180));
+  }
+  return {
+    x: minX - CANVAS_MANAGER_GROUP_PADDING,
+    y: minY - CANVAS_MANAGER_GROUP_PADDING,
+    width:
+      maxX - minX + CANVAS_MANAGER_GROUP_PADDING * 2,
+    height:
+      maxY - minY + CANVAS_MANAGER_GROUP_PADDING * 2,
+  };
+}
+
+function applyCanvasManagerGroupBounds(managerId, groupEl = null) {
+  const manager = state.sessions.find(
+    (session) => session.id === managerId && session.nodeRole === 'manager'
+  );
+  if (!manager) return null;
+  const team = canvasManagerTeam(manager);
+  const systemNodes = canvasSystemNodesFor(manager.id);
+  ensureSystemNodeLayout(manager, systemNodes);
+  const bounds = canvasManagerGroupBounds(manager, team, systemNodes);
+  const target =
+    groupEl ||
+    canvasDom.nodes?.querySelector(
+      `.canvas-manager-group[data-session-id="${CSS.escape(manager.id)}"]`
+    );
+  if (!target || !bounds) return bounds;
+  target.style.left = `${bounds.x}px`;
+  target.style.top = `${bounds.y}px`;
+  target.style.width = `${bounds.width}px`;
+  target.style.height = `${bounds.height}px`;
+  return bounds;
+}
+
 function buildCanvasManagerGroup(manager, team, node) {
   const groupEl = el('div', 'canvas-manager-group');
   groupEl.dataset.sessionId = manager.id;
-  groupEl.style.left = `${(Number(node.x) || 0) - CANVAS_MANAGER_GROUP_PADDING}px`;
-  groupEl.style.top = `${(Number(node.y) || 0) - CANVAS_MANAGER_GROUP_PADDING}px`;
-  groupEl.style.width = `${CANVAS_MANAGER_GROUP_WIDTH}px`;
-  groupEl.style.height = `${CANVAS_MANAGER_GROUP_HEIGHT}px`;
+  const systemNodes = canvasSystemNodesFor(manager.id);
+  ensureSystemNodeLayout(manager, systemNodes);
+  const bounds = canvasManagerGroupBounds(manager, team, systemNodes);
+  if (bounds) {
+    groupEl.style.left = `${bounds.x}px`;
+    groupEl.style.top = `${bounds.y}px`;
+    groupEl.style.width = `${bounds.width}px`;
+    groupEl.style.height = `${bounds.height}px`;
+  }
   groupEl.addEventListener('pointerdown', (event) => {
     const managerCard = canvasDom.nodes?.querySelector(
       `.canvas-manager-panel[data-session-id="${CSS.escape(manager.id)}"]`
@@ -1444,16 +1537,6 @@ function buildCanvasManagerGroup(manager, team, node) {
       groupEl
     );
   });
-  const systemNodes = canvasSystemNodesFor(manager.id);
-  if (systemNodes.length > 0) {
-    const lane = el('div', 'canvas-system-lane');
-    lane.addEventListener('pointerdown', (event) => event.stopPropagation());
-    lane.addEventListener('click', (event) => event.stopPropagation());
-    for (const systemNode of systemNodes) {
-      lane.append(buildCanvasSystemNode(systemNode));
-    }
-    groupEl.append(lane);
-  }
   return groupEl;
 }
 
@@ -1691,6 +1774,18 @@ function renderCanvasNodes(index) {
     cardEl.style.height = `${CANVAS_MANAGER_CARD_SIZE}px`;
     canvasDom.nodes.append(cardEl);
     measured.push({ groupEl: cardEl, node });
+    const systemNodes = canvasSystemNodesFor(manager.id);
+    ensureSystemNodeLayout(manager, systemNodes);
+    for (const systemNode of systemNodes) {
+      const systemEl = buildCanvasSystemNode(systemNode);
+      const systemLayout = canvasState.nodes[systemNode.id];
+      if (!systemLayout) continue;
+      systemEl.style.left = `${systemLayout.x}px`;
+      systemEl.style.top = `${systemLayout.y}px`;
+      systemEl.style.width = `${CANVAS_MANAGER_CARD_SIZE}px`;
+      systemEl.style.height = `${CANVAS_MANAGER_CARD_SIZE}px`;
+      canvasDom.nodes.append(systemEl);
+    }
   }
   for (const root of regularRoots) {
     const node = canvasState.nodes[root.id];
@@ -2127,6 +2222,29 @@ function startCanvasManagerDrag(
   canvasSelectGroup(manager.id, null);
 }
 
+function startCanvasSystemNodeDrag(event, systemNode, systemEl) {
+  if (event.button !== 0) return;
+  const layout = canvasState.nodes[systemNode.id];
+  if (!layout) return;
+  event.stopPropagation();
+  canvasState.systemNodeDrag = {
+    systemNode,
+    systemEl,
+    node: layout,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: Number(layout.x) || 0,
+    originY: Number(layout.y) || 0,
+    moved: false,
+    pointerId: event.pointerId,
+  };
+  try {
+    systemEl.setPointerCapture(event.pointerId);
+  } catch {
+    /* ignore */
+  }
+}
+
 function startCanvasGroupDrag(event, root, groupEl, node) {
   if (event.button !== 0) return;
   if (
@@ -2138,6 +2256,7 @@ function startCanvasGroupDrag(event, root, groupEl, node) {
   event.stopPropagation();
   canvasState.drag = {
     sessionId: root.id,
+    managerId: String(root.managerId || '').trim(),
     groupEl,
     node,
     startX: event.clientX,
@@ -2156,6 +2275,27 @@ function startCanvasGroupDrag(event, root, groupEl, node) {
 function onCanvasPointerMove(event) {
   if (canvasState.workspaceDrag) {
     updateWorkspaceDrag(event);
+    event.preventDefault();
+    return;
+  }
+  if (canvasState.systemNodeDrag) {
+    const drag = canvasState.systemNodeDrag;
+    const dx = (event.clientX - drag.startX) / canvasState.view.k;
+    const dy = (event.clientY - drag.startY) / canvasState.view.k;
+    if (
+      !drag.moved &&
+      Math.abs(event.clientX - drag.startX) +
+        Math.abs(event.clientY - drag.startY) <
+        4
+    ) {
+      return;
+    }
+    drag.moved = true;
+    drag.node.x = drag.originX + dx;
+    drag.node.y = drag.originY + dy;
+    drag.systemEl.style.left = `${drag.node.x}px`;
+    drag.systemEl.style.top = `${drag.node.y}px`;
+    applyCanvasManagerGroupBounds(drag.systemNode.managerId);
     event.preventDefault();
     return;
   }
@@ -2179,8 +2319,10 @@ function onCanvasPointerMove(event) {
       origin.item.el.style.top = `${origin.item.node.y}px`;
     }
     if (drag.groupBackdrop) {
-      drag.groupBackdrop.style.left = `${(Number(drag.items[0].node.x) || 0) - CANVAS_MANAGER_GROUP_PADDING}px`;
-      drag.groupBackdrop.style.top = `${(Number(drag.items[0].node.y) || 0) - CANVAS_MANAGER_GROUP_PADDING}px`;
+      applyCanvasManagerGroupBounds(
+        drag.manager.id,
+        drag.groupBackdrop
+      );
     }
     event.preventDefault();
     return;
@@ -2233,6 +2375,9 @@ function onCanvasPointerMove(event) {
     drag.node.y = drag.originY + dy;
     drag.groupEl.style.left = `${drag.node.x}px`;
     drag.groupEl.style.top = `${drag.node.y}px`;
+    if (drag.managerId) {
+      applyCanvasManagerGroupBounds(drag.managerId);
+    }
     updateCanvasFrameElements();
     event.preventDefault();
     return;
@@ -2267,6 +2412,23 @@ function onCanvasPointerUp() {
     finishWorkspaceDrag();
     finishWorknodesSync();
     return;
+  }
+  if (canvasState.systemNodeDrag) {
+    const drag = canvasState.systemNodeDrag;
+    if (drag.moved) {
+      canvasState.suppressClick = true;
+      setTimeout(() => {
+        canvasState.suppressClick = false;
+      }, 80);
+      scheduleCanvasSave();
+      applyCanvasManagerGroupBounds(drag.systemNode.managerId);
+    }
+    try {
+      drag.systemEl.releasePointerCapture(drag.pointerId);
+    } catch {
+      /* ignore */
+    }
+    canvasState.systemNodeDrag = null;
   }
   if (canvasState.managerDrag) {
     const drag = canvasState.managerDrag;
@@ -2719,6 +2881,7 @@ function closeCanvas() {
   canvasDom.overlay.setAttribute('aria-hidden', 'true');
   canvasState.drag = null;
   canvasState.managerDrag = null;
+  canvasState.systemNodeDrag = null;
   canvasState.frameDrag = null;
   canvasState.marquee = null;
   canvasState.pan = null;
@@ -2952,6 +3115,7 @@ async function syncWorknodes() {
   if (
     canvasState.drag ||
     canvasState.managerDrag ||
+    canvasState.systemNodeDrag ||
     canvasState.frameDrag ||
     canvasState.marquee ||
     canvasState.pan ||

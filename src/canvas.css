@@ -1586,7 +1586,7 @@ body.canvas-space .canvas-stage.panning {
 }
 
 .canvas-system-node {
-  position: relative;
+  position: absolute;
   display: flex;
   flex-direction: column;
   width: 180px;
