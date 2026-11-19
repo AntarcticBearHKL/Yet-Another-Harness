@@ -65,7 +65,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 对话面板里按 Space 总是打开输入框（焦点在按钮 / 消息块上时也一样，不会触发折叠或按钮点击）；输入框为空或只有空格、且没有挂 Skill 时，再按 Space 关闭输入框；有文字或已挂 Skill 时 Space 才作为空格
 - 所有带确认按钮的弹窗按 Space 等于点击确认按钮：删除确认的 `Delete`、重命名的 `Save`、项目的 `Create / Save`、Goal 的 `Start Goal`、Skill 参数的 `Attach`、工具授权的 `允许一次`、设置的 `Done`、MCP 服务器表单的 `Save`；焦点在输入框 / 文本域 / 下拉框里时 Space 仍然是空格，项目目录拖放区这类自己处理 Space 的控件保持原行为
 - 后台进程：LLM 用 `background_start` 启动长时间挂载的进程（dev server、watcher、`npm run dev` 等）并附 `note` 备注，工具立即返回 id、备注、命令和启动信息；进程会一直运行，让端口 / 服务持续可用，不用来执行任务拿结果。对话右上角显示当前对话运行中的后台任务数量，点击打开面板查看每个任务的备注、命令、状态、耗时、输出并停止任务；`background_list` / `background_output` / `background_stop` 用于列出、读取和停止任务；工具面板里是「后台」分类
-- 子代理：`subagent_start` 在独立只读对话里跑一个完整任务（`fork: true` 可先分叉当前对话），可选择角色配置（信息收集、程序员、测试员、文档写作、代码审查、Build），工具立即返回；任务完成后把结果像后台完成提示一样排入当前对话队列，当前回合结束后自动继续。子代理对话命名 `#n-对话名`，在 Tab 列表里显示「子代理」徽章，只能看不能输入；`subagent_close` 停止并关闭它；工具面板里是「Subagent」分类
+- 角色：Subagent 分组保留信息收集、程序员、测试员、文档写作、代码审查五个 worker，不再有通用 Build，也没有项目协调 Agent；每个 worker 直接处理 Agile 任务，使用 `task_block` / `task_finish`
 - `/fork` 系统 Skill：在当前工作目录把当前对话分叉成新的可编辑对话，命名 `#n-对话名`，原对话保持不变；在输入框输入 `/fork [名字]` 或从斜杠列表选择
 - Agile 工作区：从 Tab 工作区空白处的右键菜单打开；桌面端打开一个独立窗口（网页端回退为全屏页面），窗口位置和大小会记住。固定四列 Backlog / In Progress / Blocked / Finished；左侧分组和迭代，支持折叠、改名、新建、删除；卡片可以打开任务表单，标题和描述只读，备注仍可添加，备注在 In Progress 期间锁定；Finished 任务被加备注会自动回到 Backlog 并标记返工。支持任务搜索、WIP 上限、迭代日期/目标、显示更新时间和默认 OpenAgile Skill。看板数据存在 `%APPDATA%\yah\agile.json`；Manager 通过 `backlog_add` 发布并行任务，调度器负责发放
 - 任务工具：工具面板的「Agile」分类只保留 `backlog_list`、`backlog_add`、`iteration_add`、`task_block`、`task_finish`；旧的 `agile_*`、`mission_*`、`worknode_result`、`question` 工具已删除
@@ -81,14 +81,14 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 在输入框开头输入 `/` 会在光标位置弹出搜索式 Skill 联想：按名称、描述、关键词匹配当前对话可用的 Skill，上下键移动、回车或点击选择；输入完整的 Skill 名称或 id 后会自动识别并关闭联想，后面可以直接跟空格、参数或正文，不需要回车选择；只有部分匹配时才需要上下键 / 回车选择。选中后输入框本身不变色，只在输入框上方显示一个带颜色的 `/ Skill` 标记，按 Backspace 或点 × 整体删除；带参数的 MCP Skill 会先弹出参数表单
 - 附加的 Skill 在发送时解析并注入该次请求的 system prompt（`# Active Skills`），不会写进用户输入；排队消息会一起保存自己的 Skill
 - 已连接且当前对话启用的 MCP 服务器会把 prompts 暴露为临时 Skill；切换 MCP 开关后列表实时更新
-- Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧按「管理 / Agent / Subagent」分组列出固定配置，右侧显示名称、提示词和工具权限；Agent 只有一个「项目协调」，负责理解项目并分配任务；具体工作角色全部在 Subagent：信息收集、程序员、测试员、文档写作、代码审查和通用 Build；配置完全只读，不能新增、删除或修改
-- Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；每个角色的提示词第一句都是先阅读整个项目目录、README、AGENTS.md、依赖清单和关键源码，理解开发方式后再开始工作。项目协调 Agent 只有只读检查工具和 `subagent_start` / `subagent_close` / `task_block` / `task_finish`，不直接改代码；Subagent 使用各自的工作工具；工具权限和工具目录一样左右分栏：左列第一行是「允许所有工具」，下面是分类，右列第一行是搜索框，下面是当前分类的工具；可以浏览分类和搜索，但复选框只展示状态、不响应点击，显示保持原样不做灰色禁用；MCP 工具不进入 Agent 工具权限，也不受 Agent 工具勾选限制，仍由对话的 MCP 开关控制，并继续在 tool 面板里查看
+- Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧按「管理 / Subagent」分组列出固定配置，右侧显示名称、提示词和工具权限；管理只有一个 Manager；具体工作角色全部在 Subagent：信息收集、程序员、测试员、文档写作、代码审查，没有通用 Build，也没有项目协调 Agent；配置完全只读，不能新增、删除或修改
+- Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；每个角色的提示词第一句都是先阅读整个项目目录、README、AGENTS.md、依赖清单和关键源码，理解开发方式后再开始工作。每个 Subagent 是直接干活的 worker，拥有自己的工作工具和 Git 工具，以及 `task_block` / `task_finish`；工具权限和工具目录一样左右分栏：左列第一行是「允许所有工具」，下面是分类，右列第一行是搜索框，下面是当前分类的工具；可以浏览分类和搜索，但复选框只展示状态、不响应点击，显示保持原样不做灰色禁用；MCP 工具不进入 Agent 工具权限，也不受 Agent 工具勾选限制，仍由对话的 MCP 开关控制，并继续在 tool 面板里查看
 - Manager 的主流程是 `backlog_list` / `backlog_add` / `iteration_add`：把用户请求拆成可并行的任务，写明角色和验收标准后直接写入 Agile Backlog；调度器每 1.5 秒扫描 Backlog，把任务分配给空闲工程师；工程师用 `task_block` 在需要审批或问卷时阻塞任务，解决后调度器恢复原工程师，完成后用 `task_finish` 提交结果，Report Hub 汇总并移到 Finished
 - 调度器详情页会记录每次扫描的 Backlog / 进行中 / 阻塞 / 完成数量，以及每个任务的分发和阻塞步骤；端口不消耗模型
-- 每个管理 group 导入目录时自动检查 Git：目录已有 Git 就复用，没有就执行 `git init` 并建立初始提交；项目协调 Agent 和每个 Subagent 都在独立 worktree / branch（`yah/...`）上工作，Subagent 完成时自动提交自己的变更，报告里会列出使用的分支
+- 每个管理 group 导入目录时自动检查 Git：目录已有 Git 就复用，没有就执行 `git init` 并建立初始提交；每个 Subagent worker 都在独立 worktree / branch（`yah/...`）上工作，完成时自动提交自己的变更，报告里会列出使用的分支
 - Manager 的工具权限被收窄为 `backlog_list`、`backlog_add`、`iteration_add`；它不读文件、不搜索、不执行命令，也不直接写代码，所有执行都交给 Agent / Subagent
-- Manager 配置里可以设置「干活工程师」数量，默认 1、最少 1；每个工程师是一个独立的项目协调 Agent 对话 node，调度器会把待执行任务派给空闲的工程师 node，而不是为每个任务新建临时 work node；工程师再按任务类型调用对应的 Subagent
-- 输入框底部从左到右是：当前 Agent 名字（如 `Build`，琥珀色、左对齐，可点击展开暖色磨砂下拉菜单）、写死的模型名 `deepseek-v4.1-flash-1017`（带下拉箭头，目前只有这一个选项）、思考强度滑条、极简回车图标发送按钮；输入框默认不显示 placeholder。每个对话必须有一个 Agent，新对话默认使用「Build」；按对话保存选择，新对话继承同项目上一个对话的 Agent；对话开始（有第一条消息）后 Agent 固定，选择器变灰锁定，不能再切换；排队消息会保存自己的 Agent
+- Manager 配置里可以设置「干活工程师」数量，默认 1、最少 1；每个工程师是一个独立的 Subagent worker 对话 node，调度器会把待执行任务派给空闲的工程师 node，并按任务角色切换对应 worker profile，而不是为每个任务新建临时 work node
+- 输入框底部从左到右是：当前 Agent 名字（如 `程序员`，琥珀色、左对齐，可点击展开暖色磨砂下拉菜单）、写死的模型名 `deepseek-v4.1-flash-1017`（带下拉箭头，目前只有这一个选项）、思考强度滑条、极简回车图标发送按钮；输入框默认不显示 placeholder。每个对话必须有一个 Agent，新对话默认使用「程序员」；按对话保存选择，新对话继承同项目上一个对话的 Agent；对话开始（有第一条消息）后 Agent 固定，选择器变灰锁定，不能再切换；排队消息会保存自己的 Agent
 - 思考强度滑条是一条极简平面细线 + 小圆点，不显示「思考强度」文字和 low/high/max 挡位文字，鼠标指针保持默认；拖动时圆点自由跟随指针、没有吸附阈限，松开后自动吸附到最近的 `low` / `high` / `max` 挡位；也可以用方向键切换，选择保存在 `settings.json`，发送时作为 `reasoning_effort` 传给 DeepSeek
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
 - tool 和 Skill 面板是无标题的左右分栏：tool 页左侧按分类列出内置工具（搜索 / 文件 / 系统），代理类工具不在 tool 面板显示（仍可用于 Agent），右侧每个工具是一张独立卡片，默认折叠，只显示名称、参数数量和 chevron；点击展开说明和参数，一次最多只展开一个工具。Skill 页使用同样的分类侧栏和折叠卡片：左侧平铺系统、本地分类（内置 / 用户 / 绘画等，由 frontmatter `category` 决定）和 MCP 服务器（显示为 `MCP · 名称`），右侧每个 Skill 是一张和工具相同的卡片，默认折叠，展开后显示说明、固定指令和 MCP 参数；MCP 工具只出现在独立的 MCP 工作区，不混进 tool 面板；MCP 工作区左侧服务器、右侧概览 / 工具 / 资源 / 提示词 / 日志，概览是第一个 tab；没有内容时显示空状态
@@ -257,11 +257,11 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 - OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`systeminfo`
 - Git（结构化、无 shell，统一放在工具的 Git 菜单）：`git_status`、`git_diff`、`git_log`、`git_show`、`git_blame`、`git_branch`、`git_checkout`、`git_add`、`git_commit`、`git_stash`、`git_fetch`、`git_pull`、`git_push`、`git_merge`、`git_remote`、`git_tag`、`git_restore`、`git_reset`、`git_revert`、`git_cherry_pick`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）
-- OMO 常驻 / 条件工具：`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`、`subagent_start/close`
+- OMO 常驻 / 条件工具：`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`
 - 任务闭环：`backlog_list` / `backlog_add` / `iteration_add`（Manager 管理 Agile 任务）、`task_block`（worker 阻塞并创建审批或问卷）、`task_finish`（worker 提交结果并完成）
 - 兼容别名：`hashline_edit`；`read_file`、`web_search`、`interactive_bash`、`SystemInfo`、`system_info` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
-- `background_*`、`monitor_*` 是长驻进程管理，不再把完成输出塞回对话；`subagent_start` 启动带完整工具的子代理，完成后把结果塞回父对话，`subagent_close` 停止并关闭它；`interactive_bash` 已合并为 `shell` 的隐藏别名
+- `background_*`、`monitor_*` 是长驻进程管理，不再把完成输出塞回对话；调度器把 Backlog 任务直接分配给对应角色的 worker；`interactive_bash` 已合并为 `shell` 的隐藏别名
 
 ## Tool calling
 

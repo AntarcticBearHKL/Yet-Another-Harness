@@ -2,11 +2,10 @@
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are YAH - Yet Another Harness, a terse terminal coding assistant. Answer in plain text.';
-const DEFAULT_AGENT_ID = 'basic';
-const DEFAULT_AGENT_NAME = 'Build';
+const DEFAULT_AGENT_ID = 'sub-programmer';
+const DEFAULT_AGENT_NAME = '程序员';
 const MANAGER_AGENT_ID = 'manager';
 const MANAGER_AGENT_NAME = 'Manager';
-const AGENT_AGENT_NAME = '项目协调';
 const EFFORT_LEVELS = ['low', 'high', 'max'];
 const DEFAULT_EFFORT = 'high';
 const NO_KEY_HINT = 'No API key. Open Settings to add one.';
@@ -5755,11 +5754,7 @@ function agentMenuEntries() {
       ? state.agents
       : [{ id: DEFAULT_AGENT_ID, name: DEFAULT_AGENT_NAME }];
   return agents
-    .filter(
-      (agent) =>
-        agent.id !== MANAGER_AGENT_ID &&
-        (agent.kind === 'agent' || agent.id === DEFAULT_AGENT_ID)
-    )
+    .filter((agent) => agent.id !== MANAGER_AGENT_ID)
     .map((agent) => ({
       id: agent.id || DEFAULT_AGENT_ID,
       name: agent.name || DEFAULT_AGENT_NAME,
@@ -8992,6 +8987,7 @@ function renderCatalogCategories(data, selectedKind, page) {
       ['Agent', 'agent', agents],
       ['Subagent', 'subagent', subagents],
     ]) {
+      if (entries.length === 0) continue;
       const section = el('div', 'catalog-section catalog-agent-section');
       section.append(el('div', 'catalog-section-label', label));
       for (const agent of entries) {

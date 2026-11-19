@@ -68,18 +68,33 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
       return { ok: true };
     },
   };
+  const workers = {
+    'sub-research': '信息收集',
+    'sub-programmer': '程序员',
+    'sub-tester': '测试员',
+    'sub-writer': '文档写作',
+    'sub-reviewer': '代码审查',
+  };
   const service = createSystemNodeService({
     store,
     runner,
     getAgileStore: () => agile,
-    getAgent: () => ({ id: 'agent', name: '项目协调', kind: 'agent' }),
+    getAgent: (agentId) => {
+      const id = agentId || 'sub-programmer';
+      return {
+        id,
+        name: workers[id] || id,
+        kind: 'subagent',
+        tools: ['read', 'write', 'task_block', 'task_finish'],
+      };
+    },
     createWorkNode: async (manager, options) => {
       const id = `w-${createdWorkNodes.length + 1}`;
       store.createSession({
         id,
         title: options.title,
         system: 'sys',
-        agentId: 'agent',
+        agentId: 'sub-programmer',
         projectId: manager.projectId,
         nodeRole: 'work',
         managerId: manager.id,
@@ -101,7 +116,7 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
         id,
         title: `工程师 ${index}`,
         system: 'sys',
-        agentId: 'agent',
+        agentId: 'sub-programmer',
         projectId: manager.projectId,
         nodeRole: 'work',
         managerId: manager.id,

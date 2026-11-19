@@ -1,7 +1,10 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { AGENT_AGENT_ID } = require('../src/agent-defaults');
+const {
+  DEFAULT_WORKER_AGENT_ID,
+  ROLE_WORKER_AGENT_MAP,
+} = require('../src/agent-defaults');
 const { normalizeQuestions } = require('../src/tools/agent');
 
 const DEFAULT_ROLE_MAP = {
@@ -15,7 +18,7 @@ const DEFAULT_ROLE_MAP = {
   docs: '文档写作',
   reviewer: '代码审查',
   review: '代码审查',
-  general: '通用',
+  general: '程序员',
 };
 
 const TERMINAL_COLUMNS = new Set(['finished', 'blocked']);
@@ -45,7 +48,7 @@ function taskPrompt(task, goal, roleName = '') {
     `Mission: ${goal || task.title}`,
     `Task: ${task.title}`,
     task.role ? `Role: ${task.role}` : '',
-    roleName ? `Delegate to Subagent: ${roleName}` : '',
+    roleName ? `Worker role: ${roleName}` : '',
     '',
     task.description || '(no description)',
   ];
@@ -247,6 +250,16 @@ function createSystemNodeService({
     );
   }
 
+  function workerAgentForRole(role) {
+    const key = String(role || 'general').toLowerCase();
+    const id = ROLE_WORKER_AGENT_MAP[key] || DEFAULT_WORKER_AGENT_ID;
+    const agent = getAgent?.(id);
+    if (!agent || agent.kind !== 'subagent') {
+      throw new Error(`worker profile not found: ${id}`);
+    }
+    return agent;
+  }
+
   async function ensureManagerEngineers(manager) {
     const count = managerEngineerCount(manager);
     let engineers = store
@@ -286,27 +299,6 @@ function createSystemNodeService({
           (Number(left.nodeConfig?.engineerIndex) || 0) -
           (Number(right.nodeConfig?.engineerIndex) || 0)
       );
-    const engineerAgent = getAgent?.(AGENT_AGENT_ID);
-    if (Array.isArray(engineerAgent?.tools)) {
-      const nextTools = engineerAgent.tools.map(String);
-      for (const engineer of engineers) {
-        const currentTools = Array.isArray(engineer.nodeConfig?.tools)
-          ? engineer.nodeConfig.tools.map(String)
-          : null;
-        if (
-          !currentTools ||
-          currentTools.length !== nextTools.length ||
-          currentTools.some((name, index) => name !== nextTools[index])
-        ) {
-          store.updateSessionNode(engineer.id, {
-            nodeConfig: {
-              ...(engineer.nodeConfig || {}),
-              tools: nextTools,
-            },
-          });
-        }
-      }
-    }
     const extras = store
       .listWorkNodesMeta(manager.id)
       .filter(
@@ -893,10 +885,7 @@ function createSystemNodeService({
       return { resumed: false, requeued: true, taskId: task.id };
     }
     const workerActor = { type: 'agent', id: task.claimedBy || worker.id };
-    const agent = getAgent?.(AGENT_AGENT_ID);
-    if (!agent || agent.kind !== 'agent') {
-      throw new Error('project coordinator Agent profile not found');
-    }
+    const agent = workerAgentForRole(task.role);
     agile.moveTask(task.id, 'progress', { actor: workerActor });
     const runId = crypto.randomUUID();
     watchWorkNode(worker, report?.id || null);
@@ -1418,21 +1407,20 @@ function createSystemNodeService({
             actor: { type: 'agent', id: engineer.id },
           });
           const role = String(task.role || 'general');
-          const roleName = roleMap[role] || role || '通用';
-          const agent = getAgent?.(AGENT_AGENT_ID);
-          if (!agent || agent.kind !== 'agent') {
-            throw new Error('project coordinator Agent profile not found');
-          }
+          const roleName = roleMap[role] || role || '程序员';
+          const agent = workerAgentForRole(role);
           const engineerBaseTitle = String(
             engineer.title || `工程师 ${engineerIndex + 1}`
           ).split(' · ')[0];
           store.updateSessionNode(engineer.id, {
+            agentId: agent.id,
             title: `${engineerBaseTitle} · ${task.title}`.slice(0, 120),
             nodeConfig: {
               ...(engineer.nodeConfig || {}),
               task: task.title,
               taskId: task.id,
               reportId: report.id,
+              tools: agent.tools,
             },
           });
           notify?.({ managerId: manager.id, nodeId: engineer.id });

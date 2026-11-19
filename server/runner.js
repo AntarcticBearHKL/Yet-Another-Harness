@@ -5,7 +5,10 @@ const store = require('../src/store');
 const deepseek = require('../src/deepseek');
 const attachments = require('../src/attachments');
 const { ensureAgentsMd } = require('./context');
-const { BUILTIN_AGENT } = require('./agents');
+const { getAgent } = require('./agents');
+const {
+  DEFAULT_WORKER_AGENT_ID,
+} = require('../src/agent-defaults');
 const { normalizeReasoningEffort } = require('../src/reasoning');
 const {
   buildAuditPrompt,
@@ -672,7 +675,9 @@ function startRun({
   store.createRun(id, sessionId, 'running');
 
   const resolvedAgentConfig =
-    agentConfig || sessionAgentConfigs.get(sessionId) || BUILTIN_AGENT;
+    agentConfig ||
+    sessionAgentConfigs.get(sessionId) ||
+    getAgent(null, DEFAULT_WORKER_AGENT_ID);
   if (agentConfig) sessionAgentConfigs.set(sessionId, agentConfig);
 
   const agent = {
@@ -777,7 +782,7 @@ function startRun({
                     .join(' · ')
                 : 'none'
             }`,
-            'Before delegating, inspect the entire project and its development conventions. Each Subagent works on its own branch.',
+            'Inspect the entire project and its development conventions before starting. Keep changes on your own branch.',
             'When you need approval or an answer, call task_block. When the task is done, call task_finish.',
           ].join('\n')
         : '';
@@ -826,12 +831,12 @@ function startRun({
 
   let goalAction = null;
   const sessionToolOverride =
-    resolvedAgentConfig?.kind !== 'agent' &&
+    session.nodeRole !== 'work' &&
     Array.isArray(session.nodeConfig?.tools)
       ? session.nodeConfig.tools.map(String).filter(Boolean)
       : null;
   const effectiveMcpDisabled =
-    resolvedAgentConfig?.kind === 'agent'
+    session.nodeRole === 'work' || resolvedAgentConfig?.kind === 'agent'
       ? ['*']
       : Array.isArray(session.mcpDisabled)
         ? session.mcpDisabled

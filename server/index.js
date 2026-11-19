@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 const QRCode = require('qrcode');
 
 const store = require('../src/store');
+const { DEFAULT_AGENT_ID } = require('../src/agent-defaults');
 const attachments = require('../src/attachments');
 const tools = require('../src/tools');
 const processTools = require('../src/tools/process');
@@ -18,7 +19,7 @@ const runner = require('./runner');
 const usage = require('./usage');
 const { McpManager } = require('./mcp/manager');
 const { createSkillService } = require('./skills');
-const { loadAgents, getAgent, getSubagent, BUILTIN_AGENT } = require('./agents');
+const { loadAgents, getAgent, getSubagent } = require('./agents');
 const { createSubagentService } = require('./subagents');
 const { createSystemNodeService } = require('./system-nodes');
 const { createGitWorktreeService } = require('./git-worktrees');
@@ -769,7 +770,7 @@ function handleApi(req, res, url) {
         const session = chats.sessions.find((item) => item.id === sessionId);
         const agent =
           getAgent(AGENTS_FILE, body?.agentId || session?.agentId) ||
-          BUILTIN_AGENT;
+          getAgent(AGENTS_FILE, DEFAULT_AGENT_ID);
         const result = runner.startRun({
           sessionId,
           text: String(body?.text || ''),

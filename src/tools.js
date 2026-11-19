@@ -82,8 +82,6 @@ async function execute(name, args, context = null) {
       background_stop: processTools.backgroundStop,
       background_output: processTools.backgroundOutput,
       background_cancel: processTools.backgroundCancel,
-      subagent_start: agentTools.subagentStartTool,
-      subagent_close: agentTools.subagentCloseTool,
       backlog_list: taskTools.backlogList,
       backlog_add: taskTools.backlogAdd,
       iteration_add: taskTools.iterationAdd,
@@ -211,9 +209,6 @@ function statusLabel(name, args) {
   }
   if (name === 'skill') {
     return value.name ? `skill: ${value.name}` : 'skill';
-  }
-  if (name === 'subagent_start' || name === 'subagent_close') {
-    return value.sessionId ? `${name}: ${value.sessionId}` : name;
   }
   if (name === 'backlog_add') {
     const count = Array.isArray(value.tasks) ? value.tasks.length : 0;

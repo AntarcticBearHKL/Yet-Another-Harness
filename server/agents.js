@@ -3,13 +3,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {
-  BUILTIN_AGENT,
   MANAGER_AGENT,
-  AGENT_AGENT,
-  ROLE_AGENTS,
   ROLE_SUBAGENTS,
   DEFAULT_AGENT_ID,
-  AGENT_AGENT_ID,
+  DEFAULT_WORKER_AGENT_ID,
 } = require('../src/agent-defaults');
 
 function cloneAgent(agent) {
@@ -21,13 +18,7 @@ function cloneAgent(agent) {
 }
 
 function builtinAgents() {
-  return [
-    BUILTIN_AGENT,
-    MANAGER_AGENT,
-    AGENT_AGENT,
-    ...ROLE_AGENTS,
-    ...ROLE_SUBAGENTS,
-  ].map(cloneAgent);
+  return [MANAGER_AGENT, ...ROLE_SUBAGENTS].map(cloneAgent);
 }
 
 function loadAgents() {
@@ -68,14 +59,14 @@ function getSubagent(file, id) {
   const key = String(id || '').trim();
   const agents = builtinAgents();
   if (!key) {
-    return agents.find((agent) => agent.id === DEFAULT_AGENT_ID) || null;
+    return agents.find((agent) => agent.id === DEFAULT_WORKER_AGENT_ID) || null;
   }
   const byId = agents.find((agent) => agent.id === key);
   if (byId) return byId;
   return (
     agents.find(
       (agent) =>
-        agent.kind !== 'agent' &&
+        agent.kind === 'subagent' &&
         (agent.name === key ||
           agent.name.toLowerCase() === key.toLowerCase())
     ) || null
@@ -83,9 +74,8 @@ function getSubagent(file, id) {
 }
 
 module.exports = {
-  BUILTIN_AGENT,
   DEFAULT_AGENT_ID,
-  AGENT_AGENT_ID,
+  DEFAULT_WORKER_AGENT_ID,
   loadAgents,
   saveAgents,
   getAgent,

@@ -77,14 +77,14 @@ test('canvas work nodes can be created and closed', async () => {
         { id: 'basic', name: 'Build', kind: 'subagent', tools: ['read', 'grep'] },
         {
           id: 'agent',
-          name: '通用',
-          kind: 'agent',
+          name: '程序员',
+          kind: 'subagent',
           tools: [
             'read',
             'write',
             'shell',
-            'subagent_start',
-            'subagent_close',
+            'task_block',
+            'task_finish',
           ],
         },
       ],
@@ -92,14 +92,14 @@ test('canvas work nodes can be created and closed', async () => {
         if (id === 'agent') {
           return {
             id: 'agent',
-            name: '通用',
-            kind: 'agent',
+            name: '程序员',
+            kind: 'subagent',
             tools: [
               'read',
               'write',
               'shell',
-              'subagent_start',
-              'subagent_close',
+              'task_block',
+              'task_finish',
             ],
           };
         }
@@ -145,8 +145,8 @@ test('canvas work nodes can be created and closed', async () => {
       'read',
       'write',
       'shell',
-      'subagent_start',
-      'subagent_close',
+      'task_block',
+      'task_finish',
     ]);
     assert.equal(runs.length, 1);
     assert.equal(runs[0].sessionId, work.id);

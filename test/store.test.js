@@ -999,7 +999,7 @@ test('sessions always default to the built-in agent', () => {
     });
     store.saveChats(chats);
     const loaded = store.loadChats();
-    assert.equal(loaded.sessions[0].agentId, 'basic');
+    assert.equal(loaded.sessions[0].agentId, 'sub-programmer');
   });
 });
 

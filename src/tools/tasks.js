@@ -52,7 +52,7 @@ function normalizeTasks(raw) {
       return {
         title: title.slice(0, 200),
         description: text(item.description),
-        role: text(item.role) || 'general',
+        role: text(item.role) || 'programmer',
         acceptance: text(item.acceptance),
       };
     })

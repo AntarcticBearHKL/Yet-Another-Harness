@@ -150,7 +150,7 @@ const PATCH = fn(
 
 const BACKGROUND_START = fn(
   'background_start',
-  'Start a long-running background process (dev server, watcher, npm run dev, a server that must stay up) and return immediately with its id, note and startup info. The process keeps running so it can keep serving; it is not a way to run a task and get a result. Use subagent_start for tasks whose result should come back to the conversation. Manage it with background_list, background_output and background_stop.',
+  'Start a long-running background process (dev server, watcher, npm run dev, a server that must stay up) and return immediately with its id, note and startup info. The process keeps running so it can keep serving; it is not a way to run a task and get a result. Manage it with background_list, background_output and background_stop.',
   {
     command: str('Shell command to run'),
     note: str('Short note describing what this background task is doing'),
@@ -207,26 +207,6 @@ const MONITOR_OUTPUT = fn(
   { id: str('Monitor id') },
   ['id']
 );
-
-const SUBAGENT_START = fn(
-  'subagent_start',
-  'Start a Subagent in its own read-only conversation and return immediately. The Subagent runs the full agent loop with tools; when it finishes, its result is queued back into this conversation as a follow-up prompt. Use fork=true to copy the current conversation into the Subagent first; otherwise it starts a fresh conversation. Choose a role profile such as 程序员, 测试员, 信息收集, 文档写作 or 代码审查; omit agent to use the general Build worker. Use subagent_close to stop and close it, and use background_start for long-running processes that should keep running.',
-  {
-    prompt: str('The task for the Subagent'),
-    name: str('Short name for the Subagent conversation'),
-    fork: bool('Fork the current conversation into the Subagent conversation'),
-    agent: str('Subagent profile id or name (程序员, 测试员, 信息收集, 文档写作, 代码审查, Build); defaults to Build'),
-    note: str('Short note shown in the result'),
-  },
-  ['prompt']
-);
-const SUBAGENT_CLOSE = fn(
-  'subagent_close',
-  'Stop a running Subagent and close its conversation.',
-  { sessionId: str('Subagent session id') },
-  ['sessionId']
-);
-
 
 const HTML_VIEW = fn(
   'html_view',
@@ -730,8 +710,6 @@ const OMO = [
   MONITOR_STOP,
   MONITOR_LIST,
   MONITOR_OUTPUT,
-  SUBAGENT_START,
-  SUBAGENT_CLOSE,
 ];
 
 const TASK_TOOLS = [
@@ -751,7 +729,7 @@ const TASK_TOOLS = [
         properties: {
           title: str('Task title'),
           description: str('Task description and context'),
-          role: str('Work role: research, programmer, tester, writer, reviewer or general'),
+          role: str('Work role: research, programmer, tester, writer or reviewer'),
           acceptance: str('Acceptance criteria used by the Report Hub'),
         },
         required: ['title'],

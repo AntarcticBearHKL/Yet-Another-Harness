@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const store = require('../store');
 const { mergedDefinitions } = require('./definitions');
 const { DEFAULT_SYSTEM_PROMPT } = store;
-const { AGENT_AGENT_ID } = require('../agent-defaults');
+const { DEFAULT_WORKER_AGENT_ID } = require('../agent-defaults');
 
 let providers = {
   canvasStore: null,
@@ -304,14 +304,14 @@ async function startWorkNode(workNode, task) {
 async function createManagedWorkNode(manager, options = {}) {
   const title = asText(options.title) || 'Work node';
   const task = asText(options.task);
-  const agent = resolveAgent(options.agentId || AGENT_AGENT_ID);
+  const agent = resolveAgent(options.agentId || DEFAULT_WORKER_AGENT_ID);
   if (!agent) {
     throw new Error(
-      `agent not found: ${options.agentId || AGENT_AGENT_ID}. Choose an Agent profile.`
+      `agent not found: ${options.agentId || DEFAULT_WORKER_AGENT_ID}. Choose a worker profile.`
     );
   }
-  if (agent.kind !== 'agent') {
-    throw new Error('work nodes require an Agent profile');
+  if (agent.kind !== 'agent' && agent.kind !== 'subagent') {
+    throw new Error('work nodes require a worker profile');
   }
   if (isManagerAgent(agent)) {
     throw new Error('manager Agents cannot run as work nodes');
@@ -410,7 +410,7 @@ async function createGroupEngineer(manager, index) {
   return createManagedWorkNode(manager, {
     title: `工程师 ${Math.max(1, Number(index) || 1)}`,
     task: '',
-    agentId: AGENT_AGENT_ID,
+    agentId: DEFAULT_WORKER_AGENT_ID,
     start: false,
     engineer: true,
     engineerIndex: Math.max(1, Number(index) || 1),

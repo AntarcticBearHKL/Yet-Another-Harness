@@ -13,14 +13,11 @@ const {
 } = require('../server/agents');
 const {
   MANAGER_AGENT,
-  AGENT_AGENT,
   ROLE_SUBAGENTS,
 } = require('../src/agent-defaults');
 
 const BUILTIN_IDS = [
-  'basic',
   'manager',
-  'agent',
   'sub-research',
   'sub-programmer',
   'sub-tester',
@@ -38,29 +35,27 @@ test('agent profiles are a fixed built-in list', () => {
       BUILTIN_IDS
     );
     assert.ok(loaded.every((agent) => agent.builtin === true));
-    assert.equal(loaded[0].name, 'Build');
-    assert.equal(loaded[1].name, 'Manager');
-    assert.equal(loaded[2].name, '项目协调');
+    assert.equal(loaded[0].name, 'Manager');
+    assert.equal(loaded[1].name, '信息收集');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('the Agent is a project-aware coordinator with no write tools', () => {
-  assert.equal(AGENT_AGENT.name, '项目协调');
-  assert.ok(AGENT_AGENT.prompt.startsWith('Before doing anything else, inspect the entire project'));
-  assert.ok(AGENT_AGENT.tools.includes('read'));
-  assert.ok(AGENT_AGENT.tools.includes('glob'));
-  assert.ok(AGENT_AGENT.tools.includes('grep'));
-  assert.ok(AGENT_AGENT.tools.includes('subagent_start'));
-  assert.ok(AGENT_AGENT.tools.includes('subagent_close'));
-  assert.ok(AGENT_AGENT.tools.includes('task_block'));
-  assert.ok(AGENT_AGENT.tools.includes('task_finish'));
-  assert.ok(!AGENT_AGENT.tools.includes('worknode_result'));
-  assert.ok(!AGENT_AGENT.tools.includes('question'));
-  assert.ok(!AGENT_AGENT.tools.includes('write'));
-  assert.ok(!AGENT_AGENT.tools.includes('edit'));
-  assert.ok(!AGENT_AGENT.tools.includes('shell'));
+test('specialist workers own a task and can block or finish it', () => {
+  const programmer = ROLE_SUBAGENTS.find(
+    (agent) => agent.id === 'sub-programmer'
+  );
+  assert.equal(programmer.name, '程序员');
+  assert.ok(programmer.prompt.startsWith('Before doing anything else, inspect the entire project'));
+  assert.ok(programmer.tools.includes('read'));
+  assert.ok(programmer.tools.includes('write'));
+  assert.ok(programmer.tools.includes('shell'));
+  assert.ok(programmer.tools.includes('task_block'));
+  assert.ok(programmer.tools.includes('task_finish'));
+  assert.ok(!programmer.tools.includes('subagent_start'));
+  assert.ok(!programmer.tools.includes('subagent_close'));
+  assert.ok(!programmer.tools.includes('question'));
 });
 
 test('subagent roles mirror the work roles without delegation tools', () => {
@@ -95,15 +90,13 @@ test('getAgent resolves ids and role names', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-agents-'));
   const file = path.join(dir, 'agents.json');
   try {
-    assert.equal(getAgent(file, '').id, 'basic');
-    assert.equal(getAgent(file, 'basic').name, 'Build');
-    assert.equal(getAgent(file, 'agent').kind, 'agent');
-    assert.equal(getAgent(file, '程序員'), null);
+    assert.equal(getAgent(file, '').id, 'sub-programmer');
+    assert.equal(getAgent(file, 'sub-programmer').name, '程序员');
+    assert.equal(getAgent(file, 'agent'), null);
     assert.equal(getAgent(file, '程序员').id, 'sub-programmer');
     assert.equal(getAgent(file, '测试员').id, 'sub-tester');
-    assert.equal(getAgent(file, 'sub-programmer').id, 'sub-programmer');
     assert.equal(getAgent(file, 'missing'), null);
-    assert.equal(getSubagent(file, '').id, 'basic');
+    assert.equal(getSubagent(file, '').id, 'sub-programmer');
     assert.equal(getSubagent(file, '程序员').id, 'sub-programmer');
     assert.equal(getSubagent(file, '代码审查').id, 'sub-reviewer');
     assert.equal(getSubagent(file, 'programmer'), null);
@@ -122,7 +115,7 @@ test('saving agents ignores edits and keeps the built-in list', () => {
       saved.map((agent) => agent.id),
       BUILTIN_IDS
     );
-    assert.equal(saved[0].name, 'Build');
+    assert.equal(saved[0].name, 'Manager');
     const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
     assert.deepEqual(
       stored.agents.map((agent) => agent.id),
