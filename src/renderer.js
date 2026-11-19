@@ -7495,7 +7495,7 @@ function closeSettings() {
 
 /* ---------------------------------------------------------------- window drag */
 const DRAG_EXCLUDE =
-  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, .canvas-manager, .canvas-manager-panel, .canvas-manager-group, .manager-composer, .manager-composer-content, #web-content';
+  'button, a, input, textarea, select, label, [contenteditable="true"], .switch-card, .composer-box, .agent-menu, .action-menu, .usage-card, .question-dock, .canvas-manager, .canvas-manager-panel, .canvas-manager-group, .canvas-system-node, .manager-composer, .manager-composer-content, #web-content';
 
 function hitsScrollbar(target, event) {
   if (target.scrollHeight <= target.clientHeight && target.scrollWidth <= target.clientWidth) {
@@ -7561,7 +7561,7 @@ function onWindowDragStart(event) {
     const workspacePage = target.closest('.canvas-workspaces-page');
     const excluded = workspacePage
       ? '.canvas-workspace, button, input, textarea, select, [contenteditable="true"]'
-      : '.canvas-group, .canvas-child, .canvas-manager, .canvas-manager-panel, .canvas-manager-group, .canvas-frame, .canvas-zoom-indicator, .manager-composer, .manager-composer-content, button, input, textarea, select, [contenteditable="true"]';
+      : '.canvas-group, .canvas-child, .canvas-manager, .canvas-manager-panel, .canvas-manager-group, .canvas-system-node, .canvas-frame, .canvas-zoom-indicator, .manager-composer, .manager-composer-content, button, input, textarea, select, [contenteditable="true"]';
     if (target.closest(excluded)) return;
   } else if (event.button !== 0) {
     return;
@@ -7988,7 +7988,7 @@ function startActionMenuPress(event) {
     state.switcherOpen || dom.switcher.classList.contains('open');
   const frameTarget = canvasOpen ? target?.closest('.canvas-frame') : null;
   const nodeTarget = canvasOpen
-    ? target?.closest('.canvas-group, .canvas-child, .canvas-manager, .canvas-manager-panel')
+    ? target?.closest('.canvas-group, .canvas-child, .canvas-manager, .canvas-manager-panel, .canvas-system-node')
     : null;
   const workspaceTarget = canvasOpen
     ? target?.closest('.canvas-workspace')

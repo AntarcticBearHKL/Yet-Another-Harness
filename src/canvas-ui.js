@@ -1913,7 +1913,7 @@ function renderCanvas() {
 function canvasApplySelection() {
   const ids = canvasState.selectedIds;
   for (const group of canvasDom.nodes.querySelectorAll(
-    '.canvas-group, .canvas-manager, .canvas-manager-panel'
+    '.canvas-group, .canvas-manager, .canvas-manager-panel, .canvas-system-node'
   )) {
     group.classList.toggle(
       'selected',
@@ -3135,7 +3135,7 @@ function bindCanvasEvents() {
     if (
       event.target instanceof Element &&
       event.target.closest(
-        '.canvas-group, .canvas-manager, .canvas-manager-panel, .canvas-manager-group, .canvas-frame, .manager-composer, .canvas-workspaces-page, .canvas-zoom-indicator, button'
+        '.canvas-group, .canvas-manager, .canvas-manager-panel, .canvas-manager-group, .canvas-system-node, .canvas-frame, .manager-composer, .canvas-workspaces-page, .canvas-zoom-indicator, button'
       )
     ) {
       return;
@@ -3158,7 +3158,7 @@ function bindCanvasEvents() {
     }
     if (
       event.target instanceof Element &&
-      event.target.closest('.canvas-group, .canvas-manager, .canvas-manager-panel, .canvas-manager-group, .canvas-frame, .manager-composer, .canvas-workspaces-page, button')
+      event.target.closest('.canvas-group, .canvas-manager, .canvas-manager-panel, .canvas-manager-group, .canvas-system-node, .canvas-frame, .manager-composer, .canvas-workspaces-page, button')
     ) {
       return;
     }
