@@ -868,12 +868,12 @@ function buildCanvasManagerPanel(manager, team, node) {
   );
   if (running) panelEl.classList.add('running');
 
-  const head = el('header', 'canvas-manager-panel-head');
-  const icon = el('span', 'canvas-manager-panel-icon');
+  const head = el('header', 'canvas-management-card-head');
+  const icon = el('span', 'canvas-management-card-icon');
   icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${CANVAS_MANAGER_ICON}</svg>`;
   head.append(icon);
   head.append(
-    el('span', 'canvas-manager-panel-title', manager.title || 'Manager')
+    el('span', 'canvas-management-card-title', manager.title || 'Manager')
   );
   panelEl.append(head);
 
@@ -883,25 +883,13 @@ function buildCanvasManagerPanel(manager, team, node) {
   const runningCount = team.filter((session) =>
     canvasState.running.has(session.id)
   ).length;
-  const meta = el('div', 'canvas-manager-meta');
-  meta.append(
+  panelEl.append(
     el(
-      'span',
-      '',
+      'div',
+      'canvas-management-card-subtitle',
       `${team.length} 个 work node · ${runningCount} 运行 · ${done} 完成`
     )
   );
-  panelEl.append(meta);
-
-  const progress = el('div', 'canvas-manager-progress');
-  const fill = el('span');
-  fill.style.width = `${team.length ? Math.round((done / team.length) * 100) : 0}%`;
-  progress.append(fill);
-  panelEl.append(progress);
-
-  const foot = el('div', 'canvas-manager-foot');
-  foot.append(el('span', '', '双击打开 · 拖动整组'));
-  panelEl.append(foot);
 
   panelEl.title = manager.title || 'Manager';
   panelEl.addEventListener('pointerdown', (event) => {
@@ -939,6 +927,18 @@ function buildCanvasManagerPanel(manager, team, node) {
   });
   return panelEl;
 }
+
+const CANVAS_SYSTEM_ICONS = {
+  agile: RING_ICONS.agile,
+  orchestrator:
+    '<path d="M4 12a8 8 0 0 1 14-5M20 12a8 8 0 0 1-14 5"/><path d="M18 3v4h-4M6 21v-4h4"/>',
+  report:
+    '<path d="M6 3h9l3 3v15H6z"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+  approval:
+    '<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3Z"/><path d="M9 12l2 2 4-5"/>',
+  questionnaire:
+    '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .8-1.5 1.3-1.5 2.5"/><path d="M12 17h.01"/>',
+};
 
 function canvasSystemNodeStatus(node) {
   const status = String(node?.status || '');
@@ -1314,74 +1314,88 @@ async function openSystemNodePage(nodeId) {
 }
 
 function buildCanvasSystemNode(node) {
-  const status = canvasSystemNodeStatus(node);
   const article = el(
     'article',
     `canvas-system-node type-${node.type} status-${node.status}`
   );
-  const head = el('header', 'canvas-system-node-head');
-  head.append(el('span', `canvas-system-node-state ${status.tone}`));
-  head.append(el('span', 'canvas-system-node-type', canvasSystemNodeType(node)));
-  head.append(el('span', 'canvas-system-node-status', status.label));
+  const head = el('header', 'canvas-management-card-head');
+  const icon = el('span', 'canvas-management-card-icon');
+  icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${
+    CANVAS_SYSTEM_ICONS[node.type] || RING_ICONS.folder
+  }</svg>`;
+  head.append(
+    icon,
+    el('span', 'canvas-management-card-title', node.title || canvasSystemNodeType(node))
+  );
   article.append(head);
-  article.append(el('div', 'canvas-system-node-title', node.title || '系统 node'));
+  const status = canvasSystemNodeStatus(node);
   const summary = canvasSystemNodeSummary(node);
-  if (summary) article.append(el('div', 'canvas-system-node-summary', summary));
-  const actions = el('div', 'canvas-system-node-actions');
-  if (node.type === 'agile') {
-    actions.append(
-      systemNodeButton('打开 Agile', async () => {
-        openManagerAgile(node.managerId);
-      })
-    );
-  } else if (node.type === 'approval' && node.status === 'pending') {
-    actions.append(
-      systemNodeButton('允许', async () => {
-        await systemNodeAction(node.id, 'approve');
-      })
-    );
-    actions.append(
-      systemNodeButton('拒绝', async () => {
-        await systemNodeAction(node.id, 'deny');
-      })
-    );
-  } else if (node.type === 'questionnaire' && node.status === 'pending') {
-    actions.append(
-      systemNodeButton('回答', async () => openSystemNodeWindow(node.id))
-    );
-  } else if (node.type === 'report' && node.status !== 'collecting') {
-    actions.append(
-      systemNodeButton('打开报告', async () => openSystemNodeWindow(node.id))
-    );
-  } else {
-    actions.append(
-      systemNodeButton('查看', async () => openSystemNodeWindow(node.id))
-    );
+  const subtitle = [status.label, summary].filter(Boolean).join(' · ');
+  if (subtitle) {
+    article.append(el('div', 'canvas-management-card-subtitle', subtitle));
   }
-  article.append(actions);
   article.addEventListener('pointerdown', (event) => event.stopPropagation());
-  let clickTimer = null;
-  article.addEventListener('click', (event) => {
-    if (event.target.closest('button')) return;
-    if (node.type === 'agile') {
-      clearTimeout(clickTimer);
-      clickTimer = setTimeout(() => {
-        clickTimer = null;
-        openSystemNodeWindow(node.id);
-      }, 350);
-      return;
-    }
-    openSystemNodeWindow(node.id);
-  });
+  article.addEventListener('click', (event) => event.stopPropagation());
   article.addEventListener('dblclick', (event) => {
-    if (node.type !== 'agile') return;
     event.preventDefault();
     event.stopPropagation();
-    clearTimeout(clickTimer);
-    clickTimer = null;
-    openManagerAgile(node.managerId);
+    if (node.type === 'agile') openManagerAgile(node.managerId);
+    else openSystemNodeWindow(node.id);
+  });
+  article.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openSystemNodeMenu(node, event.clientX, event.clientY);
   });
   return article;
+}
+
+function openSystemNodeMenu(node, x, y) {
+  const items = [
+    {
+      label: node.type === 'agile' ? '打开 Agile 面板' : '打开面板',
+      icon:
+        node.type === 'agile'
+          ? RING_ICONS.agile
+          : '<path d="M5 12h14M13 6l6 6-6 6"/>',
+      action: () => {
+        if (node.type === 'agile') openManagerAgile(node.managerId);
+        else openSystemNodeWindow(node.id);
+      },
+    },
+  ];
+  if (node.type === 'orchestrator') {
+    items.push({
+      label: node.status === 'paused' ? '恢复调度器' : '暂停调度器',
+      icon: RING_ICONS.settings,
+      action: () =>
+        void systemNodeAction(
+          node.id,
+          node.status === 'paused' ? 'resume' : 'pause'
+        ),
+    });
+    items.push({
+      label: '关闭调度器',
+      icon: RING_ICONS.close,
+      danger: true,
+      confirm: true,
+      action: () => void systemNodeAction(node.id, 'close'),
+    });
+  } else if (node.type === 'report') {
+    if (node.status === 'ready') {
+      items.push({
+        label: '标记已读',
+        icon: RING_ICONS.archive,
+        action: () => void systemNodeAction(node.id, 'read'),
+      });
+    }
+    items.push({
+      label: '归档报告',
+      icon: RING_ICONS.archive,
+      action: () => void systemNodeAction(node.id, 'archive'),
+    });
+  }
+  openActionMenu({ x, y, items });
 }
 
 function canvasSystemNodesFor(managerId) {
@@ -1394,7 +1408,9 @@ function canvasSystemNodesFor(managerId) {
   };
   return canvasState.systemNodes
     .filter((node) => node.managerId === managerId)
-    .filter((node) => node.status !== 'archived')
+    .filter(
+      (node) => node.status !== 'archived' && node.status !== 'closed'
+    )
     .slice()
     .sort((left, right) => {
       const leftOrder = order[left.type] ?? 9;

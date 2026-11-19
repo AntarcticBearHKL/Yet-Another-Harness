@@ -384,6 +384,12 @@ function createSystemNodeService({
 
   function ensureMission(manager, boardId, goal, taskIds = []) {
     let orchestrator = ensureOrchestrator(manager);
+    if (orchestrator.status === 'closed') {
+      orchestrator = updateNode(orchestrator.id, { status: 'running' });
+      orchestrator = appendStep(orchestrator, '调度器已重新启动', {
+        kind: 'control',
+      });
+    }
     const boardIds = Array.isArray(orchestrator.payload?.boardIds)
       ? [...orchestrator.payload.boardIds]
       : [];
@@ -1016,6 +1022,10 @@ function createSystemNodeService({
           name === 'pause' ? '调度器已暂停' : '调度器已恢复',
           { kind: 'control' }
         );
+      }
+      if (name === 'close') {
+        const updated = updateNode(node.id, { status: 'closed' });
+        return appendStep(updated, '调度器已关闭', { kind: 'control' });
       }
       throw new Error(`unknown orchestrator action: ${name}`);
     }
