@@ -22,6 +22,7 @@ const CANVAS_MANAGER_CARD_SIZE = 180;
 const CANVAS_MANAGER_GROUP_WIDTH = 620;
 const CANVAS_MANAGER_GROUP_HEIGHT = 420;
 const CANVAS_MANAGER_GROUP_PADDING = 20;
+const CANVAS_COLLISION_GAP = 8;
 const CANVAS_FRAME_PADDING = 32;
 const CANVAS_MIN_ZOOM = 0.2;
 const CANVAS_MAX_ZOOM = 3;
@@ -1328,6 +1329,7 @@ function buildCanvasSystemNode(node) {
     'article',
     `canvas-system-node type-${node.type} status-${node.status}`
   );
+  article.dataset.nodeId = node.id;
   const head = el('header', 'canvas-management-card-head');
   const icon = el('span', 'canvas-management-card-icon');
   icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${
@@ -1488,6 +1490,38 @@ function canvasManagerGroupBounds(manager, team, systemNodes = []) {
     height:
       maxY - minY + CANVAS_MANAGER_GROUP_PADDING * 2,
   };
+}
+
+function canvasRectsOverlap(left, right, gap = CANVAS_COLLISION_GAP) {
+  return !(
+    left.x + left.width + gap <= right.x ||
+    right.x + right.width + gap <= left.x ||
+    left.y + left.height + gap <= right.y ||
+    right.y + right.height + gap <= left.y
+  );
+}
+
+function canvasNodeCollides(candidate, ignoreIds = new Set()) {
+  for (const [id, node] of Object.entries(canvasState.nodes)) {
+    if (ignoreIds.has(id)) continue;
+    if (!node || typeof node !== 'object') continue;
+    if (canvasRectsOverlap(candidate, node)) return true;
+  }
+  return false;
+}
+
+function canvasManagerMemberIds(managerId, systemNodes = null) {
+  const manager = state.sessions.find(
+    (session) => session.id === managerId && session.nodeRole === 'manager'
+  );
+  if (!manager) return new Set();
+  const team = canvasManagerTeam(manager);
+  const system = systemNodes || canvasSystemNodesFor(managerId);
+  return new Set([
+    managerId,
+    ...team.map((session) => session.id),
+    ...system.map((node) => node.id),
+  ]);
 }
 
 function applyCanvasManagerGroupBounds(managerId, groupEl = null) {
@@ -2188,7 +2222,7 @@ function startCanvasManagerDrag(
       `.canvas-manager-group[data-session-id="${CSS.escape(manager.id)}"]`
     ) ||
     null;
-  const items = [{ node, el: managerEl }];
+  const items = [{ id: manager.id, node, el: managerEl }];
   for (const session of team) {
     const teamNode = canvasState.nodes[session.id];
     if (!teamNode) continue;
@@ -2196,13 +2230,23 @@ function startCanvasManagerDrag(
       `.canvas-group[data-session-id="${CSS.escape(session.id)}"]`
     );
     if (!teamEl) continue;
-    items.push({ node: teamNode, el: teamEl });
+    items.push({ id: session.id, node: teamNode, el: teamEl });
+  }
+  const systemNodes = canvasSystemNodesFor(manager.id);
+  for (const systemNode of systemNodes) {
+    const systemEl = canvasDom.nodes.querySelector(
+      `.canvas-system-node[data-node-id="${CSS.escape(systemNode.id)}"]`
+    );
+    const systemLayout = canvasState.nodes[systemNode.id];
+    if (!systemEl || !systemLayout) continue;
+    items.push({ id: systemNode.id, node: systemLayout, el: systemEl });
   }
   canvasState.managerDrag = {
     manager,
     managerEl,
     groupBackdrop: backdrop,
     items,
+    ignoreIds: new Set(items.map((item) => item.id)),
     startX: event.clientX,
     startY: event.clientY,
     origins: items.map((item) => ({
@@ -2257,6 +2301,7 @@ function startCanvasGroupDrag(event, root, groupEl, node) {
   canvasState.drag = {
     sessionId: root.id,
     managerId: String(root.managerId || '').trim(),
+    groupIds: new Set(canvasGroupSessionIds(root.id)),
     groupEl,
     node,
     startX: event.clientX,
@@ -2291,8 +2336,21 @@ function onCanvasPointerMove(event) {
       return;
     }
     drag.moved = true;
-    drag.node.x = drag.originX + dx;
-    drag.node.y = drag.originY + dy;
+    const candidate = {
+      ...drag.node,
+      x: drag.originX + dx,
+      y: drag.originY + dy,
+    };
+    if (
+      canvasNodeCollides(
+        candidate,
+        new Set([drag.systemNode.id])
+      )
+    ) {
+      return;
+    }
+    drag.node.x = candidate.x;
+    drag.node.y = candidate.y;
     drag.systemEl.style.left = `${drag.node.x}px`;
     drag.systemEl.style.top = `${drag.node.y}px`;
     applyCanvasManagerGroupBounds(drag.systemNode.managerId);
@@ -2312,6 +2370,18 @@ function onCanvasPointerMove(event) {
       return;
     }
     drag.moved = true;
+    const candidates = drag.origins.map((origin) => ({
+      ...origin.item.node,
+      x: origin.x + dx,
+      y: origin.y + dy,
+    }));
+    if (
+      candidates.some((candidate) =>
+        canvasNodeCollides(candidate, drag.ignoreIds)
+      )
+    ) {
+      return;
+    }
     for (const origin of drag.origins) {
       origin.item.node.x = origin.x + dx;
       origin.item.node.y = origin.y + dy;
@@ -2371,8 +2441,14 @@ function onCanvasPointerMove(event) {
         /* ignore */
       }
     }
-    drag.node.x = drag.originX + dx;
-    drag.node.y = drag.originY + dy;
+    const candidate = {
+      ...drag.node,
+      x: drag.originX + dx,
+      y: drag.originY + dy,
+    };
+    if (canvasNodeCollides(candidate, drag.groupIds)) return;
+    drag.node.x = candidate.x;
+    drag.node.y = candidate.y;
     drag.groupEl.style.left = `${drag.node.x}px`;
     drag.groupEl.style.top = `${drag.node.y}px`;
     if (drag.managerId) {
