@@ -5,7 +5,7 @@ const path = require('node:path');
 
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 3;
-const MIN_NODE_WIDTH = 220;
+const MIN_NODE_WIDTH = 180;
 const MAX_NODE_WIDTH = 900;
 const MIN_NODE_HEIGHT = 40;
 const MAX_NODE_HEIGHT = 2000;

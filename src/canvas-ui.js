@@ -1446,8 +1446,20 @@ function ensureSystemNodeLayout(manager, systemNodes = []) {
     width: CANVAS_MANAGER_CARD_SIZE,
     height: CANVAS_MANAGER_CARD_SIZE,
   };
+  let changed = false;
   systemNodes.forEach((systemNode, index) => {
-    if (canvasState.nodes[systemNode.id]) return;
+    const existing = canvasState.nodes[systemNode.id];
+    if (existing) {
+      if (
+        Number(existing.width) !== CANVAS_MANAGER_CARD_SIZE ||
+        Number(existing.height) !== CANVAS_MANAGER_CARD_SIZE
+      ) {
+        existing.width = CANVAS_MANAGER_CARD_SIZE;
+        existing.height = CANVAS_MANAGER_CARD_SIZE;
+        changed = true;
+      }
+      return;
+    }
     const column = index % 2;
     const row = Math.floor(index / 2);
     canvasState.nodes[systemNode.id] = {
@@ -1460,7 +1472,9 @@ function ensureSystemNodeLayout(manager, systemNodes = []) {
       height: CANVAS_MANAGER_CARD_SIZE,
       parentSessionId: null,
     };
+    changed = true;
   });
+  if (changed) scheduleCanvasSave();
 }
 
 function canvasManagerGroupBounds(manager, team, systemNodes = []) {
@@ -1808,6 +1822,14 @@ function renderCanvasNodes(index) {
   for (const manager of managers) {
     const node = canvasState.nodes[manager.id];
     if (!node) continue;
+    if (
+      Number(node.width) !== CANVAS_MANAGER_CARD_SIZE ||
+      Number(node.height) !== CANVAS_MANAGER_CARD_SIZE
+    ) {
+      node.width = CANVAS_MANAGER_CARD_SIZE;
+      node.height = CANVAS_MANAGER_CARD_SIZE;
+      scheduleCanvasSave();
+    }
     const team = canvasManagerTeam(manager, index.sessions);
     const groupBackdrop = buildCanvasManagerGroup(manager, team, node);
     canvasDom.nodes.append(groupBackdrop);

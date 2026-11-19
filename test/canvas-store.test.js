@@ -57,7 +57,7 @@ test('canvas normalize clamps zoom and node size', () => {
     frames: [{ id: 'f1', nodeIds: ['s1', 's1', ''] }],
   });
   assert.equal(canvas.view.k, 3);
-  assert.equal(canvas.nodes.s1.width, 220);
+  assert.equal(canvas.nodes.s1.width, 180);
   assert.equal(canvas.nodes.s1.height, 2000);
   assert.deepEqual(canvas.frames, [{ id: 'f1', nodeIds: ['s1'] }]);
 });
