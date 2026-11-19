@@ -7983,6 +7983,18 @@ function startActionMenuPress(event) {
   }
   const target = event.target instanceof Element ? event.target : null;
   if (target?.closest('.manager-composer')) return;
+  const systemNodeTarget = target?.closest('.canvas-system-node');
+  if (systemNodeTarget?.dataset.nodeId) {
+    event.preventDefault();
+    if (actionMenuPress) cancelActionMenuPress();
+    window.openSystemNodeMenuById?.(
+      systemNodeTarget.dataset.nodeId,
+      event.clientX,
+      event.clientY
+    );
+    lastActionMenuAt = Date.now();
+    return;
+  }
   const canvasOpen = Boolean(window.canvasOverlayOpen?.());
   const switcherOpen =
     state.switcherOpen || dom.switcher.classList.contains('open');

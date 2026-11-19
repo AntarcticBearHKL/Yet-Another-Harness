@@ -1361,11 +1361,6 @@ function buildCanvasSystemNode(node) {
     if (node.type === 'agile') openManagerAgile(node.managerId);
     else openSystemNodeWindow(node.id);
   });
-  article.addEventListener('contextmenu', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    openSystemNodeMenu(node, event.clientX, event.clientY);
-  });
   return article;
 }
 
@@ -1415,6 +1410,12 @@ function openSystemNodeMenu(node, x, y) {
     });
   }
   openActionMenu({ x, y, items });
+}
+
+function openSystemNodeMenuById(nodeId, x, y) {
+  const node = canvasState.systemNodes.find((item) => item.id === nodeId);
+  if (!node) return;
+  openSystemNodeMenu(node, x, y);
 }
 
 function canvasSystemNodesFor(managerId) {
@@ -1915,10 +1916,8 @@ function canvasApplySelection() {
   for (const group of canvasDom.nodes.querySelectorAll(
     '.canvas-group, .canvas-manager, .canvas-manager-panel, .canvas-system-node'
   )) {
-    group.classList.toggle(
-      'selected',
-      ids.has(group.dataset.sessionId)
-    );
+    const id = group.dataset.sessionId || group.dataset.nodeId;
+    group.classList.toggle('selected', Boolean(id && ids.has(id)));
   }
   for (const child of canvasDom.nodes.querySelectorAll('.canvas-child')) {
     child.classList.toggle(
@@ -2280,6 +2279,10 @@ function startCanvasSystemNodeDrag(event, systemNode, systemEl) {
   const layout = canvasState.nodes[systemNode.id];
   if (!layout) return;
   event.stopPropagation();
+  canvasState.selectedIds = new Set([systemNode.id]);
+  canvasState.selectedId = systemNode.id;
+  canvasState.selectedChildId = null;
+  canvasApplySelection();
   systemEl.classList.add('dragging');
   canvasState.systemNodeDrag = {
     systemNode,
@@ -3196,6 +3199,7 @@ window.createCanvasManagerNode = createCanvasManagerNode;
 window.openCanvasNodeMenu = openCanvasNodeMenu;
 window.openSystemNodePage = openSystemNodePage;
 window.openSystemNodeWindow = openSystemNodeWindow;
+window.openSystemNodeMenuById = openSystemNodeMenuById;
 window.openCanvasFrameMenu = openCanvasFrameMenu;
 window.openCanvasWorkspaceMenu = openCanvasWorkspaceMenu;
 

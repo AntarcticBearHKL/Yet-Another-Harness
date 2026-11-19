@@ -1607,6 +1607,15 @@ body.canvas-space .canvas-stage.panning {
   cursor: grabbing;
 }
 
+.canvas-system-node.selected {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 4px 12px rgba(74, 54, 40, 0.08);
+}
+
 .canvas-system-node:hover {
   border-color: rgba(185, 111, 61, 0.36);
 }
