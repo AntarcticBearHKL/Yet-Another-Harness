@@ -1096,7 +1096,9 @@ function canvasReportSubtitle(node) {
 }
 
 function canvasReportMarkdown(markdown) {
-  return String(markdown || '').replace(/^\s*#{1,6}\s+[^\n]*\n+/, '');
+  return String(markdown || '')
+    .replace(/^\s*#{1,6}\s+[^\n]*\n+/, '')
+    .replace(/^\s*状态：[^\n]*阻塞。[ \t]*\r?\n?/m, '');
 }
 
 function buildSystemNodeCard(node, options = {}) {

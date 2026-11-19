@@ -68,9 +68,6 @@ function taskPrompt(task, goal, roleName = '') {
 }
 
 function buildReportMarkdown(goal, tasks) {
-  const total = tasks.length;
-  const finished = tasks.filter((task) => task.column === 'finished').length;
-  const blocked = tasks.filter((task) => task.column === 'blocked').length;
   const statusLabel = (column) => {
     if (column === 'finished') return '完成';
     if (column === 'blocked') return '阻塞';
@@ -79,8 +76,6 @@ function buildReportMarkdown(goal, tasks) {
   };
   const lines = [
     `# ${goal || '任务报告'}`,
-    '',
-    `状态：${finished}/${total} 完成，${blocked} 阻塞。`,
     '',
   ];
   for (const [index, task] of tasks.entries()) {

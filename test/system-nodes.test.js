@@ -7,8 +7,24 @@ const os = require('node:os');
 const path = require('node:path');
 const store = require('../src/store');
 const { createAgileStore } = require('../src/agile-store');
-const { createSystemNodeService } = require('../server/system-nodes');
+const { createSystemNodeService, buildReportMarkdown } = require('../server/system-nodes');
 const tasks = require('../src/tools/tasks');
+
+test('report markdown omits the blocked summary line', () => {
+  const markdown = buildReportMarkdown('Goal', [
+    { title: 'Blocked task', column: 'blocked', role: 'tester' },
+    {
+      title: 'Done task',
+      column: 'finished',
+      role: 'programmer',
+      result: { summary: 'ok' },
+    },
+  ]);
+  assert.match(markdown, /^# Goal/);
+  assert.doesNotMatch(markdown, /^\s*状态：/m);
+  assert.doesNotMatch(markdown, /阻塞。/);
+  assert.match(markdown, /## 1\. Blocked task/);
+});
 
 test('manager publishes parallel backlog and workers block, resume and finish', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-system-nodes-'));
