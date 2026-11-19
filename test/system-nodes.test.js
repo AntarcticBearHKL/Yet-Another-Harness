@@ -8,9 +8,9 @@ const path = require('node:path');
 const store = require('../src/store');
 const { createAgileStore } = require('../src/agile-store');
 const { createSystemNodeService } = require('../server/system-nodes');
-const mission = require('../src/tools/mission');
+const tasks = require('../src/tools/tasks');
 
-test('mission dispatch drives Agile, orchestrator and report hub', async () => {
+test('manager publishes parallel backlog and workers block, resume and finish', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-system-nodes-'));
   store.init({
     getPath(name) {
@@ -41,12 +41,16 @@ test('mission dispatch drives Agile, orchestrator and report hub', async () => {
   });
   const agile = createAgileStore(path.join(dir, 'agile.json'));
   const createdWorkNodes = [];
+  const runs = [];
   const runner = {
     subscribe: () => () => {},
     resolveApproval: () => true,
     resolveQuestions: () => true,
     activeRunForSession: () => null,
-    startRun: () => ({ ok: true }),
+    startRun: (args) => {
+      runs.push(args);
+      return { ok: true };
+    },
   };
   const service = createSystemNodeService({
     store,
@@ -99,11 +103,20 @@ test('mission dispatch drives Agile, orchestrator and report hub', async () => {
     },
     notify: () => {},
   });
-  mission.configure({ getAgileStore: () => agile, systemNodeService: service });
+  tasks.configure({ getAgileStore: () => agile, systemNodeService: service });
   try {
-    const result = JSON.parse(
-      await mission.missionDispatch(
+    const iteration = JSON.parse(
+      tasks.iterationAdd({ goal: 'Build login' }, { sessionId: 'm1' })
+    );
+    assert.equal(iteration.ok, true);
+    assert.equal(iteration.goal, 'Build login');
+    assert.equal(iteration.orchestratorId !== null, true);
+    assert.equal(iteration.reportId !== null, true);
+
+    const backlog = JSON.parse(
+      await tasks.backlogAdd(
         {
+          iterationId: iteration.iterationId,
           goal: 'Build login',
           tasks: [
             {
@@ -115,7 +128,6 @@ test('mission dispatch drives Agile, orchestrator and report hub', async () => {
             {
               title: 'Test login',
               role: 'tester',
-              dependsOn: ['Implement login'],
               acceptance: 'Login flow passes',
             },
           ],
@@ -123,65 +135,143 @@ test('mission dispatch drives Agile, orchestrator and report hub', async () => {
         { sessionId: 'm1' }
       )
     );
-    assert.equal(result.ok, true);
-    assert.equal(result.tasks.length, 2);
-    assert.equal(result.orchestratorId !== null, true);
-    assert.equal(result.reportId !== null, true);
-    assert.equal(result.agileId !== null, true);
+    assert.equal(backlog.ok, true);
+    assert.equal(backlog.tasks.length, 2);
+    assert.equal(backlog.orchestratorId !== null, true);
+    assert.equal(backlog.reportId !== null, true);
+
     const orchestrator = service
       .list('m1')
       .find((node) => node.type === 'orchestrator');
     assert.equal(orchestrator.payload.engineerCount, 2);
     assert.equal(orchestrator.payload.wipLimit, 2);
-    const agileNode = service.list('m1').find((node) => node.type === 'agile');
-    assert.equal(agileNode.payload.counts.total, 2);
-    assert.equal(agileNode.payload.counts.backlog, 1);
-    const board = agile.snapshot(result.boardId);
-    assert.equal(board.tasks.length, 2);
     const engineers = createdWorkNodes.filter(
       (node) => node.nodeConfig?.engineer
     );
     assert.equal(engineers.length, 2);
+
+    const board = agile.snapshot(iteration.iterationId);
     const first = board.tasks.find((task) => task.title === 'Implement login');
-    assert.equal(first.column, 'progress');
-    assert.equal(first.workNodeId, engineers[0].id);
-    assert.equal(first.role, 'programmer');
-
     const second = board.tasks.find((task) => task.title === 'Test login');
-    assert.equal(second.column, 'backlog');
-    assert.deepEqual(second.dependsOn, [first.id]);
-
-    const workNode = store.getSession(engineers[0].id);
-    const submitted = service.submitWorkResult(workNode, {
-      taskId: first.id,
-      status: 'done',
-      summary: 'Login form implemented',
-      how: ['Added LoginForm', 'Wired auth API'],
-      files: ['src/LoginForm.jsx'],
-      commands: ['npm test'],
-      tests: [{ name: 'login', status: 'passed' }],
-    });
-    assert.equal(submitted.ok, true);
-    const finished = agile.getTask(first.id);
-    assert.equal(finished.column, 'finished');
-    assert.equal(finished.result.summary, 'Login form implemented');
-    const report = service.list('m1').find((node) => node.type === 'report');
-    assert.equal(report.status, 'collecting');
-
+    assert.equal(first.column, 'progress');
+    assert.equal(second.column, 'progress');
+    assert.ok(first.workNodeId);
+    assert.ok(second.workNodeId);
+    assert.equal(first.role, 'programmer');
+    assert.equal(second.role, 'tester');
+    const firstAssigned = store.getSession(first.workNodeId);
+    assert.equal(firstAssigned.nodeConfig.task, 'Implement login');
+    assert.equal(firstAssigned.nodeConfig.taskId, first.id);
     await service.tick();
-    const after = agile.snapshot(result.boardId);
-    const next = after.tasks.find((task) => task.title === 'Test login');
-    assert.equal(next.column, 'progress');
-    assert.equal(createdWorkNodes.length, 2);
-    assert.equal(next.workNodeId, engineers[0].id);
-    const secondWork = store.getSession(engineers[0].id);
-    service.submitWorkResult(secondWork, {
-      taskId: next.id,
-      status: 'done',
-      summary: 'Login flow verified',
-      how: ['Ran the login flow in Chrome'],
-      tests: [{ name: 'login flow', status: 'passed' }],
+    assert.equal(
+      store.getSession(first.workNodeId).nodeConfig.task,
+      'Implement login'
+    );
+
+    const listed = JSON.parse(
+      tasks.backlogList(
+        { iterationId: iteration.iterationId },
+        { sessionId: 'm1' }
+      )
+    );
+    assert.equal(listed.tasks.length, 2);
+    assert.ok(listed.tasks.every((task) => task.column === 'progress'));
+
+    const firstEngineer = store.getSession(first.workNodeId);
+    const blocked = JSON.parse(
+      tasks.taskBlock(
+        {
+          kind: 'approval',
+          reason: 'Need permission to install dependencies',
+          action: 'npm install',
+        },
+        { sessionId: firstEngineer.id }
+      )
+    );
+    assert.equal(blocked.ok, true);
+    assert.equal(blocked.kind, 'approval');
+    const blockedTask = agile.getTask(first.id);
+    assert.equal(blockedTask.column, 'blocked');
+    assert.equal(blockedTask.blockedBy, firstEngineer.id);
+    assert.equal(blockedTask.blockedKind, 'approval');
+    assert.equal(blockedTask.blockedNodeId, blocked.nodeId);
+    const approvalNode = service
+      .list('m1')
+      .find((node) => node.id === blocked.nodeId);
+    assert.equal(approvalNode.payload.blockedBy.title, firstEngineer.title);
+    assert.match(approvalNode.payload.reason, /install dependencies/);
+
+    const approved = service.action(blocked.nodeId, 'approve');
+    assert.equal(approved.status, 'approved');
+    const resumed = agile.getTask(first.id);
+    assert.equal(resumed.column, 'progress');
+    assert.equal(resumed.blockedBy, '');
+    const resumeRun = runs.find(
+      (run) => run.sessionId === firstEngineer.id && /Task resumed/.test(run.text)
+    );
+    assert.ok(resumeRun);
+    assert.match(resumeRun.text, /approved/);
+
+    const finished = JSON.parse(
+      tasks.taskFinish(
+        {
+          summary: 'Login form implemented',
+          how: ['Added LoginForm', 'Wired auth API'],
+          files: ['src/LoginForm.jsx'],
+          commands: ['npm test'],
+          tests: [{ name: 'login', status: 'passed' }],
+        },
+        { sessionId: firstEngineer.id }
+      )
+    );
+    assert.equal(finished.ok, true);
+    assert.equal(agile.getTask(first.id).column, 'finished');
+
+    const secondEngineer = store.getSession(second.workNodeId);
+    const questionBlocked = JSON.parse(
+      tasks.taskBlock(
+        {
+          kind: 'question',
+          reason: 'Need to know which browser to test',
+          questions: [
+            {
+              question: 'Which browser should I test?',
+              header: 'Browser',
+              options: [
+                { label: 'Chrome', description: 'Chromium browser' },
+              ],
+            },
+          ],
+        },
+        { sessionId: secondEngineer.id }
+      )
+    );
+    assert.equal(questionBlocked.kind, 'question');
+    const questionNode = service
+      .list('m1')
+      .find((node) => node.id === questionBlocked.nodeId);
+    assert.equal(questionNode.payload.blockedBy.title, secondEngineer.title);
+    assert.equal(agile.getTask(second.id).column, 'blocked');
+
+    const answered = service.action(questionNode.id, 'answer', {
+      answers: [['Chrome']],
     });
+    assert.equal(answered.status, 'answered');
+    assert.equal(agile.getTask(second.id).column, 'progress');
+    const questionRun = runs.find(
+      (run) =>
+        run.sessionId === secondEngineer.id && /Chrome/.test(run.text)
+    );
+    assert.ok(questionRun);
+
+    tasks.taskFinish(
+      {
+        summary: 'Login flow verified',
+        how: ['Ran the login flow in Chrome'],
+        tests: [{ name: 'login flow', status: 'passed' }],
+      },
+      { sessionId: secondEngineer.id }
+    );
     const ready = service.list('m1').find((node) => node.type === 'report');
     assert.equal(ready.status, 'ready');
     assert.equal(ready.payload.goal, 'Build login');
@@ -189,34 +279,18 @@ test('mission dispatch drives Agile, orchestrator and report hub', async () => {
     assert.match(ready.payload.reportMarkdown, /Login flow verified/);
     const read = service.action(ready.id, 'read');
     assert.equal(read.status, 'read');
-    const status = JSON.parse(
-      mission.missionStatus({}, { sessionId: 'm1' })
-    );
-    assert.equal(status.missions.length, 1);
-    assert.equal(status.missions[0].counts.finished, 2);
-    const reportResult = JSON.parse(
-      mission.missionReport({}, { sessionId: 'm1' })
-    );
-    assert.equal(reportResult.status, 'read');
-    assert.match(reportResult.reportMarkdown, /Login flow verified/);
 
-    const approval = service.createNode({
-      managerId: 'm1',
-      type: 'approval',
-      status: 'pending',
-      title: '审批',
-      payload: { approvalId: 'approval-1' },
-    });
-    assert.equal(service.action(approval.id, 'approve').status, 'approved');
-
-    const question = service.createNode({
-      managerId: 'm1',
-      type: 'questionnaire',
-      status: 'pending',
-      title: '问卷',
-      payload: { questionId: 'question-1', questions: [] },
-    });
-    assert.equal(service.action(question.id, 'dismiss').status, 'dismissed');
+    assert.match(
+      tasks.taskBlock(
+        { kind: 'approval', reason: 'not a worker' },
+        { sessionId: 'm1' }
+      ),
+      /only be called by a work node/
+    );
+    assert.match(
+      tasks.backlogList({}, { sessionId: firstEngineer.id }),
+      /only a manager node/
+    );
   } finally {
     service.stop();
     store.close();

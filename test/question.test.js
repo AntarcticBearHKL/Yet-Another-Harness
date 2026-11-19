@@ -2,34 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const tools = require('../src/tools');
 const { normalizeQuestions, questionTool } = require('../src/tools/agent');
-
-test('question definition allows one to five questions', () => {
-  const definition = tools
-    .definitions()
-    .find((item) => item.function.name === 'question');
-  assert.ok(definition, 'question is exposed');
-  const questions = definition.function.parameters.properties.questions;
-  assert.equal(questions.minItems, 1);
-  assert.equal(questions.maxItems, 5);
-  assert.match(definition.function.description, /up to 5 questions/i);
-  assert.match(definition.function.description, /write your own answer/i);
-  assert.match(definition.function.description, /blocking/i);
-  assert.match(definition.function.description, /timed/i);
-  assert.deepEqual(definition.function.parameters.properties.mode.enum, [
-    'blocking',
-    'timed',
-  ]);
-  assert.equal(
-    definition.function.parameters.properties.timeout_seconds.minimum,
-    5
-  );
-  assert.equal(
-    definition.function.parameters.properties.timeout_seconds.maximum,
-    600
-  );
-});
 
 test('normalizeQuestions keeps at most five and trims fields', () => {
   const raw = Array.from({ length: 7 }, (_, index) => ({
@@ -167,18 +140,8 @@ test('questionTool reports dismissal and missing clients as tool errors', async 
   );
 
   assert.equal(
-    await tools.execute(
-      'question',
-      JSON.stringify({ questions: [{ question: 'Continue?' }] }),
-      { askQuestions: async () => ({ cancelled: true }) }
-    ),
-    'tool error: The user dismissed this question'
-  );
-
-  assert.equal(
-    await tools.execute(
-      'question',
-      JSON.stringify({ questions: [{ question: 'Continue?' }] }),
+    await questionTool(
+      { questions: [{ question: 'Continue?' }] },
       {}
     ),
     'tool error: interactive questions are not available in this client'

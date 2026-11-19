@@ -13,15 +13,14 @@ const systemTools = require('./tools/system-info');
 const mouseTools = require('./tools/mouse');
 const chromeTools = require('./tools/chrome');
 const viewerTools = require('./tools/viewer');
-const agileTools = require('./tools/agile');
 const worknodeTools = require('./tools/worknode');
-const missionTools = require('./tools/mission');
+const taskTools = require('./tools/tasks');
 const gitTools = require('./tools/git');
 
 function configure(next = {}) {
   agentTools.configure(next);
   worknodeTools.configure(next);
-  missionTools.configure(next);
+  taskTools.configure(next);
 }
 
 // 免费 websearch：DuckDuckGo 公开 HTML 端点，不需要 API key。
@@ -85,44 +84,15 @@ async function execute(name, args, context = null) {
       background_cancel: processTools.backgroundCancel,
       subagent_start: agentTools.subagentStartTool,
       subagent_close: agentTools.subagentCloseTool,
-      worknode_result: missionTools.worknodeResult,
-      mission_dispatch: missionTools.missionDispatch,
-      mission_status: missionTools.missionStatus,
-      mission_report: missionTools.missionReport,
-      agile_list_boards: agileTools.agileListBoards,
-      agile_get_board: agileTools.agileGetBoard,
-      agile_create_board: agileTools.agileCreateBoard,
-      agile_delete_board: agileTools.agileDeleteBoard,
-      agile_list_tasks: agileTools.agileListTasks,
-      agile_get_task: agileTools.agileGetTask,
-      agile_create_task: agileTools.agileCreateTask,
-      agile_create_tasks: agileTools.agileCreateTasks,
-      agile_update_task: agileTools.agileUpdateTask,
-      agile_move_task: agileTools.agileMoveTask,
-      agile_move_tasks: agileTools.agileMoveTasks,
-      agile_delete_task: agileTools.agileDeleteTask,
-      agile_set_blocked_reason: agileTools.agileSetBlockedReason,
-      agile_claim_task: agileTools.agileClaimTask,
-      agile_release_task: agileTools.agileReleaseTask,
-      agile_heartbeat_task: agileTools.agileHeartbeatTask,
-      agile_claim_next: agileTools.agileClaimNext,
-      agile_digest_notes: agileTools.agileDigestNotes,
-      agile_undigest_notes: agileTools.agileUndigestNotes,
-      agile_list_columns: agileTools.agileListColumns,
-      agile_get_board_snapshot: agileTools.agileGetBoardSnapshot,
-      agile_list_events: agileTools.agileListEvents,
-      agile_wait_for_event: agileTools.agileWaitForEvent,
-      agile_list_roadmap: agileTools.agileListRoadmap,
-      agile_list_skills: agileTools.agileListSkills,
-      agile_get_skill: agileTools.agileGetSkill,
-      agile_create_skill: agileTools.agileCreateSkill,
-      agile_update_skill: agileTools.agileUpdateSkill,
-      agile_delete_skill: agileTools.agileDeleteSkill,
+      backlog_list: taskTools.backlogList,
+      backlog_add: taskTools.backlogAdd,
+      iteration_add: taskTools.iterationAdd,
+      task_block: taskTools.taskBlock,
+      task_finish: taskTools.taskFinish,
       monitor_start: processTools.monitorStart,
       monitor_stop: processTools.monitorStop,
       monitor_list: processTools.monitorList,
       monitor_output: processTools.monitorOutput,
-      question: agentTools.questionTool,
       systeminfo: systemTools.systemInfoTool,
       SystemInfo: systemTools.systemInfoTool,
       system_info: systemTools.systemInfoTool,
@@ -245,14 +215,22 @@ function statusLabel(name, args) {
   if (name === 'subagent_start' || name === 'subagent_close') {
     return value.sessionId ? `${name}: ${value.sessionId}` : name;
   }
-  if (name === 'mission_dispatch') {
-    return value.goal ? `mission_dispatch: ${String(value.goal).slice(0, 50)}` : 'mission_dispatch';
+  if (name === 'backlog_add') {
+    const count = Array.isArray(value.tasks) ? value.tasks.length : 0;
+    return `backlog_add: ${count} 个任务`;
   }
-  if (name === 'mission_status' || name === 'mission_report') {
-    return value.boardId ? `${name}: ${value.boardId}` : name;
+  if (name === 'backlog_list' || name === 'iteration_add') {
+    return value.iterationId || value.goal
+      ? `${name}: ${String(value.iterationId || value.goal).slice(0, 50)}`
+      : name;
   }
-  if (name === 'worknode_result') {
-    return value.taskId ? `worknode_result: ${value.taskId}` : 'worknode_result';
+  if (name === 'task_block') {
+    return value.kind
+      ? `task_block: ${String(value.kind).slice(0, 20)}`
+      : 'task_block';
+  }
+  if (name === 'task_finish') {
+    return value.taskId ? `task_finish: ${value.taskId}` : 'task_finish';
   }
   if (name.startsWith('git_') || name.startsWith('worktree_')) {
     const detail = String(

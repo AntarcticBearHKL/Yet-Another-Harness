@@ -1189,6 +1189,16 @@ body.canvas-space .canvas-stage.panning {
   white-space: nowrap;
 }
 
+.canvas-group-task {
+  overflow: hidden;
+  margin-top: 5px;
+  color: var(--dim);
+  font-size: 9.5px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .manager-composer {
   position: absolute;
   inset: 0;

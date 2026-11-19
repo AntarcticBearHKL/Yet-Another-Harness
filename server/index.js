@@ -11,7 +11,6 @@ const store = require('../src/store');
 const attachments = require('../src/attachments');
 const tools = require('../src/tools');
 const processTools = require('../src/tools/process');
-const agileTools = require('../src/tools/agile');
 const worknodeTools = require('../src/tools/worknode');
 const { createAgileStore } = require('../src/agile-store');
 const { createCanvasStore } = require('../src/canvas-store');
@@ -111,6 +110,49 @@ function resolveAgileStore(managerId) {
   return managerAgileStore(id);
 }
 
+function enrichWorkSessionTasks(chats) {
+  const cache = new Map();
+  for (const session of chats.sessions) {
+    if (
+      session.nodeRole !== 'work' ||
+      !session.managerId ||
+      session.nodeConfig?.engineer !== true
+    ) {
+      continue;
+    }
+    let agile = cache.get(session.managerId);
+    if (!agile) {
+      try {
+        agile = resolveAgileStore(session.managerId);
+      } catch {
+        continue;
+      }
+      cache.set(session.managerId, agile);
+    }
+    try {
+      const iterations = agile.listRoadmap().iterations || [];
+      for (const iteration of iterations) {
+        const tasks = agile.snapshot(iteration.id).tasks || [];
+        const current = tasks.find(
+          (task) =>
+            task.workNodeId === session.id &&
+            (task.column === 'progress' || task.column === 'blocked')
+        );
+        if (!current) continue;
+        session.nodeConfig = {
+          ...(session.nodeConfig || {}),
+          task: current.title,
+          taskId: current.id,
+          reportId: current.reportId || session.nodeConfig?.reportId || null,
+        };
+        break;
+      }
+    } catch {
+      /* keep the stored task if the Agile store is unavailable */
+    }
+  }
+}
+
 function ensureChatGitRepos(chats) {
   const directories = new Set();
   for (const project of chats?.projects || []) {
@@ -127,30 +169,6 @@ function ensureChatGitRepos(chats) {
   gitWorktrees.ensureRepositories([...directories]);
 }
 
-function sessionAgileManagerId(context) {
-  const direct = String(context?.managerId || '').trim();
-  if (direct) return direct;
-  const sessionId = String(context?.sessionId || '').trim();
-  if (!sessionId) return '';
-  const sessions = store.loadChats().sessions;
-  let session = sessions.find((item) => item.id === sessionId) || null;
-  const seen = new Set();
-  while (session && !seen.has(session.id)) {
-    seen.add(session.id);
-    if (session.nodeRole === 'manager') return session.id;
-    const managerId = String(session.managerId || '').trim();
-    if (managerId) return managerId;
-    if (!session.parentSessionId) break;
-    session =
-      sessions.find((item) => item.id === session.parentSessionId) || null;
-  }
-  return '';
-}
-
-agileTools.configure((context) => {
-  const managerId = sessionAgileManagerId(context);
-  return resolveAgileStore(managerId);
-});
 const canvasStore = createCanvasStore(path.join(DATA_DIR, 'canvas.json'));
 const HOST = '127.0.0.1';
 const LOCAL_PORT = Number(process.env.YAH_LOCAL_PORT) || 3789;
@@ -543,6 +561,7 @@ function handleApi(req, res, url) {
     for (const session of chats.sessions) {
       ensureAgentsMd(session, chats);
     }
+    enrichWorkSessionTasks(chats);
     sendJson(res, 200, chats);
     return true;
   }

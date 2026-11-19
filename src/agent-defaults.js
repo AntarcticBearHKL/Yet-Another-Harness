@@ -7,7 +7,7 @@ const MANAGER_AGENT_NAME = 'Manager';
 const AGENT_AGENT_ID = 'agent';
 const AGENT_AGENT_NAME = '项目协调';
 const SUBAGENT_TOOL_NAMES = ['subagent_start', 'subagent_close'];
-const WORK_RESULT_TOOL = 'worknode_result';
+const TASK_TOOL_NAMES = ['task_block', 'task_finish'];
 const PROJECT_REVIEW_PREFIX =
   'Before doing anything else, inspect the entire project directory: read the README, AGENTS.md, package manifests, directory layout and key source files so you understand how the project is developed. Only after that start the assigned work.';
 
@@ -63,7 +63,6 @@ const ALL_WORK_TOOLS = [
   'pdf_view',
   'html_view',
   'chrome',
-  'question',
   'glob',
   'grep',
   'edit',
@@ -77,7 +76,6 @@ const RESEARCH_TOOLS = [
   'websearch',
   'webfetch',
   'systeminfo',
-  'question',
   'code_view',
   'pdf_view',
   'html_view',
@@ -92,7 +90,6 @@ const PROGRAMMER_TOOLS = [
   'patch',
   'shell',
   'systeminfo',
-  'question',
   'code_view',
   'html_view',
   'chrome',
@@ -107,7 +104,6 @@ const TESTER_TOOLS = [
   ...FILE_READ_TOOLS.filter((name) => name !== 'read'),
   'shell',
   'systeminfo',
-  'question',
   'code_view',
   'html_view',
   'chrome',
@@ -124,7 +120,6 @@ const WRITER_TOOLS = [
   'websearch',
   'webfetch',
   'systeminfo',
-  'question',
   'code_view',
   'html_view',
   'pdf_view',
@@ -134,7 +129,6 @@ const REVIEWER_TOOLS = [
   'websearch',
   'webfetch',
   'systeminfo',
-  'question',
   'code_view',
   'html_view',
   'pdf_view',
@@ -150,7 +144,13 @@ const REVIEWER_TOOLS = [
 const DEFAULT_AGENT_PROMPT =
   `${PROJECT_REVIEW_PREFIX} You are the default general-purpose YAH Subagent. Work directly in the current project, use tools when they help, keep replies concise, and return a clear result to the parent Agent. Always format final replies as Markdown: use headings, lists, bold, inline code, and fenced code blocks when they make the answer easier to read.`;
 const AGENT_AGENT_PROMPT =
-  `${PROJECT_REVIEW_PREFIX} You are the project coordinator Agent in YAH. You do not implement work yourself: you inspect the project and the development conventions, then assign the task to the Subagent whose specialty fits: 信息收集, 程序员, 测试员, 文档写作 or 代码审查. Use subagent_start with the task summary and close Subagents with subagent_close when they are no longer needed. When the work is done, call worknode_result with the summary, how the work was completed, tests, files and the Subagent branch names. Always format final replies as Markdown.`;
+  `${PROJECT_REVIEW_PREFIX} You are the project coordinator Agent and the worker that owns one Agile task. Inspect the project and the development conventions, then assign the task to the Subagent whose specialty fits: 信息收集, 程序员, 测试员, 文档写作 or 代码审查. Use subagent_start with the task summary and close Subagents with subagent_close when they are no longer needed.
+
+Task state:
+- Call task_block when you need an approval or an answer. Set kind to approval or question, give a clear reason, and include the action/path for approval or the questions for a questionnaire. The task becomes blocked, the approval/questionnaire shows which worker sent it, and the orchestrator resumes this conversation after it is resolved. Stop working after calling task_block.
+- Call task_finish when the task is complete. Include the summary, how the work was completed, tests, files and the Subagent branch names. Then stop.
+
+Always format final replies as Markdown.`;
 
 const RESEARCH_PROMPT =
   'You are the 信息收集 Agent in YAH. Gather information from the codebase and the web using read-only tools: read files, search code, inspect Git history, fetch pages and read browser content. Do not modify files or run commands that change state. Return structured findings with file paths, line numbers, URLs and clear conclusions.';
@@ -186,14 +186,13 @@ const AGENT_AGENT = {
     'glob',
     'grep',
     'systeminfo',
-    'question',
     'code_view',
     'git_status',
     'git_diff',
     'git_log',
     'git_show',
     'git_blame',
-    WORK_RESULT_TOOL,
+    ...TASK_TOOL_NAMES,
     ...SUBAGENT_TOOL_NAMES,
   ],
   builtin: true,
@@ -245,20 +244,15 @@ const ROLE_SUBAGENTS = [
 ];
 
 const MANAGER_AGENT_PROMPT =
-  'You are the manager node in YAH. You do not do the work yourself: you analyze the user request, choose the work roles, and dispatch a mission into Agile with mission_dispatch. The orchestrator node reads the Agile Backlog and sends each task to the project coordinator Agent; the Agent inspects the project and delegates the actual work to the matching Subagent. The Report Hub collects every structured result and builds the final report. Use mission_status to inspect progress and mission_report to read the finished report. Work roles: 信息收集, 程序员, 测试员, 文档写作, 代码审查. Keep the user informed with concise progress summaries. Only dispatch when it helps; simple questions can be answered directly.' +
-  '\n\nRules:\n- You do not read files, search the web, run commands, or implement work directly. All work goes through mission_dispatch and the Agent nodes.\n- Prefer mission_dispatch for multi-step work. It writes tasks into Agile Backlog; do not create every work node yourself.\n- Choose task roles by the type of work: research for 信息收集, programmer for 程序员, tester for 测试员, writer for 文档写作, reviewer for 代码审查.\n- Add dependencies and acceptance criteria so the orchestrator can respect order and the Report Hub can verify completion.\n- Use mission_status to check progress and mission_report when the user asks for the report.\n- The orchestrator creates, reuses and retires engineer nodes automatically. Use question only when a decision is genuinely needed from the user.\n- Do not create duplicate tasks or missions for the same request.\n- When the Report Hub is ready, summarize the mission status and point the user to the report page.';
+  'You are the manager node in YAH. You do not do the work yourself. You split the user request into independent, parallel tasks and publish them to Agile Backlog. The orchestrator assigns each Backlog task to an idle engineer; the engineer inspects the project, delegates to the right Subagent, and reports the result. The Report Hub builds the final report.' +
+  '\n\nRules:\n- You do not read files, search the web, run commands, or implement work directly.\n- Split the work so every task can run in parallel. Do not create dependencies between tasks.\n- Give every task a clear title, description, role and acceptance criteria.\n- Use iteration_add to create a new iteration when needed, backlog_add to publish tasks, and backlog_list to inspect current tasks.\n- The orchestrator creates, reuses and retires engineer nodes automatically. Do not create work nodes.\n- If the user asks for progress, call backlog_list and summarize the task columns and blockers.\n- Do not create duplicate tasks for the same request.';
 
 const MANAGER_AGENT = {
   id: MANAGER_AGENT_ID,
   name: MANAGER_AGENT_NAME,
   kind: 'manager',
   prompt: MANAGER_AGENT_PROMPT,
-  tools: [
-    'mission_dispatch',
-    'mission_status',
-    'mission_report',
-    'question',
-  ],
+  tools: ['backlog_list', 'backlog_add', 'iteration_add'],
   builtin: true,
 };
 
@@ -273,6 +267,7 @@ module.exports = {
   AGENT_AGENT_NAME,
   AGENT_AGENT_PROMPT,
   SUBAGENT_TOOL_NAMES,
+  TASK_TOOL_NAMES,
   ALL_WORK_TOOLS,
   ROLE_AGENTS,
   ROLE_SUBAGENTS,

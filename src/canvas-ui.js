@@ -1000,13 +1000,16 @@ function canvasSystemNodeSummary(node) {
   }
   if (node?.type === 'approval') {
     const payload = node.payload || {};
-    return payload.path || payload.tool || '等待批准';
+    const source = payload.blockedBy?.title || '';
+    const detail = payload.path || payload.tool || '等待批准';
+    return source ? `${source} · ${detail}` : detail;
   }
   if (node?.type === 'questionnaire') {
-    const questions = Array.isArray(node.payload?.questions)
-      ? node.payload.questions
-      : [];
-    return questions[0]?.question || '等待回答';
+    const payload = node.payload || {};
+    const questions = Array.isArray(payload.questions) ? payload.questions : [];
+    const source = payload.blockedBy?.title || '';
+    const detail = questions[0]?.question || '等待回答';
+    return source ? `${source} · ${detail}` : detail;
   }
   return '';
 }
@@ -1159,7 +1162,7 @@ function buildSystemNodeCard(node, options = {}) {
       ['工具', payload.tool],
       ['路径', payload.path],
       ['允许目录', Array.isArray(payload.allowedDirs) ? payload.allowedDirs.join(' · ') : ''],
-      ['来源', payload.sourceTitle],
+      ['发起者', payload.blockedBy?.title || payload.sourceTitle],
       ['原因', payload.reason],
     ]) {
       if (!value) continue;
@@ -1187,6 +1190,18 @@ function buildSystemNodeCard(node, options = {}) {
     }
   } else if (node.type === 'questionnaire') {
     const payload = node.payload || {};
+    const info = el('div', 'system-node-fields');
+    for (const [label, value] of [
+      ['发起者', payload.blockedBy?.title || payload.sourceTitle],
+      ['原因', payload.reason],
+    ]) {
+      if (!value) continue;
+      const row = el('div', 'system-node-field');
+      row.append(el('span', 'system-node-field-label', label));
+      row.append(el('span', 'system-node-field-value', String(value)));
+      info.append(row);
+    }
+    if (info.childNodes.length > 0) card.append(info);
     const questions = Array.isArray(payload.questions) ? payload.questions : [];
     const form = el('div', 'system-node-questionnaire');
     const controls = [];
@@ -1806,6 +1821,15 @@ function buildCanvasGroup(root, children, jobs, node) {
     )
   );
   heading.append(subline);
+  if (
+    root.nodeRole === 'work' &&
+    root.nodeConfig?.task &&
+    !String(root.title || '').includes(root.nodeConfig.task)
+  ) {
+    heading.append(
+      el('div', 'canvas-group-task', `任务：${root.nodeConfig.task}`)
+    );
+  }
   head.append(heading);
   groupEl.append(head);
 

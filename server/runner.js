@@ -747,7 +747,7 @@ function startRun({
               ? nodeConfig.files.join(' · ')
               : 'none'
           }`,
-          'Create work nodes with the worknode tools. Assign each work node an Agent and a task, then monitor it.',
+          'Publish parallel Backlog tasks with backlog_add, inspect them with backlog_list, and create iterations with iteration_add. The orchestrator assigns Backlog tasks to idle engineers.',
         ].join('\n')
       : session.nodeRole === 'work'
         ? [
@@ -778,6 +778,7 @@ function startRun({
                 : 'none'
             }`,
             'Before delegating, inspect the entire project and its development conventions. Each Subagent works on its own branch.',
+            'When you need approval or an answer, call task_block. When the task is done, call task_finish.',
           ].join('\n')
         : '';
   const system = [
@@ -824,9 +825,11 @@ function startRun({
   };
 
   let goalAction = null;
-  const sessionToolOverride = Array.isArray(session.nodeConfig?.tools)
-    ? session.nodeConfig.tools.map(String).filter(Boolean)
-    : null;
+  const sessionToolOverride =
+    resolvedAgentConfig?.kind !== 'agent' &&
+    Array.isArray(session.nodeConfig?.tools)
+      ? session.nodeConfig.tools.map(String).filter(Boolean)
+      : null;
   const effectiveMcpDisabled =
     resolvedAgentConfig?.kind === 'agent'
       ? ['*']

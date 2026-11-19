@@ -208,253 +208,6 @@ const MONITOR_OUTPUT = fn(
   ['id']
 );
 
-const AGILE_LIST_BOARDS = fn(
-  'agile_list_boards',
-  'List all agile iterations with task counts and dates.',
-  {}
-);
-const AGILE_GET_BOARD = fn(
-  'agile_get_board',
-  'Get an agile iteration with columns, tasks and settings.',
-  { boardId: str('Iteration id (defaults to the active iteration)') }
-);
-const AGILE_CREATE_BOARD = fn(
-  'agile_create_board',
-  'Create the next blank iteration on the single agile line. The iteration is numbered automatically.',
-  {}
-);
-const AGILE_DELETE_BOARD = fn(
-  'agile_delete_board',
-  'Delete an iteration and its tasks.',
-  { boardId: str('Iteration id') },
-  ['boardId']
-);
-const AGILE_LIST_TASKS = fn(
-  'agile_list_tasks',
-  'List tasks in an iteration, optionally filtered by column, search, claimedBy, needsDigest or ready.',
-  {
-    boardId: str('Iteration id (defaults to the active iteration)'),
-    column: str('Column id or name'),
-    search: str('Text to search in title and description'),
-    claimedBy: str('Exact agent id; empty string selects unclaimed tasks'),
-    needsDigest: bool('Only tasks with (or without) undigested notes'),
-    ready: bool('Only ready Backlog tasks (notes digested, unclaimed)'),
-  }
-);
-const AGILE_GET_TASK = fn(
-  'agile_get_task',
-  'Get one task with description, notes, claim state, blocked reason and column history.',
-  { taskId: str('Task id') },
-  ['taskId']
-);
-const AGILE_CREATE_TASK = fn(
-  'agile_create_task',
-  'Create a task in Backlog. The human owns notes (keyPoints); this tool cannot add notes. Call agile_digest_notes after folding notes into the description before claiming or moving into In Progress.',
-  {
-    title: str('Task title'),
-    description: str('Task description'),
-    assignee: str('Optional assignee'),
-    role: str('Work role used by the orchestrator: research, programmer, tester, writer, reviewer or general'),
-    acceptance: str('Acceptance criteria used by the Report Hub'),
-    dependsOn: arr('Dependency task ids', { type: 'string' }),
-    autoDispatch: bool('Allow the orchestrator to dispatch this task (default true)'),
-    boardId: str('Iteration id (defaults to the active iteration)'),
-    agent: str('Calling agent identity'),
-  },
-  ['title']
-);
-const AGILE_CREATE_TASKS = fn(
-  'agile_create_tasks',
-  'Create several Backlog tasks in one call. Every item lands in Backlog.',
-  {
-    boardId: str('Iteration id (defaults to the active iteration)'),
-    tasks: arr('Tasks to create', {
-      type: 'object',
-      properties: {
-        title: str('Task title'),
-        description: str('Task description'),
-        assignee: str('Optional assignee'),
-        role: str('Work role: research, programmer, tester, writer, reviewer or general'),
-        acceptance: str('Acceptance criteria'),
-        dependsOn: arr('Dependency task ids', { type: 'string' }),
-        autoDispatch: bool('Allow the orchestrator to dispatch this task (default true)'),
-      },
-      required: ['title'],
-    }),
-    agent: str('Calling agent identity'),
-  },
-  ['tasks']
-);
-const AGILE_UPDATE_TASK = fn(
-  'agile_update_task',
-  'Update a task title, description, assignee, role, acceptance criteria, dependencies or blocked reason. This cannot change notes or clear needsDigest.',
-  {
-    taskId: str('Task id'),
-    title: str('New title'),
-    description: str('New description'),
-    assignee: str('New assignee'),
-    role: str('New work role'),
-    acceptance: str('New acceptance criteria'),
-    dependsOn: arr('New dependency task ids', { type: 'string' }),
-    autoDispatch: bool('Allow the orchestrator to dispatch this task'),
-    blockedReason: str('Blocked reason; empty string clears it'),
-    agent: str('Calling agent identity'),
-  },
-  ['taskId']
-);
-const AGILE_MOVE_TASK = fn(
-  'agile_move_task',
-  'Move a task to one of the four fixed columns. Moving into In Progress is refused while the task has undigested notes; an unclaimed task moved there is claimed by the caller.',
-  {
-    taskId: str('Task id'),
-    column: str('Column id or name: backlog, progress, blocked, finished'),
-    position: num('0-based position in the target column (default appends)'),
-    agent: str('Calling agent identity'),
-  },
-  ['taskId', 'column']
-);
-const AGILE_MOVE_TASKS = fn(
-  'agile_move_tasks',
-  'Move several tasks into one of the four fixed columns. Refused per task while it has undigested notes (In Progress), and unclaimed tasks moved there are claimed by the caller.',
-  {
-    taskIds: arr('Task ids to move', { type: 'string' }),
-    column: str('Column id or name: backlog, progress, blocked, finished'),
-    position: num('0-based position in the target column (default appends)'),
-    agent: str('Calling agent identity'),
-  },
-  ['taskIds', 'column']
-);
-const AGILE_DELETE_TASK = fn(
-  'agile_delete_task',
-  'Delete a task. Finished tasks cannot be deleted.',
-  { taskId: str('Task id'), agent: str('Calling agent identity') },
-  ['taskId']
-);
-const AGILE_SET_BLOCKED_REASON = fn(
-  'agile_set_blocked_reason',
-  'Record why a task is blocked, or clear the reason with an empty string.',
-  {
-    taskId: str('Task id'),
-    reason: str('Blocked reason; empty string clears it'),
-    agent: str('Calling agent identity'),
-  },
-  ['taskId']
-);
-const AGILE_CLAIM_TASK = fn(
-  'agile_claim_task',
-  'Claim a task for an agent. Refused while it has undigested human notes or another live claim.',
-  { taskId: str('Task id'), agent: str('Agent identity') },
-  ['taskId']
-);
-const AGILE_RELEASE_TASK = fn(
-  'agile_release_task',
-  'Release a claimed task.',
-  { taskId: str('Task id'), agent: str('Agent identity') },
-  ['taskId']
-);
-const AGILE_HEARTBEAT_TASK = fn(
-  'agile_heartbeat_task',
-  'Keep a claimed In Progress task alive without changing its content.',
-  { taskId: str('Task id'), agent: str('Agent identity') },
-  ['taskId']
-);
-const AGILE_CLAIM_NEXT = fn(
-  'agile_claim_next',
-  'Claim the next ready task (Backlog, notes digested, unclaimed or expired).',
-  { boardId: str('Iteration id'), agent: str('Agent identity') }
-);
-const AGILE_DIGEST_NOTES = fn(
-  'agile_digest_notes',
-  'Fold the human notes into the description by stamping digestedAt and clearing needsDigest. This is the only way to clear it.',
-  {
-    taskId: str('Task id'),
-    pointIds: arr('Specific note ids; omit to digest all undigested notes', {
-      type: 'string',
-    }),
-    agent: str('Calling agent identity'),
-  },
-  ['taskId']
-);
-const AGILE_UNDIGEST_NOTES = fn(
-  'agile_undigest_notes',
-  'Reverse digesting by removing digestedAt stamps and setting needsDigest again.',
-  {
-    taskId: str('Task id'),
-    pointIds: arr('Specific note ids; omit to undigest every digested note', {
-      type: 'string',
-    }),
-    agent: str('Calling agent identity'),
-  },
-  ['taskId']
-);
-const AGILE_LIST_COLUMNS = fn(
-  'agile_list_columns',
-  'List the four fixed agile columns and their WIP limits.',
-  {}
-);
-const AGILE_GET_BOARD_SNAPSHOT = fn(
-  'agile_get_board_snapshot',
-  'Get the full projected board snapshot (board, columns, tasks, settings, seq).',
-  { boardId: str('Iteration id') }
-);
-const AGILE_LIST_EVENTS = fn(
-  'agile_list_events',
-  'List recent agile domain events (audit trail), oldest first.',
-  { limit: num('Maximum events (1-1000)') }
-);
-const AGILE_WAIT_FOR_EVENT = fn(
-  'agile_wait_for_event',
-  'Wait for the next agile event after a sequence number (max 30s). Returns timedOut when nothing arrives.',
-  {
-    since: num('Return the first event with seq greater than this value'),
-    timeoutMs: num('Maximum wait in milliseconds (1-30000, default 15000)'),
-    type: str('Only this event type'),
-    boardId: str('Only this iteration id'),
-  }
-);
-const AGILE_LIST_ROADMAP = fn(
-  'agile_list_roadmap',
-  'List iterations on the single agile line with dates, goals and unfinished task counts.',
-  {}
-);
-const AGILE_LIST_SKILLS = fn(
-  'agile_list_skills',
-  'List the agile collaboration skills / usage guides.',
-  {}
-);
-const AGILE_GET_SKILL = fn(
-  'agile_get_skill',
-  'Get one agile skill by id or name.',
-  { skill: str('Skill id or name') },
-  ['skill']
-);
-const AGILE_CREATE_SKILL = fn(
-  'agile_create_skill',
-  'Create an agile collaboration skill.',
-  {
-    name: str('Skill name'),
-    description: str('Short description'),
-    content: str('Usage guide text'),
-  },
-  ['name']
-);
-const AGILE_UPDATE_SKILL = fn(
-  'agile_update_skill',
-  'Update an agile skill.',
-  {
-    skillId: str('Skill id'),
-    name: str('New name'),
-    description: str('New description'),
-    content: str('New content'),
-  },
-  ['skillId']
-);
-const AGILE_DELETE_SKILL = fn(
-  'agile_delete_skill',
-  'Delete an agile skill.',
-  { skillId: str('Skill id') },
-  ['skillId']
-);
 const SUBAGENT_START = fn(
   'subagent_start',
   'Start a Subagent in its own read-only conversation and return immediately. The Subagent runs the full agent loop with tools; when it finishes, its result is queued back into this conversation as a follow-up prompt. Use fork=true to copy the current conversation into the Subagent first; otherwise it starts a fresh conversation. Choose a role profile such as 程序员, 测试员, 信息收集, 文档写作 or 代码审查; omit agent to use the general Build worker. Use subagent_close to stop and close it, and use background_start for long-running processes that should keep running.',
@@ -474,54 +227,6 @@ const SUBAGENT_CLOSE = fn(
   ['sessionId']
 );
 
-const QUESTION = fn(
-  'question',
-  `Ask the user up to 5 questions when you need a decision, preference, or clarification. A question sheet rises from the bottom of the chat; the user can pick an option, select several options, or type their own answer. Use this instead of guessing or asking in prose when the answer changes what you do next.
-
-Modes:
-- "blocking" (default): the run waits until the user answers or dismisses the question.
-- "timed": set "timeout_seconds" (5-600, default 60). The sheet shows a countdown; any user interaction resets it. When it expires, the answers entered so far (possibly none) are submitted automatically, and you should continue with your best judgment for anything unanswered.
-
-Usage notes:
-- Ask at most 5 questions per call. Ask several independent questions together instead of making several calls.
-- A "write your own answer" input is added automatically; do not add a separate free-form option.
-- Set "multiple": true to allow selecting more than one option.
-- If you recommend an option, put it first and end its label with "(Recommended)".
-- Keep "header" to a very short label (max 30 characters).
-- Omit "options" or use an empty array when the answer should be free-form text.
-- Use "timed" when you can proceed without the user; use "blocking" when the answer is required before any further work.`,
-  {
-    questions: arr('Questions to ask (1-5)', {
-      type: 'object',
-      properties: {
-        question: str('Complete question text'),
-        header: str('Very short label (max 30 chars)'),
-        options: arr('Available choices. Omit or leave empty for a free-form answer.', {
-          type: 'object',
-          properties: {
-            label: str('Display text (1-5 words, concise)'),
-            description: str('Explanation of choice'),
-          },
-          required: ['label', 'description'],
-        }),
-        multiple: bool('Allow selecting multiple choices'),
-      },
-      required: ['question', 'header'],
-    }),
-    mode: str(
-      '"blocking" waits for the user; "timed" auto-submits after timeout_seconds'
-    ),
-    timeout_seconds: num(
-      'Timed mode only: seconds before auto-submit (5-600, default 60)'
-    ),
-  },
-  ['questions']
-);
-QUESTION.function.parameters.properties.questions.minItems = 1;
-QUESTION.function.parameters.properties.questions.maxItems = 5;
-QUESTION.function.parameters.properties.mode.enum = ['blocking', 'timed'];
-QUESTION.function.parameters.properties.timeout_seconds.minimum = 5;
-QUESTION.function.parameters.properties.timeout_seconds.maximum = 600;
 
 const HTML_VIEW = fn(
   'html_view',
@@ -1010,7 +715,6 @@ const OPENCODE = [
   PDF_VIEW,
   HTML_VIEW,
   CHROME,
-  QUESTION,
 ];
 
 const OMO = [
@@ -1022,35 +726,6 @@ const OMO = [
   BACKGROUND_STOP,
   BACKGROUND_OUTPUT,
   BACKGROUND_CANCEL,
-  AGILE_LIST_BOARDS,
-  AGILE_GET_BOARD,
-  AGILE_CREATE_BOARD,
-  AGILE_DELETE_BOARD,
-  AGILE_LIST_TASKS,
-  AGILE_GET_TASK,
-  AGILE_CREATE_TASK,
-  AGILE_CREATE_TASKS,
-  AGILE_UPDATE_TASK,
-  AGILE_MOVE_TASK,
-  AGILE_MOVE_TASKS,
-  AGILE_DELETE_TASK,
-  AGILE_SET_BLOCKED_REASON,
-  AGILE_CLAIM_TASK,
-  AGILE_RELEASE_TASK,
-  AGILE_HEARTBEAT_TASK,
-  AGILE_CLAIM_NEXT,
-  AGILE_DIGEST_NOTES,
-  AGILE_UNDIGEST_NOTES,
-  AGILE_LIST_COLUMNS,
-  AGILE_GET_BOARD_SNAPSHOT,
-  AGILE_LIST_EVENTS,
-  AGILE_WAIT_FOR_EVENT,
-  AGILE_LIST_ROADMAP,
-  AGILE_LIST_SKILLS,
-  AGILE_GET_SKILL,
-  AGILE_CREATE_SKILL,
-  AGILE_UPDATE_SKILL,
-  AGILE_DELETE_SKILL,
   MONITOR_START,
   MONITOR_STOP,
   MONITOR_LIST,
@@ -1059,51 +734,71 @@ const OMO = [
   SUBAGENT_CLOSE,
 ];
 
-const WORKNODE_TOOLS = [
+const TASK_TOOLS = [
   fn(
-    'mission_dispatch',
-    'Manager only. Write a mission directly into Agile: create or reuse an iteration, create Backlog tasks with role, dependencies and acceptance criteria, then ensure the orchestrator and Report Hub system nodes. The orchestrator dispatches tasks to Agent work nodes by role.',
+    'backlog_list',
+    'Manager only. List the current iteration and its tasks with column, assignee, blocked reason and result.',
+    { iterationId: str('Iteration id; omit to use the active iteration') }
+  ),
+  fn(
+    'backlog_add',
+    'Manager only. Add one or more parallel tasks to the Backlog of an iteration. Split the work so tasks can run independently; do not add dependencies. Creates an iteration when none exists.',
     {
-      goal: str('Mission goal shown in the report and task context'),
-      boardId: str('Existing Agile iteration id; omit to create a new iteration'),
-      tasks: arr('Tasks to write into Agile Backlog', {
+      iterationId: str('Iteration id; omit to use the active iteration'),
+      goal: str('Mission goal used by the Report Hub'),
+      tasks: arr('Parallel Backlog tasks', {
         type: 'object',
         properties: {
           title: str('Task title'),
           description: str('Task description and context'),
           role: str('Work role: research, programmer, tester, writer, reviewer or general'),
           acceptance: str('Acceptance criteria used by the Report Hub'),
-          dependsOn: arr('Dependency task ids, titles or 0-based indexes', {
-            type: 'string',
-          }),
-          autoDispatch: bool('Allow the orchestrator to dispatch this task (default true)'),
         },
         required: ['title'],
       }),
-      autoDispatch: bool('Default auto-dispatch value for all tasks'),
     },
-    ['goal', 'tasks']
+    ['tasks']
   ),
   fn(
-    'mission_status',
-    'Manager only. Inspect missions written by mission_dispatch: task counts by column, task roles and dependencies, Report Hub status, and recent orchestrator steps.',
-    {
-      boardId: str('Optional mission/Agile iteration id; omit for all missions this manager dispatched'),
-    }
+    'iteration_add',
+    'Manager only. Create a new Agile iteration and return its id.',
+    { goal: str('Iteration goal / mission name') }
   ),
   fn(
-    'mission_report',
-    'Manager only. Read the Report Hub for a mission: status, counts, step log and the full Markdown report describing how the work was completed.',
+    'task_block',
+    'Worker only. Block the current task and create an approval or questionnaire node. The node records which worker sent it. After the user resolves it, the orchestrator unblocks the task and resumes the same worker. Stop working after calling this.',
     {
-      boardId: str('Mission/Agile iteration id; omit for the latest report'),
-    }
+      kind: str('approval or question'),
+      reason: str('Why the task is blocked; shown on the task and the node'),
+      action: str('Approval only: action or tool that needs approval'),
+      path: str('Approval only: file or resource path'),
+      questions: arr('Question only: questions to ask', {
+        type: 'object',
+        properties: {
+          question: str('Complete question text'),
+          header: str('Very short label'),
+          options: arr('Available choices', {
+            type: 'object',
+            properties: {
+              label: str('Display text'),
+              description: str('Explanation of choice'),
+            },
+            required: ['label', 'description'],
+          }),
+          multiple: bool('Allow selecting more than one choice'),
+        },
+        required: ['question', 'header'],
+      }),
+      mode: str('Question only: blocking or timed'),
+      timeoutSeconds: num('Question only: timed timeout in seconds'),
+    },
+    ['kind', 'reason']
   ),
   fn(
-    'worknode_result',
-    'Submit the structured result of a work node. Call this when the task is complete, then stop. The Report Hub uses it to mark the Agile task finished or blocked and to build the mission report. Include the Subagent branch names in branches.',
+    'task_finish',
+    'Worker only. Submit the result of the current task and mark it finished. The Report Hub uses it to build the mission report. Include the Subagent branch names in branches.',
     {
-      taskId: str('Agile task id; defaults to this work node task'),
-      status: str('done, failed or blocked (default done)'),
+      taskId: str('Task id; defaults to the current task'),
       summary: str('What was accomplished'),
       how: arr('Steps describing how the task was completed', { type: 'string' }),
       files: arr('Files created or changed', { type: 'string' }),
@@ -1115,13 +810,10 @@ const WORKNODE_TOOLS = [
           status: str('passed, failed or skipped'),
         },
       }),
-      artifacts: arr('Artifacts such as screenshots, reports or URLs', {
-        type: 'string',
-      }),
+      artifacts: arr('Artifacts such as screenshots, reports or URLs', { type: 'string' }),
       branches: arr('Git branches used by the Subagents', { type: 'string' }),
       blockers: arr('Blockers that remain', { type: 'string' }),
       followUps: arr('Suggested follow-up work', { type: 'string' }),
-      durationMs: num('Elapsed time in milliseconds'),
     },
     ['summary']
   ),
@@ -1129,7 +821,7 @@ const WORKNODE_TOOLS = [
 
 function mergedDefinitions() {
   const byName = new Map();
-  for (const definition of [...OPENCODE, ...OMO, ...WORKNODE_TOOLS, ...GIT_TOOLS]) {
+  for (const definition of [...OPENCODE, ...OMO, ...TASK_TOOLS, ...GIT_TOOLS]) {
     byName.set(definition.function.name, definition);
   }
   return [...byName.values()];
@@ -1139,6 +831,6 @@ module.exports = {
   mergedDefinitions,
   OPENCODE,
   OMO,
-  WORKNODE_TOOLS,
+  TASK_TOOLS,
   GIT_TOOLS,
 };

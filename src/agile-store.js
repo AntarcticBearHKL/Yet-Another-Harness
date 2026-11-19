@@ -176,6 +176,9 @@ function normalizeTask(raw) {
     claimedAt: raw.claimedAt ? String(raw.claimedAt) : null,
     blockedReason: normalizeText(raw.blockedReason, 2000),
     blockedAt: raw.blockedAt ? String(raw.blockedAt) : null,
+    blockedBy: normalizeText(raw.blockedBy, 120),
+    blockedKind: normalizeText(raw.blockedKind, 20),
+    blockedNodeId: normalizeText(raw.blockedNodeId, 120),
     columnHistory: Array.isArray(raw.columnHistory)
       ? raw.columnHistory
           .map((entry) => ({
@@ -288,11 +291,11 @@ function createAgileStore(file) {
             '# OpenAgile',
             '',
             '- Four fixed columns: Backlog, In Progress, Blocked, Finished.',
-            '- Manager writes tasks into Backlog; the orchestrator node dispatches them by role.',
+            '- Manager publishes parallel Backlog tasks; the orchestrator assigns them to idle engineers.',
             '- The task description belongs to the Manager and Agent. Notes (keyPoints) belong to the human.',
-            '- Call agile_digest_notes before a task moves into In Progress when it has undigested notes.',
-            '- The orchestrator uses agile_move_task and claimTask; the human cannot drag cards.',
-            '- Add a blocked reason when work cannot continue and needs a human decision.',
+            '- Engineers call task_block for approval or a questionnaire; the orchestrator unblocks and resumes the same engineer after it is resolved.',
+            '- Engineers call task_finish when the task is done; the Report Hub builds the final report.',
+            '- The human cannot drag cards.',
           ].join('\n'),
           createdAt,
           updatedAt: createdAt,
@@ -786,6 +789,15 @@ function createAgileStore(file) {
       task.blockedReason = normalizeText(patch.blockedReason, 2000);
       task.blockedAt = task.blockedReason ? nowIso() : null;
     }
+    if (typeof patch.blockedBy === 'string') {
+      task.blockedBy = normalizeText(patch.blockedBy, 120);
+    }
+    if (typeof patch.blockedKind === 'string') {
+      task.blockedKind = normalizeText(patch.blockedKind, 20);
+    }
+    if (typeof patch.blockedNodeId === 'string') {
+      task.blockedNodeId = normalizeText(patch.blockedNodeId, 120);
+    }
     task.updatedAt = nowIso();
     task.lastActivityAt = task.updatedAt;
     recordEvent('task.updated', { taskId: task.id, fields: patch }, task.boardId, actor);
@@ -809,11 +821,6 @@ function createAgileStore(file) {
     const actor = normalizeActor(options.actor);
     assertClaimAvailable(task, actor);
     const column = normalizeColumn(columnValue);
-    if (column === 'progress' && task.needsDigest) {
-      throw new Error(
-        'Task has undigested notes. Call agile_digest_notes before moving it into In Progress.'
-      );
-    }
     const from = task.column;
     if (from === column && options.position === undefined) {
       return taskView(task);
@@ -837,6 +844,12 @@ function createAgileStore(file) {
     }
     if (column === 'blocked') {
       task.blockedAt = task.blockedAt || task.updatedAt;
+    } else {
+      task.blockedReason = '';
+      task.blockedAt = null;
+      task.blockedBy = '';
+      task.blockedKind = '';
+      task.blockedNodeId = '';
     }
     task.columnHistory.push({ column, at: task.updatedAt });
     if (task.columnHistory.length > 200) task.columnHistory = task.columnHistory.slice(-200);

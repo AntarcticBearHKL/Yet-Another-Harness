@@ -247,6 +247,39 @@ const TOOL_I18N = {
     durationMs: '耗时（毫秒）',
   }),
 
+  backlog_list: t('任务列表', '查看当前迭代及任务状态、阻塞原因和结果。', {
+    iterationId: '迭代 ID（省略时查看当前迭代）',
+  }),
+  backlog_add: t('添加 Backlog', '把拆分好的并行任务写入 Backlog；没有迭代时会自动创建。', {
+    iterationId: '迭代 ID（省略时使用当前迭代）',
+    goal: 'Mission 目标，用于 Report Hub',
+    tasks: '并行任务列表',
+  }),
+  iteration_add: t('添加迭代', '创建一个新的 Agile 迭代并返回 ID。', {
+    goal: '迭代目标 / Mission 名称',
+  }),
+  task_block: t('阻塞任务', '把当前任务标记为阻塞，并创建审批或问卷；会记录发起任务的工程师。解决后调度器会恢复原工程师。', {
+    kind: '阻塞类型：approval 或 question',
+    reason: '阻塞原因，显示在任务和系统 node 上',
+    action: '仅审批：需要审批的动作或工具',
+    path: '仅审批：文件或资源路径',
+    questions: '仅问卷：要询问的问题',
+    mode: '仅问卷：blocking 或 timed',
+    timeoutSeconds: '仅问卷：定时模式的秒数',
+  }),
+  task_finish: t('完成任务', '提交当前任务结果并标记完成；Report Hub 用它生成报告。', {
+    taskId: '任务 ID（默认当前任务）',
+    summary: '完成内容摘要',
+    how: '如何完成任务的步骤',
+    files: '新增或修改的文件',
+    commands: '执行过的命令',
+    tests: '测试及结果',
+    artifacts: '截图、报告或链接等产物',
+    branches: 'Subagent 使用的 Git 分支',
+    blockers: '仍然存在的阻塞',
+    followUps: '建议的后续工作',
+  }),
+
   agile_list_boards: t('敏捷迭代列表', '列出所有迭代及任务数和日期。'),
   agile_get_board: t('获取敏捷迭代', '获取迭代的列、任务和设置。'),
   agile_create_board: t('创建敏捷迭代', '在唯一的主线中创建下一个空白迭代，自动编号。'),

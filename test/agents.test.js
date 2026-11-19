@@ -54,7 +54,10 @@ test('the Agent is a project-aware coordinator with no write tools', () => {
   assert.ok(AGENT_AGENT.tools.includes('grep'));
   assert.ok(AGENT_AGENT.tools.includes('subagent_start'));
   assert.ok(AGENT_AGENT.tools.includes('subagent_close'));
-  assert.ok(AGENT_AGENT.tools.includes('worknode_result'));
+  assert.ok(AGENT_AGENT.tools.includes('task_block'));
+  assert.ok(AGENT_AGENT.tools.includes('task_finish'));
+  assert.ok(!AGENT_AGENT.tools.includes('worknode_result'));
+  assert.ok(!AGENT_AGENT.tools.includes('question'));
   assert.ok(!AGENT_AGENT.tools.includes('write'));
   assert.ok(!AGENT_AGENT.tools.includes('edit'));
   assert.ok(!AGENT_AGENT.tools.includes('shell'));
@@ -154,11 +157,11 @@ test('the manager profile is fixed and cannot be overridden', () => {
     assert.equal(loaded.prompt, MANAGER_AGENT.prompt);
     assert.deepEqual(loaded.tools, MANAGER_AGENT.tools);
     assert.equal(loaded.builtin, true);
-    assert.ok(loaded.tools.includes('mission_dispatch'));
-    assert.ok(loaded.tools.includes('mission_status'));
-    assert.ok(loaded.tools.includes('mission_report'));
-    assert.ok(loaded.tools.includes('question'));
-    assert.equal(loaded.tools.length, 4);
+    assert.ok(loaded.tools.includes('backlog_list'));
+    assert.ok(loaded.tools.includes('backlog_add'));
+    assert.ok(loaded.tools.includes('iteration_add'));
+    assert.equal(loaded.tools.length, 3);
+    assert.ok(!loaded.tools.includes('mission_dispatch'));
     assert.ok(!loaded.tools.includes('worknode_create'));
     assert.ok(!loaded.tools.includes('worknode_close'));
     assert.ok(!loaded.tools.includes('agile_list_boards'));

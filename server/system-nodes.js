@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { AGENT_AGENT_ID } = require('../src/agent-defaults');
+const { normalizeQuestions } = require('../src/tools/agent');
 
 const DEFAULT_ROLE_MAP = {
   research: '信息收集',
@@ -59,7 +60,8 @@ function taskPrompt(task, goal, roleName = '') {
   }
   lines.push(
     '',
-    'When the task is complete, call worknode_result with taskId, status, summary, how, files, commands, tests, artifacts, branches, blockers and followUps.',
+    'When the task is complete, call task_finish with summary, how, files, commands, tests, artifacts, branches, blockers and followUps.',
+    'If you need approval or an answer before continuing, call task_block with kind approval or question. The task becomes blocked, the user sees who sent it, and the orchestrator resumes this conversation after it is resolved.',
     `taskId: ${task.id}`
   );
   return lines.filter((line) => line !== null).join('\n');
@@ -288,6 +290,28 @@ function createSystemNodeService({
           (Number(left.nodeConfig?.engineerIndex) || 0) -
           (Number(right.nodeConfig?.engineerIndex) || 0)
       );
+    const engineerAgent = getAgent?.(AGENT_AGENT_ID);
+    if (Array.isArray(engineerAgent?.tools)) {
+      const nextTools = engineerAgent.tools.map(String);
+      for (const engineer of engineers) {
+        const current = store.getSession(engineer.id) || engineer;
+        const currentTools = Array.isArray(current.nodeConfig?.tools)
+          ? current.nodeConfig.tools.map(String)
+          : null;
+        if (
+          !currentTools ||
+          currentTools.length !== nextTools.length ||
+          currentTools.some((name, index) => name !== nextTools[index])
+        ) {
+          store.updateSessionNode(engineer.id, {
+            nodeConfig: {
+              ...(current.nodeConfig || {}),
+              tools: nextTools,
+            },
+          });
+        }
+      }
+    }
     const extras = store
       .listWorkNodes(manager.id)
       .filter(
@@ -560,6 +584,7 @@ function createSystemNodeService({
     try {
       const agile = getAgileStore(session.managerId);
       const task = agile.getTask(taskId);
+      if (task.column === 'blocked' || task.column === 'finished') return;
       const workerActor = {
         type: 'agent',
         id: task.claimedBy || session.id,
@@ -590,12 +615,18 @@ function createSystemNodeService({
 
   function submitWorkResult(session, input = {}) {
     if (!session || session.nodeRole !== 'work' || !session.managerId) {
-      throw new Error('worknode_result can only be called by a work node');
+      throw new Error('task_finish can only be called by a work node');
     }
-    const taskId = String(input.taskId || session.nodeConfig?.taskId || '').trim();
-    if (!taskId) throw new Error('worknode_result requires a taskId');
     const agile = getAgileStore(session.managerId);
-    const task = agile.getTask(taskId);
+    const found = findWorkTask(session, agile);
+    const taskId = String(input.taskId || found?.id || '').trim();
+    if (!taskId) throw new Error('task_finish requires a taskId');
+    const task = found?.id === taskId ? found : agile.getTask(taskId);
+    if (!task) throw new Error('task not found');
+    rememberWorkTask(session, task);
+    if (task.column === 'blocked') {
+      throw new Error('task is blocked; wait for the orchestrator to resume it');
+    }
     if (task.result && task.column === 'finished') {
       return { ok: true, duplicate: true, taskId, reportId: task.reportId || null };
     }
@@ -657,6 +688,371 @@ function createSystemNodeService({
     return { ok: true, taskId, status, reportId: report?.id || null };
   }
 
+  function findWorkTask(session, agile) {
+    const directId = String(session.nodeConfig?.taskId || '').trim();
+    if (directId) {
+      try {
+        const direct = agile.getTask(directId);
+        if (direct && direct.workNodeId === session.id) return direct;
+      } catch {
+        /* fall through to the workNodeId lookup */
+      }
+    }
+    try {
+      const iterations = agile.listRoadmap().iterations || [];
+      for (const iteration of iterations) {
+        const tasks = agile.snapshot(iteration.id).tasks || [];
+        const task = tasks.find(
+          (item) =>
+            item.workNodeId === session.id &&
+            (item.column === 'progress' || item.column === 'blocked')
+        );
+        if (task) return task;
+      }
+    } catch {
+      /* keep the stored task if the Agile store is unavailable */
+    }
+    return null;
+  }
+
+  function rememberWorkTask(session, task) {
+    if (!task) return;
+    if (
+      session.nodeConfig?.taskId === task.id &&
+      session.nodeConfig?.task === task.title
+    ) {
+      return;
+    }
+    store.updateSessionNode(session.id, {
+      nodeConfig: {
+        ...(session.nodeConfig || {}),
+        task: task.title,
+        taskId: task.id,
+        reportId: task.reportId || session.nodeConfig?.reportId || null,
+      },
+    });
+  }
+
+  function workTaskFor(session, input = {}) {
+    if (!session || session.nodeRole !== 'work' || !session.managerId) {
+      throw new Error('task_block can only be called by a work node');
+    }
+    const agile = getAgileStore(session.managerId);
+    const task = findWorkTask(session, agile);
+    const taskId = String(input.taskId || task?.id || '').trim();
+    if (!taskId) throw new Error('task_block requires a taskId');
+    const freshTask = task?.id === taskId ? task : agile.getTask(taskId);
+    if (!freshTask) throw new Error('task not found');
+    if (freshTask.column === 'finished') {
+      throw new Error('task is already finished');
+    }
+    if (freshTask.column === 'blocked') {
+      throw new Error('task is already blocked');
+    }
+    if (freshTask.workNodeId && freshTask.workNodeId !== session.id) {
+      throw new Error('task is assigned to another worker');
+    }
+    rememberWorkTask(session, freshTask);
+    return { agile, task: freshTask, taskId };
+  }
+
+  function blockedOutcomeFromNode(node) {
+    if (node.type === 'approval') {
+      return {
+        kind: 'approval',
+        approved: node.status === 'approved',
+        reason:
+          String(node.payload?.decision || '') ||
+          (node.status === 'approved' ? 'approved' : 'denied'),
+      };
+    }
+    return {
+      kind: 'question',
+      answers: Array.isArray(node.payload?.answers)
+        ? node.payload.answers
+        : [],
+      cancelled: node.status === 'dismissed',
+      timedOut: node.status === 'expired',
+    };
+  }
+
+  function resumePrompt(task, node, outcome) {
+    const lines = [
+      '[Task resumed]',
+      `Task: ${task.title}`,
+      task.acceptance ? `Acceptance: ${task.acceptance}` : '',
+    ];
+    if (outcome.kind === 'approval') {
+      lines.push(
+        outcome.approved ? 'Approval: approved' : 'Approval: denied',
+        outcome.reason ? `Reason: ${outcome.reason}` : '',
+        'Continue the task. If you still need approval or an answer, call task_block again. When done, call task_finish.'
+      );
+    } else {
+      if (outcome.timedOut) {
+        lines.push(
+          'Questionnaire: no answer before the timer expired.',
+          'Continue with your best judgment. When done, call task_finish.'
+        );
+      } else if (outcome.cancelled) {
+        lines.push(
+          'Questionnaire: dismissed without an answer.',
+          'Continue with your best judgment. When done, call task_finish.'
+        );
+      } else {
+        const questions = Array.isArray(node.payload?.questions)
+          ? node.payload.questions
+          : [];
+        lines.push('Questionnaire answers:');
+        questions.forEach((question, index) => {
+          const values = Array.isArray(outcome.answers?.[index])
+            ? outcome.answers[index].map(String).filter(Boolean)
+            : [];
+          lines.push(
+            `- ${question.question || `Question ${index + 1}`}: ${
+              values.length ? values.join(', ') : 'Unanswered'
+            }`
+          );
+        });
+        lines.push(
+          'Continue the task with these answers. If you still need input, call task_block again. When done, call task_finish.'
+        );
+      }
+    }
+    return lines.filter(Boolean).join('\n');
+  }
+
+  function resumeBlockedTask(node, outcome = null) {
+    const current = store.getSystemNode(node?.id);
+    if (!current || !current.taskId) return { resumed: false };
+    const manager = managerSession(current.managerId);
+    if (!manager) return { resumed: false };
+    const agile = getAgileStore(manager.id);
+    const task = agile.getTask(current.taskId);
+    if (!task || task.column !== 'blocked') return { resumed: false };
+    if (task.blockedNodeId && task.blockedNodeId !== current.id) {
+      return { resumed: false };
+    }
+    const worker = task.workNodeId
+      ? store.getSession(task.workNodeId)
+      : current.sessionId
+        ? store.getSession(current.sessionId)
+        : null;
+    const orchestrator = findNode(manager.id, 'orchestrator');
+    const report = reportNodeForTask({ ...task, managerId: manager.id });
+    const resolvedOutcome = outcome || blockedOutcomeFromNode(current);
+    if (!worker || worker.archivedAt) {
+      const releaseActor = {
+        type: 'agent',
+        id: task.claimedBy || manager.id,
+      };
+      agile.moveTask(task.id, 'backlog', {
+        actor: releaseActor,
+      });
+      agile.releaseTask(task.id, releaseActor);
+      agile.updateTask(task.id, {
+        workNodeId: '',
+        blockedReason: '',
+        blockedBy: '',
+        blockedKind: '',
+        blockedNodeId: '',
+        actor: releaseActor,
+      });
+      appendStep(orchestrator, `解除阻塞：${task.title} → Backlog（原工程师不可用）`, {
+        kind: 'unblock',
+        taskId: task.id,
+      });
+      if (report) refreshReport(report, task.boardId, report.payload?.goal || null);
+      return { resumed: false, requeued: true, taskId: task.id };
+    }
+    const workerActor = { type: 'agent', id: task.claimedBy || worker.id };
+    const agent = getAgent?.(AGENT_AGENT_ID);
+    if (!agent || agent.kind !== 'agent') {
+      throw new Error('project coordinator Agent profile not found');
+    }
+    agile.moveTask(task.id, 'progress', { actor: workerActor });
+    const runId = crypto.randomUUID();
+    watchWorkNode(worker, report?.id || null);
+    try {
+      runner.startRun({
+        sessionId: worker.id,
+        text: resumePrompt(task, current, resolvedOutcome),
+        runId,
+        agentConfig: agent,
+        reasoningEffort: store.loadSettings().reasoningEffort,
+      });
+    } catch (runError) {
+      agile.moveTask(task.id, 'backlog', { actor: workerActor });
+      agile.releaseTask(task.id, workerActor);
+      agile.updateTask(task.id, {
+        workNodeId: '',
+        blockedReason: '',
+        blockedBy: '',
+        blockedKind: '',
+        blockedNodeId: '',
+        actor: workerActor,
+      });
+      appendStep(
+        orchestrator,
+        `恢复失败，任务回到 Backlog：${task.title}`,
+        { kind: 'error', taskId: task.id }
+      );
+      return { resumed: false, requeued: true, error: runError.message };
+    }
+    appendStep(
+      orchestrator,
+      `解除阻塞：${task.title} → ${worker.title || worker.id}`,
+      { kind: 'unblock', taskId: task.id }
+    );
+    if (report) {
+      appendStep(report, `任务恢复：${task.title}`, {
+        kind: 'unblock',
+        taskId: task.id,
+      });
+      refreshReport(report, task.boardId, report.payload?.goal || null);
+    }
+    return {
+      resumed: true,
+      taskId: task.id,
+      workerId: worker.id,
+      runId,
+    };
+  }
+
+  function blockTask(session, input = {}) {
+    const kind = String(input.kind || '').trim().toLowerCase();
+    if (kind !== 'approval' && kind !== 'question') {
+      throw new Error('task_block requires kind "approval" or "question"');
+    }
+    const reason = text(input.reason || '', 2000);
+    if (!reason) throw new Error('task_block requires a reason');
+    const { agile, task, taskId } = workTaskFor(session, input);
+    const manager = managerSession(session.managerId);
+    if (!manager) throw new Error('manager not found');
+    const blockedBy = {
+      sessionId: session.id,
+      title: session.title || 'worker',
+    };
+    let node;
+    if (kind === 'approval') {
+      const action = text(input.action || input.tool || 'approval', 120);
+      node = createNode({
+        managerId: manager.id,
+        type: 'approval',
+        status: 'pending',
+        title: `审批 · ${action}`,
+        taskId,
+        sessionId: session.id,
+        payload: {
+          approvalId: `block-${crypto.randomUUID()}`,
+          tool: action,
+          path: text(input.path || '', 500),
+          reason,
+          blockedBy,
+          blockedTask: true,
+          sourceTitle: session.title || '',
+          requestedAt: Date.now(),
+          steps: [
+            {
+              at: Date.now(),
+              message: `${blockedBy.title} 因任务阻塞发起审批：${reason}`,
+            },
+          ],
+        },
+      });
+    } else {
+      const questions = normalizeQuestions({ questions: input.questions });
+      const mode = input.mode === 'timed' ? 'timed' : 'blocking';
+      const timeoutSeconds =
+        mode === 'timed'
+          ? Math.max(
+              5,
+              Math.min(600, Math.round(Number(input.timeoutSeconds) || 60))
+            )
+          : 0;
+      node = createNode({
+        managerId: manager.id,
+        type: 'questionnaire',
+        status: 'pending',
+        title: '问卷',
+        taskId,
+        sessionId: session.id,
+        payload: {
+          questionId: `block-${crypto.randomUUID()}`,
+          questions,
+          mode,
+          timeoutSeconds,
+          reason,
+          blockedBy,
+          blockedTask: true,
+          sourceTitle: session.title || '',
+          requestedAt: Date.now(),
+          steps: [
+            {
+              at: Date.now(),
+              message: `${blockedBy.title} 因任务阻塞发起问卷：${reason}`,
+            },
+          ],
+        },
+      });
+      if (mode === 'timed' && timeoutSeconds > 0) {
+        const timeout = setTimeout(() => {
+          questionTimers.delete(node.id);
+          const current = store.getSystemNode(node.id);
+          if (current?.status !== 'pending') return;
+          const updated = updateNode(node.id, { status: 'expired' });
+          try {
+            resumeBlockedTask(updated, blockedOutcomeFromNode(updated));
+          } catch (resumeError) {
+            console.error('resume expired blocked task failed', resumeError);
+          }
+        }, (timeoutSeconds + 3) * 1000);
+        timeout.unref?.();
+        questionTimers.set(node.id, timeout);
+      }
+    }
+    const workerActor = { type: 'agent', id: task.claimedBy || session.id };
+    try {
+      agile.moveTask(taskId, 'blocked', { actor: workerActor });
+      agile.updateTask(taskId, {
+        blockedReason: reason,
+        blockedBy: session.id,
+        blockedKind: kind,
+        blockedNodeId: node.id,
+        actor: workerActor,
+      });
+    } catch (blockError) {
+      try {
+        updateNode(node.id, { status: 'expired' });
+      } catch {
+        /* ignore cleanup failure */
+      }
+      throw blockError;
+    }
+    const orchestrator = findNode(manager.id, 'orchestrator');
+    appendStep(
+      orchestrator,
+      `任务阻塞：${task.title} → ${kind === 'approval' ? '审批' : '问卷'}（${blockedBy.title}）`,
+      { kind: 'blocked', taskId }
+    );
+    const report = reportNodeForTask({ ...task, managerId: manager.id });
+    if (report) {
+      appendStep(report, `任务阻塞：${task.title}（${blockedBy.title}）`, {
+        kind: 'blocked',
+        taskId,
+      });
+      refreshReport(report, task.boardId, report.payload?.goal || null);
+    }
+    return {
+      ok: true,
+      taskId,
+      nodeId: node.id,
+      kind,
+      status: 'blocked',
+      blockedBy: blockedBy.title,
+    };
+  }
+
   function createApprovalNode(session, payload = {}) {
     if (!session?.managerId) return null;
     const manager = managerSession(session.managerId);
@@ -681,6 +1077,10 @@ function createSystemNodeService({
         tool: String(payload.tool || 'action'),
         path: String(payload.path || ''),
         allowedDirs: strings(payload.allowedDirs, 50),
+        blockedBy: {
+          sessionId: session.id,
+          title: session.title || 'worker',
+        },
         requestedAt: Date.now(),
         sourceTitle: session.title || '',
         steps: [
@@ -721,6 +1121,10 @@ function createSystemNodeService({
         questions: Array.isArray(payload.questions) ? payload.questions : [],
         mode,
         timeoutSeconds,
+        blockedBy: {
+          sessionId: session.id,
+          title: session.title || 'worker',
+        },
         requestedAt: Date.now(),
         sourceTitle: session.title || '',
         steps: [
@@ -765,6 +1169,17 @@ function createSystemNodeService({
         payload.approved === true ? '审批已通过' : '审批已拒绝',
         { kind: 'decision' }
       );
+      if (updated?.payload?.blockedTask) {
+        try {
+          resumeBlockedTask(updated, {
+            kind: 'approval',
+            approved: payload.approved === true,
+            reason: String(payload.reason || ''),
+          });
+        } catch (resumeError) {
+          console.error('resume approved task failed', resumeError);
+        }
+      }
     }
   }
 
@@ -802,6 +1217,18 @@ function createSystemNodeService({
             : '问卷已回答',
         { kind: 'decision' }
       );
+      if (updated?.payload?.blockedTask) {
+        try {
+          resumeBlockedTask(updated, {
+            kind: 'question',
+            answers: Array.isArray(payload.answers) ? payload.answers : [],
+            cancelled: payload.cancelled === true,
+            timedOut: payload.timedOut === true,
+          });
+        } catch (resumeError) {
+          console.error('resume answered task failed', resumeError);
+        }
+      }
     }
   }
 
@@ -823,6 +1250,9 @@ function createSystemNodeService({
         const summary = String(event.payload?.text || '').trim();
         if (taskId && summary) {
           try {
+            const agile = getAgileStore(current.managerId);
+            const task = agile.getTask(taskId);
+            if (task.column === 'blocked' || task.column === 'finished') return;
             submitWorkResult(current, {
               taskId,
               status: 'done',
@@ -866,6 +1296,23 @@ function createSystemNodeService({
         continue;
       }
       if (tasks.length === 0) continue;
+      for (const task of tasks) {
+        if (task.column !== 'blocked' || !task.blockedNodeId) continue;
+        const node = store.getSystemNode(task.blockedNodeId);
+        if (!node) continue;
+        if (
+          !['approved', 'denied', 'answered', 'dismissed', 'expired'].includes(
+            node.status
+          )
+        ) {
+          continue;
+        }
+        try {
+          resumeBlockedTask(node, blockedOutcomeFromNode(node));
+        } catch (resumeError) {
+          console.error('resume blocked task from tick failed', resumeError);
+        }
+      }
       const now = Date.now();
       if (now - (Number(payload.lastScanAt) || 0) >= 10000) {
         const counts = {
@@ -904,7 +1351,6 @@ function createSystemNodeService({
       const eligible = tasks
         .filter((task) => task.column === 'backlog')
         .filter((task) => task.autoDispatch !== false)
-        .filter((task) => !task.needsDigest)
         .filter((task) =>
           (Array.isArray(task.dependsOn) ? task.dependsOn : []).every(
             (id) => byId.get(id)?.column === 'finished'
@@ -940,9 +1386,9 @@ function createSystemNodeService({
         }
         const engineer = idleEngineers[engineerIndex];
         try {
-          agile.claimTask(task.id, orchestrator.id);
+          agile.claimTask(task.id, engineer.id);
           agile.moveTask(task.id, 'progress', {
-            actor: { type: 'agent', id: orchestrator.id },
+            actor: { type: 'agent', id: engineer.id },
           });
           const role = String(task.role || 'general');
           const roleName = roleMap[role] || role || '通用';
@@ -950,7 +1396,11 @@ function createSystemNodeService({
           if (!agent || agent.kind !== 'agent') {
             throw new Error('project coordinator Agent profile not found');
           }
+          const engineerBaseTitle = String(
+            engineer.title || `工程师 ${engineerIndex + 1}`
+          ).split(' · ')[0];
           store.updateSessionNode(engineer.id, {
+            title: `${engineerBaseTitle} · ${task.title}`.slice(0, 120),
             nodeConfig: {
               ...(engineer.nodeConfig || {}),
               task: task.title,
@@ -958,6 +1408,7 @@ function createSystemNodeService({
               reportId: report.id,
             },
           });
+          notify?.({ managerId: manager.id, nodeId: engineer.id });
           const currentEngineer = store.getSession(engineer.id);
           watchWorkNode(currentEngineer, report.id);
           runner.startRun({
@@ -975,23 +1426,27 @@ function createSystemNodeService({
             workNodeId: engineer.id,
             reportId: report.id,
             attempts: (Number(task.attempts) || 0) + 1,
-            actor: { type: 'agent', id: orchestrator.id },
+            actor: { type: 'agent', id: engineer.id },
           });
           engineerIndex += 1;
           appendStep(
             orchestrator,
-            `派活：${task.title} → ${engineer.title || `工程师 ${engineerIndex}`} → ${roleName}`,
+            `派活：${task.title} → ${engineerBaseTitle} → ${roleName}`,
             { kind: 'dispatch', taskId: task.id }
           );
         } catch (error) {
+          const failureActor = {
+            type: 'agent',
+            id: task.claimedBy || orchestrator.id,
+          };
           try {
             agile.moveTask(task.id, 'blocked', {
-              actor: { type: 'agent', id: orchestrator.id },
+              actor: failureActor,
             });
             agile.setBlockedReason(
               task.id,
               `调度失败: ${error.message}`,
-              { type: 'agent', id: orchestrator.id }
+              failureActor
             );
           } catch {
             /* ignore failure recovery */
@@ -1094,24 +1549,42 @@ function createSystemNodeService({
         throw new Error(`unknown approval action: ${name}`);
       }
       const approved = name === 'approve';
-      const ok = runner.resolveApproval(node.payload?.approvalId, approved);
-      return updateNode(node.id, {
+      const blockedTask = node.payload?.blockedTask === true;
+      const ok = blockedTask
+        ? true
+        : runner.resolveApproval(node.payload?.approvalId, approved);
+      const updated = updateNode(node.id, {
         status: ok ? (approved ? 'approved' : 'denied') : 'expired',
         payload: {
           ...(node.payload || {}),
           decidedAt: Date.now(),
-          reason: ok ? (approved ? 'approved' : 'denied') : 'not pending',
+          decision: ok ? (approved ? 'approved' : 'denied') : 'not pending',
         },
       });
+      if (blockedTask) {
+        try {
+          resumeBlockedTask(updated, {
+            kind: 'approval',
+            approved,
+            reason: approved ? 'approved' : 'denied',
+          });
+        } catch (resumeError) {
+          console.error('resume blocked approval failed', resumeError);
+        }
+      }
+      return updated;
     }
     if (node.type === 'questionnaire') {
       if (name === 'answer' || name === 'dismiss') {
         const answers = name === 'dismiss' ? [] : input.answers;
-        const ok = runner.resolveQuestions(node.payload?.questionId, {
-          answers: Array.isArray(answers) ? answers : [],
-          cancelled: name === 'dismiss',
-        });
-        return updateNode(node.id, {
+        const blockedTask = node.payload?.blockedTask === true;
+        const ok = blockedTask
+          ? true
+          : runner.resolveQuestions(node.payload?.questionId, {
+              answers: Array.isArray(answers) ? answers : [],
+              cancelled: name === 'dismiss',
+            });
+        const updated = updateNode(node.id, {
           status: ok
             ? name === 'dismiss'
               ? 'dismissed'
@@ -1123,6 +1596,19 @@ function createSystemNodeService({
             answeredAt: Date.now(),
           },
         });
+        if (blockedTask) {
+          try {
+            resumeBlockedTask(updated, {
+              kind: 'question',
+              answers: Array.isArray(answers) ? answers : [],
+              cancelled: name === 'dismiss',
+              timedOut: false,
+            });
+          } catch (resumeError) {
+            console.error('resume blocked question failed', resumeError);
+          }
+        }
+        return updated;
       }
       throw new Error(`unknown questionnaire action: ${name}`);
     }
@@ -1158,6 +1644,8 @@ function createSystemNodeService({
     ensureReport,
     ensureMission,
     submitWorkResult,
+    blockTask,
+    resumeBlockedTask,
     watchWorkNode,
     unwatchWorkNode,
     action,
