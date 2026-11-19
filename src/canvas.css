@@ -279,6 +279,11 @@ body.canvas-space .canvas-stage.panning {
   }
 }
 
+.canvas-system-node.type-agile.status-running::after {
+  content: none;
+  animation: none;
+}
+
 .canvas-group-head {
   display: flex;
   align-items: flex-start;

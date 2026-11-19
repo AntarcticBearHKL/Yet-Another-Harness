@@ -883,24 +883,6 @@ function buildCanvasManagerPanel(manager, team, node) {
   );
   panelEl.append(head);
 
-  const done = team.filter(
-    (session) => canvasNodeStatus(session).tone === 'done'
-  ).length;
-  const runningCount = team.filter((session) =>
-    canvasState.running.has(session.id)
-  ).length;
-  const engineerCount = Math.max(
-    1,
-    Number(manager.nodeConfig?.engineerCount) || 1
-  );
-  panelEl.append(
-    el(
-      'div',
-      'canvas-management-card-subtitle',
-      `${engineerCount} 个工程师 · ${team.length} 个 work node · ${runningCount} 运行 · ${done} 完成`
-    )
-  );
-
   panelEl.title = manager.title || 'Manager';
   panelEl.addEventListener('pointerdown', (event) => {
     startCanvasManagerDrag(event, manager, panelEl, node, team);
@@ -1340,11 +1322,14 @@ function buildCanvasSystemNode(node) {
     el('span', 'canvas-management-card-title', node.title || canvasSystemNodeType(node))
   );
   article.append(head);
-  const status = canvasSystemNodeStatus(node);
-  const summary = canvasSystemNodeSummary(node);
-  const subtitle = [status.label, summary].filter(Boolean).join(' · ');
-  if (subtitle) {
-    article.append(el('div', 'canvas-management-card-subtitle', subtitle));
+  const titleOnly = node.type === 'agile' || node.type === 'orchestrator';
+  if (!titleOnly) {
+    const status = canvasSystemNodeStatus(node);
+    const summary = canvasSystemNodeSummary(node);
+    const subtitle = [status.label, summary].filter(Boolean).join(' · ');
+    if (subtitle) {
+      article.append(el('div', 'canvas-management-card-subtitle', subtitle));
+    }
   }
   article.addEventListener('pointerdown', (event) => {
     event.stopPropagation();
