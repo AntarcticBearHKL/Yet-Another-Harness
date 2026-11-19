@@ -7988,6 +7988,12 @@ function startActionMenuPress(event) {
   if (systemNodeTarget?.dataset.nodeId) {
     event.preventDefault();
     if (actionMenuPress) cancelActionMenuPress();
+    actionMenuPress = {
+      target,
+      x: event.clientX,
+      y: event.clientY,
+      systemNode: true,
+    };
     window.openSystemNodeMenuById?.(
       systemNodeTarget.dataset.nodeId,
       event.clientX,
@@ -8074,6 +8080,7 @@ function endActionMenuPress(event) {
   const press = actionMenuPress;
   if (!press) return;
   actionMenuPress = null;
+  if (press.systemNode) return;
   if (!state.ringOpen) return;
   const hovered = document.elementFromPoint(event.clientX, event.clientY);
   const active =
