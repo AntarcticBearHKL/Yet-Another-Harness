@@ -1061,26 +1061,6 @@ const OMO = [
 
 const WORKNODE_TOOLS = [
   fn(
-    'worknode_create',
-    'Create a conversation work node under this manager node. Choose the Agent profile that matches the work: 通用 (full toolset), 信息收集, 程序员, 测试员, 文档写作 or 代码审查. Give the node a title and task, and optionally narrow its tools, skills or MCP servers. Set start=false to create it idle. The Agent works directly with its role tools and may delegate focused parts to Subagents.',
-    {
-      title: str('Short conversation title'),
-      task: str('Task prompt for the conversation'),
-      agentId: str('Agent profile id or name (通用, 信息收集, 程序员, 测试员, 文档写作, 代码审查); defaults to 通用'),
-      tools: arr('Optional subset of the Agent tools'),
-      skills: arr('Optional subset of skill ids'),
-      mcp: arr('Optional subset of MCP server ids'),
-      start: bool('Start the task immediately (default true)'),
-    },
-    ['title', 'task']
-  ),
-  fn(
-    'worknode_close',
-    'Close a conversation work node: stop its active run, archive the conversation and remove it from the canvas.',
-    { id: str('Work node id') },
-    ['id']
-  ),
-  fn(
     'mission_dispatch',
     'Manager only. Write a mission directly into Agile: create or reuse an iteration, create Backlog tasks with role, dependencies and acceptance criteria, then ensure the orchestrator and Report Hub system nodes. The orchestrator dispatches tasks to Agent work nodes by role.',
     {

@@ -157,10 +157,10 @@ test('the manager profile is fixed and cannot be overridden', () => {
     assert.ok(loaded.tools.includes('mission_dispatch'));
     assert.ok(loaded.tools.includes('mission_status'));
     assert.ok(loaded.tools.includes('mission_report'));
-    assert.ok(loaded.tools.includes('worknode_close'));
     assert.ok(loaded.tools.includes('question'));
-    assert.equal(loaded.tools.length, 5);
+    assert.equal(loaded.tools.length, 4);
     assert.ok(!loaded.tools.includes('worknode_create'));
+    assert.ok(!loaded.tools.includes('worknode_close'));
     assert.ok(!loaded.tools.includes('agile_list_boards'));
     assert.ok(!loaded.tools.includes('webfetch'));
     assert.ok(!loaded.tools.includes('websearch'));

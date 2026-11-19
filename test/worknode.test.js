@@ -125,13 +125,12 @@ test('canvas work nodes can be created and closed', async () => {
     tools.configure(providers);
 
     const created = JSON.parse(
-      await tools.execute(
-        'worknode_create',
-        JSON.stringify({
+      await worknode.worknodeCreate(
+        {
           title: 'Work',
           task: 'do it',
           agentId: 'agent',
-        }),
+        },
         { sessionId: 'm1' }
       )
     );
@@ -155,11 +154,7 @@ test('canvas work nodes can be created and closed', async () => {
 
     activeId = work.id;
     const closed = JSON.parse(
-      await tools.execute(
-        'worknode_close',
-        JSON.stringify({ id: work.id }),
-        { sessionId: 'm1' }
-      )
+      worknode.worknodeClose({ id: work.id }, { sessionId: 'm1' })
     );
     assert.equal(closed.ok, true);
     assert.equal(closed.closed, true);

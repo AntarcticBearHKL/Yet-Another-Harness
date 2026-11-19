@@ -85,8 +85,6 @@ async function execute(name, args, context = null) {
       background_cancel: processTools.backgroundCancel,
       subagent_start: agentTools.subagentStartTool,
       subagent_close: agentTools.subagentCloseTool,
-      worknode_create: worknodeTools.worknodeCreate,
-      worknode_close: worknodeTools.worknodeClose,
       worknode_result: missionTools.worknodeResult,
       mission_dispatch: missionTools.missionDispatch,
       mission_status: missionTools.missionStatus,
