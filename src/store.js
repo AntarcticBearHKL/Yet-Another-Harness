@@ -295,6 +295,10 @@ function normalizeNodeConfig(raw) {
     taskId: text(raw.taskId, 120) || null,
     reportId: text(raw.reportId, 120) || null,
     branches,
+    engineer: raw.engineer === true,
+    engineerIndex: Number.isFinite(Number(raw.engineerIndex))
+      ? Math.max(0, Number(raw.engineerIndex))
+      : 0,
     ...(kind === 'manager'
       ? {
           engineerCount: Math.max(

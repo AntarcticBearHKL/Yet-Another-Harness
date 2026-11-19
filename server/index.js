@@ -12,6 +12,7 @@ const attachments = require('../src/attachments');
 const tools = require('../src/tools');
 const processTools = require('../src/tools/process');
 const agileTools = require('../src/tools/agile');
+const worknodeTools = require('../src/tools/worknode');
 const { createAgileStore } = require('../src/agile-store');
 const { createCanvasStore } = require('../src/canvas-store');
 const runner = require('./runner');
@@ -184,6 +185,10 @@ const systemNodeService = createSystemNodeService({
   getAgileStore: (managerId) => resolveAgileStore(managerId),
   createWorkNode: (manager, options) =>
     worknodeTools.createManagedWorkNode(manager, options),
+  createEngineer: (manager, index) =>
+    worknodeTools.createGroupEngineer(manager, index),
+  closeEngineer: (manager, id) =>
+    worknodeTools.worknodeClose({ id }, { sessionId: manager.id }),
   getAgent: (agentId) => getAgent(AGENTS_FILE, agentId),
   notify: (event) => runner.publishGlobal(event),
 });

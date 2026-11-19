@@ -160,6 +160,8 @@ function createSystemNodeService({
   runner,
   getAgileStore,
   createWorkNode,
+  createEngineer,
+  closeEngineer,
   getAgent,
   notify,
 } = {}) {
@@ -245,6 +247,65 @@ function createSystemNodeService({
       1,
       Math.min(12, Math.round(Number(manager?.nodeConfig?.engineerCount) || 1))
     );
+  }
+
+  async function ensureManagerEngineers(manager) {
+    const count = managerEngineerCount(manager);
+    let engineers = store
+      .listWorkNodes(manager.id)
+      .filter(
+        (session) =>
+          session.nodeConfig?.engineer === true && !session.archivedAt
+      )
+      .sort(
+        (left, right) =>
+          (Number(left.nodeConfig?.engineerIndex) || 0) -
+          (Number(right.nodeConfig?.engineerIndex) || 0)
+      );
+    for (let index = 1; index <= count; index += 1) {
+      if (
+        engineers.some(
+          (session) => Number(session.nodeConfig?.engineerIndex) === index
+        )
+      ) {
+        continue;
+      }
+      if (typeof createEngineer !== 'function') break;
+      try {
+        const created = await createEngineer(manager, index);
+        if (created?.workNode) engineers.push(created.workNode);
+      } catch (engineerError) {
+        throw new Error(`create engineer failed: ${engineerError.message}`);
+      }
+    }
+    engineers = engineers
+      .filter(
+        (session) =>
+          Number(session.nodeConfig?.engineerIndex) <= count
+      )
+      .sort(
+        (left, right) =>
+          (Number(left.nodeConfig?.engineerIndex) || 0) -
+          (Number(right.nodeConfig?.engineerIndex) || 0)
+      );
+    const extras = store
+      .listWorkNodes(manager.id)
+      .filter(
+        (session) =>
+          session.nodeConfig?.engineer === true &&
+          !session.archivedAt &&
+          Number(session.nodeConfig?.engineerIndex) > count &&
+          !runner.activeRunForSession?.(session.id)
+      );
+    for (const extra of extras) {
+      if (typeof closeEngineer !== 'function') break;
+      try {
+        await closeEngineer(manager, extra.id);
+      } catch (closeError) {
+        console.error('retire engineer failed', closeError);
+      }
+    }
+    return engineers;
   }
 
   function ensureOrchestrator(manager) {
@@ -748,20 +809,21 @@ function createSystemNodeService({
     if (!session?.id || watched.has(session.id)) return;
     const unsubscribe = runner.subscribe(session.id, (event) => {
       if (!event) return;
+      const current = store.getSession(session.id) || session;
       if (event.type === 'tool.approval') {
-        createApprovalNode(session, event.payload);
+        createApprovalNode(current, event.payload);
       } else if (event.type === 'tool.question') {
-        createQuestionNode(session, event.payload);
+        createQuestionNode(current, event.payload);
       } else if (event.type === 'tool.approval.resolved') {
         updateApprovalNode(event.payload);
       } else if (event.type === 'tool.question.resolved') {
         updateQuestionNode(event.payload);
       } else if (event.type === 'run.done') {
-        const taskId = session.nodeConfig?.taskId;
+        const taskId = current.nodeConfig?.taskId;
         const summary = String(event.payload?.text || '').trim();
         if (taskId && summary) {
           try {
-            submitWorkResult(session, {
+            submitWorkResult(current, {
               taskId,
               status: 'done',
               summary,
@@ -772,7 +834,7 @@ function createSystemNodeService({
           }
         }
       } else if (event.type === 'run.error') {
-        markWorkNodeFailed(session, event.payload?.error || 'run failed');
+        markWorkNodeFailed(current, event.payload?.error || 'run failed');
       }
     });
     watched.set(session.id, unsubscribe);
@@ -796,10 +858,6 @@ function createSystemNodeService({
     if (boardIds.length === 0) return;
     const agile = getAgileStore(manager.id);
     const roleMap = payload.roleMap || DEFAULT_ROLE_MAP;
-    const wipLimit = Math.max(
-      1,
-      Number(payload.engineerCount) || Number(payload.wipLimit) || 1
-    );
     for (const boardId of boardIds) {
       let tasks;
       try {
@@ -827,7 +885,6 @@ function createSystemNodeService({
         });
         payload.lastScanAt = now;
       }
-      let active = tasks.filter((task) => task.column === 'progress').length;
       for (const task of tasks) {
         if (task.column !== 'progress') continue;
         if (task.workNodeId) continue;
@@ -860,8 +917,28 @@ function createSystemNodeService({
         boardId,
         payload.goals?.[boardId] || tasks[0]?.title || 'Mission',
         tasks.map((task) => task.id)
-      );      for (const task of eligible) {
-        if (active >= wipLimit) break;
+      );
+      const engineers = await ensureManagerEngineers(manager);
+      if (engineers.length === 0) {
+        appendStep(orchestrator, '没有可用的工程师 node', {
+          kind: 'error',
+        });
+        continue;
+      }
+      const idleEngineers = engineers.filter(
+        (engineer) => !runner.activeRunForSession?.(engineer.id)
+      );
+      let engineerIndex = 0;
+      for (const task of eligible) {
+        if (engineerIndex >= idleEngineers.length) {
+          appendStep(
+            orchestrator,
+            `${idleEngineers.length} 个工程师都在忙，等待空闲`,
+            { kind: 'scan' }
+          );
+          break;
+        }
+        const engineer = idleEngineers[engineerIndex];
         try {
           agile.claimTask(task.id, orchestrator.id);
           agile.moveTask(task.id, 'progress', {
@@ -873,30 +950,37 @@ function createSystemNodeService({
           if (!agent || agent.kind !== 'agent') {
             throw new Error('project coordinator Agent profile not found');
           }
-          const created = await createWorkNode(manager, {
-            title: task.title,
-            task: taskPrompt(
+          store.updateSessionNode(engineer.id, {
+            nodeConfig: {
+              ...(engineer.nodeConfig || {}),
+              task: task.title,
+              taskId: task.id,
+              reportId: report.id,
+            },
+          });
+          const currentEngineer = store.getSession(engineer.id);
+          watchWorkNode(currentEngineer, report.id);
+          runner.startRun({
+            sessionId: engineer.id,
+            text: taskPrompt(
               task,
               report?.payload?.goal || 'Mission',
               roleName
             ),
-            agentId: AGENT_AGENT_ID,
-            taskId: task.id,
-            reportId: report.id,
-            start: true,
+            runId: crypto.randomUUID(),
+            agentConfig: agent,
+            reasoningEffort: store.loadSettings().reasoningEffort,
           });
-          if (!created?.ok) throw new Error(created?.error || 'work node creation failed');
           agile.updateTask(task.id, {
-            workNodeId: created.id,
+            workNodeId: engineer.id,
             reportId: report.id,
             attempts: (Number(task.attempts) || 0) + 1,
             actor: { type: 'agent', id: orchestrator.id },
           });
-          watchWorkNode(created.workNode, report.id);
-          active += 1;
+          engineerIndex += 1;
           appendStep(
             orchestrator,
-            `已分发任务：${task.title} → 项目协调 → ${roleName}`,
+            `派活：${task.title} → ${engineer.title || `工程师 ${engineerIndex}`} → ${roleName}`,
             { kind: 'dispatch', taskId: task.id }
           );
         } catch (error) {
@@ -935,6 +1019,16 @@ function createSystemNodeService({
       for (const manager of managers) {
         refreshAgileNode(manager);
         const orchestrator = ensureOrchestrator(manager);
+        try {
+          await ensureManagerEngineers(manager);
+        } catch (engineerError) {
+          console.error('ensure engineers failed', engineerError);
+          appendStep(
+            orchestrator,
+            `工程师 node 创建失败：${engineerError.message}`,
+            { kind: 'error' }
+          );
+        }
         if (!orchestrator || orchestrator.status !== 'running') continue;
         try {
           await tickManager(manager, orchestrator);

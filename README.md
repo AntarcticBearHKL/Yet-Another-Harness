@@ -86,7 +86,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 调度器详情页会记录每次扫描的 Backlog / 进行中 / 阻塞 / 完成数量，以及每个任务的分发和阻塞步骤；端口不消耗模型
 - 每个管理 group 导入目录时自动检查 Git：目录已有 Git 就复用，没有就执行 `git init` 并建立初始提交；项目协调 Agent 和每个 Subagent 都在独立 worktree / branch（`yah/...`）上工作，Subagent 完成时自动提交自己的变更，报告里会列出使用的分支
 - Manager 的工具权限被收窄为 `mission_dispatch`、`mission_status`、`mission_report`、`worknode_close`、`question`；它不读文件、不搜索、不执行命令，也不直接写代码，所有执行都交给 Agent / Subagent
-- Manager 配置里可以设置「干活工程师」数量，默认 1、最少 1；调度器用它作为同时运行的 work node 上限，每个工程师对应一个独立 Subagent 工作分支
+- Manager 配置里可以设置「干活工程师」数量，默认 1、最少 1；每个工程师是一个独立的项目协调 Agent 对话 node，调度器会把待执行任务派给空闲的工程师 node，而不是为每个任务新建临时 work node；工程师再按任务类型调用对应的 Subagent
 - 输入框底部从左到右是：当前 Agent 名字（如 `Build`，琥珀色、左对齐，可点击展开暖色磨砂下拉菜单）、写死的模型名 `deepseek-v4.1-flash-1017`（带下拉箭头，目前只有这一个选项）、思考强度滑条、极简回车图标发送按钮；输入框默认不显示 placeholder。每个对话必须有一个 Agent，新对话默认使用「Build」；按对话保存选择，新对话继承同项目上一个对话的 Agent；对话开始（有第一条消息）后 Agent 固定，选择器变灰锁定，不能再切换；排队消息会保存自己的 Agent
 - 思考强度滑条是一条极简平面细线 + 小圆点，不显示「思考强度」文字和 low/high/max 挡位文字，鼠标指针保持默认；拖动时圆点自由跟随指针、没有吸附阈限，松开后自动吸附到最近的 `low` / `high` / `max` 挡位；也可以用方向键切换，选择保存在 `settings.json`，发送时作为 `reasoning_effort` 传给 DeepSeek
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒

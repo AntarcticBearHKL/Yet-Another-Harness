@@ -107,7 +107,11 @@ function mcpDisabledFor(selected) {
 }
 
 function isManagerAgent(agent) {
-  return Array.isArray(agent?.tools) && agent.tools.some((name) => String(name).startsWith(WORKNODE_TOOL_PREFIX));
+  return (
+    Array.isArray(agent?.tools) &&
+    (agent.tools.includes('worknode_create') ||
+      agent.tools.includes('worknode_close'))
+  );
 }
 
 function resolveAgent(agentId) {
@@ -317,7 +321,10 @@ async function createManagedWorkNode(manager, options = {}) {
   const mcpDisabled = mcpDisabledFor(options.mcp) || [];
   const id = crypto.randomUUID();
   let worktree = null;
-  if (typeof providers.prepareWorktree === 'function') {
+  if (
+    options.engineer !== true &&
+    typeof providers.prepareWorktree === 'function'
+  ) {
     try {
       worktree = providers.prepareWorktree({
         baseDirectories: managerDirectories(manager),
@@ -337,6 +344,8 @@ async function createManagedWorkNode(manager, options = {}) {
     kind: 'work',
     directories,
     branches,
+    engineer: options.engineer === true,
+    engineerIndex: Number(options.engineerIndex) || 0,
     files: managerFiles(manager),
     task,
     taskId: options.taskId ? String(options.taskId) : null,
@@ -394,6 +403,18 @@ async function createManagedWorkNode(manager, options = {}) {
     started,
     workNode,
   };
+}
+
+async function createGroupEngineer(manager, index) {
+  if (!manager) throw new Error('manager is required');
+  return createManagedWorkNode(manager, {
+    title: `工程师 ${Math.max(1, Number(index) || 1)}`,
+    task: '',
+    agentId: AGENT_AGENT_ID,
+    start: false,
+    engineer: true,
+    engineerIndex: Math.max(1, Number(index) || 1),
+  });
 }
 
 async function worknodeCreate(args = {}, context = null) {
@@ -468,6 +489,7 @@ function worknodeClose(args = {}, context = null) {
 
 module.exports = {
   configure,
+  createGroupEngineer,
   createManagedWorkNode,
   worknodeCreate,
   worknodeClose,

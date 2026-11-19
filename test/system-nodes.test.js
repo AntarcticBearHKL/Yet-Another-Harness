@@ -45,12 +45,14 @@ test('mission dispatch drives Agile, orchestrator and report hub', async () => {
     subscribe: () => () => {},
     resolveApproval: () => true,
     resolveQuestions: () => true,
+    activeRunForSession: () => null,
+    startRun: () => ({ ok: true }),
   };
   const service = createSystemNodeService({
     store,
     runner,
     getAgileStore: () => agile,
-    getAgent: () => ({ id: 'agent', name: '程序员', kind: 'agent' }),
+    getAgent: () => ({ id: 'agent', name: '项目协调', kind: 'agent' }),
     createWorkNode: async (manager, options) => {
       const id = `w-${createdWorkNodes.length + 1}`;
       store.createSession({
@@ -66,6 +68,28 @@ test('mission dispatch drives Agile, orchestrator and report hub', async () => {
           task: options.task,
           taskId: options.taskId,
           reportId: options.reportId,
+        },
+        pendingQueue: [],
+      });
+      const workNode = store.getSession(id);
+      createdWorkNodes.push(workNode);
+      return { ok: true, id, workNode };
+    },
+    createEngineer: async (manager, index) => {
+      const id = `e-${index}`;
+      store.createSession({
+        id,
+        title: `工程师 ${index}`,
+        system: 'sys',
+        agentId: 'agent',
+        projectId: manager.projectId,
+        nodeRole: 'work',
+        managerId: manager.id,
+        nodeConfig: {
+          kind: 'work',
+          engineer: true,
+          engineerIndex: index,
+          task: '',
         },
         pendingQueue: [],
       });
@@ -114,17 +138,20 @@ test('mission dispatch drives Agile, orchestrator and report hub', async () => {
     assert.equal(agileNode.payload.counts.backlog, 1);
     const board = agile.snapshot(result.boardId);
     assert.equal(board.tasks.length, 2);
+    const engineers = createdWorkNodes.filter(
+      (node) => node.nodeConfig?.engineer
+    );
+    assert.equal(engineers.length, 2);
     const first = board.tasks.find((task) => task.title === 'Implement login');
     assert.equal(first.column, 'progress');
-    assert.equal(createdWorkNodes.length, 1);
-    assert.equal(first.workNodeId, createdWorkNodes[0].id);
+    assert.equal(first.workNodeId, engineers[0].id);
     assert.equal(first.role, 'programmer');
 
     const second = board.tasks.find((task) => task.title === 'Test login');
     assert.equal(second.column, 'backlog');
     assert.deepEqual(second.dependsOn, [first.id]);
 
-    const workNode = store.getSession(createdWorkNodes[0].id);
+    const workNode = store.getSession(engineers[0].id);
     const submitted = service.submitWorkResult(workNode, {
       taskId: first.id,
       status: 'done',
@@ -146,7 +173,8 @@ test('mission dispatch drives Agile, orchestrator and report hub', async () => {
     const next = after.tasks.find((task) => task.title === 'Test login');
     assert.equal(next.column, 'progress');
     assert.equal(createdWorkNodes.length, 2);
-    const secondWork = store.getSession(createdWorkNodes[1].id);
+    assert.equal(next.workNodeId, engineers[0].id);
+    const secondWork = store.getSession(engineers[0].id);
     service.submitWorkResult(secondWork, {
       taskId: next.id,
       status: 'done',
