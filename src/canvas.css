@@ -1543,39 +1543,60 @@ body.canvas-space .canvas-stage.panning {
 
 .canvas-manager-group {
   position: absolute;
-  border: 1px solid rgba(185, 111, 61, 0.28);
+  border: 0;
   border-radius: 26px;
-  background: rgba(185, 111, 61, 0.045);
+  background: transparent;
+  color: rgba(185, 111, 61, 0.42);
   cursor: grab;
   user-select: none;
   touch-action: none;
-  transition:
-    border-color 120ms ease,
-    background 120ms ease;
+  transition: color 120ms ease;
 }
 
 .canvas-manager-group:hover {
-  border-color: rgba(185, 111, 61, 0.42);
-  background: rgba(185, 111, 61, 0.06);
+  color: rgba(185, 111, 61, 0.62);
+  background: transparent;
 }
 
 .canvas-manager-group.dragging {
   cursor: grabbing;
-  border-color: var(--accent);
-  background: rgba(185, 111, 61, 0.075);
+  color: var(--accent);
+  background: transparent;
+}
+
+.canvas-manager-outline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-manager-outline-rect {
+  fill: none;
+  stroke: currentColor;
 }
 
 .canvas-manager-divider {
   position: absolute;
-  width: 1px;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    rgba(185, 111, 61, 0.32) 12%,
-    rgba(185, 111, 61, 0.32) 88%,
-    transparent
-  );
+  width: 9px;
+  overflow: visible;
+  background: transparent;
+  color: rgba(185, 111, 61, 0.4);
   pointer-events: none;
+}
+
+.canvas-manager-divider-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-manager-divider-line {
+  stroke: currentColor;
 }
 
 .canvas-manager-divider.hidden {

@@ -1631,8 +1631,9 @@ function updateCanvasManagerDivider(
     return;
   }
   divider.classList.remove('hidden');
-  divider.style.left = `${info.x - bounds.x}px`;
+  divider.style.left = `${info.x - bounds.x - 4.5}px`;
   divider.style.top = `${CANVAS_MANAGER_GROUP_PADDING}px`;
+  divider.style.width = '9px';
   divider.style.height = `${
     bounds.height - CANVAS_MANAGER_GROUP_PADDING * 2
   }px`;
@@ -1667,6 +1668,95 @@ function applyCanvasManagerGroupBounds(managerId, groupEl = null) {
   return bounds;
 }
 
+const CANVAS_SVG_NS = 'http://www.w3.org/2000/svg';
+
+function canvasSvgNode(tag, attrs = {}) {
+  const node = document.createElementNS(CANVAS_SVG_NS, tag);
+  for (const [name, value] of Object.entries(attrs)) {
+    node.setAttribute(name, String(value));
+  }
+  return node;
+}
+
+function buildCanvasManagerOutline() {
+  const svg = canvasSvgNode('svg', {
+    class: 'canvas-manager-outline',
+    width: '100%',
+    height: '100%',
+    preserveAspectRatio: 'none',
+    'aria-hidden': 'true',
+  });
+  svg.append(
+    canvasSvgNode('rect', {
+      class: 'canvas-manager-outline-rect',
+      x: '0',
+      y: '0',
+      width: '100%',
+      height: '100%',
+      rx: '26',
+      ry: '26',
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': '1',
+      'stroke-dasharray': '7 6',
+      'shape-rendering': 'geometricPrecision',
+    })
+  );
+  return svg;
+}
+
+function buildCanvasManagerDividerLine() {
+  const svg = canvasSvgNode('svg', {
+    class: 'canvas-manager-divider-svg',
+    width: '100%',
+    height: '100%',
+    preserveAspectRatio: 'none',
+    'aria-hidden': 'true',
+  });
+  svg.append(
+    canvasSvgNode('line', {
+      class: 'canvas-manager-divider-line',
+      x1: '50%',
+      y1: '0',
+      x2: '50%',
+      y2: '100%',
+      stroke: 'currentColor',
+      'stroke-width': '1',
+      'stroke-dasharray': '5 5',
+      'shape-rendering': 'geometricPrecision',
+    })
+  );
+  return svg;
+}
+
+function applyCanvasDashScale(zoom) {
+  if (!canvasDom.nodes) return;
+  const scale = Number(zoom) > 0 ? 1 / Number(zoom) : 1;
+  const key = String(Number(zoom) || 1);
+  for (const rect of canvasDom.nodes.querySelectorAll(
+    '.canvas-manager-outline-rect'
+  )) {
+    if (rect.dataset.dashScale === key) continue;
+    rect.dataset.dashScale = key;
+    rect.setAttribute('stroke-width', (scale).toFixed(3));
+    rect.setAttribute(
+      'stroke-dasharray',
+      `${(7 * scale).toFixed(3)} ${(6 * scale).toFixed(3)}`
+    );
+  }
+  for (const line of canvasDom.nodes.querySelectorAll(
+    '.canvas-manager-divider-line'
+  )) {
+    if (line.dataset.dashScale === key) continue;
+    line.dataset.dashScale = key;
+    line.setAttribute('stroke-width', (scale).toFixed(3));
+    line.setAttribute(
+      'stroke-dasharray',
+      `${(5 * scale).toFixed(3)} ${(5 * scale).toFixed(3)}`
+    );
+  }
+}
+
 function buildCanvasManagerGroup(manager, team, node) {
   const groupEl = el('div', 'canvas-manager-group');
   groupEl.dataset.sessionId = manager.id;
@@ -1679,7 +1769,10 @@ function buildCanvasManagerGroup(manager, team, node) {
     groupEl.style.width = `${bounds.width}px`;
     groupEl.style.height = `${bounds.height}px`;
   }
-  groupEl.append(el('div', 'canvas-manager-divider hidden'));
+  groupEl.append(buildCanvasManagerOutline());
+  const dividerEl = el('div', 'canvas-manager-divider hidden');
+  dividerEl.append(buildCanvasManagerDividerLine());
+  groupEl.append(dividerEl);
   if (bounds) {
     updateCanvasManagerDivider(
       manager,
@@ -2029,6 +2122,7 @@ function applyCanvasView() {
   if (canvasDom.zoomLayer) {
     canvasDom.zoomLayer.style.zoom = String(view.k);
   }
+  applyCanvasDashScale(view.k);
   if (canvasDom.world) {
     canvasDom.world.style.transform = `translate(${x}px, ${y}px)`;
   }
