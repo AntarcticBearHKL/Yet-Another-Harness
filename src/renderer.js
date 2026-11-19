@@ -7067,23 +7067,24 @@ async function runCompactFlow(session) {
     const queue = Array.isArray(session.pendingQueue)
       ? [...session.pendingQueue]
       : [];
-    const result = await api.compactChat(session.id, queue);
+    await api.compactChat(session.id, queue);
     state.compactStatus = null;
+    state.openCardKey = null;
+    state.viewMode = 'questions';
+    state.forceScroll = true;
+    state.followBottom = true;
+    state.foldRestored = false;
     closeComposer();
-    if (result?.newSessionId) {
-      await refreshChats(result.newSessionId);
-      const next = currentSession();
-      if (
-        next &&
-        !next.frozen &&
-        !state.streaming &&
-        Array.isArray(next.pendingQueue) &&
-        next.pendingQueue.length > 0
-      ) {
-        processNextQueuedPrompt(next);
-      }
-    } else {
-      await refreshChats();
+    await refreshChats();
+    const next = currentSession();
+    if (
+      next &&
+      !next.frozen &&
+      !state.streaming &&
+      Array.isArray(next.pendingQueue) &&
+      next.pendingQueue.length > 0
+    ) {
+      processNextQueuedPrompt(next);
     }
   } catch (error) {
     state.compactStatus = {

@@ -76,7 +76,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 新建对话默认关闭所有 MCP 服务器：MCP 摘要显示 `0/总数`，需要时在对话顶部的 MCP 配置页里手动打开；开关按会话持久化
 - Skill 是带 frontmatter 的 Markdown 文件（`name` / `description` / `keywords` / `category`），放在项目 `skills/`（内置）或 `%APPDATA%\yah\skills`（用户）；内置测试 Skill 已删除
 - Skill 页新增「系统」分组：`compact` / `goal` / `fork` / `clear` 是内置系统 Skill，不是可编辑的 Markdown，而是固定指令；只读，不能修改，输入 `/` 可以像其他 Skill 一样搜索和调用。`/clear` 会清空当前对话的全部消息和临时状态，回到新对话状态
-- 上下文压缩按 OpenCode 的方式工作：每次请求前用「已测量的 prompt + 之后新增内容的估算」判断，达到模型窗口减去 10%（至少 16k）时自动压缩；保留最近约 15k tokens，旧历史写成结构化 checkpoint。手动 `/compact` 或在 Skill 里选 `compact` 不会立刻执行，而是先作为 `/ compact` 标记放进输入框，可以和其他消息一起排队；发送后压缩结果显示为一条独立的 `CONTEXT COMPACTED` 消息（manual、压缩前后 token 数、可展开摘要），完成后旧对话被冻结、不能再发消息，并自动新建一个 `#1 原标题` 的对话，把同一条压缩摘要放在开头，接着在新对话里继续聊。自动压缩仍在过程组里显示 `CONTEXT COMPACTED` block
+- 上下文压缩按 OpenCode 的方式工作：每次请求前用「已测量的 prompt + 之后新增内容的估算」判断，达到模型窗口减去 10%（至少 16k）时自动压缩；保留最近约 15k tokens，旧历史写成结构化 checkpoint。手动 `/compact` 或在 Skill 里选 `compact` 不会立刻执行，而是先作为 `/ compact` 标记放进输入框，可以和其他消息一起排队；发送后压缩结果显示为一条 `CONTEXT COMPACTED` 消息（manual、压缩前后 token 数、可展开摘要），原来的全部消息被清空，这条压缩结果成为当前对话的第一条消息，对话本身、标题和画布节点保持不变。自动压缩仍在过程组里显示 `CONTEXT COMPACTED` block，不打断当前这一轮
 - Goal 模式按 OpenChamber 的方式实现：`/goal` 打开目标对话框，`/goal <目标>` 直接开始；目标保存在当前对话，输入框上方显示目标状态条（进度、token、暂停 / 继续 / 清除）。每轮结束后会运行一个独立的 `GOAL CHECK` block，用三个 yes/no 问题判断 `complete` / `continue` / `blocked`；未完成会自动继续，直到完成、被阻塞、token 预算用完或达到自动轮次上限
 - 在输入框开头输入 `/` 会在光标位置弹出搜索式 Skill 联想：按名称、描述、关键词匹配当前对话可用的 Skill，上下键移动、回车或点击选择；输入完整的 Skill 名称或 id 后会自动识别并关闭联想，后面可以直接跟空格、参数或正文，不需要回车选择；只有部分匹配时才需要上下键 / 回车选择。选中后输入框本身不变色，只在输入框上方显示一个带颜色的 `/ Skill` 标记，按 Backspace 或点 × 整体删除；带参数的 MCP Skill 会先弹出参数表单
 - 附加的 Skill 在发送时解析并注入该次请求的 system prompt（`# Active Skills`），不会写进用户输入；排队消息会一起保存自己的 Skill

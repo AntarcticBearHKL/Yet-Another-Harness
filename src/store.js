@@ -1886,6 +1886,62 @@ function appendMessage(sessionId, role, text, request, usage = null, images = nu
   return seq;
 }
 
+function replaceSessionMessages(sessionId, messages) {
+  const id = String(sessionId || '').trim();
+  if (!id) return [];
+  const database = openDb();
+  const exists = database.prepare('SELECT id FROM sessions WHERE id = ?').get(id);
+  if (!exists) return [];
+  const entries = Array.isArray(messages) ? messages : [];
+  const deleteSteps = database.prepare(
+    'DELETE FROM steps WHERE session_id = ?'
+  );
+  const deleteRequests = database.prepare(
+    'DELETE FROM requests WHERE session_id = ?'
+  );
+  const deleteMessages = database.prepare(
+    'DELETE FROM messages WHERE session_id = ?'
+  );
+  const insertMessage = database.prepare(
+    'INSERT INTO messages (session_id, seq, role, text, request, usage, images) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  );
+  const touch = database.prepare(
+    'UPDATE sessions SET updated_at = ? WHERE id = ?'
+  );
+  const seqs = [];
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    deleteSteps.run(id);
+    deleteRequests.run(id);
+    deleteMessages.run(id);
+    entries.forEach((entry, index) => {
+      const images = attachments.normalizeImages(entry?.images);
+      insertMessage.run(
+        id,
+        index,
+        normalizeRole(entry?.role),
+        String(entry?.text ?? ''),
+        entry?.request === undefined ? null : entry.request,
+        entry?.usage && typeof entry.usage === 'object'
+          ? JSON.stringify(entry.usage)
+          : null,
+        images.length > 0 ? JSON.stringify(images) : null
+      );
+      seqs.push(index);
+    });
+    touch.run(Date.now(), id);
+    database.exec('COMMIT');
+  } catch (error) {
+    try {
+      database.exec('ROLLBACK');
+    } catch {
+      /* ignore */
+    }
+    throw error;
+  }
+  return seqs;
+}
+
 function createSession(session) {
   const database = openDb();
   const row = database
@@ -2572,6 +2628,7 @@ module.exports = {
   getArchivedJob,
   deleteSessionsTree,
   appendMessage,
+  replaceSessionMessages,
   createSession,
   getSession,
   updateSessionNode,

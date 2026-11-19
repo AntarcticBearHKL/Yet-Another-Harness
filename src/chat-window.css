@@ -100,7 +100,6 @@ body.chat-window.chat-compact .context-stack,
 body.chat-window.chat-compact .context-block,
 body.chat-window.chat-compact .process-group,
 body.chat-window.chat-compact .frozen-note,
-body.chat-window.chat-compact .compact-turn,
 body.chat-window.chat-compact .goal-check-block,
 body.chat-window.chat-compact .goal-strip,
 body.chat-window.chat-compact .message-card:not(.prompt-card):not(.answer-card) {

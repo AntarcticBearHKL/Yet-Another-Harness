@@ -516,14 +516,6 @@ function startGoalContinuation(sessionId, goal, maxTurns) {
   }
 }
 
-function continuationTitle(title) {
-  const text = String(title || 'Chat').trim() || 'Chat';
-  const match = text.match(/^#(\d+)\s+(.+)$/);
-  const next = match ? Number(match[1]) + 1 : 1;
-  const base = match ? match[2] : text;
-  return `#${next} ${base}`;
-}
-
 async function compactSession(sessionId, options = {}) {
   const id = String(sessionId || '').trim();
   if (!id) throw Object.assign(new Error('sessionId is required'), { code: 'bad_request' });
@@ -552,76 +544,50 @@ async function compactSession(sessionId, options = {}) {
     compaction: session.compaction,
     sessionId: id,
   });
+  // The compacted conversation keeps the new checkpoint as its only message.
+  // `through` points past that message so the model receives the checkpoint
+  // first and skips the stored summary bubble.
+  const compaction = { ...result.compaction, through: 1 };
   const metrics = {
     beforeTokens: result.beforeTokens,
     afterTokens: result.afterTokens,
     recentTokens: result.split.recentTokens,
-    through: result.compaction.through,
+    through: compaction.through,
     auto: false,
     at: Date.now(),
   };
   const step = {
     kind: 'compact',
     label: 'manual',
-    text: result.compaction.summary,
+    text: compaction.summary,
     name: 'manual',
     ok: true,
     metrics,
   };
-  const oldSeq = store.appendMessage(
-    id,
-    'Compact',
-    result.compaction.summary,
-    '',
-    metrics
-  );
-  store.updateSessionCompaction(id, result.compaction);
-
-  const newSessionId = crypto.randomUUID();
-  const newCompaction = {
-    ...result.compaction,
-    through: 1,
-  };
-  store.createSession({
-    id: newSessionId,
-    title: continuationTitle(session.title),
-    system: session.system,
-    agentsMd: session.agentsMd,
-    agentId: session.agentId,
-    projectId: session.projectId,
-    mcpDisabled: session.mcpDisabled,
-    compaction: newCompaction,
-    pendingQueue: Array.isArray(options.queue) ? options.queue : [],
-    frozen: false,
-  });
-  store.appendMessage(
-    newSessionId,
-    'Compact',
-    result.compaction.summary,
-    '',
-    metrics
-  );
-  store.setSessionFrozen(id, true);
-  store.updateSessionPendingQueue(id, []);
-  store.setCurrentSession(newSessionId);
+  const [messageSeq = 0] = store.replaceSessionMessages(id, [
+    {
+      role: 'Compact',
+      text: compaction.summary,
+      request: '',
+      usage: metrics,
+    },
+  ]);
+  store.updateSessionCompaction(id, compaction);
+  if (Array.isArray(options.queue)) {
+    store.updateSessionPendingQueue(id, options.queue);
+  }
 
   emit(id, null, 'compaction.done', {
-    messageSeq: oldSeq,
+    messageSeq,
     step,
-    compaction: result.compaction,
+    compaction,
     auto: false,
-    newSessionId,
-  });
-  emit(id, null, 'session.created', {
-    sessionId: newSessionId,
-    fromSessionId: id,
   });
   return {
     ok: true,
-    oldSessionId: id,
-    newSessionId,
+    sessionId: id,
     step,
-    compaction: result.compaction,
+    compaction,
     beforeTokens: result.beforeTokens,
     afterTokens: result.afterTokens,
   };
@@ -1073,7 +1039,6 @@ module.exports = {
   cancelRun,
   cancelSessionRuns,
   compactSession,
-  continuationTitle,
   isApprovalPending,
   resolveApproval,
   resolveQuestions,

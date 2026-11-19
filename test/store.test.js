@@ -957,6 +957,45 @@ test('clearSession removes messages and transient conversation state', () => {
   });
 });
 
+test('replaceSessionMessages keeps only the supplied messages', () => {
+  withStoreDir(() => {
+    const id = store.createSession({
+      id: 'replace-me',
+      title: 'Replace Chat',
+      system: 'sys',
+      agentId: 'sub-programmer',
+      projectId: null,
+      pendingQueue: [{ text: 'keep me', skills: [], agentId: 'sub-programmer' }],
+    });
+    store.appendMessage(id, 'User', 'old question', null);
+    const answerSeq = store.appendMessage(id, 'Agent', 'old answer', null);
+    store.updateMessage(id, answerSeq, {
+      role: 'Agent',
+      text: 'old answer',
+      steps: [{ kind: 'text', text: 'old answer', round: 0 }],
+      requests: [],
+    });
+    const seqs = store.replaceSessionMessages(id, [
+      {
+        role: 'Compact',
+        text: '## Objective\n- new checkpoint',
+        request: '',
+        usage: { beforeTokens: 120, afterTokens: 40 },
+      },
+    ]);
+    assert.deepEqual(seqs, [0]);
+    const session = store.getSession(id);
+    assert.equal(session.msgs.length, 1);
+    assert.equal(session.msgs[0].role, 'Compact');
+    assert.equal(session.msgs[0].text, '## Objective\n- new checkpoint');
+    assert.equal(session.msgs[0].usage.beforeTokens, 120);
+    assert.deepEqual(session.msgs[0].steps, []);
+    assert.deepEqual(session.msgs[0].requests, []);
+    assert.equal(session.pendingQueue.length, 1);
+    assert.equal(session.pendingQueue[0].text, 'keep me');
+  });
+});
+
 test('goal and compaction state round-trip through sqlite', () => {
   withStoreDir(() => {
     const chats = store.defaultChats();
