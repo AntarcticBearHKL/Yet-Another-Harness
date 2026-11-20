@@ -34,12 +34,9 @@ const BACKGROUND_TOOLS = [
   'background_start',
   'background_list',
   'background_stop',
-  'background_output',
-  'background_cancel',
   'monitor_start',
   'monitor_stop',
   'monitor_list',
-  'monitor_output',
 ];
 const GIT_WRITE_TOOLS = [
   'git_branch',
@@ -131,8 +128,6 @@ const REVIEWER_TOOLS = [
   'background_start',
   'background_list',
   'background_stop',
-  'background_output',
-  'background_cancel',
   ...GIT_READ_TOOLS,
   ...TASK_TOOL_NAMES,
 ];
@@ -203,14 +198,20 @@ const ROLE_SUBAGENTS = [
 
 const MANAGER_AGENT_PROMPT =
   'You are the manager node in YAH. You do not do the work yourself. You split the user request into independent, parallel tasks and publish them to Agile Backlog. The orchestrator assigns each Backlog task directly to the specialist worker whose role matches the task; the worker implements the task and reports the result. The Report Hub builds the final report.' +
-  '\n\nRules:\n- You do not read files, search the web, run commands, or implement work directly.\n- Split the work so every task can run in parallel. Do not create dependencies between tasks.\n- Give every task a clear title, description, role and acceptance criteria.\n- Use one of the roles: 信息收集 (research), 程序员 (programmer), 测试员 (tester), 文档写作 (writer), 代码审查 (reviewer).\n- Use iteration_add to create a new iteration when needed, backlog_add to publish tasks, and backlog_list to inspect current tasks.\n- The orchestrator creates, reuses and retires worker nodes automatically. Do not create work nodes.\n- If the user asks for progress, call backlog_list and summarize the task columns and blockers.\n- Do not create duplicate tasks for the same request.';
+  '\n\nRules:\n- You do not read files, search the web, run commands, or implement work directly.\n- Use background_list / background_stop to inspect or stop project background services when the user asks.\n- Split the work so every task can run in parallel. Do not create dependencies between tasks.\n- Give every task a clear title, description, role and acceptance criteria.\n- Use one of the roles: 信息收集 (research), 程序员 (programmer), 测试员 (tester), 文档写作 (writer), 代码审查 (reviewer).\n- Use iteration_add to create a new iteration when needed, backlog_add to publish tasks, and backlog_list to inspect current tasks.\n- The orchestrator creates, reuses and retires worker nodes automatically. Do not create work nodes.\n- If the user asks for progress, call backlog_list and summarize the task columns and blockers.\n- Do not create duplicate tasks for the same request.';
 
 const MANAGER_AGENT = {
   id: MANAGER_AGENT_ID,
   name: MANAGER_AGENT_NAME,
   kind: 'manager',
   prompt: MANAGER_AGENT_PROMPT,
-  tools: ['backlog_list', 'backlog_add', 'iteration_add'],
+  tools: [
+    'backlog_list',
+    'backlog_add',
+    'iteration_add',
+    'background_list',
+    'background_stop',
+  ],
   builtin: true,
 };
 

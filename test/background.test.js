@@ -2,108 +2,151 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const process = require('node:process');
 const tools = require('../src/tools');
-
-function waitFor(predicate, timeout = 5000) {
-  return new Promise((resolve, reject) => {
-    const startedAt = Date.now();
-    const check = () => {
-      let value = false;
-      try {
-        value = predicate();
-      } catch {
-        value = false;
-      }
-      if (value) {
-        resolve(value);
-        return;
-      }
-      if (Date.now() - startedAt > timeout) {
-        reject(new Error('timed out waiting for background task'));
-        return;
-      }
-      setTimeout(check, 50);
-    };
-    check();
-  });
-}
 
 function startedId(text) {
   const match = String(text || '').match(/Started background task (\S+)/);
   return match ? match[1] : '';
 }
 
-test('background tools start, list and read a task with its note', async () => {
-  const sessionId = `bg-test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  let completed = null;
-  const context = {
+function workerContext({ projectId, sessionId, title = 'Worker A' }) {
+  return {
+    projectId,
     sessionId,
+    sessionTitle: title,
+    nodeRole: 'work',
     allowedDirs: [process.cwd()],
-    onBackgroundStart: () => {},
-    onBackgroundComplete: (job) => {
-      completed = job;
-    },
   };
-  const command = 'echo bg-ok';
+}
+
+test('background services are project-scoped, note-only and expose status', async () => {
+  const projectId = `bg-project-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}`;
+  const sessionId = `bg-creator-${Date.now()}`;
+  const context = workerContext({ projectId, sessionId });
+
+  const missingNote = await tools.execute(
+    'background_start',
+    JSON.stringify({ command: 'echo nope' }),
+    context
+  );
+  assert.match(missingNote, /requires "note"/);
+
   const start = await tools.execute(
     'background_start',
-    JSON.stringify({ command, note: 'background smoke test' }),
+    JSON.stringify({
+      command: 'echo bg-ok',
+      note: 'background smoke test',
+    }),
     context
   );
   const id = startedId(start);
   assert.ok(id, start);
   assert.match(start, /note: background smoke test/);
   assert.match(start, /status: running/);
+  assert.doesNotMatch(start, /output|exit code/i);
 
-  await waitFor(() => completed && completed.id === id);
+  let finished = false;
+  for (let index = 0; index < 80; index += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const list = await tools.execute('background_list', '{}', context);
+    if (new RegExp(`${id}\\s+stopped`).test(list)) {
+      finished = true;
+      break;
+    }
+  }
+  assert.ok(finished, 'background service should stop after echo exits');
 
   const list = await tools.execute('background_list', '{}', context);
   assert.match(list, new RegExp(id));
   assert.match(list, /background smoke test/);
-  assert.match(list, /done/);
+  assert.match(list, /creator=Worker A/);
+  assert.match(list, /stopped/);
 
   const output = await tools.execute(
     'background_output',
     JSON.stringify({ id }),
     context
   );
-  assert.match(output, /bg-ok/);
-  assert.match(output, /note: background smoke test/);
+  assert.match(output, /unknown tool/);
 
   const stop = await tools.execute(
     'background_stop',
     JSON.stringify({ id }),
     context
   );
-  assert.match(stop, /already done/);
+  assert.match(stop, /already stopped/);
 });
 
-test('background_stop cancels a running task', async () => {
-  const sessionId = `bg-stop-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const context = {
-    sessionId,
-    allowedDirs: [process.cwd()],
+test('only the creator or a manager can stop a project background service', async () => {
+  const projectId = `bg-stop-project-${Date.now()}`;
+  const creator = workerContext({
+    projectId,
+    sessionId: `bg-stop-creator-${Date.now()}`,
+    title: 'Creator',
+  });
+  const other = workerContext({
+    projectId,
+    sessionId: `bg-stop-other-${Date.now()}`,
+    title: 'Other',
+  });
+  const manager = {
+    ...workerContext({
+      projectId,
+      sessionId: `bg-stop-manager-${Date.now()}`,
+      title: 'Manager',
+    }),
+    nodeRole: 'manager',
   };
   const command =
     process.platform === 'win32'
-      ? 'powershell -NoProfile -Command "Start-Sleep -Seconds 30"'
+      ? 'ping -n 30 127.0.0.1 > nul'
       : 'sleep 30';
   const start = await tools.execute(
     'background_start',
-    JSON.stringify({ command, note: 'long task to stop' }),
-    context
+    JSON.stringify({ command, note: 'long service to stop' }),
+    creator
   );
   const id = startedId(start);
   assert.ok(id, start);
   await new Promise((resolve) => setTimeout(resolve, 300));
 
-  const stop = await tools.execute(
+  const denied = await tools.execute(
     'background_stop',
     JSON.stringify({ id }),
-    context
+    other
   );
-  assert.match(stop, /Stopped background task/);
+  assert.match(denied, /only the creator or a manager/);
 
-  const list = await tools.execute('background_list', '{}', context);
-  assert.match(list, new RegExp(`${id}\\s+cancelled`));
+  const crossProject = await tools.execute(
+    'background_stop',
+    JSON.stringify({ id }),
+    {
+      ...manager,
+      projectId: `other-project-${Date.now()}`,
+    }
+  );
+  assert.match(crossProject, /no background task/);
+
+  const stopped = await tools.execute(
+    'background_stop',
+    JSON.stringify({ id }),
+    manager
+  );
+  assert.match(stopped, /Stopped background task/);
+
+  const list = await tools.execute('background_list', '{}', creator);
+  assert.match(list, new RegExp(`${id}\\s+stopped`));
+
+  const shell = await tools.execute(
+    'shell',
+    JSON.stringify({
+      command,
+      background: true,
+    }),
+    manager
+  );
+  assert.match(shell, /background mode requires "note"/);
 });

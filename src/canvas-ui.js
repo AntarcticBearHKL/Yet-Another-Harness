@@ -60,8 +60,6 @@ const canvasState = {
   marquee: null,
   pan: null,
   workspaceDrag: null,
-  backgroundBySession: {},
-  backgroundFetched: {},
   running: new Set(),
   runsTimer: null,
   runsRequest: 0,
@@ -305,22 +303,6 @@ function canvasGroupSessionIds(rootId) {
   return index.sessions
     .filter((session) => index.rootFor(session).id === rootId)
     .map((session) => session.id);
-}
-
-function canvasGroupJobs(root, children) {
-  const jobs = [];
-  for (const session of [root, ...children]) {
-    const list = canvasState.backgroundBySession[session.id];
-    if (Array.isArray(list)) jobs.push(...list);
-  }
-  return jobs
-    .filter((job) => job.status === 'running')
-    .sort((left, right) => {
-      const leftRunning = left.status === 'running' ? 0 : 1;
-      const rightRunning = right.status === 'running' ? 0 : 1;
-      if (leftRunning !== rightRunning) return leftRunning - rightRunning;
-      return (right.startedAt || 0) - (left.startedAt || 0);
-    });
 }
 
 /* -------------------------------- 分组框 -------------------------------- */
@@ -627,77 +609,6 @@ function finishCanvasMarquee() {
   }
 }
 
-/* ------------------------------- 后台任务 ------------------------------- */
-
-function canvasJobSummary(job) {
-  if (!job) return null;
-  return {
-    id: job.id,
-    sessionId: job.sessionId,
-    note: job.note,
-    command: job.command,
-    cwd: job.cwd,
-    status: job.status,
-    exitCode: job.exitCode,
-    startedAt: job.startedAt,
-    endedAt: job.endedAt,
-  };
-}
-
-function mergeCanvasBackgroundJob(job) {
-  const summary = canvasJobSummary(job);
-  const sessionId = String(summary?.sessionId || '');
-  if (!sessionId || !summary?.id) return;
-  const list = Array.isArray(canvasState.backgroundBySession[sessionId])
-    ? canvasState.backgroundBySession[sessionId]
-    : [];
-  const index = list.findIndex((item) => item.id === summary.id);
-  if (index >= 0) list[index] = { ...list[index], ...summary };
-  else list.push(summary);
-  canvasState.backgroundBySession[sessionId] = list;
-  canvasState.backgroundFetched[sessionId] = Date.now();
-}
-
-async function loadCanvasBackground({ force = false } = {}) {
-  if (!canvasOverlayOpen()) return;
-  const index = canvasGroupIndex();
-  const now = Date.now();
-  const targets = index.sessions
-    .map((session) => session.id)
-    .filter((id) => {
-      const list = canvasState.backgroundBySession[id];
-      if (!Array.isArray(list)) return true;
-      const fetchedAt = canvasState.backgroundFetched[id] || 0;
-      const running = list.some((job) => job.status === 'running');
-      return force || (running && now - fetchedAt > 3000);
-    });
-  if (targets.length === 0) return;
-  for (const id of targets) canvasState.backgroundFetched[id] = now;
-  await Promise.allSettled(
-    targets.map(async (id) => {
-      try {
-        const data = await api.loadBackground(id);
-        canvasState.backgroundBySession[id] = Array.isArray(data?.jobs)
-          ? data.jobs.map(canvasJobSummary).filter(Boolean)
-          : [];
-      } catch {
-        canvasState.backgroundBySession[id] =
-          canvasState.backgroundBySession[id] || [];
-      }
-    })
-  );
-  if (!canvasOverlayOpen()) return;
-  if (
-    canvasState.drag ||
-    canvasState.frameDrag ||
-    canvasState.marquee ||
-    canvasState.workspaceDrag
-  ) {
-    return;
-  }
-  renderCanvas();
-}
-
 async function loadCanvasRuns() {
   if (!canvasOverlayOpen()) return;
   const request = ++canvasState.runsRequest;
@@ -784,46 +695,6 @@ function buildCanvasChild(child, root) {
     event.preventDefault();
   });
   return childEl;
-}
-
-function buildCanvasTask(job) {
-  const row = el('div', 'canvas-task');
-  const status =
-    job?.status === 'exited'
-      ? job?.exitCode === 0
-        ? 'done'
-        : 'blocked'
-      : job?.status === 'running'
-        ? 'running'
-        : job?.status === 'error' || job?.status === 'timeout'
-          ? 'blocked'
-          : 'idle';
-  row.classList.add(status);
-  const note = String(job?.note || job?.command || '后台任务').trim();
-  row.append(el('span', 'canvas-task-note', note));
-  const command = String(job?.command || '').trim();
-  const statusLabel =
-    job?.status === 'exited'
-      ? job?.exitCode === 0
-        ? '完成'
-        : '失败'
-      : typeof backgroundStatusLabel === 'function'
-        ? backgroundStatusLabel(job?.status)
-        : job?.status || '运行中';
-  if (statusLabel) {
-    row.append(el('span', `canvas-task-status ${status}`, statusLabel));
-  }
-  const elapsed =
-    typeof backgroundElapsed === 'function' ? backgroundElapsed(job) : '';
-  row.title = [
-    note,
-    command && command !== note ? command : '',
-    statusLabel,
-    elapsed,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-  return row;
 }
 
 function buildCanvasColumn(title, rows) {
@@ -943,6 +814,8 @@ const CANVAS_SYSTEM_ICONS = {
     '<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3Z"/><path d="M9 12l2 2 4-5"/>',
   questionnaire:
     '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .8-1.5 1.3-1.5 2.5"/><path d="M12 17h.01"/>',
+  background:
+    '<rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/>',
 };
 
 function canvasSystemNodeStatus(node) {
@@ -979,6 +852,13 @@ function canvasSystemNodeStatus(node) {
     if (status === 'expired') return { label: '已过期', tone: 'idle' };
     return { label: status || '问卷', tone: 'idle' };
   }
+  if (node?.type === 'background') {
+    const jobs = Array.isArray(node.payload?.jobs) ? node.payload.jobs : [];
+    const running = Number(node.payload?.running) || 0;
+    if (running > 0) return { label: `${running} 个运行中`, tone: 'running' };
+    if (jobs.length > 0) return { label: '已停止', tone: 'idle' };
+    return { label: '空闲', tone: 'idle' };
+  }
   return { label: status || '系统', tone: 'idle' };
 }
 
@@ -988,6 +868,7 @@ function canvasSystemNodeType(node) {
   if (node?.type === 'report') return 'Report Hub';
   if (node?.type === 'approval') return '审批';
   if (node?.type === 'questionnaire') return '问卷';
+  if (node?.type === 'background') return 'BACKGROUND';
   return '系统';
 }
 
@@ -1023,6 +904,13 @@ function canvasSystemNodeSummary(node) {
     const source = payload.blockedBy?.title || '';
     const detail = questions[0]?.question || '等待回答';
     return source ? `${source} · ${detail}` : detail;
+  }
+  if (node?.type === 'background') {
+    const jobs = Array.isArray(node.payload?.jobs) ? node.payload.jobs : [];
+    const running = Number(node.payload?.running) || 0;
+    return jobs.length
+      ? `${running} 运行中 · 共 ${jobs.length} 个服务`
+      : '还没有后台服务';
   }
   return '';
 }
@@ -1292,6 +1180,53 @@ function buildSystemNodeCard(node, options = {}) {
       foot.append(systemNodeButton('关闭', async () => closeSystemNodeModal()));
       card.append(foot);
     }
+  } else if (node.type === 'background') {
+    const jobs = Array.isArray(node.payload?.jobs) ? node.payload.jobs : [];
+    const list = el('div', 'system-node-jobs');
+    if (jobs.length === 0) {
+      list.append(el('div', 'agile-empty', '还没有后台服务'));
+    } else {
+      for (const job of jobs) {
+        const row = el(
+          'div',
+          `system-node-job${job.running ? ' running' : ''}`
+        );
+        const head = el('div', 'system-node-job-head');
+        head.append(
+          el('span', 'system-node-job-note', job.note || '(无备注)')
+        );
+        head.append(
+          el(
+            'span',
+            `system-node-state ${job.running ? 'running' : 'idle'}`,
+            job.running ? '运行中' : '已停止'
+          )
+        );
+        row.append(head);
+        const meta = [
+          `创建者：${job.creatorTitle || job.creatorSessionId || '未知'}`,
+          job.command,
+        ]
+          .filter(Boolean)
+          .join(' · ');
+        row.append(el('div', 'system-node-job-meta', meta));
+        if (job.running) {
+          row.append(
+            systemNodeButton('停止', async () => {
+              const ok = await systemNodeAction(node.id, 'stop', {
+                jobId: job.id,
+              });
+              if (ok) window.openSystemNodePage?.(node.id);
+            })
+          );
+        }
+        list.append(row);
+      }
+    }
+    card.append(list);
+    const foot = el('div', 'system-node-modal-actions');
+    foot.append(systemNodeButton('关闭', async () => closeSystemNodeModal()));
+    card.append(foot);
   } else if (node.type === 'orchestrator') {
     const payload = node.payload || {};
     const info = el('div', 'system-node-fields');
@@ -1472,6 +1407,7 @@ function canvasSystemNodesFor(managerId) {
     report: 2,
     approval: 3,
     questionnaire: 4,
+    background: 5,
   };
   return canvasState.systemNodes
     .filter((node) => node.managerId === managerId)
@@ -1486,6 +1422,20 @@ function canvasSystemNodesFor(managerId) {
     });
 }
 
+function canvasFindFreeSystemNodeLayout(layout, ignoreId = null) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const overlaps = Object.entries(canvasState.nodes).some(
+      ([id, node]) =>
+        id !== ignoreId &&
+        node &&
+        canvasRectsOverlap(layout, node)
+    );
+    if (!overlaps) return layout;
+    layout.y += CANVAS_MANAGER_CARD_SIZE + 12;
+  }
+  return layout;
+}
+
 function ensureSystemNodeLayout(manager, systemNodes = []) {
   const managerNode = canvasState.nodes[manager.id] || {
     x: 80,
@@ -1493,7 +1443,7 @@ function ensureSystemNodeLayout(manager, systemNodes = []) {
     width: CANVAS_MANAGER_CARD_SIZE,
     height: CANVAS_MANAGER_CARD_SIZE,
   };
-  const rightTypes = new Set(['report', 'approval', 'questionnaire']);
+  const rightTypes = new Set(['report', 'approval', 'questionnaire', 'background']);
   let leftIndex = 0;
   let rightIndex = 0;
   let changed = false;
@@ -1508,22 +1458,65 @@ function ensureSystemNodeLayout(manager, systemNodes = []) {
         existing.height = CANVAS_MANAGER_CARD_SIZE;
         changed = true;
       }
+      if (systemNode.type === 'background') {
+        const overlaps = Object.entries(canvasState.nodes).some(
+          ([id, node]) =>
+            id !== systemNode.id &&
+            node &&
+            canvasRectsOverlap(existing, node)
+        );
+        if (overlaps) {
+          const otherLayouts = systemNodes
+            .filter((item) => item.id !== systemNode.id)
+            .map((item) => canvasState.nodes[item.id])
+            .filter(Boolean);
+          existing.y =
+            otherLayouts.length > 0
+              ? Math.max(
+                  ...otherLayouts.map(
+                    (layout) =>
+                      (Number(layout.y) || 0) +
+                      (Number(layout.height) || 180)
+                  )
+                ) + 12
+              : existing.y;
+          canvasFindFreeSystemNodeLayout(existing, systemNode.id);
+          changed = true;
+        }
+      }
       return;
     }
     const onRight = rightTypes.has(systemNode.type);
     const index = onRight ? rightIndex : leftIndex;
     const column = onRight ? 0 : index % 2;
     const row = onRight ? index : Math.floor(index / 2);
-    canvasState.nodes[systemNode.id] = {
+    const existingRightLayouts = onRight
+      ? systemNodes
+          .filter((item) => item.id !== systemNode.id)
+          .map((item) => canvasState.nodes[item.id])
+          .filter(Boolean)
+      : [];
+    const startY =
+      existingRightLayouts.length > 0
+        ? Math.max(
+            ...existingRightLayouts.map(
+              (layout) =>
+                (Number(layout.y) || 0) + (Number(layout.height) || 180)
+            )
+          ) + 12
+        : (Number(managerNode.y) || 0) + row * 200;
+    const layout = {
       x:
         (Number(managerNode.x) || 0) +
         (onRight ? 760 : 220) +
         column * 200,
-      y: (Number(managerNode.y) || 0) + row * 200,
+      y: startY,
       width: CANVAS_MANAGER_CARD_SIZE,
       height: CANVAS_MANAGER_CARD_SIZE,
       parentSessionId: null,
     };
+    canvasFindFreeSystemNodeLayout(layout, systemNode.id);
+    canvasState.nodes[systemNode.id] = layout;
     if (onRight) rightIndex += 1;
     else leftIndex += 1;
     changed = true;
@@ -1967,7 +1960,7 @@ function buildCanvasManager(manager, team, node) {
   return managerEl;
 }
 
-function buildCanvasGroup(root, children, jobs, node) {
+function buildCanvasGroup(root, children, node) {
   const groupEl = el('article', 'canvas-group');
   groupEl.dataset.sessionId = root.id;
   if (canvasState.selectedIds.has(root.id)) {
@@ -2021,10 +2014,6 @@ function buildCanvasGroup(root, children, jobs, node) {
     buildCanvasColumn(
       'SUBAGENTS',
       activeChildren.map((child) => buildCanvasChild(child, root))
-    ),
-    buildCanvasColumn(
-      'BACKGROUND',
-      jobs.map((job) => buildCanvasTask(job))
     )
   );
   groupEl.append(columns);
@@ -2127,8 +2116,7 @@ function renderCanvasNodes(index) {
     if (!node) continue;
     canvasState.visibleIds.add(root.id);
     const children = childrenByRoot.get(root.id) || [];
-    const jobs = canvasGroupJobs(root, children);
-    const groupEl = buildCanvasGroup(root, children, jobs, node);
+    const groupEl = buildCanvasGroup(root, children, node);
     groupEl.style.left = `${node.x}px`;
     groupEl.style.top = `${node.y}px`;
     groupEl.style.width = `${CANVAS_GROUP_WIDTH}px`;
@@ -3288,7 +3276,6 @@ function openCanvas() {
   } else {
     renderCanvas();
   }
-  void loadCanvasBackground();
   void loadCanvasRuns();
   scheduleCanvasRunsPoll();
 }
@@ -3349,7 +3336,6 @@ function refreshCanvas() {
     return;
   }
   renderCanvas();
-  void loadCanvasBackground();
   void loadCanvasRuns();
   scheduleCanvasRunsPoll();
 }
@@ -3440,7 +3426,6 @@ async function loadCanvas() {
   canvasState.loaded = true;
   canvasState.loading = false;
   renderCanvas();
-  void loadCanvasBackground();
 }
 
 /* --------------------------------- 事件 --------------------------------- */
@@ -3627,18 +3612,4 @@ api.onSubagentComplete((payload) => {
   }
 });
 
-api.onBackgroundUpdate((payload) => {
-  if (!payload?.sessionId) return;
-  mergeCanvasBackgroundJob(payload);
-  if (canvasOverlayOpen() && !canvasInteractionActive()) {
-    renderCanvas();
-  }
-});
 
-api.onBackgroundComplete((payload) => {
-  if (!payload?.sessionId) return;
-  mergeCanvasBackgroundJob(payload);
-  if (canvasOverlayOpen() && !canvasInteractionActive()) {
-    renderCanvas();
-  }
-});

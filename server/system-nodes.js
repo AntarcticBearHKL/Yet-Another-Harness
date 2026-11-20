@@ -6,6 +6,7 @@ const {
   ROLE_WORKER_AGENT_MAP,
 } = require('../src/agent-defaults');
 const { normalizeQuestions } = require('../src/tools/agent');
+const backgroundTools = require('../src/tools/process');
 
 const DEFAULT_ROLE_MAP = {
   research: '信息收集',
@@ -421,6 +422,59 @@ function createSystemNodeService({
       /* Agile node stays with its last snapshot if the store is unavailable */
     }
     return node;
+  }
+
+  function ensureBackgroundNode(manager) {
+    let node = findNode(manager.id, 'background');
+    if (!node) {
+      node = createNode({
+        managerId: manager.id,
+        type: 'background',
+        status: 'idle',
+        title: '后台',
+        payload: {
+          projectId: manager.projectId,
+          jobs: [],
+          running: 0,
+          createdAt: Date.now(),
+        },
+      });
+    }
+    return node;
+  }
+
+  function refreshBackgroundNode(manager) {
+    const node = ensureBackgroundNode(manager);
+    const jobs = backgroundTools.listJobs(manager.projectId);
+    const running = jobs.filter((job) => job.running).length;
+    const signature = JSON.stringify(
+      jobs.map((job) => [
+        job.id,
+        job.status,
+        job.running,
+        job.endedAt,
+        job.note,
+        job.creatorSessionId,
+        job.creatorTitle,
+        job.command,
+        job.cwd,
+      ])
+    );
+    const status = running > 0 ? 'running' : 'idle';
+    if (node.payload?.signature === signature && node.status === status) {
+      return node;
+    }
+    return updateNode(node.id, {
+      status,
+      payload: {
+        ...(node.payload || {}),
+        projectId: manager.projectId,
+        jobs,
+        running,
+        signature,
+        updatedAt: Date.now(),
+      },
+    });
   }
 
   function ensureReport(manager, boardId, goal, taskIds = []) {
@@ -1484,6 +1538,7 @@ function createSystemNodeService({
       const managers = store.listManagerSessions();
       for (const manager of managers) {
         refreshAgileNode(manager);
+        refreshBackgroundNode(manager);
         const orchestrator = ensureOrchestrator(manager);
         try {
           await ensureManagerEngineers(manager);
@@ -1538,6 +1593,23 @@ function createSystemNodeService({
     const node = store.getSystemNode(nodeId);
     if (!node) throw new Error('system node not found');
     const name = String(actionName || '').trim();
+    if (node.type === 'background') {
+      if (name !== 'stop') {
+        throw new Error(`unknown background action: ${name}`);
+      }
+      const manager = managerSession(node.managerId);
+      if (!manager) throw new Error('manager not found');
+      const jobId = String(input.jobId || input.id || '').trim();
+      if (!jobId) throw new Error('jobId is required');
+      const job = backgroundTools.cancelJob(jobId, manager.projectId);
+      if (!job) throw new Error('background task not found');
+      const updated = refreshBackgroundNode(manager);
+      return appendStep(
+        updated,
+        `后台服务已停止：${job.note || job.id}`,
+        { kind: 'control', jobId: job.id }
+      );
+    }
     if (node.type === 'report') {
       if (name === 'read') {
         const updated = updateNode(node.id, {
@@ -1682,6 +1754,8 @@ function createSystemNodeService({
     updateNode,
     list,
     ensureOrchestrator,
+    ensureBackgroundNode,
+    refreshBackgroundNode,
     ensureReport,
     ensureMission,
     submitWorkResult,

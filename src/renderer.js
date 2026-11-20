@@ -550,6 +550,11 @@ const api = {
       method: 'POST',
       body: { sessionId, id },
     }),
+  stopProjectBackground: (projectId) =>
+    requestJson('/api/background/stop-project', {
+      method: 'POST',
+      body: { projectId },
+    }),
   loadSkills: (sessionId, mcpDisabled = []) =>
     requestJson(
       `/api/skills?sessionId=${encodeURIComponent(
@@ -5004,6 +5009,9 @@ function deleteProject(projectId) {
   state.sessions = state.sessions.filter(
     (session) => session.projectId !== projectId
   );
+  api
+    .stopProjectBackground(projectId)
+    .catch((error) => console.error('stop project background failed', error));
   for (const session of removedSessions) {
     api
       .deleteSession(session.id)
@@ -5125,11 +5133,6 @@ function renderAll() {
   }
   updateControls();
   renderAgentPicker();
-  renderBackgroundBadge();
-  const session = currentSession();
-  if (session && state.background.sessionId !== session.id) {
-    void loadBackgroundJobs(session.id, true);
-  }
   connectChatEvents(currentSession()?.id || null);
   window.refreshCanvas?.();
 }

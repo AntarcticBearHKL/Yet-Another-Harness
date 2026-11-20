@@ -110,12 +110,13 @@ const GREP = fn(
 
 const SHELL = fn(
   'shell',
-  'Execute a shell command and return stdout, stderr, and exit code. Supports workdir, timeout, and background mode.',
+  'Execute a shell command and return stdout, stderr, and exit code. Supports workdir, timeout, and background mode. Background mode is a sustained project service and requires "note".',
   {
     command: str('Shell command string to execute'),
     workdir: str('Working directory'),
     timeout: num('Timeout in milliseconds (default 120000, 0 disables)'),
     background: bool('Start in the background and return a job id'),
+    note: str('Required with background: true; a short note describing what the service does'),
   },
   ['command']
 );
@@ -150,63 +151,42 @@ const PATCH = fn(
 
 const BACKGROUND_START = fn(
   'background_start',
-  'Start a long-running background process (dev server, watcher, npm run dev, a server that must stay up) and return immediately with its id, note and startup info. The process keeps running so it can keep serving; it is not a way to run a task and get a result. Manage it with background_list, background_output and background_stop.',
+  'Start a sustained project background service (dev server, watcher, npm run dev, a server that must stay up) and return immediately with its id, note and running state. It is not a way to run a task and get a result: no output or completion result is returned. Every call requires a short note. The service is listed in the manager project 后台 node; only its creator or a manager can stop it.',
   {
     command: str('Shell command to run'),
-    note: str('Short note describing what this background task is doing'),
+    note: str('Short note describing what this background service is for'),
     workdir: str('Working directory (defaults to the project directory)'),
-    timeout_seconds: num(
-      'Optional timeout in seconds; omit or use 0 for no timeout'
-    ),
   },
   ['command', 'note']
 );
 const BACKGROUND_LIST = fn(
   'background_list',
-  'List all background tasks in the current conversation with id, status, elapsed time, note and command.',
+  "List the project's background services with id, running state, note, creator and command.",
   {}
 );
 const BACKGROUND_STOP = fn(
   'background_stop',
-  'Stop a running background task by id.',
-  { id: str('Background task id') },
-  ['id']
-);
-const BACKGROUND_OUTPUT = fn(
-  'background_output',
-  'Read output and status of a background job.',
-  { id: str('Background job id') },
-  ['id']
-);
-const BACKGROUND_CANCEL = fn(
-  'background_cancel',
-  'Cancel a background job by id.',
-  { id: str('Background job id') },
+  'Stop a background service by id. Only its creator or a manager can stop it.',
+  { id: str('Background service id') },
   ['id']
 );
 const MONITOR_START = fn(
   'monitor_start',
-  'Start a background command and return its monitor id.',
+  'Start a sustained project background service and return its monitor id. Requires a short note.',
   {
     command: str('Command to run'),
+    note: str('Short note describing what this background service is for'),
     workdir: str('Working directory'),
-    timeout: num('Timeout in milliseconds'),
   },
-  ['command']
+  ['command', 'note']
 );
 const MONITOR_STOP = fn(
   'monitor_stop',
-  'Stop a monitored background command.',
+  'Stop a project background service.',
   { id: str('Monitor id') },
   ['id']
 );
-const MONITOR_LIST = fn('monitor_list', 'List monitored background commands.', {});
-const MONITOR_OUTPUT = fn(
-  'monitor_output',
-  'Read output from a monitored background command.',
-  { id: str('Monitor id') },
-  ['id']
-);
+const MONITOR_LIST = fn('monitor_list', "List the project's background services.", {});
 
 const HTML_VIEW = fn(
   'html_view',
@@ -704,12 +684,9 @@ const OMO = [
   BACKGROUND_START,
   BACKGROUND_LIST,
   BACKGROUND_STOP,
-  BACKGROUND_OUTPUT,
-  BACKGROUND_CANCEL,
   MONITOR_START,
   MONITOR_STOP,
   MONITOR_LIST,
-  MONITOR_OUTPUT,
 ];
 
 const TASK_TOOLS = [

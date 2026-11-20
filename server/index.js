@@ -679,7 +679,6 @@ function handleApi(req, res, url) {
           return;
         }
         runner.cancelSessionRuns([session.id]);
-        processTools.forgetJobsForSession(session.id);
         const cleared = store.clearSession(session.id);
         sendJson(res, 200, { ok: cleared });
       })
@@ -730,8 +729,8 @@ function handleApi(req, res, url) {
     }
     const group = store.managerGroupIds(managerId);
     runner.cancelSessionRuns(group.sessionIds);
+    processTools.forgetJobsForProject(manager.projectId);
     for (const sessionId of group.sessionIds) {
-      processTools.forgetJobsForSession(sessionId);
       systemNodeService.unwatchWorkNode?.(sessionId);
     }
     store.deleteManagerGroup(managerId);
@@ -782,7 +781,6 @@ function handleApi(req, res, url) {
     }
     const ids = store.sessionSubtreeIds(sessionId);
     runner.cancelSessionRuns(ids);
-    for (const id of ids) processTools.forgetJobsForSession(id);
     store.deleteSessionsTree(sessionId);
     sendJson(res, 200, { ok: true, ids });
     return true;
@@ -1302,19 +1300,49 @@ function handleApi(req, res, url) {
 
   if (req.method === 'GET' && pathname === '/api/background') {
     const sessionId = String(url.searchParams.get('sessionId') || '');
-    sendJson(res, 200, { jobs: processTools.listJobs(sessionId) });
+    let projectId = String(url.searchParams.get('projectId') || '');
+    if (!projectId && sessionId) {
+      projectId = store.getSessionMeta(sessionId)?.projectId || '';
+    }
+    sendJson(res, 200, { jobs: processTools.listJobs(projectId) });
     return true;
   }
 
   if (req.method === 'POST' && pathname === '/api/background/stop') {
     readJson(req)
       .then((body) => {
-        const job = processTools.cancelJob(body?.id, body?.sessionId);
+        const sessionId = String(body?.sessionId || '');
+        let projectId = String(body?.projectId || '');
+        if (!projectId && sessionId) {
+          projectId = store.getSessionMeta(sessionId)?.projectId || '';
+        }
+        if (!projectId) {
+          sendJson(res, 400, { error: 'projectId is required' });
+          return;
+        }
+        const job = processTools.cancelJob(body?.id, projectId);
         if (!job) {
           sendJson(res, 404, { error: 'background task not found' });
           return;
         }
         sendJson(res, 200, { ok: true, job: processTools.jobSummary(job) });
+      })
+      .catch((error) =>
+        sendJson(res, error.status || 400, { error: error.message })
+      );
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/background/stop-project') {
+    readJson(req)
+      .then((body) => {
+        const projectId = String(body?.projectId || '').trim();
+        if (!projectId) {
+          sendJson(res, 400, { error: 'projectId is required' });
+          return;
+        }
+        const cancelled = processTools.forgetJobsForProject(projectId);
+        sendJson(res, 200, { ok: true, cancelled });
       })
       .catch((error) =>
         sendJson(res, error.status || 400, { error: error.message })

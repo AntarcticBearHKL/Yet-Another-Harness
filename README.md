@@ -64,13 +64,13 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 删除项目会一次性删除项目本身以及里面的所有对话记录；删除最后一个项目后保持无项目状态，不会自动创建默认项目，需要重新点 `+` 新建；删除对话、排队消息、MCP 服务器也都遵循同样的两步确认
 - 对话面板里按 Space 总是打开输入框（焦点在按钮 / 消息块上时也一样，不会触发折叠或按钮点击）；输入框为空或只有空格、且没有挂 Skill 时，再按 Space 关闭输入框；有文字或已挂 Skill 时 Space 才作为空格
 - 所有带确认按钮的弹窗按 Space 等于点击确认按钮：删除确认的 `Delete`、重命名的 `Save`、项目的 `Create / Save`、Goal 的 `Start Goal`、Skill 参数的 `Attach`、工具授权的 `允许一次`、设置的 `Done`、MCP 服务器表单的 `Save`；焦点在输入框 / 文本域 / 下拉框里时 Space 仍然是空格，项目目录拖放区这类自己处理 Space 的控件保持原行为
-- 后台进程：LLM 用 `background_start` 启动长时间挂载的进程（dev server、watcher、`npm run dev` 等）并附 `note` 备注，工具立即返回 id、备注、命令和启动信息；进程会一直运行，让端口 / 服务持续可用，不用来执行任务拿结果。对话右上角显示当前对话运行中的后台任务数量，点击打开面板查看每个任务的备注、命令、状态、耗时、输出并停止任务；`background_list` / `background_output` / `background_stop` 用于列出、读取和停止任务；工具面板里是「后台」分类
+- 后台服务：LLM 用 `background_start` 在项目里启动持续运行的服务（dev server、watcher、`npm run dev` 等），每次必须附 `note` 简洁说明用途；工具只返回 id、备注和运行状态，不返回输出或执行结果，服务结束时也不会把任何内容送回对话。服务按项目保存，不属于某个对话；Manager group 里有统一的「后台」管理 node，显示每个服务的备注、创建者、命令和运行状态，创建者或管理员（Manager / 人在画布上）可以停止对应服务；`background_list` / `background_stop` 用于列出和停止，旧的 `background_output` / `background_cancel` / `monitor_output` 已删除。工具面板里是「后台」分类
 - 角色：Subagent 分组保留信息收集、程序员、测试员、文档写作、代码审查五个 worker，不再有通用 Build，也没有项目协调 Agent；每个 worker 直接处理 Agile 任务，使用 `task_block` / `task_finish`
 - `/fork` 系统 Skill：在当前工作目录把当前对话分叉成新的可编辑对话，命名 `#n-对话名`，原对话保持不变；在输入框输入 `/fork [名字]` 或从斜杠列表选择
 - Agile 工作区：从 Tab 工作区空白处的右键菜单打开；桌面端打开一个独立窗口（网页端回退为全屏页面），窗口位置和大小会记住。固定四列 Backlog / In Progress / Blocked / Finished；左侧分组和迭代，支持折叠、改名、新建、删除；卡片可以打开任务表单，标题和描述只读，备注仍可添加，备注在 In Progress 期间锁定；Finished 任务被加备注会自动回到 Backlog 并标记返工。支持任务搜索、WIP 上限、迭代日期/目标、显示更新时间和默认 OpenAgile Skill。看板数据存在 `%APPDATA%\yah\agile.json`；Manager 通过 `backlog_add` 发布并行任务，调度器负责发放
 - 任务工具：工具面板的「Agile」分类只保留 `backlog_list`、`backlog_add`、`iteration_add`、`task_block`、`task_finish`；旧的 `agile_*`、`mission_*`、`worknode_result`、`question` 工具已删除
-- 系统 node：Manager group 右侧显示统一的方形管理 node，包括 Agile、调度器、Report Hub、审批和问卷。每个 Manager 启动后自动出现 Agile 和调度器；发布 Backlog 后自动出现 Report Hub，审批和问卷在 `task_block` 时出现。点击任意管理 node 会打开统一风格的详情页，显示状态、执行步骤和该类型的专属内容（Agile 计数、报告正文、审批详情或问卷表单）。调度器每 1.5 秒扫描 Agile Backlog，按角色和空闲工程师创建 / 复用 Agent work node；工程师用 `task_finish` 提交结果，Report Hub 更新 Agile 并生成可读报告；`task_block` 创建审批或问卷时会在 node 上记录发起任务的工程师，解决后调度器解除阻塞并把任务发回原工程师
-- 工程师 node、Agile、调度器、Report Hub、审批和问卷都可以在 group 内自由拖动；拖动组本身会带着组内全部 node 一起移动。group 背景会根据所有成员的位置实时扩展，始终包裹整个组；node 之间有碰撞体积，靠近其他 node 时会被挡住，不能重叠。新建管理 node 时不再询问工程师数量，默认只创建一个工程师；之后可以右键管理 node 选「新增工程师」逐个添加，或在「配置」里调整数量。右键管理 node 选择「删除管理 node」会删除整个 group：管理对话、所有工作 node 及其子对话、Agile / 调度器 / 报告 / 审批 / 问卷等系统 node 和该 Manager 的 Agile 数据一起删除，不能恢复
+- 系统 node：Manager group 右侧显示统一的方形管理 node，包括 Agile、调度器、后台、Report Hub、审批和问卷。每个 Manager 启动后自动出现 Agile、调度器和后台；发布 Backlog 后自动出现 Report Hub，审批和问卷在 `task_block` 时出现。点击任意管理 node 会打开统一风格的详情页，显示状态、执行步骤和该类型的专属内容（Agile 计数、后台服务列表、报告正文、审批详情或问卷表单）。调度器每 1.5 秒扫描 Agile Backlog，按角色和空闲工程师创建 / 复用 Agent work node；工程师用 `task_finish` 提交结果，Report Hub 更新 Agile 并生成可读报告；`task_block` 创建审批或问卷时会在 node 上记录发起任务的工程师，解决后调度器解除阻塞并把任务发回原工程师
+- 工程师 node、Agile、调度器、后台、Report Hub、审批和问卷都可以在 group 内自由拖动；拖动组本身会带着组内全部 node 一起移动。group 背景会根据所有成员的位置实时扩展，始终包裹整个组；node 之间有碰撞体积，靠近其他 node 时会被挡住，不能重叠。新建管理 node 时不再询问工程师数量，默认只创建一个工程师；之后可以右键管理 node 选「新增工程师」逐个添加，或在「配置」里调整数量。右键管理 node 选择「删除管理 node」会删除整个 group：管理对话、所有工作 node 及其子对话、Agile / 调度器 / 后台 / 报告 / 审批 / 问卷等系统 node、该 Manager 的 Agile 数据和项目后台服务一起删除，不能恢复
 - 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
 - 输入框（Space）里：新对话（还没有任何消息）上方只显示 MCP 摘要按钮；已有消息的对话上方只显示排队消息框。生成中仍可继续输入，消息按顺序排队、一行一条，左侧拖动排序，行尾是编辑 / 立即发送 / 删除三个纯图标按钮；当前生成结束后自动按顺序处理队列；这两块都是和输入框同宽的圆角矩形
 - 新建对话默认关闭所有 MCP 服务器：MCP 摘要显示 `0/总数`，需要时在对话顶部的 MCP 配置页里手动打开；开关按会话持久化
@@ -257,11 +257,11 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 - OpenCode：`read`、`write`、`shell`、`webfetch`、`websearch`、`patch`、`question`、`systeminfo`
 - Git（结构化、无 shell，统一放在工具的 Git 菜单）：`git_status`、`git_diff`、`git_log`、`git_show`、`git_blame`、`git_branch`、`git_checkout`、`git_add`、`git_commit`、`git_stash`、`git_fetch`、`git_pull`、`git_push`、`git_merge`、`git_remote`、`git_tag`、`git_restore`、`git_reset`、`git_revert`、`git_cherry_pick`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）
-- OMO 常驻 / 条件工具：`background_start/list/stop/output/cancel`、`monitor_start/stop/list/output`
+- OMO 常驻 / 条件工具：`background_start/list/stop`、`monitor_start/stop/list`
 - 任务闭环：`backlog_list` / `backlog_add` / `iteration_add`（Manager 管理 Agile 任务）、`task_block`（worker 阻塞并创建审批或问卷）、`task_finish`（worker 提交结果并完成）
 - 兼容别名：`hashline_edit`；`read_file`、`web_search`、`interactive_bash`、`SystemInfo`、`system_info` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
-- `background_*`、`monitor_*` 是长驻进程管理，不再把完成输出塞回对话；调度器把 Backlog 任务直接分配给对应角色的 worker；`interactive_bash` 已合并为 `shell` 的隐藏别名
+- `background_*`、`monitor_*` 是按项目绑定的常驻服务管理：必须填写备注，只暴露运行 / 停止状态，不提供输出，也不会把完成结果送回对话；创建者或 Manager 可以停止。调度器把 Backlog 任务直接分配给对应角色的 worker；`interactive_bash` 已合并为 `shell` 的隐藏别名
 
 ## Tool calling
 

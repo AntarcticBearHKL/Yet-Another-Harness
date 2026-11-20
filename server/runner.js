@@ -98,40 +98,6 @@ function publishLive(sessionId, type, payload = {}) {
   publish(event);
 }
 
-function backgroundJobEventPayload(sessionId, job) {
-  return {
-    id: job.id,
-    sessionId,
-    note: job.note,
-    command: job.command,
-    cwd: job.cwd,
-    status: job.status,
-    exitCode: job.exitCode,
-    startedAt: job.startedAt,
-    endedAt: job.endedAt,
-    truncated: job.truncated,
-    outputPreview: String(job.output || '').slice(-2000),
-    stderrPreview: String(job.stderr || '').slice(-2000),
-  };
-}
-
-function handleBackgroundStart(sessionId, job) {
-  if (!sessionId || !job) return;
-  publishLive(
-    sessionId,
-    'background.update',
-    backgroundJobEventPayload(sessionId, job)
-  );
-}
-
-function handleBackgroundComplete(sessionId, job) {
-  if (!sessionId || !job) return;
-  store.archiveBackgroundJob(job.sessionId || sessionId, job);
-  const payload = backgroundJobEventPayload(sessionId, job);
-  publishLive(sessionId, 'background.update', payload);
-  publishLive(sessionId, 'background.complete', payload);
-}
-
 function requestToolApproval(sessionId, runId, request) {
   return new Promise((resolve) => {
     const approvalId = crypto.randomUUID();
@@ -781,6 +747,8 @@ function startRun({
   const toolContext = {
     enforceProjectRoots: true,
     sessionId,
+    sessionTitle: session.title,
+    nodeRole: session.nodeRole,
     managerId:
       session.nodeRole === 'manager'
         ? session.id
@@ -790,9 +758,6 @@ function startRun({
     approve: (request) => requestToolApproval(sessionId, id, request),
     askQuestions: (questions, options) =>
       requestQuestions(sessionId, id, questions, options),
-    onBackgroundStart: (job) => handleBackgroundStart(sessionId, job),
-    onBackgroundComplete: (job) =>
-      handleBackgroundComplete(sessionId, job),
   };
 
   let goalAction = null;

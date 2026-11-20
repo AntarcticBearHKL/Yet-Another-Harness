@@ -2128,6 +2128,47 @@ body.maximized .system-node-page {
   resize: vertical;
 }
 
+.system-node-jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  padding: 0 18px 8px;
+}
+
+.system-node-job {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(252, 246, 238, 0.45);
+}
+
+.system-node-job-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.system-node-job-note {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.system-node-job-meta {
+  margin-top: 5px;
+  color: var(--faint);
+  font-size: 10.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.system-node-job .system-node-action {
+  margin-top: 8px;
+}
+
 .system-node-modal-actions {
   display: flex;
   justify-content: flex-end;

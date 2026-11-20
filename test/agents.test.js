@@ -153,7 +153,9 @@ test('the manager profile is fixed and cannot be overridden', () => {
     assert.ok(loaded.tools.includes('backlog_list'));
     assert.ok(loaded.tools.includes('backlog_add'));
     assert.ok(loaded.tools.includes('iteration_add'));
-    assert.equal(loaded.tools.length, 3);
+    assert.ok(loaded.tools.includes('background_list'));
+    assert.ok(loaded.tools.includes('background_stop'));
+    assert.equal(loaded.tools.length, 5);
     assert.ok(!loaded.tools.includes('mission_dispatch'));
     assert.ok(!loaded.tools.includes('worknode_create'));
     assert.ok(!loaded.tools.includes('worknode_close'));
