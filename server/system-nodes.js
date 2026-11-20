@@ -391,6 +391,26 @@ function createSystemNodeService({
         }
         continue;
       }
+      if (index >= 2) {
+        const workerNumber = Math.max(1, index - 1);
+        const workerTitle = `工程师 ${workerNumber}`;
+        const currentTitle = String(engineer.title || '').trim();
+        const separator = currentTitle.indexOf(' · ');
+        const baseTitle =
+          separator >= 0 ? currentTitle.slice(0, separator) : currentTitle;
+        if (!baseTitle || /^工程师\s*\d+$/.test(baseTitle)) {
+          const suffix =
+            separator >= 0 ? currentTitle.slice(separator) : '';
+          const nextTitle = `${workerTitle}${suffix}`.slice(0, 120);
+          if (nextTitle !== currentTitle) {
+            const updated = store.updateSessionNode(engineer.id, {
+              title: nextTitle,
+            });
+            if (updated) Object.assign(engineer, updated);
+            notify?.({ managerId: manager.id, nodeId: engineer.id });
+          }
+        }
+      }
       if (
         index >= 2 &&
         typeof ensureWorktree === 'function' &&
