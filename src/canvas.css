@@ -1612,7 +1612,6 @@ body.canvas-space .canvas-stage.panning {
 
 .canvas-manager-column-list > .selected {
   background: var(--selected);
-  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .canvas-manager-column-list > .selected:hover {
@@ -1627,7 +1626,7 @@ body.canvas-space .canvas-stage.panning {
   height: auto;
   min-height: 0;
   overflow: hidden;
-  padding: 9px 11px;
+  padding: 14px 12px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -1640,7 +1639,7 @@ body.canvas-space .canvas-stage.panning {
 .canvas-manager-column .canvas-group.selected {
   outline: none;
   border-color: transparent;
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: none;
 }
 
 .canvas-manager-column .canvas-group-head {
