@@ -2410,6 +2410,9 @@ function startCanvasGroupDrag(event, groupEl, node, managerId = '') {
     groupEl,
     node,
     managerId: String(managerId || ''),
+    selectionId:
+      String(managerId || '') ||
+      String(groupEl.dataset.sessionId || ''),
     rect,
     offsetX: (Number(node.x) || 0) - rect.x,
     offsetY: (Number(node.y) || 0) - rect.y,
@@ -2417,12 +2420,11 @@ function startCanvasGroupDrag(event, groupEl, node, managerId = '') {
     startY: event.clientY,
     obstacles: canvasGroupObstacles(groupEl),
     moved: false,
+    selected: false,
+    additive: event.shiftKey,
     pointerId: event.pointerId,
   };
   groupEl.classList.add('dragging');
-  if (!event.shiftKey) {
-    canvasSelectGroup(managerId || node.id, null);
-  }
 }
 
 function onCanvasPointerMove(event) {
@@ -2444,6 +2446,12 @@ function onCanvasPointerMove(event) {
       return;
     }
     drag.moved = true;
+    if (!drag.selected) {
+      drag.selected = true;
+      if (!drag.additive && drag.selectionId) {
+        canvasSelectGroup(drag.selectionId, null);
+      }
+    }
     const limited = canvasLimitedGroupDrag(
       drag.rect,
       dx,

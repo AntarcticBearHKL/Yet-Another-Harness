@@ -1607,15 +1607,11 @@ body.canvas-space .canvas-stage.panning {
 }
 
 .canvas-manager-column-list > *:hover {
-  background: rgba(185, 111, 61, 0.055);
+  background: transparent;
 }
 
 .canvas-manager-column-list > .selected {
-  background: var(--selected);
-}
-
-.canvas-manager-column-list > .selected:hover {
-  background: var(--selected);
+  background: transparent;
 }
 
 .canvas-manager-column .canvas-manager-panel,
