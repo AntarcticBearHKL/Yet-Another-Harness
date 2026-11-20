@@ -1530,6 +1530,31 @@ body.canvas-space .canvas-stage.panning {
   stroke: currentColor;
 }
 
+.canvas-manager-group-title {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.canvas-manager-group-title-text {
+  max-width: 100%;
+  overflow: hidden;
+  color: rgba(185, 111, 61, 0.17);
+  font-size: clamp(64px, 9vw, 168px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .canvas-manager-divider {
   position: absolute;
   width: 9px;

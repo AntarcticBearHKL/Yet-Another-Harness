@@ -1789,6 +1789,16 @@ function buildCanvasManagerGroup(manager, team, node) {
     groupEl.style.height = `${bounds.height}px`;
   }
   groupEl.append(buildCanvasManagerOutline());
+  const project = state.projects.find((item) => item.id === manager.projectId);
+  const projectName = String(project?.name || '').trim();
+  if (projectName) {
+    const title = el('div', 'canvas-manager-group-title');
+    title.setAttribute('aria-hidden', 'true');
+    title.append(
+      el('span', 'canvas-manager-group-title-text', projectName)
+    );
+    groupEl.append(title);
+  }
   const dividerEl = el('div', 'canvas-manager-divider hidden');
   dividerEl.append(buildCanvasManagerDividerLine());
   groupEl.append(dividerEl);
