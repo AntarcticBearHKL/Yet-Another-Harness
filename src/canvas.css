@@ -764,9 +764,8 @@ body.canvas-space .canvas-stage.panning {
   border-radius: 16px;
   background: var(--surface-card);
   color: var(--text-soft);
-  cursor: grab;
+  cursor: default;
   user-select: none;
-  touch-action: none;
   box-shadow: 0 4px 12px rgba(74, 54, 40, 0.06);
   transition:
     background 120ms ease,
@@ -957,9 +956,8 @@ body.canvas-space .canvas-stage.panning {
   box-shadow:
     0 10px 26px rgba(74, 54, 40, 0.14),
     0 1px 0 rgba(255, 253, 249, 0.08) inset;
-  cursor: grab;
+  cursor: default;
   user-select: none;
-  touch-action: none;
 }
 
 .canvas-manager.selected {
@@ -1499,21 +1497,9 @@ body.canvas-space .canvas-stage.panning {
   border-radius: 26px;
   background: transparent;
   color: rgba(185, 111, 61, 0.42);
-  cursor: grab;
+  pointer-events: none;
   user-select: none;
-  touch-action: none;
   transition: color 120ms ease;
-}
-
-.canvas-manager-group:hover {
-  color: rgba(185, 111, 61, 0.62);
-  background: transparent;
-}
-
-.canvas-manager-group.dragging {
-  cursor: grabbing;
-  color: var(--accent);
-  background: transparent;
 }
 
 .canvas-manager-outline {
@@ -1609,14 +1595,8 @@ body.canvas-space .canvas-stage.panning {
   border-radius: 16px;
   background: var(--surface-card);
   box-shadow: 0 4px 12px rgba(74, 54, 40, 0.06);
-  cursor: grab;
-  touch-action: none;
+  cursor: default;
   user-select: none;
-}
-
-.canvas-system-node.dragging {
-  z-index: 20;
-  cursor: grabbing;
 }
 
 .canvas-system-node.selected {
