@@ -23,6 +23,7 @@ const CANVAS_MANAGER_GROUP_WIDTH = 620;
 const CANVAS_MANAGER_GROUP_HEIGHT = 420;
 const CANVAS_MANAGER_GROUP_PADDING = 20;
 const CANVAS_COLLISION_GAP = 0;
+const CANVAS_DRAG_STEP = 12;
 const CANVAS_FRAME_PADDING = 32;
 const CANVAS_MIN_ZOOM = 0.2;
 const CANVAS_MAX_ZOOM = 3;
@@ -1584,12 +1585,39 @@ function canvasCollidingIds(rect, ignoreIds = new Set()) {
   return ids;
 }
 
-function canvasMoveBlocked(current, candidate, ignoreIds = new Set()) {
-  if (!current) return false;
-  const currentIds = new Set(canvasCollidingIds(current, ignoreIds));
-  return canvasCollidingIds(candidate, ignoreIds).some(
-    (id) => !currentIds.has(id)
+// Fast pointer moves can jump far enough to skip over a card entirely. Check
+// the movement in small steps so a drag stops at the first obstacle instead of
+// tunnelling through it.
+function canvasLimitedDrag(items, dx, dy, ignoreIds = new Set()) {
+  if (!Array.isArray(items) || items.length === 0) return { dx: 0, dy: 0 };
+  const steps = Math.max(
+    1,
+    Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / CANVAS_DRAG_STEP)
   );
+  const currentIds = items.map(
+    (item) => new Set(canvasCollidingIds(item.node, ignoreIds))
+  );
+  let validX = 0;
+  let validY = 0;
+  for (let step = 1; step <= steps; step += 1) {
+    const t = step / steps;
+    const stepX = dx * t;
+    const stepY = dy * t;
+    const blocked = items.some((item, index) => {
+      const candidate = {
+        ...item.node,
+        x: item.originX + stepX,
+        y: item.originY + stepY,
+      };
+      return canvasCollidingIds(candidate, ignoreIds).some(
+        (id) => !currentIds[index].has(id)
+      );
+    });
+    if (blocked) break;
+    validX = stepX;
+    validY = stepY;
+  }
+  return { dx: validX, dy: validY };
 }
 
 function canvasManagerMemberIds(managerId, systemNodes = null) {
@@ -2614,22 +2642,21 @@ function onCanvasPointerMove(event) {
       return;
     }
     drag.moved = true;
-    const candidate = {
-      ...drag.node,
-      x: drag.originX + dx,
-      y: drag.originY + dy,
-    };
-    if (
-      canvasMoveBlocked(
-        drag.node,
-        candidate,
-        new Set([drag.systemNode.id])
-      )
-    ) {
-      return;
-    }
-    drag.node.x = candidate.x;
-    drag.node.y = candidate.y;
+    const limited = canvasLimitedDrag(
+      [
+        {
+          node: drag.node,
+          originX: drag.originX,
+          originY: drag.originY,
+        },
+      ],
+      dx,
+      dy,
+      new Set([drag.systemNode.id])
+    );
+    if (limited.dx === 0 && limited.dy === 0) return;
+    drag.node.x = drag.originX + limited.dx;
+    drag.node.y = drag.originY + limited.dy;
     drag.systemEl.style.left = `${drag.node.x}px`;
     drag.systemEl.style.top = `${drag.node.y}px`;
     applyCanvasManagerGroupBounds(drag.systemNode.managerId);
@@ -2649,24 +2676,20 @@ function onCanvasPointerMove(event) {
       return;
     }
     drag.moved = true;
-    if (
-      drag.origins.some((origin) =>
-        canvasMoveBlocked(
-          origin.item.node,
-          {
-            ...origin.item.node,
-            x: origin.x + dx,
-            y: origin.y + dy,
-          },
-          drag.ignoreIds
-        )
-      )
-    ) {
-      return;
-    }
+    const limited = canvasLimitedDrag(
+      drag.origins.map((origin) => ({
+        node: origin.item.node,
+        originX: origin.x,
+        originY: origin.y,
+      })),
+      dx,
+      dy,
+      drag.ignoreIds
+    );
+    if (limited.dx === 0 && limited.dy === 0) return;
     for (const origin of drag.origins) {
-      origin.item.node.x = origin.x + dx;
-      origin.item.node.y = origin.y + dy;
+      origin.item.node.x = origin.x + limited.dx;
+      origin.item.node.y = origin.y + limited.dy;
       origin.item.el.style.left = `${origin.item.node.x}px`;
       origin.item.el.style.top = `${origin.item.node.y}px`;
     }
@@ -2723,14 +2746,21 @@ function onCanvasPointerMove(event) {
         /* ignore */
       }
     }
-    const candidate = {
-      ...drag.node,
-      x: drag.originX + dx,
-      y: drag.originY + dy,
-    };
-    if (canvasMoveBlocked(drag.node, candidate, drag.groupIds)) return;
-    drag.node.x = candidate.x;
-    drag.node.y = candidate.y;
+    const limited = canvasLimitedDrag(
+      [
+        {
+          node: drag.node,
+          originX: drag.originX,
+          originY: drag.originY,
+        },
+      ],
+      dx,
+      dy,
+      drag.groupIds
+    );
+    if (limited.dx === 0 && limited.dy === 0) return;
+    drag.node.x = drag.originX + limited.dx;
+    drag.node.y = drag.originY + limited.dy;
     drag.groupEl.style.left = `${drag.node.x}px`;
     drag.groupEl.style.top = `${drag.node.y}px`;
     if (drag.managerId) {
