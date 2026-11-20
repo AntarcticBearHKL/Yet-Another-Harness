@@ -555,10 +555,14 @@ function bindAgileEvents() {
   });
 }
 
-function anyAgileModalOpen() {
+function agileTaskOpen() {
   return Boolean(
     agileDom.taskModal && !agileDom.taskModal.classList.contains('hidden')
   );
+}
+
+function anyAgileModalOpen() {
+  return agileTaskOpen();
 }
 
 async function refreshAgileIfChanged() {
@@ -581,6 +585,8 @@ async function refreshAgileIfChanged() {
 
 window.openAgile = openAgile;
 window.closeAgile = closeAgile;
+window.closeAgileTask = closeAgileTask;
+window.agileTaskOpen = agileTaskOpen;
 window.agileOverlayOpen = agileOverlayOpen;
 window.handleAgileEscape = handleAgileEscape;
 window.refreshAgileIfChanged = refreshAgileIfChanged;

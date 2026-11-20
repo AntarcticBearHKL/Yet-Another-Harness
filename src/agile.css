@@ -17,22 +17,34 @@
 }
 
 #agile-task-modal {
+  position: fixed;
+  inset: var(--window-inset, 0px);
   z-index: 70;
-  background: transparent;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: clamp(26px, 5vh, 56px) clamp(24px, 4vw, 64px);
+  border-radius: 18px;
+  background: rgba(251, 246, 239, 0.24);
+  -webkit-backdrop-filter: blur(12px) saturate(1.02);
+  backdrop-filter: blur(12px) saturate(1.02);
+  overflow: hidden;
 }
 
-#agile-task-modal .overlay-panel {
-  border: 1px solid rgba(74, 54, 40, 0.16);
-  background: var(--glass-panel);
-  -webkit-backdrop-filter: blur(18px) saturate(1.04);
-  backdrop-filter: blur(18px) saturate(1.04);
-  box-shadow: none;
+#agile-task-modal.hidden {
+  display: none;
 }
 
 #agile-task-modal .hidden {
   display: none;
+}
+
+#agile-task-modal .overlay-panel {
+  border: 0;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
 }
 
 body:has(#agile:not(.hidden)) #window-controls,
@@ -423,8 +435,14 @@ body:has(#agile:not(.hidden)) #confirm-overlay {
 }
 
 .agile-task-panel {
-  width: min(680px, calc(100vw - 40px));
-  max-height: min(86vh, 760px);
+  width: 100%;
+  max-width: 1180px;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .agile-task-scroll {

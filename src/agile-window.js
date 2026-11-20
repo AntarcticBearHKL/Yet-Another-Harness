@@ -152,6 +152,10 @@ document.addEventListener('contextmenu', (event) => {
     closeConfirm();
     return;
   }
+  if (window.agileTaskOpen?.()) {
+    window.closeAgileTask?.();
+    return;
+  }
   window.closeAgile?.();
 });
 
