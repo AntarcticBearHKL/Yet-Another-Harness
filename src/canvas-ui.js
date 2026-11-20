@@ -1443,7 +1443,7 @@ function ensureSystemNodeLayout(manager, systemNodes = []) {
     width: CANVAS_MANAGER_CARD_SIZE,
     height: CANVAS_MANAGER_CARD_SIZE,
   };
-  const rightTypes = new Set(['report', 'approval', 'questionnaire', 'background']);
+  const rightTypes = new Set(['report', 'approval', 'questionnaire']);
   let leftIndex = 0;
   let rightIndex = 0;
   let changed = false;
@@ -1459,27 +1459,34 @@ function ensureSystemNodeLayout(manager, systemNodes = []) {
         changed = true;
       }
       if (systemNode.type === 'background') {
+        const shouldMoveLeft =
+          (Number(existing.x) || 0) > (Number(managerNode.x) || 0) + 500;
         const overlaps = Object.entries(canvasState.nodes).some(
           ([id, node]) =>
             id !== systemNode.id &&
             node &&
             canvasRectsOverlap(existing, node)
         );
-        if (overlaps) {
-          const otherLayouts = systemNodes
-            .filter((item) => item.id !== systemNode.id)
-            .map((item) => canvasState.nodes[item.id])
-            .filter(Boolean);
-          existing.y =
-            otherLayouts.length > 0
-              ? Math.max(
-                  ...otherLayouts.map(
-                    (layout) =>
-                      (Number(layout.y) || 0) +
-                      (Number(layout.height) || 180)
-                  )
-                ) + 12
-              : existing.y;
+        if (shouldMoveLeft || overlaps) {
+          if (shouldMoveLeft) {
+            existing.x = (Number(managerNode.x) || 0) + 220;
+            existing.y = (Number(managerNode.y) || 0) + 200;
+          } else {
+            const otherLayouts = systemNodes
+              .filter((item) => item.id !== systemNode.id)
+              .map((item) => canvasState.nodes[item.id])
+              .filter(Boolean);
+            existing.y =
+              otherLayouts.length > 0
+                ? Math.max(
+                    ...otherLayouts.map(
+                      (layout) =>
+                        (Number(layout.y) || 0) +
+                        (Number(layout.height) || 180)
+                    )
+                  ) + 12
+                : existing.y;
+          }
           canvasFindFreeSystemNodeLayout(existing, systemNode.id);
           changed = true;
         }
@@ -1628,7 +1635,7 @@ function canvasManagerMemberIds(managerId, systemNodes = null) {
 }
 
 function canvasManagerGroupDivider(manager, team, systemNodes = []) {
-  const leftTypes = new Set(['agile', 'orchestrator']);
+  const leftTypes = new Set(['agile', 'orchestrator', 'background']);
   const leftSystem = systemNodes.filter((node) => leftTypes.has(node.type));
   const rightSystem = systemNodes.filter((node) => !leftTypes.has(node.type));
   if (rightSystem.length === 0) return null;
