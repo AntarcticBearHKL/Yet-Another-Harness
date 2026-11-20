@@ -48,6 +48,7 @@ const canvasState = {
   nodes: {},
   frames: [],
   systemNodes: [],
+  visibleIds: new Set(),
   selectedId: null,
   selectedChildId: null,
   selectedIds: new Set(),
@@ -65,6 +66,8 @@ const canvasState = {
   runsRequest: 0,
   runsDirty: false,
   pendingWorknodes: false,
+  pendingReload: false,
+  saveInFlight: false,
   saveTimer: null,
   pageTimer: null,
   zoomTimer: null,
@@ -231,6 +234,11 @@ function ensureCanvasGroups() {
   const index = canvasGroupIndex();
   const { sessions, roots } = index;
   const ids = new Set(sessions.map((session) => session.id));
+  const managerIds = new Set(
+    sessions
+      .filter((session) => session.nodeRole === 'manager')
+      .map((session) => session.id)
+  );
   let dirty = index.dirty;
   if (canvasState.frames.length > 0) {
     canvasState.frames = [];
@@ -239,7 +247,11 @@ function ensureCanvasGroups() {
   for (const id of Object.keys(canvasState.nodes)) {
     const isSession = ids.has(id);
     const isSystemNode = canvasState.systemNodes.some(
-      (node) => node.id === id && node.status !== 'archived'
+      (node) =>
+        node.id === id &&
+        node.status !== 'archived' &&
+        node.status !== 'closed' &&
+        managerIds.has(node.managerId)
     );
     if (!isSession && !isSystemNode) {
       delete canvasState.nodes[id];
@@ -1559,8 +1571,13 @@ function canvasRectsOverlap(left, right, gap = CANVAS_COLLISION_GAP) {
 
 function canvasCollidingIds(rect, ignoreIds = new Set()) {
   const ids = [];
+  const visible =
+    canvasState.visibleIds instanceof Set && canvasState.visibleIds.size > 0
+      ? canvasState.visibleIds
+      : null;
   for (const [id, node] of Object.entries(canvasState.nodes)) {
     if (ignoreIds.has(id)) continue;
+    if (visible && !visible.has(id)) continue;
     if (!node || typeof node !== 'object') continue;
     if (canvasRectsOverlap(rect, node)) ids.push(id);
   }
@@ -2024,6 +2041,7 @@ function buildCanvasGroup(root, children, jobs, node) {
 function renderCanvasNodes(index) {
   if (!canvasDom.nodes) return;
   canvasDom.nodes.replaceChildren();
+  canvasState.visibleIds = new Set();
   const { roots, childrenByRoot } = index;
   let dirty = false;
   let resized = false;
@@ -2033,6 +2051,7 @@ function renderCanvasNodes(index) {
   for (const manager of managers) {
     const node = canvasState.nodes[manager.id];
     if (!node) continue;
+    canvasState.visibleIds.add(manager.id);
     if (
       Number(node.width) !== CANVAS_MANAGER_CARD_SIZE ||
       Number(node.height) !== CANVAS_MANAGER_CARD_SIZE
@@ -2062,11 +2081,13 @@ function renderCanvasNodes(index) {
       systemEl.style.width = `${CANVAS_MANAGER_CARD_SIZE}px`;
       systemEl.style.height = `${CANVAS_MANAGER_CARD_SIZE}px`;
       canvasDom.nodes.append(systemEl);
+      canvasState.visibleIds.add(systemNode.id);
     }
   }
   for (const root of regularRoots) {
     const node = canvasState.nodes[root.id];
     if (!node) continue;
+    canvasState.visibleIds.add(root.id);
     const children = childrenByRoot.get(root.id) || [];
     const jobs = canvasGroupJobs(root, children);
     const groupEl = buildCanvasGroup(root, children, jobs, node);
@@ -2732,12 +2753,9 @@ function onCanvasPointerMove(event) {
 }
 
 function onCanvasPointerUp() {
-  const finishWorknodesSync = () => {
-    if (canvasState.pendingWorknodes) void syncWorknodes();
-  };
   if (canvasState.workspaceDrag) {
     finishWorkspaceDrag();
-    finishWorknodesSync();
+    void flushCanvasDeferredUpdates();
     return;
   }
   if (canvasState.systemNodeDrag) {
@@ -2747,7 +2765,7 @@ function onCanvasPointerUp() {
       setTimeout(() => {
         canvasState.suppressClick = false;
       }, 80);
-      scheduleCanvasSave();
+      void saveCanvasNow();
       applyCanvasManagerGroupBounds(drag.systemNode.managerId);
     }
     try {
@@ -2765,7 +2783,7 @@ function onCanvasPointerUp() {
       setTimeout(() => {
         canvasState.suppressClick = false;
       }, 80);
-      scheduleCanvasSave();
+      void saveCanvasNow();
     }
     try {
       drag.managerEl.releasePointerCapture(drag.pointerId);
@@ -2782,7 +2800,7 @@ function onCanvasPointerUp() {
       setTimeout(() => {
         canvasState.suppressClick = false;
       }, 80);
-      scheduleCanvasSave();
+      void saveCanvasNow();
     }
     try {
       drag.frameEl.releasePointerCapture(drag.pointerId);
@@ -2799,7 +2817,7 @@ function onCanvasPointerUp() {
       setTimeout(() => {
         canvasState.suppressClick = false;
       }, 80);
-      scheduleCanvasSave();
+      void saveCanvasNow();
     }
     try {
       if (drag.captured) {
@@ -2823,9 +2841,9 @@ function onCanvasPointerUp() {
     }
     canvasState.pan = null;
     canvasDom.stage?.classList.remove('panning');
-    scheduleCanvasSave();
+    void saveCanvasNow();
   }
-  finishWorknodesSync();
+  void flushCanvasDeferredUpdates();
 }
 
 /* ------------------------------- 会话与开关 ------------------------------- */
@@ -3330,6 +3348,7 @@ async function saveCanvasNow() {
   clearTimeout(canvasState.saveTimer);
   canvasState.saveTimer = null;
   if (!canvasState.loaded) return;
+  canvasState.saveInFlight = true;
   try {
     await requestJson('/api/canvas', {
       method: 'POST',
@@ -3342,6 +3361,9 @@ async function saveCanvasNow() {
     });
   } catch (error) {
     console.error('save canvas failed', error);
+  } finally {
+    canvasState.saveInFlight = false;
+    if (!canvasInteractionActive()) void flushCanvasDeferredUpdates();
   }
 }
 
@@ -3486,17 +3508,36 @@ window.openCanvasWorkspaceMenu = openCanvasWorkspaceMenu;
 
 bindCanvasEvents();
 
+function canvasInteractionActive() {
+  return Boolean(
+    canvasState.drag ||
+      canvasState.managerDrag ||
+      canvasState.systemNodeDrag ||
+      canvasState.frameDrag ||
+      canvasState.marquee ||
+      canvasState.pan ||
+      canvasState.workspaceDrag ||
+      canvasState.saveInFlight
+  );
+}
+
+async function flushCanvasDeferredUpdates() {
+  if (!canvasOverlayOpen()) return;
+  if (canvasInteractionActive()) return;
+  if (canvasState.pendingWorknodes) {
+    canvasState.pendingReload = false;
+    await syncWorknodes();
+    return;
+  }
+  if (canvasState.pendingReload) {
+    canvasState.pendingReload = false;
+    await reloadCanvas();
+  }
+}
+
 async function syncWorknodes() {
   if (!canvasOverlayOpen()) return;
-  if (
-    canvasState.drag ||
-    canvasState.managerDrag ||
-    canvasState.systemNodeDrag ||
-    canvasState.frameDrag ||
-    canvasState.marquee ||
-    canvasState.pan ||
-    canvasState.workspaceDrag
-  ) {
+  if (canvasInteractionActive()) {
     canvasState.pendingWorknodes = true;
     return;
   }
@@ -3511,6 +3552,10 @@ api.onWorknodesChanged?.(() => {
 
 api.onSystemNodesChanged?.(() => {
   if (!canvasOverlayOpen()) return;
+  if (canvasInteractionActive()) {
+    canvasState.pendingReload = true;
+    return;
+  }
   void reloadCanvas();
 });
 
@@ -3522,14 +3567,7 @@ api.onSubagentStarted((payload) => {
   if (session && payload.parentSessionId) {
     session.parentSessionId = payload.parentSessionId;
   }
-  if (
-    canvasOverlayOpen() &&
-    !canvasState.drag &&
-    !canvasState.managerDrag &&
-    !canvasState.frameDrag &&
-    !canvasState.marquee &&
-    !canvasState.workspaceDrag
-  ) {
+  if (canvasOverlayOpen() && !canvasInteractionActive()) {
     renderCanvas();
     scheduleCanvasSave();
   }
@@ -3543,14 +3581,7 @@ api.onSubagentComplete((payload) => {
     session.archivedAt = payload?.endedAt || Date.now();
     session.archivedStatus = payload?.status || 'done';
   }
-  if (
-    canvasOverlayOpen() &&
-    !canvasState.drag &&
-    !canvasState.managerDrag &&
-    !canvasState.frameDrag &&
-    !canvasState.marquee &&
-    !canvasState.workspaceDrag
-  ) {
+  if (canvasOverlayOpen() && !canvasInteractionActive()) {
     renderCanvas();
     scheduleCanvasSave();
   }
@@ -3559,14 +3590,7 @@ api.onSubagentComplete((payload) => {
 api.onBackgroundUpdate((payload) => {
   if (!payload?.sessionId) return;
   mergeCanvasBackgroundJob(payload);
-  if (
-    canvasOverlayOpen() &&
-    !canvasState.drag &&
-    !canvasState.managerDrag &&
-    !canvasState.frameDrag &&
-    !canvasState.marquee &&
-    !canvasState.workspaceDrag
-  ) {
+  if (canvasOverlayOpen() && !canvasInteractionActive()) {
     renderCanvas();
   }
 });
@@ -3574,14 +3598,7 @@ api.onBackgroundUpdate((payload) => {
 api.onBackgroundComplete((payload) => {
   if (!payload?.sessionId) return;
   mergeCanvasBackgroundJob(payload);
-  if (
-    canvasOverlayOpen() &&
-    !canvasState.drag &&
-    !canvasState.managerDrag &&
-    !canvasState.frameDrag &&
-    !canvasState.marquee &&
-    !canvasState.workspaceDrag
-  ) {
+  if (canvasOverlayOpen() && !canvasInteractionActive()) {
     renderCanvas();
   }
 });
