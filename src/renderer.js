@@ -2751,29 +2751,6 @@ function latestCompactBlock(msg, streaming) {
   };
 }
 
-function compactProcessCount(msg) {
-  const steps = Array.isArray(msg?.steps) ? msg.steps : [];
-  if (steps.length === 0) return 0;
-  const preambleText = preambleTextIndexes(steps);
-  const lastTextIndex = finalTextIndex(steps, preambleText);
-  const { pairedResults } = pairToolSteps(steps);
-  let count = 0;
-  steps.forEach((step, index) => {
-    if (!step || step.kind === 'status') return;
-    if (index === lastTextIndex) return;
-    if (step.kind === 'text' || step.kind === 'thinking') {
-      if (String(step.text || '').trim()) count += 1;
-      return;
-    }
-    if (step.kind === 'call') {
-      count += 1;
-      return;
-    }
-    if (step.kind === 'result' && !pairedResults.has(index)) count += 1;
-  });
-  return count;
-}
-
 function renderCompactAgentMessage(msg, msgIndex, container, streaming) {
   const block = latestCompactBlock(msg, streaming);
   const key =
@@ -2808,24 +2785,6 @@ function renderCompactAgentMessage(msg, msgIndex, container, streaming) {
     true
   );
   appendRow(card, {}, container);
-  const processCount = compactProcessCount(msg);
-  if (processCount > 0) {
-    const link = el(
-      'button',
-      'compact-process-link',
-      `过程 ${processCount} · 查看`
-    );
-    link.type = 'button';
-    link.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.openCardKey = null;
-      state.viewMode = null;
-      state.collapsedProcessKeys.delete(`p:${msgIndex}`);
-      setChatCompact(false);
-    });
-    container.append(link);
-  }
 }
 
 function renderAgentMessage(msg, msgIndex, container) {
