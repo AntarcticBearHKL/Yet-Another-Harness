@@ -2974,6 +2974,26 @@ function layoutManagerTeam(managerId) {
   scheduleCanvasSave();
 }
 
+async function addManagerEngineer(managerId) {
+  const manager = state.sessions.find(
+    (session) => session.id === managerId && session.nodeRole === 'manager'
+  );
+  if (!manager) return;
+  const current = Math.max(
+    1,
+    Math.min(12, Math.round(Number(manager.nodeConfig?.engineerCount) || 1))
+  );
+  if (current >= 12) return;
+  manager.nodeConfig = {
+    ...(manager.nodeConfig || {}),
+    kind: 'manager',
+    engineerCount: current + 1,
+  };
+  renderCanvas();
+  await window.flushChats?.();
+  window.refreshCanvas?.();
+}
+
 async function stopManagerTeam(managerId) {
   const ids = [
     managerId,
@@ -3040,38 +3060,51 @@ function openCanvasNodeMenu(sessionId, x, y) {
   const session = state.sessions.find((item) => item.id === sessionId);
   if (!session) return;
   if (session.nodeRole === 'manager') {
-    openActionMenu({
-      x,
-      y,
-      items: [
-        {
-          label: '打开对话',
-          icon: '<path d="M5 12h14M13 6l6 6-6 6"/>',
-          action: () => openCanvasSession(session.id),
-        },
-        {
-          label: '配置',
-          icon: RING_ICONS.settings,
-          action: () => window.openManagerComposer?.(session.id),
-        },
-        {
-          label: '自动整理',
-          icon: RING_ICONS.folder,
-          action: () => layoutManagerTeam(session.id),
-        },
-        {
-          label: '停止全部',
-          icon: RING_ICONS.close,
-          action: () => void stopManagerTeam(session.id),
-        },
-        {
-          label: '删除管理 node',
-          icon: RING_ICONS.trash,
-          danger: true,
-          action: () => deleteManagerNode(session.id),
-        },
-      ],
-    });
+    const items = [
+      {
+        label: '打开对话',
+        icon: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+        action: () => openCanvasSession(session.id),
+      },
+      {
+        label: '配置',
+        icon: RING_ICONS.settings,
+        action: () => window.openManagerComposer?.(session.id),
+      },
+    ];
+    const engineerCount = Math.max(
+      1,
+      Math.min(
+        12,
+        Math.round(Number(session.nodeConfig?.engineerCount) || 1)
+      )
+    );
+    if (engineerCount < 12) {
+      items.push({
+        label: '新增工程师',
+        icon: '<path d="M12 5v14M5 12h14"/>',
+        action: () => void addManagerEngineer(session.id),
+      });
+    }
+    items.push(
+      {
+        label: '自动整理',
+        icon: RING_ICONS.folder,
+        action: () => layoutManagerTeam(session.id),
+      },
+      {
+        label: '停止全部',
+        icon: RING_ICONS.close,
+        action: () => void stopManagerTeam(session.id),
+      },
+      {
+        label: '删除管理 node',
+        icon: RING_ICONS.trash,
+        danger: true,
+        action: () => deleteManagerNode(session.id),
+      }
+    );
+    openActionMenu({ x, y, items });
     return;
   }
   const index = canvasGroupIndex();

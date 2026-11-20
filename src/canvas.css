@@ -2194,6 +2194,10 @@ body.maximized .system-node-page {
   margin-top: 14px;
 }
 
+.manager-engineer-field.hidden {
+  display: none;
+}
+
 .manager-engineer-label {
   color: var(--faint);
   font-size: 10.5px;

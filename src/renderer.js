@@ -63,6 +63,7 @@ const dom = {
   managerComposer: $('manager-composer'),
   managerComposerTitle: $('manager-composer-title'),
   managerName: $('manager-name'),
+  managerEngineerField: $('manager-engineer-field'),
   managerEngineerCount: $('manager-engineer-count'),
   managerFixedAgent: $('manager-fixed-agent'),
   managerDrop: $('manager-drop'),
@@ -726,6 +727,9 @@ function openManagerComposer(managerId = null) {
       managerComposerState.engineerCount
     );
   }
+  if (dom.managerEngineerField) {
+    dom.managerEngineerField.classList.toggle('hidden', !manager);
+  }
   if (dom.managerFixedAgent) {
     dom.managerFixedAgent.textContent = `${managerAgentDisplayName()} · 管理类`;
   }
@@ -775,11 +779,13 @@ async function createManagerFromComposer() {
     managerComposerDefaultProjectName();
   const agentId = MANAGER_AGENT_ID;
   const directories = managerComposerState.directories.slice();
-  const engineerCount = Math.max(
-    1,
-    Math.min(12, Math.round(Number(dom.managerEngineerCount?.value) || 1))
-  );
   const editingId = managerComposerState.editingId;
+  const engineerCount = editingId
+    ? Math.max(
+        1,
+        Math.min(12, Math.round(Number(dom.managerEngineerCount?.value) || 1))
+      )
+    : 1;
   if (directories.length === 0) {
     if (dom.managerComposerError) {
       dom.managerComposerError.textContent = '先拖入至少一个文件夹';
