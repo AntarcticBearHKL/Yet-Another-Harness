@@ -2064,10 +2064,11 @@ body.panel-window #background-badge {
 /* The blur lives on a pseudo element so the Skill popup keeps its own
    backdrop-filter. A backdrop-filtered ancestor (the composer itself) would
    otherwise become the popup's backdrop root and stop it from blurring the
-   composer text behind it. */
+   composer text behind it. It must stay absolute so the app's rounded window
+   frame clips it; a fixed layer would blur the desktop outside the window. */
 #composer::before {
   content: "";
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: rgba(251, 246, 239, 0.24);
   -webkit-backdrop-filter: blur(12px) saturate(1.02);
