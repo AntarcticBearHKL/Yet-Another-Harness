@@ -715,6 +715,63 @@ function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'DELETE' && pathname.startsWith('/api/managers/')) {
+    const managerId = decodeURIComponent(
+      pathname.slice('/api/managers/'.length)
+    ).replace(/\/+$/, '');
+    if (!managerId) {
+      sendJson(res, 400, { error: 'managerId is required' });
+      return true;
+    }
+    const manager = store.getSessionMeta(managerId);
+    if (!manager || manager.nodeRole !== 'manager') {
+      sendJson(res, 404, { error: 'manager not found' });
+      return true;
+    }
+    const group = store.managerGroupIds(managerId);
+    runner.cancelSessionRuns(group.sessionIds);
+    for (const sessionId of group.sessionIds) {
+      processTools.forgetJobsForSession(sessionId);
+      systemNodeService.unwatchWorkNode?.(sessionId);
+    }
+    store.deleteManagerGroup(managerId);
+
+    try {
+      const state = canvasStore.state();
+      const ids = new Set([...group.sessionIds, ...group.systemNodeIds]);
+      for (const nodeId of ids) delete state.nodes[nodeId];
+      state.wires = (state.wires || []).filter(
+        (wire) => !ids.has(wire.from) && !ids.has(wire.to)
+      );
+      state.frames = (state.frames || [])
+        .map((frame) => ({
+          ...frame,
+          nodeIds: (frame.nodeIds || []).filter((nodeId) => !ids.has(nodeId)),
+        }))
+        .filter((frame) => frame.nodeIds.length > 0);
+      canvasStore.save(state);
+    } catch (error) {
+      console.error('clean manager group canvas failed', error);
+    }
+
+    agileStores.delete(managerId);
+    try {
+      fs.rmSync(agileManagerFile(managerId), { force: true });
+    } catch (error) {
+      console.error('remove manager agile data failed', error);
+    }
+
+    runner.publishGlobal({ type: 'worknodes.changed', managerId });
+    runner.publishGlobal({ type: 'systemnodes.changed', managerId });
+    sendJson(res, 200, {
+      ok: true,
+      managerId,
+      sessionIds: group.sessionIds,
+      systemNodeIds: group.systemNodeIds,
+    });
+    return true;
+  }
+
   if (req.method === 'DELETE' && pathname.startsWith('/api/sessions/')) {
     const sessionId = decodeURIComponent(
       pathname.slice('/api/sessions/'.length)

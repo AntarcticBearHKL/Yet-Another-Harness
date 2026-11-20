@@ -70,7 +70,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - Agile 工作区：从 Tab 工作区空白处的右键菜单打开；桌面端打开一个独立窗口（网页端回退为全屏页面），窗口位置和大小会记住。固定四列 Backlog / In Progress / Blocked / Finished；左侧分组和迭代，支持折叠、改名、新建、删除；卡片可以打开任务表单，标题和描述只读，备注仍可添加，备注在 In Progress 期间锁定；Finished 任务被加备注会自动回到 Backlog 并标记返工。支持任务搜索、WIP 上限、迭代日期/目标、显示更新时间和默认 OpenAgile Skill。看板数据存在 `%APPDATA%\yah\agile.json`；Manager 通过 `backlog_add` 发布并行任务，调度器负责发放
 - 任务工具：工具面板的「Agile」分类只保留 `backlog_list`、`backlog_add`、`iteration_add`、`task_block`、`task_finish`；旧的 `agile_*`、`mission_*`、`worknode_result`、`question` 工具已删除
 - 系统 node：Manager group 右侧显示统一的方形管理 node，包括 Agile、调度器、Report Hub、审批和问卷。每个 Manager 启动后自动出现 Agile 和调度器；发布 Backlog 后自动出现 Report Hub，审批和问卷在 `task_block` 时出现。点击任意管理 node 会打开统一风格的详情页，显示状态、执行步骤和该类型的专属内容（Agile 计数、报告正文、审批详情或问卷表单）。调度器每 1.5 秒扫描 Agile Backlog，按角色和空闲工程师创建 / 复用 Agent work node；工程师用 `task_finish` 提交结果，Report Hub 更新 Agile 并生成可读报告；`task_block` 创建审批或问卷时会在 node 上记录发起任务的工程师，解决后调度器解除阻塞并把任务发回原工程师
-- 工程师 node、Agile、调度器、Report Hub、审批和问卷都可以在 group 内自由拖动；拖动组本身会带着组内全部 node 一起移动。group 背景会根据所有成员的位置实时扩展，始终包裹整个组；node 之间有碰撞体积，靠近其他 node 时会被挡住，不能重叠
+- 工程师 node、Agile、调度器、Report Hub、审批和问卷都可以在 group 内自由拖动；拖动组本身会带着组内全部 node 一起移动。group 背景会根据所有成员的位置实时扩展，始终包裹整个组；node 之间有碰撞体积，靠近其他 node 时会被挡住，不能重叠。右键管理 node 选择「删除管理 node」会删除整个 group：管理对话、所有工作 node 及其子对话、Agile / 调度器 / 报告 / 审批 / 问卷等系统 node 和该 Manager 的 Agile 数据一起删除，不能恢复
 - 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
 - 输入框（Space）里：新对话（还没有任何消息）上方只显示 MCP 摘要按钮；已有消息的对话上方只显示排队消息框。生成中仍可继续输入，消息按顺序排队、一行一条，左侧拖动排序，行尾是编辑 / 立即发送 / 删除三个纯图标按钮；当前生成结束后自动按顺序处理队列；这两块都是和输入框同宽的圆角矩形
 - 新建对话默认关闭所有 MCP 服务器：MCP 摘要显示 `0/总数`，需要时在对话顶部的 MCP 配置页里手动打开；开关按会话持久化

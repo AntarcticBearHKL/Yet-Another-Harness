@@ -1824,6 +1824,59 @@ function deleteSessionsTree(sessionId) {
   return ids;
 }
 
+function managerGroupIds(managerId) {
+  const id = String(managerId || '').trim();
+  if (!id) return { sessionIds: [], systemNodeIds: [] };
+  const database = openDb();
+  const workIds = database
+    .prepare('SELECT id FROM sessions WHERE manager_id = ?')
+    .all(id)
+    .map((row) => String(row.id));
+  const sessionIds = new Set();
+  for (const root of [id, ...workIds]) {
+    for (const subId of sessionSubtreeIds(root)) sessionIds.add(subId);
+  }
+  const systemNodeIds = database
+    .prepare('SELECT id FROM system_nodes WHERE manager_id = ?')
+    .all(id)
+    .map((row) => String(row.id));
+  return { sessionIds: [...sessionIds], systemNodeIds };
+}
+
+function deleteManagerGroup(managerId) {
+  const group = managerGroupIds(managerId);
+  if (group.sessionIds.length === 0) return group;
+  const database = openDb();
+  const placeholders = group.sessionIds.map(() => '?').join(',');
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    database
+      .prepare(`DELETE FROM archive_jobs WHERE session_id IN (${placeholders})`)
+      .run(...group.sessionIds);
+    database
+      .prepare(`DELETE FROM runs WHERE session_id IN (${placeholders})`)
+      .run(...group.sessionIds);
+    if (group.systemNodeIds.length > 0) {
+      const nodePlaceholders = group.systemNodeIds.map(() => '?').join(',');
+      database
+        .prepare(`DELETE FROM system_nodes WHERE id IN (${nodePlaceholders})`)
+        .run(...group.systemNodeIds);
+    }
+    database
+      .prepare(`DELETE FROM sessions WHERE id IN (${placeholders})`)
+      .run(...group.sessionIds);
+    database.exec('COMMIT');
+  } catch (error) {
+    try {
+      database.exec('ROLLBACK');
+    } catch {
+      /* ignore */
+    }
+    throw error;
+  }
+  return group;
+}
+
 function updateSessionGoal(sessionId, goal) {
   const database = openDb();
   const normalized = goal === null || goal === undefined ? null : normalizeGoal(goal);
@@ -2627,6 +2680,8 @@ module.exports = {
   listArchivedJobs,
   getArchivedJob,
   deleteSessionsTree,
+  managerGroupIds,
+  deleteManagerGroup,
   appendMessage,
   replaceSessionMessages,
   createSession,

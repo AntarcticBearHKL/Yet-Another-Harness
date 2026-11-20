@@ -1315,6 +1315,96 @@ test('manager and work node fields round-trip through sqlite', () => {
   });
 });
 
+test('deleteManagerGroup removes work nodes, subagents and system nodes', () => {
+  withStoreDir(() => {
+    const manager = (id) => ({
+      id,
+      title: id,
+      system: 'sys',
+      agentId: 'manager',
+      projectId: 'p1',
+      nodeRole: 'manager',
+      managerId: null,
+      mcpDisabled: [],
+      pendingQueue: [],
+      msgs: [],
+    });
+    store.saveChats({
+      projects: [{ id: 'p1', name: 'Project 1', directories: ['C:\\work'] }],
+      sessions: [
+        manager('m1'),
+        manager('m2'),
+        {
+          id: 'w1',
+          title: 'Work 1',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          nodeRole: 'work',
+          managerId: 'm1',
+          mcpDisabled: [],
+          pendingQueue: [],
+          msgs: [],
+        },
+        {
+          id: 'w2',
+          title: 'Work 2',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          nodeRole: 'work',
+          managerId: 'm2',
+          mcpDisabled: [],
+          pendingQueue: [],
+          msgs: [],
+        },
+        {
+          id: 'sub1',
+          title: 'Sub 1',
+          system: 'sys',
+          agentId: 'basic',
+          projectId: 'p1',
+          subagent: true,
+          parentSessionId: 'w1',
+          mcpDisabled: [],
+          pendingQueue: [],
+          msgs: [],
+        },
+      ],
+      current: 0,
+      seq: 5,
+    });
+    store.createSystemNode({
+      id: 'sys-m1',
+      managerId: 'm1',
+      type: 'agile',
+      status: 'idle',
+      title: 'Agile',
+    });
+    store.createSystemNode({
+      id: 'sys-m2',
+      managerId: 'm2',
+      type: 'agile',
+      status: 'idle',
+      title: 'Agile',
+    });
+
+    const group = store.deleteManagerGroup('m1');
+    assert.deepEqual(
+      new Set(group.sessionIds),
+      new Set(['m1', 'w1', 'sub1'])
+    );
+    assert.deepEqual(group.systemNodeIds, ['sys-m1']);
+    for (const id of ['m1', 'w1', 'sub1']) {
+      assert.equal(store.getSession(id), null);
+    }
+    assert.ok(store.getSession('m2'));
+    assert.ok(store.getSession('w2'));
+    assert.equal(store.getSystemNode('sys-m1'), null);
+    assert.ok(store.getSystemNode('sys-m2'));
+  });
+});
+
 test('structure saves refuse to wipe every session by accident', () => {
   withStoreDir(() => {
     store.saveStructure({

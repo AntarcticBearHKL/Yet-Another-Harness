@@ -2995,28 +2995,43 @@ function deleteManagerNode(managerId) {
   );
   if (!manager) return;
   openConfirm({
-    text: '删除这个管理 node？它创建的工作 node 会保留为未归属，不会被删除。',
+    text: '删除这个管理 node 和 group 里的全部内容？所有工作 node、Agile、调度器、报告等都会一起删除，无法恢复。',
     action: async () => {
-      for (const session of state.sessions) {
-        if (session.managerId === managerId) {
-          session.managerId = null;
-        }
-      }
       await window.flushChats?.();
       try {
-        await api.deleteSession(managerId);
+        const result = await requestJson(
+          `/api/managers/${encodeURIComponent(managerId)}`,
+          { method: 'DELETE' }
+        );
+        const ids = new Set([
+          managerId,
+          ...(Array.isArray(result?.sessionIds) ? result.sessionIds : []),
+          ...(Array.isArray(result?.systemNodeIds) ? result.systemNodeIds : []),
+        ]);
+        state.sessions = state.sessions.filter(
+          (session) => !ids.has(session.id)
+        );
+        canvasState.systemNodes = canvasState.systemNodes.filter(
+          (node) => !ids.has(node.id)
+        );
+        for (const id of ids) delete canvasState.nodes[id];
+        canvasState.frames = (canvasState.frames || [])
+          .map((frame) => ({
+            ...frame,
+            nodeIds: (frame.nodeIds || []).filter((id) => !ids.has(id)),
+          }))
+          .filter((frame) => frame.nodeIds.length > 0);
+        const selectionHit =
+          [...canvasState.selectedIds].some((id) => ids.has(id)) ||
+          ids.has(canvasState.selectedId);
+        if (selectionHit) canvasClearSelection();
+        renderCanvas();
+        scheduleCanvasSave();
+        await window.refreshChats?.();
+        await reloadCanvas();
       } catch (error) {
-        console.error('delete manager failed', error);
+        console.error('delete manager group failed', error);
       }
-      state.sessions = state.sessions.filter(
-        (session) => session.id !== managerId
-      );
-      delete canvasState.nodes[managerId];
-      if (canvasState.selectedId === managerId) canvasClearSelection();
-      renderCanvas();
-      scheduleCanvasSave();
-      await window.refreshChats?.();
-      await reloadCanvas();
     },
   });
 }
@@ -3053,7 +3068,6 @@ function openCanvasNodeMenu(sessionId, x, y) {
           label: '删除管理 node',
           icon: RING_ICONS.trash,
           danger: true,
-          confirm: true,
           action: () => deleteManagerNode(session.id),
         },
       ],
