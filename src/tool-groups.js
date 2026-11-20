@@ -82,11 +82,14 @@
     ['mission_dispatch', 'agile'],
     ['mission_status', 'agile'],
     ['mission_report', 'agile'],
+    ['design_write', 'agile'],
     ['backlog_list', 'agile'],
     ['backlog_add', 'agile'],
     ['iteration_add', 'agile'],
     ['task_block', 'agile'],
     ['task_finish', 'agile'],
+    ['task_merge', 'agile'],
+    ['task_reject', 'agile'],
     ['question', 'view'],
   ]);
 

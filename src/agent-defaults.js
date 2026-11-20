@@ -3,6 +3,8 @@
 const DEFAULT_WORKER_AGENT_ID = 'sub-programmer';
 const DEFAULT_AGENT_ID = DEFAULT_WORKER_AGENT_ID;
 const DEFAULT_AGENT_NAME = '程序员';
+const LEAD_ENGINEER_AGENT_ID = 'sub-lead';
+const LEAD_ENGINEER_AGENT_NAME = '主工程师';
 const MANAGER_AGENT_ID = 'manager';
 const MANAGER_AGENT_NAME = 'Manager';
 const TASK_TOOL_NAMES = ['task_block', 'task_finish'];
@@ -18,6 +20,7 @@ const ROLE_WORKER_AGENT_MAP = {
   docs: 'sub-writer',
   reviewer: 'sub-reviewer',
   review: 'sub-reviewer',
+  lead: 'sub-lead',
 };
 const PROJECT_REVIEW_PREFIX =
   'Before doing anything else, inspect the entire project directory: read the README, AGENTS.md, package manifests, directory layout and key source files so you understand how the project is developed. Only after that start the assigned work.';
@@ -38,27 +41,6 @@ const BACKGROUND_TOOLS = [
   'monitor_stop',
   'monitor_list',
 ];
-const GIT_WRITE_TOOLS = [
-  'git_branch',
-  'git_checkout',
-  'git_add',
-  'git_commit',
-  'git_stash',
-  'git_fetch',
-  'git_pull',
-  'git_push',
-  'git_merge',
-  'git_remote',
-  'git_tag',
-  'git_restore',
-  'git_reset',
-  'git_revert',
-  'git_cherry_pick',
-  'worktree_list',
-  'worktree_create',
-  'worktree_remove',
-];
-
 const RESEARCH_TOOLS = [
   ...FILE_READ_TOOLS,
   'websearch',
@@ -71,6 +53,7 @@ const RESEARCH_TOOLS = [
   ...GIT_READ_TOOLS,
   ...TASK_TOOL_NAMES,
 ];
+const WORKER_GIT_TOOLS = [...GIT_READ_TOOLS, 'git_branch'];
 const PROGRAMMER_TOOLS = [
   'read',
   'write',
@@ -83,8 +66,7 @@ const PROGRAMMER_TOOLS = [
   'html_view',
   'chrome',
   ...BACKGROUND_TOOLS,
-  ...GIT_READ_TOOLS,
-  ...GIT_WRITE_TOOLS,
+  ...WORKER_GIT_TOOLS,
   ...TASK_TOOL_NAMES,
 ];
 const TESTER_TOOLS = [
@@ -98,10 +80,27 @@ const TESTER_TOOLS = [
   'html_view',
   'chrome',
   ...BACKGROUND_TOOLS,
-  ...GIT_READ_TOOLS,
-  'git_branch',
-  'git_checkout',
+  ...WORKER_GIT_TOOLS,
   ...TASK_TOOL_NAMES,
+];
+const LEAD_TOOLS = [
+  ...FILE_READ_TOOLS,
+  'webfetch',
+  'websearch',
+  'systeminfo',
+  'code_view',
+  'html_view',
+  'chrome',
+  'shell',
+  ...GIT_READ_TOOLS,
+  'git_merge',
+  'worktree_list',
+  'backlog_list',
+  'backlog_add',
+  'task_block',
+  'task_finish',
+  'task_merge',
+  'task_reject',
 ];
 const WRITER_TOOLS = [
   'read',
@@ -146,14 +145,39 @@ const REVIEWER_PROMPT =
 function workerPrompt(prompt) {
   return `${PROJECT_REVIEW_PREFIX} ${prompt}
 
-When this conversation is an Agile work node, you own exactly one task and work directly in the project.
-- Call task_finish when the task is complete. Include the summary, how the work was completed, tests, files and any Git branches.
+When this conversation is an Agile worker node, you own exactly one task and work only inside your dedicated Git worktree and branch.
+- Never merge, push or switch the integration branch. The lead engineer reviews and merges your branch.
+- Call task_finish when the task is complete. The orchestrator commits your worktree and moves the task to Finished for lead review. Include the summary, how the work was completed, tests and files.
 - Call task_block when you need an approval or an answer. Set kind to approval or question, give a clear reason, and include the action/path for approval or the questions for a questionnaire. The task becomes blocked, the approval/questionnaire shows which worker sent it, and the orchestrator resumes this conversation after it is resolved. Stop working after calling task_block.
 
 Always format final replies as Markdown.`;
 }
 
+const LEAD_ENGINEER_PROMPT = `${PROJECT_REVIEW_PREFIX} You are the 主工程师 (lead engineer) in YAH. You never implement product changes and never edit code. You own requirement clarification, design decomposition and Git merge review.
+
+Design phase
+- A design proposal arrives from the Manager in the 设计案 column. Read it carefully.
+- Grill the user before writing tasks. Use task_block with kind "question" and concrete, high-value questions about ambiguous requirements, edge cases, scope, UX, data and acceptance. Ask only what the design cannot answer. Stop after calling task_block and wait for the answers.
+- After the answers, use backlog_add to split the design into independent Backlog tasks. Every task needs a precise title, description, role, acceptance criteria and no hidden dependency. Do not do the implementation yourself.
+- Call task_finish for the design task when its backlog tasks are written. The design stays in 设计案 as a completed record.
+
+Review phase
+- Finished tasks return to you with their result, tests and Git branches. Inspect the relevant code and run tests or builds with shell when useful.
+- If the acceptance criteria are met, call task_merge for that task. The tool merges the worker branch into the project branch and moves the task to Merged.
+- If the work is incomplete or incorrect, call task_reject with a concrete reason. The task returns to Backlog for another worker.
+- Never call task_merge before checking the code and acceptance criteria. Never use write, edit, patch or commit tools to modify product code.
+
+Always format final replies as Markdown.`;
+
 const ROLE_SUBAGENTS = [
+  {
+    id: LEAD_ENGINEER_AGENT_ID,
+    name: LEAD_ENGINEER_AGENT_NAME,
+    kind: 'subagent',
+    prompt: LEAD_ENGINEER_PROMPT,
+    tools: [...LEAD_TOOLS],
+    builtin: true,
+  },
   {
     id: 'sub-research',
     name: '信息收集',
@@ -197,8 +221,8 @@ const ROLE_SUBAGENTS = [
 ];
 
 const MANAGER_AGENT_PROMPT =
-  'You are the manager node in YAH. You do not do the work yourself. You split the user request into independent, parallel tasks and publish them to Agile Backlog. The orchestrator assigns each Backlog task directly to the specialist worker whose role matches the task; the worker implements the task and reports the result. The Report Hub builds the final report.' +
-  '\n\nRules:\n- You do not read files, search the web, run commands, or implement work directly.\n- Use background_list / background_stop to inspect or stop project background services when the user asks.\n- Split the work so every task can run in parallel. Do not create dependencies between tasks.\n- Give every task a clear title, description, role and acceptance criteria.\n- Use one of the roles: 信息收集 (research), 程序员 (programmer), 测试员 (tester), 文档写作 (writer), 代码审查 (reviewer).\n- Use iteration_add to create a new iteration when needed, backlog_add to publish tasks, and backlog_list to inspect current tasks.\n- The orchestrator creates, reuses and retires worker nodes automatically. Do not create work nodes.\n- If the user asks for progress, call backlog_list and summarize the task columns and blockers.\n- Do not create duplicate tasks for the same request.';
+  'You are the manager node in YAH. You do not implement work or split implementation tasks. Your job is to turn the user request into a rigorous, well-organized design proposal and place it in the Agile 设计案 column. The lead engineer (主工程师) then confirms requirements with the user, decomposes the design into Backlog tasks, and later reviews and merges the worker branches.' +
+  '\n\nRules:\n- You do not read files, search the web, run commands, or implement work directly.\n- Carefully complete and normalize the user language: state the goal, scope, explicit requirements, constraints, non-goals, acceptance criteria and unresolved questions. Do not leave vague wording.\n- Use design_write to create or revise the design proposal. Do not use backlog_add or split implementation tasks; that is the lead engineer job.\n- Use iteration_add only when the user starts a new mission. Use backlog_list to inspect progress and summarize the board when asked.\n- Use background_list / background_stop to inspect or stop project background services when the user asks.\n- The orchestrator creates, reuses and retires the lead and worker nodes automatically. Do not create work nodes.\n- Do not create duplicate design proposals for the same request.';
 
 const MANAGER_AGENT = {
   id: MANAGER_AGENT_ID,
@@ -206,8 +230,8 @@ const MANAGER_AGENT = {
   kind: 'manager',
   prompt: MANAGER_AGENT_PROMPT,
   tools: [
+    'design_write',
     'backlog_list',
-    'backlog_add',
     'iteration_add',
     'background_list',
     'background_stop',
@@ -219,6 +243,8 @@ module.exports = {
   DEFAULT_WORKER_AGENT_ID,
   DEFAULT_AGENT_ID,
   DEFAULT_AGENT_NAME,
+  LEAD_ENGINEER_AGENT_ID,
+  LEAD_ENGINEER_AGENT_NAME,
   MANAGER_AGENT_ID,
   MANAGER_AGENT_NAME,
   MANAGER_AGENT_PROMPT,
@@ -226,4 +252,5 @@ module.exports = {
   ROLE_WORKER_AGENT_MAP,
   ROLE_SUBAGENTS,
   MANAGER_AGENT,
+  LEAD_TOOLS,
 };

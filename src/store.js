@@ -302,8 +302,8 @@ function normalizeNodeConfig(raw) {
     ...(kind === 'manager'
       ? {
           engineerCount: Math.max(
-            1,
-            Math.min(12, Math.round(Number(raw.engineerCount) || 1))
+            2,
+            Math.min(12, Math.round(Number(raw.engineerCount) || 2))
           ),
         }
       : {}),

@@ -691,23 +691,44 @@ const OMO = [
 
 const TASK_TOOLS = [
   fn(
+    'design_write',
+    'Manager only. Turn the user request into a rigorous, well-organized design proposal and place it in the 设计案 column. The lead engineer receives this design and grills the user before decomposing it. Include goal, scope, explicit requirements, constraints, non-goals, acceptance and open questions. Use designId to revise an existing proposal.',
+    {
+      iterationId: str('Iteration id; omit to use or create the active iteration'),
+      designId: str('Existing design task id to revise; omit to create a new design'),
+      title: str('Design proposal title'),
+      goal: str('Mission goal / desired outcome'),
+      description: str('Additional precise design context'),
+      scope: str('Included scope and boundaries'),
+      requirements: arr('Explicit functional requirements', { type: 'string' }),
+      constraints: arr('Technical or product constraints', { type: 'string' }),
+      outOfScope: arr('Explicit non-goals', { type: 'string' }),
+      openQuestions: arr('Questions the lead should confirm with the user', {
+        type: 'string',
+      }),
+      acceptance: str('Definition of done and acceptance criteria'),
+    },
+    ['title']
+  ),
+  fn(
     'backlog_list',
-    'Manager only. List the current iteration and its tasks with column, assignee, blocked reason and result.',
+    'Manager or lead engineer. List the current iteration with design proposals and every task, including column, assignee, review state, blocked reason, branches and result.',
     { iterationId: str('Iteration id; omit to use the active iteration') }
   ),
   fn(
     'backlog_add',
-    'Manager only. Add one or more parallel tasks to the Backlog of an iteration. Split the work so tasks can run independently; do not add dependencies. Creates an iteration when none exists.',
+    'Lead engineer only. Decompose the current design into one or more independent implementation tasks and add them to Backlog. Do not create dependencies or ask workers to clarify requirements; the lead must settle requirements first.',
     {
-      iterationId: str('Iteration id; omit to use the active iteration'),
+      iterationId: str('Iteration id; omit to use the design iteration'),
+      designId: str('Design task id; defaults to the lead current design'),
       goal: str('Mission goal used by the Report Hub'),
-      tasks: arr('Parallel Backlog tasks', {
+      tasks: arr('Independent Backlog tasks', {
         type: 'object',
         properties: {
           title: str('Task title'),
           description: str('Task description and context'),
           role: str('Work role: research, programmer, tester, writer or reviewer'),
-          acceptance: str('Acceptance criteria used by the Report Hub'),
+          acceptance: str('Acceptance criteria used by the lead review'),
         },
         required: ['title'],
       }),
@@ -751,7 +772,7 @@ const TASK_TOOLS = [
   ),
   fn(
     'task_finish',
-    'Worker only. Submit the result of the current task and mark it finished. The Report Hub uses it to build the mission report. Include the Subagent branch names in branches.',
+    'Worker or lead engineer. Submit the result of the current task. Worker tasks are committed to their engineer branch and move to Finished for lead review. Lead design tasks are marked ready after the design has been decomposed.',
     {
       taskId: str('Task id; defaults to the current task'),
       summary: str('What was accomplished'),
@@ -766,11 +787,29 @@ const TASK_TOOLS = [
         },
       }),
       artifacts: arr('Artifacts such as screenshots, reports or URLs', { type: 'string' }),
-      branches: arr('Git branches used by the Subagents', { type: 'string' }),
+      branches: arr('Git branches used by the worker', { type: 'string' }),
       blockers: arr('Blockers that remain', { type: 'string' }),
       followUps: arr('Suggested follow-up work', { type: 'string' }),
     },
     ['summary']
+  ),
+  fn(
+    'task_merge',
+    'Lead engineer only. Verify a Finished task, merge its Git branches into the project branch, and move the task to Merged. Call once per finished task after checking the acceptance criteria.',
+    {
+      taskId: str('Finished task id'),
+      summary: str('Review summary written into the merge result'),
+    },
+    ['taskId']
+  ),
+  fn(
+    'task_reject',
+    'Lead engineer only. Reject a Finished task that does not meet the design or acceptance criteria. The task returns to Backlog with the review reason and is assigned again.',
+    {
+      taskId: str('Finished task id'),
+      reason: str('What is incomplete or incorrect and must be reworked'),
+    },
+    ['taskId', 'reason']
   ),
 ];
 

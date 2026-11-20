@@ -5,6 +5,7 @@ const store = require('../store');
 let providers = {
   getAgileStore: null,
   systemNodeService: null,
+  mergeTaskBranches: null,
 };
 
 function configure(next = {}) {
@@ -35,6 +36,25 @@ function workSessionFor(context) {
   return session;
 }
 
+function isLeadEngineer(session) {
+  return (
+    session?.nodeRole === 'work' &&
+    Number(session.nodeConfig?.engineerIndex) === 1
+  );
+}
+
+function planningFor(context) {
+  const session = workSessionFor(context);
+  if (!session) {
+    const manager = managerFor(context);
+    return manager ? { manager, lead: null } : null;
+  }
+  if (!isLeadEngineer(session) || !session.managerId) return null;
+  const manager = store.getSession(session.managerId);
+  if (!manager || manager.nodeRole !== 'manager') return null;
+  return { manager, lead: session };
+}
+
 function agileFor(manager) {
   if (typeof providers.getAgileStore !== 'function') {
     throw new Error('Agile store is not configured');
@@ -59,16 +79,36 @@ function normalizeTasks(raw) {
     .filter(Boolean);
 }
 
+function normalizeStringList(raw, limit = 40) {
+  return (Array.isArray(raw) ? raw : [])
+    .map((item) => text(item))
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
 function taskView(task) {
   return {
     id: task.id,
+    kind: task.kind,
     title: task.title,
     description: task.description,
     role: task.role,
     acceptance: task.acceptance,
     column: task.column,
+    designId: task.designId || null,
+    designState: task.designState || null,
+    reviewState: task.reviewState || null,
+    reviewNote: task.reviewNote || null,
     assignee: task.assignee || null,
     workNodeId: task.workNodeId || null,
+    branches: Array.isArray(task.gitBranches)
+      ? task.gitBranches.map((branch) => ({
+          repo: branch.repo,
+          branch: branch.branch,
+          baseBranch: branch.baseBranch || '',
+          worktree: branch.worktree || '',
+        }))
+      : [],
     blockedReason: task.blockedReason || null,
     blockedBy: task.blockedBy || null,
     blockedKind: task.blockedKind || null,
@@ -76,14 +116,157 @@ function taskView(task) {
       ? {
           status: task.result.status || null,
           summary: task.result.summary || '',
+          branches: Array.isArray(task.result.branches)
+            ? task.result.branches
+            : [],
         }
       : null,
   };
 }
 
-function backlogList(args = {}, context = null) {
+function iterationIdFor(agile, wanted = '') {
+  const direct = text(wanted);
+  if (direct) return direct;
+  try {
+    const iterations = agile.listRoadmap().iterations || [];
+    return (
+      iterations.find((iteration) => iteration.isActive)?.id ||
+      iterations.at(-1)?.id ||
+      ''
+    );
+  } catch {
+    return '';
+  }
+}
+
+function designMarkdown(args = {}) {
+  const sections = [];
+  const intro = text(args.description || args.spec);
+  if (intro) sections.push(intro);
+  const goal = text(args.goal);
+  if (goal) sections.push(`## 目标\n${goal}`);
+  const scope = text(args.scope);
+  if (scope) sections.push(`## 范围\n${scope}`);
+  const requirements = normalizeStringList(args.requirements, 60);
+  if (requirements.length > 0) {
+    sections.push(`## 需求\n${requirements.map((item) => `- ${item}`).join('\n')}`);
+  }
+  const constraints = normalizeStringList(args.constraints, 40);
+  if (constraints.length > 0) {
+    sections.push(`## 约束\n${constraints.map((item) => `- ${item}`).join('\n')}`);
+  }
+  const outOfScope = normalizeStringList(args.outOfScope, 40);
+  if (outOfScope.length > 0) {
+    sections.push(
+      `## 非目标\n${outOfScope.map((item) => `- ${item}`).join('\n')}`
+    );
+  }
+  const openQuestions = normalizeStringList(args.openQuestions, 40);
+  if (openQuestions.length > 0) {
+    sections.push(
+      `## 待确认问题\n${openQuestions.map((item) => `- ${item}`).join('\n')}`
+    );
+  }
+  return sections.join('\n\n').slice(0, 20000);
+}
+
+async function designWrite(args = {}, context = null) {
   const manager = managerFor(context || args.context);
-  if (!manager) return error('only a manager node can list backlog');
+  if (!manager) return error('design_write can only be called by a manager node');
+  let agile;
+  try {
+    agile = agileFor(manager);
+  } catch (designError) {
+    return error(designError.message);
+  }
+  let iterationId = iterationIdFor(agile, args.iterationId || args.boardId);
+  if (!iterationId) {
+    try {
+      iterationId = agile.createBoard().id;
+    } catch (createError) {
+      return error(`failed to create iteration: ${createError.message}`);
+    }
+  }
+  const title = text(args.title) || text(args.goal) || '设计案';
+  const markdown = designMarkdown(args);
+  if (!markdown) {
+    return error('design_write requires a goal, description or requirements');
+  }
+  const acceptance = text(args.acceptance);
+  let design;
+  try {
+    const existingId = text(args.designId);
+    if (existingId) {
+      const current = agile.getTask(existingId);
+      if (current.kind !== 'design') {
+        return error('designId does not point to a design task');
+      }
+      design = agile.updateTask(existingId, {
+        title,
+        description: markdown,
+        acceptance,
+        designState: 'pending',
+        workNodeId: '',
+        claimedBy: '',
+        blockedReason: '',
+        blockedBy: '',
+        blockedKind: '',
+        blockedNodeId: '',
+        actor: { type: 'agent', id: manager.id },
+      });
+    } else {
+      design = agile.createTask({
+        boardId: iterationId,
+        column: 'design',
+        kind: 'design',
+        designState: 'pending',
+        title,
+        description: markdown,
+        acceptance,
+        role: 'lead',
+        autoDispatch: true,
+        actor: { type: 'agent', id: manager.id },
+      });
+    }
+  } catch (designError) {
+    return error(`failed to write design: ${designError.message}`);
+  }
+  let mission = null;
+  try {
+    mission = providers.systemNodeService?.ensureMission(
+      manager,
+      iterationId,
+      text(args.goal) || title,
+      [design.id]
+    );
+  } catch (missionError) {
+    console.error('design mission setup failed', missionError);
+  }
+  try {
+    await providers.systemNodeService?.tick?.();
+  } catch (tickError) {
+    console.error('design dispatch tick failed', tickError);
+  }
+  return JSON.stringify(
+    {
+      ok: true,
+      managerId: manager.id,
+      iterationId,
+      design: taskView(design),
+      orchestratorId: mission?.orchestrator?.id || null,
+      reportId: mission?.report?.id || null,
+    },
+    null,
+    2
+  );
+}
+
+function backlogList(args = {}, context = null) {
+  const planner = planningFor(context || args.context);
+  if (!planner) {
+    return error('backlog_list can only be called by a manager or lead engineer');
+  }
+  const { manager } = planner;
   let agile;
   try {
     agile = agileFor(manager);
@@ -114,6 +297,7 @@ function backlogList(args = {}, context = null) {
     {
       ok: true,
       managerId: manager.id,
+      leadId: planner.lead?.id || null,
       activeIterationId,
       iterations,
       tasks: tasks.map(taskView),
@@ -166,8 +350,11 @@ function iterationAdd(args = {}, context = null) {
 }
 
 async function backlogAdd(args = {}, context = null) {
-  const manager = managerFor(context || args.context);
-  if (!manager) return error('only a manager node can add backlog tasks');
+  const planner = planningFor(context || args.context);
+  if (!planner?.lead) {
+    return error('backlog_add can only be called by the lead engineer');
+  }
+  const { manager, lead } = planner;
   const items = normalizeTasks(args.tasks);
   if (items.length === 0) {
     return error('backlog_add requires at least one task');
@@ -178,17 +365,21 @@ async function backlogAdd(args = {}, context = null) {
   } catch (addError) {
     return error(addError.message);
   }
-  let iterationId = text(args.iterationId || args.boardId);
-  if (!iterationId) {
+  const designId = text(args.designId) || text(lead?.nodeConfig?.taskId);
+  let design = null;
+  if (designId) {
     try {
-      const iterations = agile.listRoadmap().iterations || [];
-      iterationId =
-        iterations.find((iteration) => iteration.isActive)?.id ||
-        iterations.at(-1)?.id ||
-        '';
+      design = agile.getTask(designId);
+      if (design.kind !== 'design') design = null;
     } catch {
-      iterationId = '';
+      design = null;
     }
+  }
+  let iterationId = text(
+    args.iterationId || args.boardId || design?.boardId
+  );
+  if (!iterationId) {
+    iterationId = iterationIdFor(agile);
   }
   if (!iterationId) {
     try {
@@ -197,7 +388,10 @@ async function backlogAdd(args = {}, context = null) {
       return error(`failed to create iteration: ${createError.message}`);
     }
   }
-  const goal = text(args.goal) || 'Mission';
+  const actor = {
+    type: 'agent',
+    id: lead?.id || manager.id,
+  };
   const created = [];
   try {
     for (const item of items) {
@@ -205,18 +399,31 @@ async function backlogAdd(args = {}, context = null) {
         agile.createTask({
           boardId: iterationId,
           column: 'backlog',
+          kind: 'task',
+          designId: design?.id || '',
           title: item.title,
           description: item.description,
           role: item.role,
           acceptance: item.acceptance,
           autoDispatch: true,
-          actor: { type: 'agent', id: manager.id },
+          actor,
         })
       );
     }
   } catch (createError) {
     return error(`failed to create backlog tasks: ${createError.message}`);
   }
+  if (design) {
+    try {
+      agile.updateTask(design.id, {
+        designState: 'working',
+        actor,
+      });
+    } catch (designError) {
+      console.error('design task update failed', designError);
+    }
+  }
+  const goal = text(args.goal) || design?.title || 'Mission';
   let mission = null;
   try {
     mission = providers.systemNodeService?.ensureMission(
@@ -237,6 +444,8 @@ async function backlogAdd(args = {}, context = null) {
     {
       ok: true,
       managerId: manager.id,
+      leadId: lead?.id || null,
+      designId: design?.id || null,
       iterationId,
       goal,
       tasks: created.map(taskView),
@@ -287,11 +496,169 @@ function taskFinish(args = {}, context = null) {
   }
 }
 
+async function taskMerge(args = {}, context = null) {
+  const lead = workSessionFor(context || args.context);
+  if (!isLeadEngineer(lead)) {
+    return error('task_merge can only be called by the lead engineer');
+  }
+  if (typeof providers.mergeTaskBranches !== 'function') {
+    return error('git merge service is not configured');
+  }
+  const manager = store.getSession(lead.managerId);
+  if (!manager || manager.nodeRole !== 'manager') {
+    return error('manager not found');
+  }
+  let agile;
+  try {
+    agile = agileFor(manager);
+  } catch (mergeError) {
+    return error(mergeError.message);
+  }
+  const taskId = text(args.taskId);
+  if (!taskId) return error('task_merge requires a taskId');
+  let task;
+  try {
+    task = agile.getTask(taskId);
+  } catch {
+    return error('task not found');
+  }
+  if (task.kind === 'design') {
+    return error('design tasks are not merged');
+  }
+  if (task.column !== 'finished') {
+    return error('task_merge requires a task in Finished');
+  }
+  const branches = Array.isArray(task.gitBranches) ? task.gitBranches : [];
+  if (branches.length === 0) {
+    return error('task has no Git branches to merge');
+  }
+  let merged;
+  try {
+    merged = await providers.mergeTaskBranches(branches, {
+      message: `merge: ${task.title}${
+        text(args.summary) ? ` - ${text(args.summary).slice(0, 120)}` : ''
+      }`,
+    });
+  } catch (mergeError) {
+    return error(`git merge failed: ${mergeError.message}`);
+  }
+  if (!merged?.ok) {
+    const reason = (merged?.errors || [])
+      .map((item) => item.message || item)
+      .filter(Boolean)
+      .join('; ');
+    return error(`git merge failed: ${reason || 'unknown error'}`);
+  }
+  const actor = { type: 'agent', id: lead.id };
+  let updated;
+  try {
+    agile.moveTask(task.id, 'merged', { actor });
+    updated = agile.updateTask(task.id, {
+      mergedBy: lead.id,
+      reviewLeadId: lead.id,
+      reviewStartedAt: null,
+      reviewState: 'merged',
+      reviewNote: '',
+      actor,
+    });
+  } catch (moveError) {
+    return error(`failed to mark task merged: ${moveError.message}`);
+  }
+  try {
+    providers.systemNodeService?.refreshReportForBoard?.(
+      manager.id,
+      task.boardId,
+      null
+    );
+    await providers.systemNodeService?.tick?.();
+  } catch (tickError) {
+    console.error('merge dispatch tick failed', tickError);
+  }
+  return JSON.stringify(
+    {
+      ok: true,
+      task: taskView(updated),
+      merged: merged.results,
+    },
+    null,
+    2
+  );
+}
+
+function taskReject(args = {}, context = null) {
+  const lead = workSessionFor(context || args.context);
+  if (!isLeadEngineer(lead)) {
+    return error('task_reject can only be called by the lead engineer');
+  }
+  const manager = store.getSession(lead.managerId);
+  if (!manager || manager.nodeRole !== 'manager') {
+    return error('manager not found');
+  }
+  let agile;
+  try {
+    agile = agileFor(manager);
+  } catch (rejectError) {
+    return error(rejectError.message);
+  }
+  const taskId = text(args.taskId);
+  if (!taskId) return error('task_reject requires a taskId');
+  const reason = text(args.reason);
+  if (!reason) return error('task_reject requires a reason');
+  let task;
+  try {
+    task = agile.getTask(taskId);
+  } catch {
+    return error('task not found');
+  }
+  if (task.column !== 'finished') {
+    return error('task_reject requires a task in Finished');
+  }
+  const actor = { type: 'agent', id: lead.id };
+  try {
+    agile.moveTask(task.id, 'backlog', { actor });
+    agile.updateTask(task.id, {
+      reviewState: null,
+      reviewLeadId: '',
+      reviewStartedAt: null,
+      reviewNote: reason,
+      isRework: true,
+      workNodeId: '',
+      attempts: 0,
+      actor,
+    });
+  } catch (rejectError) {
+    return error(`failed to reject task: ${rejectError.message}`);
+  }
+  try {
+    providers.systemNodeService?.refreshReportForBoard?.(
+      manager.id,
+      task.boardId,
+      null
+    );
+    providers.systemNodeService?.tick?.();
+  } catch (tickError) {
+    console.error('reject dispatch tick failed', tickError);
+  }
+  return JSON.stringify(
+    {
+      ok: true,
+      taskId: task.id,
+      column: 'backlog',
+      reason,
+    },
+    null,
+    2
+  );
+}
+
 module.exports = {
   configure,
+  designWrite,
   backlogList,
   backlogAdd,
   iterationAdd,
   taskBlock,
   taskFinish,
+  taskMerge,
+  taskReject,
 };

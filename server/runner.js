@@ -684,7 +684,7 @@ function startRun({
               ? nodeConfig.files.join(' · ')
               : 'none'
           }`,
-          'Publish parallel Backlog tasks with backlog_add, inspect them with backlog_list, and create iterations with iteration_add. The orchestrator assigns Backlog tasks to idle engineers.',
+          'Write a rigorous design proposal with design_write into the 设计案 column. Inspect progress with backlog_list and create iterations with iteration_add. The lead engineer grills the user and creates Backlog tasks; workers implement them.',
         ].join('\n')
       : session.nodeRole === 'work'
         ? [
@@ -714,8 +714,8 @@ function startRun({
                     .join(' · ')
                 : 'none'
             }`,
-            'Inspect the entire project and its development conventions before starting. Keep changes on your own branch.',
-            'When you need approval or an answer, call task_block. When the task is done, call task_finish.',
+            'Inspect the entire project and its development conventions before starting. Keep all changes on your own engineer branch; never merge it yourself.',
+            'When you need approval or an answer, call task_block. When the task is done, call task_finish. The lead engineer reviews and merges your branch.',
           ].join('\n')
         : '';
   const system = [

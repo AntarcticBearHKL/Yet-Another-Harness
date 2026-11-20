@@ -47,7 +47,7 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
           kind: 'manager',
           directories: [dir],
           files: [],
-          engineerCount: 2,
+          engineerCount: 3,
         },
         msgs: [],
       },
@@ -69,6 +69,7 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
     },
   };
   const workers = {
+    'sub-lead': '主工程师',
     'sub-research': '信息收集',
     'sub-programmer': '程序员',
     'sub-tester': '测试员',
@@ -125,6 +126,17 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
           engineer: true,
           engineerIndex: index,
           task: '',
+          directories: [dir],
+          branches:
+            index >= 2
+              ? [
+                  {
+                    repo: dir,
+                    branch: `yah/engineer-${index}`,
+                    baseBranch: 'master',
+                  },
+                ]
+              : [],
         },
         pendingQueue: [],
       });
@@ -134,7 +146,20 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
     },
     notify: () => {},
   });
-  tasks.configure({ getAgileStore: () => agile, systemNodeService: service });
+  tasks.configure({
+    getAgileStore: () => agile,
+    systemNodeService: service,
+    mergeTaskBranches: async (branches) => ({
+      ok: true,
+      results: branches.map((branch) => ({
+        repo: branch.repo,
+        branch: branch.branch,
+        into: branch.baseBranch || 'master',
+        summary: 'merged',
+      })),
+      errors: [],
+    }),
+  });
   try {
     const iteration = JSON.parse(
       tasks.iterationAdd({ goal: 'Build login' }, { sessionId: 'm1' })
@@ -144,6 +169,9 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
     assert.equal(iteration.orchestratorId !== null, true);
     assert.equal(iteration.reportId !== null, true);
 
+    await service.tick();
+    const leadEngineer = store.getSession('e-1');
+    assert.ok(leadEngineer);
     const backlog = JSON.parse(
       await tasks.backlogAdd(
         {
@@ -163,7 +191,7 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
             },
           ],
         },
-        { sessionId: 'm1' }
+        { sessionId: leadEngineer.id }
       )
     );
     assert.equal(backlog.ok, true);
@@ -174,12 +202,14 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
     const orchestrator = service
       .list('m1')
       .find((node) => node.type === 'orchestrator');
-    assert.equal(orchestrator.payload.engineerCount, 2);
+    assert.equal(orchestrator.payload.engineerCount, 3);
+    assert.equal(orchestrator.payload.workerCount, 2);
     assert.equal(orchestrator.payload.wipLimit, 2);
     const engineers = createdWorkNodes.filter(
       (node) => node.nodeConfig?.engineer
     );
-    assert.equal(engineers.length, 2);
+    assert.equal(engineers.length, 3);
+    assert.equal(engineers.find((node) => node.id === 'e-1').title, '主工程师');
 
     const board = agile.snapshot(iteration.iterationId);
     const first = board.tasks.find((task) => task.title === 'Implement login');
@@ -303,6 +333,28 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
       },
       { sessionId: secondEngineer.id }
     );
+    const finishedFirst = agile.getTask(first.id);
+    const finishedSecond = agile.getTask(second.id);
+    assert.equal(finishedFirst.column, 'finished');
+    assert.equal(finishedFirst.reviewState, 'pending');
+    assert.equal(finishedFirst.gitBranches.length, 1);
+    assert.equal(finishedSecond.column, 'finished');
+    assert.equal(
+      service.list('m1').find((node) => node.type === 'report').status,
+      'collecting'
+    );
+
+    const mergedFirst = JSON.parse(
+      await tasks.taskMerge({ taskId: first.id }, { sessionId: 'e-1' })
+    );
+    assert.equal(mergedFirst.ok, true);
+    assert.equal(agile.getTask(first.id).column, 'merged');
+    assert.equal(agile.getTask(first.id).reviewState, 'merged');
+    const mergedSecond = JSON.parse(
+      await tasks.taskMerge({ taskId: second.id }, { sessionId: 'e-1' })
+    );
+    assert.equal(mergedSecond.ok, true);
+    assert.equal(agile.getTask(second.id).column, 'merged');
     const ready = service.list('m1').find((node) => node.type === 'report');
     assert.equal(ready.status, 'ready');
     assert.equal(ready.payload.goal, 'Build login');
@@ -338,7 +390,7 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
     );
     assert.match(
       tasks.backlogList({}, { sessionId: firstEngineer.id }),
-      /only a manager node/
+      /manager or lead engineer/
     );
   } finally {
     service.stop();

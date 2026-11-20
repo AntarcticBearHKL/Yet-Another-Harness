@@ -80,11 +80,14 @@ async function execute(name, args, context = null) {
       background_start: processTools.backgroundStart,
       background_list: processTools.backgroundList,
       background_stop: processTools.backgroundStop,
+      design_write: taskTools.designWrite,
       backlog_list: taskTools.backlogList,
       backlog_add: taskTools.backlogAdd,
       iteration_add: taskTools.iterationAdd,
       task_block: taskTools.taskBlock,
       task_finish: taskTools.taskFinish,
+      task_merge: taskTools.taskMerge,
+      task_reject: taskTools.taskReject,
       monitor_start: processTools.monitorStart,
       monitor_stop: processTools.monitorStop,
       monitor_list: processTools.monitorList,
@@ -207,6 +210,11 @@ function statusLabel(name, args) {
   if (name === 'skill') {
     return value.name ? `skill: ${value.name}` : 'skill';
   }
+  if (name === 'design_write') {
+    return value.title
+      ? `design_write: ${String(value.title).slice(0, 50)}`
+      : 'design_write';
+  }
   if (name === 'backlog_add') {
     const count = Array.isArray(value.tasks) ? value.tasks.length : 0;
     return `backlog_add: ${count} 个任务`;
@@ -215,6 +223,9 @@ function statusLabel(name, args) {
     return value.iterationId || value.goal
       ? `${name}: ${String(value.iterationId || value.goal).slice(0, 50)}`
       : name;
+  }
+  if (name === 'task_merge' || name === 'task_reject') {
+    return value.taskId ? `${name}: ${value.taskId}` : name;
   }
   if (name === 'task_block') {
     return value.kind

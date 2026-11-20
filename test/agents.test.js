@@ -18,6 +18,7 @@ const {
 
 const BUILTIN_IDS = [
   'manager',
+  'sub-lead',
   'sub-research',
   'sub-programmer',
   'sub-tester',
@@ -36,7 +37,7 @@ test('agent profiles are a fixed built-in list', () => {
     );
     assert.ok(loaded.every((agent) => agent.builtin === true));
     assert.equal(loaded[0].name, 'Manager');
-    assert.equal(loaded[1].name, '信息收集');
+    assert.equal(loaded[1].name, '主工程师');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -62,6 +63,7 @@ test('subagent roles mirror the work roles without delegation tools', () => {
   assert.deepEqual(
     ROLE_SUBAGENTS.map((agent) => agent.id),
     [
+      'sub-lead',
       'sub-research',
       'sub-programmer',
       'sub-tester',
@@ -83,7 +85,18 @@ test('subagent roles mirror the work roles without delegation tools', () => {
     (agent) => agent.id === 'sub-programmer'
   );
   assert.ok(programmer.tools.includes('write'));
-  assert.ok(programmer.tools.includes('git_commit'));
+  assert.ok(programmer.tools.includes('git_status'));
+  assert.ok(!programmer.tools.includes('git_commit'));
+  assert.ok(!programmer.tools.includes('git_merge'));
+  const lead = ROLE_SUBAGENTS.find((agent) => agent.id === 'sub-lead');
+  assert.equal(lead.name, '主工程师');
+  assert.ok(lead.tools.includes('task_merge'));
+  assert.ok(lead.tools.includes('task_reject'));
+  assert.ok(lead.tools.includes('backlog_add'));
+  assert.ok(lead.tools.includes('task_block'));
+  assert.ok(lead.tools.includes('git_merge'));
+  assert.ok(!lead.tools.includes('write'));
+  assert.ok(!lead.tools.includes('edit'));
 });
 
 test('getAgent resolves ids and role names', () => {
@@ -150,8 +163,9 @@ test('the manager profile is fixed and cannot be overridden', () => {
     assert.equal(loaded.prompt, MANAGER_AGENT.prompt);
     assert.deepEqual(loaded.tools, MANAGER_AGENT.tools);
     assert.equal(loaded.builtin, true);
+    assert.ok(loaded.tools.includes('design_write'));
     assert.ok(loaded.tools.includes('backlog_list'));
-    assert.ok(loaded.tools.includes('backlog_add'));
+    assert.ok(!loaded.tools.includes('backlog_add'));
     assert.ok(loaded.tools.includes('iteration_add'));
     assert.ok(loaded.tools.includes('background_list'));
     assert.ok(loaded.tools.includes('background_stop'));

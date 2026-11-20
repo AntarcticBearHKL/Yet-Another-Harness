@@ -56,3 +56,38 @@ test('git worktrees give each expert an isolated branch', () => {
     fs.rmSync(worktreeRoot, { recursive: true, force: true });
   }
 });
+
+test('lead merges a worker branch back into the project', () => {
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-git-merge-'));
+  const worktreeRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'yah-git-merge-trees-')
+  );
+  try {
+    fs.writeFileSync(path.join(project, 'README.md'), '# Merge demo\n');
+    const git = createGitWorktreeService({ root: worktreeRoot });
+    git.ensureRepo(project);
+    const worker = git.prepareWorktree({
+      baseDirectories: [project],
+      sessionId: 'merge-worker-1',
+      label: 'Worker task',
+    });
+    assert.equal(worker.branches.length, 1);
+    fs.writeFileSync(
+      path.join(worker.directories[0], 'merged.js'),
+      'export const merged = true;\n'
+    );
+    git.commitWorktree(worker.directories, 'feat: worker change');
+    const merged = git.mergeBranches(worker.branches, {
+      message: 'merge: worker task',
+    });
+    assert.equal(merged.ok, true);
+    assert.equal(merged.results.length, 1);
+    assert.equal(
+      fs.existsSync(path.join(project, 'merged.js')),
+      true
+    );
+  } finally {
+    fs.rmSync(project, { recursive: true, force: true });
+    fs.rmSync(worktreeRoot, { recursive: true, force: true });
+  }
+});

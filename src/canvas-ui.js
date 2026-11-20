@@ -862,7 +862,7 @@ function canvasSystemNodeSummary(node) {
   if (node?.type === 'orchestrator') {
     const payload = node.payload || {};
     const boards = Array.isArray(payload.boardIds) ? payload.boardIds.length : 0;
-    const engineers = Number(payload.engineerCount) || Number(payload.wipLimit) || 1;
+    const engineers = Number(payload.engineerCount) || 2;
     return `${engineers} 个工程师 · ${
       boards ? `${boards} 个 mission` : '等待 Manager 下达 mission'
     }`;
@@ -2687,8 +2687,8 @@ async function addManagerEngineer(managerId) {
   );
   if (!manager) return;
   const current = Math.max(
-    1,
-    Math.min(12, Math.round(Number(manager.nodeConfig?.engineerCount) || 1))
+    2,
+    Math.min(12, Math.round(Number(manager.nodeConfig?.engineerCount) || 2))
   );
   if (current >= 12) return;
   manager.nodeConfig = {
@@ -2780,10 +2780,10 @@ function openCanvasNodeMenu(sessionId, x, y) {
       },
     ];
     const engineerCount = Math.max(
-      1,
+      2,
       Math.min(
         12,
-        Math.round(Number(session.nodeConfig?.engineerCount) || 1)
+        Math.round(Number(session.nodeConfig?.engineerCount) || 2)
       )
     );
     if (engineerCount < 12) {
@@ -2827,36 +2827,43 @@ function openCanvasNodeMenu(sessionId, x, y) {
       action: () => openCanvasSession(session.managerId),
     });
   }
-  items.push({
-    label: '归档',
-    icon: RING_ICONS.archive,
-    action: () => window.openArchiveWindowForSession?.(session.id),
-  });
+  const permanentEngineer =
+    session.nodeConfig?.engineer === true &&
+    Number(session.nodeConfig?.engineerIndex) <= 2;
+  if (!permanentEngineer) {
+    items.push({
+      label: '归档',
+      icon: RING_ICONS.archive,
+      action: () => window.openArchiveWindowForSession?.(session.id),
+    });
+  }
   items.push({
     label: '改名',
     icon: RING_ICONS.rename,
     action: () => openRename('session', session.id),
   });
-  items.push({
-    label: '删除',
-    icon: RING_ICONS.trash,
-    danger: true,
-    action: () => {
-      if (isRoot && groupIds.length > 1) {
+  if (!permanentEngineer) {
+    items.push({
+      label: '删除',
+      icon: RING_ICONS.trash,
+      danger: true,
+      action: () => {
+        if (isRoot && groupIds.length > 1) {
+          openConfirm({
+            text: `删除这个组和里面的 ${groupIds.length} 个对话？不可恢复。`,
+            action: () => deleteCanvasGroup(root.id),
+          });
+          return;
+        }
         openConfirm({
-          text: `删除这个组和里面的 ${groupIds.length} 个对话？不可恢复。`,
-          action: () => deleteCanvasGroup(root.id),
+          text: `删除对话「${
+            session.title || '未命名'
+          }」？不可恢复。`,
+          action: () => deleteSessionById(session.id),
         });
-        return;
-      }
-      openConfirm({
-        text: `删除对话「${
-          session.title || '未命名'
-        }」？不可恢复。`,
-        action: () => deleteSessionById(session.id),
-      });
-    },
-  });
+      },
+    });
+  }
   openActionMenu({ x, y, items });
 }
 

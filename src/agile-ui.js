@@ -166,17 +166,42 @@ function agileTaskCard(task) {
     card.append(el('div', 'agile-task-desc', task.description));
   }
   const foot = el('div', 'agile-task-foot');
+  if (task.kind === 'design') {
+    const designState = {
+      working: '整理中',
+      blocked: '待回答',
+      done: '已拆解',
+      pending: '待处理',
+    }[task.designState || 'pending'];
+    foot.append(el('span', 'agile-signal digest', `设计案 · ${designState}`));
+  }
   if (task.needsDigest) {
     foot.append(el('span', 'agile-signal digest', '待归并'));
   }
   if (task.isRework) {
     foot.append(el('span', 'agile-signal rework', '返工'));
   }
+  if (task.column === 'finished' && task.reviewState !== 'merged') {
+    foot.append(
+      el(
+        'span',
+        'agile-signal digest',
+        task.reviewState === 'reviewing' ? '检查中' : '待主工程师检查'
+      )
+    );
+  }
+  if (task.column === 'merged') {
+    foot.append(el('span', 'agile-signal merged', '已合并'));
+  }
   if (task.claimedBy) {
     foot.append(el('span', 'agile-task-meta', `@${task.claimedBy}`));
   }
   if (task.blockedReason) {
     foot.append(el('span', 'agile-signal rework', '阻塞'));
+  }
+  const branches = Array.isArray(task.gitBranches) ? task.gitBranches : [];
+  if (branches.length > 0) {
+    foot.append(el('span', 'agile-task-meta', `分支 ${branches.length}`));
   }
   const undigested = (task.keyPoints || []).filter((point) => !point.digestedAt).length;
   if (undigested > 0) {
@@ -312,6 +337,7 @@ function renderAgileTaskModal() {
   const columnName = column?.name || task.column;
   const editable = false;
   const inProgress = task.column === 'progress';
+  const readOnlyNotes = inProgress || task.column === 'merged';
   if (agileDom.taskKicker) {
     agileDom.taskKicker.textContent = columnName.toUpperCase();
   }
@@ -357,7 +383,7 @@ function renderAgileTaskModal() {
             note.digestedAt ? '已归并' : '待归并'
           )
         );
-        if (!note.digestedAt && !inProgress) {
+        if (!note.digestedAt && !readOnlyNotes) {
           const del = el('button', 'agile-note-delete', '×');
           del.type = 'button';
           del.title = '删除备注';
@@ -381,13 +407,15 @@ function renderAgileTaskModal() {
       : '没有备注';
   }
   if (agileDom.noteAdd) {
-    agileDom.noteAdd.classList.toggle('hidden', !task.id || inProgress);
+    agileDom.noteAdd.classList.toggle('hidden', !task.id || readOnlyNotes);
   }
   if (agileDom.noteLock) {
-    agileDom.noteLock.textContent = inProgress
-      ? '备注在 In Progress 期间只读，Agent 交回任务后才能修改。'
+    agileDom.noteLock.textContent = readOnlyNotes
+      ? task.column === 'merged'
+        ? '已合并的任务只读。'
+        : '备注在 In Progress 期间只读，Agent 交回任务后才能修改。'
       : '';
-    agileDom.noteLock.classList.toggle('hidden', !inProgress);
+    agileDom.noteLock.classList.toggle('hidden', !readOnlyNotes);
   }
   if (agileDom.taskInfo) {
     const info = [];
@@ -400,6 +428,27 @@ function renderAgileTaskModal() {
     if (task.assignee) info.push(`Assignee：${task.assignee}`);
     info.push(`认领：${task.claimedBy || '未认领'}`);
     if (task.claimedAt) info.push(`认领时间：${agileDate(task.claimedAt, true)}`);
+    if (task.kind === 'design') {
+      const designState = {
+        working: '整理中',
+        blocked: '待回答',
+        done: '已拆解',
+        pending: '待处理',
+      }[task.designState || 'pending'];
+      info.push(`设计状态：${designState}`);
+    }
+    if (task.column === 'finished' && task.reviewState) {
+      info.push(
+        `主工程师检查：${task.reviewState === 'reviewing' ? '进行中' : '待处理'}`
+      );
+    }
+    if (task.reviewNote) info.push(`打回原因：${task.reviewNote}`);
+    const taskBranches = Array.isArray(task.gitBranches) ? task.gitBranches : [];
+    if (taskBranches.length > 0) {
+      info.push(
+        `Git 分支：${taskBranches.map((branch) => branch.branch).join(', ')}`
+      );
+    }
     if (task.blockedReason) info.push(`阻塞原因：${task.blockedReason}`);
     if (task.updatedAt) {
       info.push(`更新：${agileDate(task.updatedAt, true)}`);
@@ -413,7 +462,7 @@ function renderAgileTaskModal() {
   if (agileDom.taskDelete) {
     agileDom.taskDelete.classList.toggle(
       'hidden',
-      !task.id || task.column === 'finished'
+      !task.id || task.column === 'finished' || task.column === 'merged'
     );
   }
   if (agileDom.taskSave) {

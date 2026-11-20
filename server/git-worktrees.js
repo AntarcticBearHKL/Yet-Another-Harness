@@ -98,10 +98,13 @@ function createGitWorktreeService({ root }) {
       if (!repo) continue;
       const baseName = path.basename(repo) || 'repo';
       const branch = `yah/${slug(label)}-${id.slice(0, 8)}`;
+      const head = git(['rev-parse', '--abbrev-ref', 'HEAD'], repo, 15000);
+      const baseBranch =
+        head.status === 0 ? String(head.stdout || '').trim() : '';
       const worktree = path.join(baseRoot, id, slug(baseName));
       if (fs.existsSync(worktree)) {
         directories.push(worktree);
-        branches.push({ repo, branch, worktree });
+        branches.push({ repo, branch, baseBranch, worktree });
         continue;
       }
       fs.mkdirSync(path.dirname(worktree), { recursive: true });
@@ -114,7 +117,7 @@ function createGitWorktreeService({ root }) {
       }
       if (result.status === 0) {
         directories.push(worktree);
-        branches.push({ repo, branch, worktree });
+        branches.push({ repo, branch, baseBranch, worktree });
       } else {
         console.error(
           'git worktree add failed',
@@ -158,12 +161,85 @@ function createGitWorktreeService({ root }) {
       .map((item) => (item.worktree ? `${item.branch} (${item.worktree})` : item.branch));
   }
 
+  function mergeBranches(branches, options = {}) {
+    const results = [];
+    const errors = [];
+    const message = String(options.message || 'merge: YAH task').slice(0, 200);
+    for (const item of Array.isArray(branches) ? branches : []) {
+      const target = String(item?.repo || '').trim();
+      const branch = String(item?.branch || '').trim();
+      if (!target || !branch) {
+        errors.push({ repo: target, branch, message: 'missing repo or branch' });
+        continue;
+      }
+      const repo = repoRoot(target) || target;
+      if (!fs.existsSync(repo)) {
+        errors.push({ repo, branch, message: 'repository not found' });
+        continue;
+      }
+      const verify = git(['rev-parse', '--verify', branch], repo, 15000);
+      if (verify.status !== 0) {
+        errors.push({ repo, branch, message: 'branch not found' });
+        continue;
+      }
+      const currentResult = git(
+        ['rev-parse', '--abbrev-ref', 'HEAD'],
+        repo,
+        15000
+      );
+      const current =
+        currentResult.status === 0
+          ? String(currentResult.stdout || '').trim()
+          : '';
+      if (current && current === branch) {
+        errors.push({
+          repo,
+          branch,
+          message: 'cannot merge a branch into itself',
+        });
+        continue;
+      }
+      const merge = git(
+        [
+          '-c',
+          'user.name=YAH',
+          '-c',
+          'user.email=yah@local',
+          'merge',
+          '--no-edit',
+          '-m',
+          message,
+          branch,
+        ],
+        repo,
+        180000
+      );
+      if (merge.status !== 0) {
+        git(['merge', '--abort'], repo, 30000);
+        errors.push({
+          repo,
+          branch,
+          message: String(merge.stderr || merge.error || 'merge failed').trim(),
+        });
+        continue;
+      }
+      results.push({
+        repo,
+        branch,
+        into: current,
+        summary: String(merge.stdout || '').trim(),
+      });
+    }
+    return { ok: errors.length === 0, results, errors };
+  }
+
   return {
     ensureRepo,
     ensureRepositories,
     prepareWorktree,
     commitWorktree,
     branchSummary,
+    mergeBranches,
   };
 }
 

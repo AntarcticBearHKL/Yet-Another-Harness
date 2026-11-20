@@ -16,8 +16,20 @@ test('agile store covers boards, notes, digest and moves', async () => {
     assert.match(board.label, /^Iteration /);
     assert.deepEqual(
       store.state(board.id).columns.map((column) => column.id),
-      ['backlog', 'progress', 'blocked', 'finished']
+      ['design', 'backlog', 'progress', 'blocked', 'finished', 'merged']
     );
+
+    const design = store.createTask({
+      boardId: board.id,
+      column: 'design',
+      kind: 'design',
+      title: 'Login design',
+      description: 'A precise design proposal',
+      actor: { type: 'agent', id: 'manager' },
+    });
+    assert.equal(design.column, 'design');
+    assert.equal(design.kind, 'design');
+    assert.equal(design.designState, 'pending');
 
     const task = store.createTask({
       boardId: board.id,
@@ -55,16 +67,39 @@ test('agile store covers boards, notes, digest and moves', async () => {
     });
     assert.equal(finished.column, 'finished');
     assert.ok(finished.doneDate);
+    assert.equal(finished.reviewState, 'pending');
     assert.throws(
       () => store.deleteTask(task.id, { actor: { type: 'human', id: null } }),
-      /Finished tasks cannot be deleted/i
+      /Finished or merged tasks cannot be deleted/i
     );
 
-    const rework = store.addNote(task.id, 'Rework this after review');
+    const merged = store.moveTask(task.id, 'merged', {
+      actor: { type: 'agent', id: 'lead' },
+    });
+    assert.equal(merged.column, 'merged');
+    assert.equal(merged.reviewState, 'merged');
+    assert.ok(merged.mergedAt);
+    assert.ok(store.state(board.id).board.allFinished);
+    assert.throws(
+      () => store.addNote(task.id, 'Merged notes are locked'),
+      /Merged tasks are read-only/i
+    );
+    assert.throws(
+      () => store.deleteTask(task.id, { actor: { type: 'human', id: null } }),
+      /Finished or merged tasks cannot be deleted/i
+    );
+
+    const rework = store.addNote(
+      store.moveTask(task.id, 'finished', {
+        actor: { type: 'agent', id: 'lead' },
+      }).id,
+      'Rework this after review'
+    );
     assert.equal(rework.column, 'backlog');
     assert.equal(rework.isRework, true);
     assert.equal(rework.needsDigest, true);
     assert.equal(rework.doneDate, null);
+    assert.equal(rework.reviewState, null);
 
     const batch = store.createTasks({
       boardId: board.id,
@@ -111,11 +146,14 @@ test('agile store covers boards, notes, digest and moves', async () => {
 test('the model catalog exposes only the simplified task tools', () => {
   const names = tools.definitions().map((definition) => definition.function.name);
   for (const name of [
+    'design_write',
     'backlog_list',
     'backlog_add',
     'iteration_add',
     'task_block',
     'task_finish',
+    'task_merge',
+    'task_reject',
   ]) {
     assert.ok(names.includes(name), `${name} is exposed`);
   }

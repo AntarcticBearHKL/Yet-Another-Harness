@@ -244,18 +244,32 @@ const TOOL_I18N = {
     durationMs: '耗时（毫秒）',
   }),
 
-  backlog_list: t('任务列表', '查看当前迭代及任务状态、阻塞原因和结果。', {
+  design_write: t('写入设计案', 'Manager 专用。把用户要求整理成严谨的设计案并写入「设计案」列；主工程师会先向用户确认需求，再拆成 Backlog。', {
+    iterationId: '迭代 ID（省略时使用或创建当前迭代）',
+    designId: '要修订的设计案任务 ID（省略时新建）',
+    title: '设计案标题',
+    goal: '目标与预期结果',
+    description: '补充的精确设计上下文',
+    scope: '范围与边界',
+    requirements: '明确的功能需求',
+    constraints: '技术或产品约束',
+    outOfScope: '明确的非目标',
+    openQuestions: '需要主工程师向用户确认的问题',
+    acceptance: '验收标准与完成定义',
+  }),
+  backlog_list: t('任务列表', 'Manager 或主工程师查看当前迭代、设计案及所有任务状态、分支和结果。', {
     iterationId: '迭代 ID（省略时查看当前迭代）',
   }),
-  backlog_add: t('添加 Backlog', '把拆分好的并行任务写入 Backlog；没有迭代时会自动创建。', {
-    iterationId: '迭代 ID（省略时使用当前迭代）',
+  backlog_add: t('添加 Backlog', '主工程师专用。把设计案拆成互相独立的实现任务写入 Backlog；需求必须先确认。', {
+    iterationId: '迭代 ID（省略时使用设计案所在迭代）',
+    designId: '设计案任务 ID（默认当前设计案）',
     goal: 'Mission 目标，用于 Report Hub',
-    tasks: '并行任务列表',
+    tasks: '独立的 Backlog 任务列表',
   }),
   iteration_add: t('添加迭代', '创建一个新的 Agile 迭代并返回 ID。', {
     goal: '迭代目标 / Mission 名称',
   }),
-  task_block: t('阻塞任务', '把当前任务标记为阻塞，并创建审批或问卷；会记录发起任务的工程师。解决后调度器会恢复原工程师。', {
+  task_block: t('阻塞任务', '把当前任务或设计案标记为阻塞，并创建审批或问卷；会记录发起人。解决后调度器会恢复原来的工程师或主工程师。', {
     kind: '阻塞类型：approval 或 question',
     reason: '阻塞原因，显示在任务和系统 node 上',
     action: '仅审批：需要审批的动作或工具',
@@ -264,7 +278,7 @@ const TOOL_I18N = {
     mode: '仅问卷：blocking 或 timed',
     timeoutSeconds: '仅问卷：定时模式的秒数',
   }),
-  task_finish: t('完成任务', '提交当前任务结果并标记完成；Report Hub 用它生成报告。', {
+  task_finish: t('完成任务', '提交当前任务结果。工程师任务会提交到自己的 Git 分支并进入 Finished，等待主工程师检查与合并；设计案则标记为已拆解。', {
     taskId: '任务 ID（默认当前任务）',
     summary: '完成内容摘要',
     how: '如何完成任务的步骤',
@@ -272,9 +286,17 @@ const TOOL_I18N = {
     commands: '执行过的命令',
     tests: '测试及结果',
     artifacts: '截图、报告或链接等产物',
-    branches: 'Subagent 使用的 Git 分支',
+    branches: '工程师使用的 Git 分支',
     blockers: '仍然存在的阻塞',
     followUps: '建议的后续工作',
+  }),
+  task_merge: t('合并任务', '主工程师专用。检查 Finished 任务后合并其 Git 分支，并把任务移到 Merged。', {
+    taskId: 'Finished 任务 ID',
+    summary: '检查与合并摘要',
+  }),
+  task_reject: t('打回任务', '主工程师专用。把不满足设计或验收标准的 Finished 任务打回 Backlog 重做。', {
+    taskId: 'Finished 任务 ID',
+    reason: '不完整或不正确之处',
   }),
 
   agile_list_boards: t('敏捷迭代列表', '列出所有迭代及任务数和日期。'),

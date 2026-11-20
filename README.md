@@ -65,12 +65,12 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 对话面板里按 Space 总是打开输入框（焦点在按钮 / 消息块上时也一样，不会触发折叠或按钮点击）；输入框为空或只有空格、且没有挂 Skill 时，再按 Space 关闭输入框；有文字或已挂 Skill 时 Space 才作为空格
 - 所有带确认按钮的弹窗按 Space 等于点击确认按钮：删除确认的 `Delete`、重命名的 `Save`、项目的 `Create / Save`、Goal 的 `Start Goal`、Skill 参数的 `Attach`、工具授权的 `允许一次`、设置的 `Done`、MCP 服务器表单的 `Save`；焦点在输入框 / 文本域 / 下拉框里时 Space 仍然是空格，项目目录拖放区这类自己处理 Space 的控件保持原行为
 - 后台服务：LLM 用 `background_start` 在项目里启动持续运行的服务（dev server、watcher、`npm run dev` 等），每次必须附 `note` 简洁说明用途；工具只返回 id、备注和运行状态，不返回输出或执行结果，服务结束时也不会把任何内容送回对话。服务按项目保存，不属于某个对话；Manager group 里有统一的「后台」管理 node，显示每个服务的备注、创建者、命令和运行状态，创建者或管理员（Manager / 人在画布上）可以停止对应服务；`background_list` / `background_stop` 用于列出和停止，旧的 `background_output` / `background_cancel` / `monitor_output` 已删除。工具面板里是「后台」分类
-- 角色：Subagent 分组保留信息收集、程序员、测试员、文档写作、代码审查五个 worker，不再有通用 Build，也没有项目协调 Agent；每个 worker 直接处理 Agile 任务，使用 `task_block` / `task_finish`
+- 角色：Subagent 分组包含主工程师、信息收集、程序员、测试员、文档写作、代码审查六个固定角色，不再有通用 Build，也没有项目协调 Agent；主工程师负责需求确认、拆解和合并检查，其余 worker 直接处理 Agile 任务，使用 `task_block` / `task_finish`
 - `/fork` 系统 Skill：在当前工作目录把当前对话分叉成新的可编辑对话，命名 `#n-对话名`，原对话保持不变；在输入框输入 `/fork [名字]` 或从斜杠列表选择
-- Agile 工作区：从 Tab 工作区空白处的右键菜单打开；桌面端打开一个独立窗口（网页端回退为全屏页面），窗口位置和大小会记住。固定四列 Backlog / In Progress / Blocked / Finished；左侧分组和迭代，支持折叠、改名、新建、删除；卡片可以打开任务表单，标题和描述只读，备注仍可添加，备注在 In Progress 期间锁定；Finished 任务被加备注会自动回到 Backlog 并标记返工。支持任务搜索、WIP 上限、迭代日期/目标、显示更新时间和默认 OpenAgile Skill。看板数据存在 `%APPDATA%\yah\agile.json`；Manager 通过 `backlog_add` 发布并行任务，调度器负责发放
-- 任务工具：工具面板的「Agile」分类只保留 `backlog_list`、`backlog_add`、`iteration_add`、`task_block`、`task_finish`；旧的 `agile_*`、`mission_*`、`worknode_result`、`question` 工具已删除
-- 系统 node：Manager group 左侧显示 Agile、调度器和后台，右侧显示 Report Hub、审批和问卷。每个 Manager 启动后自动出现 Agile、调度器和后台；发布 Backlog 后自动出现 Report Hub，审批和问卷在 `task_block` 时出现。点击任意管理 node 会打开统一风格的详情页，显示状态、执行步骤和该类型的专属内容（Agile 计数、后台服务列表、报告正文、审批详情或问卷表单）。调度器每 1.5 秒扫描 Agile Backlog，按角色和空闲工程师创建 / 复用 Agent work node；工程师用 `task_finish` 提交结果，Report Hub 更新 Agile 并生成可读报告；`task_block` 创建审批或问卷时会在 node 上记录发起任务的工程师，解决后调度器解除阻塞并把任务发回原工程师
-- 工程师 node、Agile、调度器、后台、Report Hub、审批和问卷这些单个 node 不能自由拖动，也不能改变位置。Manager group 是一个完整的圆角框，内部固定三列，列与列之间用虚线分割：左列是管理 node（Manager、Agile、调度器、后台），中列是工程师工作 node，右列是报告、审批和问卷等输出。三列不再有各自的标题或独立卡片，所有 node 直接作为框内的行从上往下排列，行与行之间没有高度空隙，也不再使用固定正方形；每行高度由内容决定，新增 node 会直接排到对应列末尾。工程师列的第一个固定是「主工程师」，编号 1 的工程师始终存在；其余工程师继续按编号排列。group 本身仍可拖动：按住任意行或组内空白处都能移动整组，group 之间保留碰撞体积和 16px 间距，拖动时不会互相重叠或覆盖。group 从 Manager 所在位置自动排版，框的高度跟随最高的一列。新建管理 node 时不再询问工程师数量，默认只创建一个工程师；之后可以右键管理 node 选「新增工程师」逐个添加，或在「配置」里调整数量。右键管理 node 选择「删除管理 node」会删除整个 group：管理对话、所有工作 node 及其子对话、Agile / 调度器 / 后台 / 报告 / 审批 / 问卷等系统 node、该 Manager 的 Agile 数据和项目后台服务一起删除，不能恢复
+- Agile 工作区：从 Tab 工作区空白处的右键菜单打开；桌面端打开一个独立窗口（网页端回退为全屏页面），窗口位置和大小会记住。固定六列 设计案 / Backlog / In Progress / Blocked / Finished / Merged；左侧分组和迭代，支持折叠、改名、新建、删除；卡片可以打开任务表单，标题和描述只读，备注仍可添加，备注在 In Progress 期间锁定；Finished 任务被加备注会自动回到 Backlog 并标记返工。支持任务搜索、WIP 上限、迭代日期/目标、显示更新时间和默认 OpenAgile Skill。看板数据存在 `%APPDATA%\yah\agile.json`。Manager 写设计案，主工程师拆成 Backlog 并检查合并，worker 完成后进入 Finished，合并后进入 Merged
+- 任务工具：工具面板的「Agile」分类包含 `design_write`、`backlog_list`、`backlog_add`、`iteration_add`、`task_block`、`task_finish`、`task_merge`、`task_reject`；旧的 `agile_*`、`mission_*`、`worknode_result`、`question` 工具已删除
+- 系统 node：Manager group 左侧显示 Agile、调度器和后台，右侧显示 Report Hub、审批和问卷。每个 Manager 启动后自动出现 Agile、调度器和后台；发布设计案后自动出现 Report Hub，审批和问卷在 `task_block` 时出现。点击任意管理 node 会打开统一风格的详情页，显示状态、执行步骤和该类型的专属内容（Agile 计数、后台服务列表、报告正文、审批详情或问卷表单）。调度器每 1.5 秒扫描设计案、Backlog、Finished 和阻塞队列：把设计案派给主工程师，把 Backlog 派给 worker 工程师，把 Finished 重新交给主工程师检查合并；主工程师用问卷向用户确认需求，worker 用 `task_finish` 提交结果，Report Hub 更新 Agile 并生成可读报告
+- 工程师 node、Agile、调度器、后台、Report Hub、审批和问卷这些单个 node 不能自由拖动，也不能改变位置。Manager group 是一个完整的圆角框，内部固定三列，列与列之间用虚线分割：左列是管理 node（Manager、Agile、调度器、后台），中列是工程师工作 node，右列是报告、审批和问卷等输出。三列不再有各自的标题或独立卡片，所有 node 直接作为框内的行从上往下排列，行与行之间没有高度空隙，也不再使用固定正方形；每行高度由内容决定，新增 node 会直接排到对应列末尾。工程师列的第一个固定是「主工程师」，编号 1 和编号 2 的工程师写死存在，不能删除或归档；编号 1 不接实现任务，只负责需求确认、拆解和合并检查，编号 2 及以后是执行任务的 worker。group 本身仍可拖动：按住任意行或组内空白处都能移动整组，group 之间保留碰撞体积和 16px 间距，拖动时不会互相重叠或覆盖。group 从 Manager 所在位置自动排版，框的高度跟随最高的一列。新建管理 node 时默认创建一个主工程师和一个工程师；之后可以右键管理 node 选「新增工程师」逐个添加，或在「配置」里调整数量。右键管理 node 选择「删除管理 node」会删除整个 group：管理对话、所有工作 node 及其子对话、Agile / 调度器 / 后台 / 报告 / 审批 / 问卷等系统 node、该 Manager 的 Agile 数据和项目后台服务一起删除，不能恢复
 - 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
 - 输入框（Space）里：新对话（还没有任何消息）上方只显示 MCP 摘要按钮；已有消息的对话上方只显示排队消息框。生成中仍可继续输入，消息按顺序排队、一行一条，左侧拖动排序，行尾是编辑 / 立即发送 / 删除三个纯图标按钮；当前生成结束后自动按顺序处理队列；这两块都是和输入框同宽的圆角矩形
 - 新建对话默认关闭所有 MCP 服务器：MCP 摘要显示 `0/总数`，需要时在对话顶部的 MCP 配置页里手动打开；开关按会话持久化
@@ -81,13 +81,13 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 在输入框开头输入 `/` 会在光标位置弹出搜索式 Skill 联想：按名称、描述、关键词匹配当前对话可用的 Skill，上下键移动、回车或点击选择；输入完整的 Skill 名称或 id 后会自动识别并关闭联想，后面可以直接跟空格、参数或正文，不需要回车选择；只有部分匹配时才需要上下键 / 回车选择。选中后输入框本身不变色，只在输入框上方显示一个带颜色的 `/ Skill` 标记，按 Backspace 或点 × 整体删除；带参数的 MCP Skill 会先弹出参数表单
 - 附加的 Skill 在发送时解析并注入该次请求的 system prompt（`# Active Skills`），不会写进用户输入；排队消息会一起保存自己的 Skill
 - 已连接且当前对话启用的 MCP 服务器会把 prompts 暴露为临时 Skill；切换 MCP 开关后列表实时更新
-- Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧按「管理 / Subagent」分组列出固定配置，右侧显示名称、提示词和工具权限；管理只有一个 Manager；具体工作角色全部在 Subagent：信息收集、程序员、测试员、文档写作、代码审查，没有通用 Build，也没有项目协调 Agent；配置完全只读，不能新增、删除或修改
-- Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；每个角色的提示词第一句都是先阅读整个项目目录、README、AGENTS.md、依赖清单和关键源码，理解开发方式后再开始工作。每个 Subagent 是直接干活的 worker，拥有自己的工作工具和 Git 工具，以及 `task_block` / `task_finish`；工具权限和工具目录一样左右分栏：左列第一行是「允许所有工具」，下面是分类，右列第一行是搜索框，下面是当前分类的工具；可以浏览分类和搜索，但复选框只展示状态、不响应点击，显示保持原样不做灰色禁用；MCP 工具不进入 Agent 工具权限，也不受 Agent 工具勾选限制，仍由对话的 MCP 开关控制，并继续在 tool 面板里查看
-- Manager 的主流程是 `backlog_list` / `backlog_add` / `iteration_add`：把用户请求拆成可并行的任务，写明角色和验收标准后直接写入 Agile Backlog；调度器每 1.5 秒扫描 Backlog，把任务分配给空闲工程师；工程师用 `task_block` 在需要审批或问卷时阻塞任务，解决后调度器恢复原工程师，完成后用 `task_finish` 提交结果，Report Hub 汇总并移到 Finished
-- 调度器详情页会记录每次扫描的 Backlog / 进行中 / 阻塞 / 完成数量，以及每个任务的分发和阻塞步骤；端口不消耗模型
-- 每个管理 group 导入目录时自动检查 Git：目录已有 Git 就复用，没有就执行 `git init` 并建立初始提交；每个 Subagent worker 都在独立 worktree / branch（`yah/...`）上工作，完成时自动提交自己的变更，报告里会列出使用的分支
-- Manager 的工具权限被收窄为 `backlog_list`、`backlog_add`、`iteration_add`；它不读文件、不搜索、不执行命令，也不直接写代码，所有执行都交给 Agent / Subagent
-- Manager 配置里可以设置「干活工程师」数量，默认 1、最少 1；每个工程师是一个独立的 Subagent worker 对话 node，调度器会把待执行任务派给空闲的工程师 node，并按任务角色切换对应 worker profile，而不是为每个任务新建临时 work node
+- Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧按「管理 / Subagent」分组列出固定配置，右侧显示名称、提示词和工具权限；管理只有一个 Manager；具体工作角色全部在 Subagent：主工程师、信息收集、程序员、测试员、文档写作、代码审查，没有通用 Build，也没有项目协调 Agent；配置完全只读，不能新增、删除或修改
+- Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；每个角色的提示词第一句都是先阅读整个项目目录、README、AGENTS.md、依赖清单和关键源码，理解开发方式后再开始工作。每个 Subagent 的工具权限按角色区分：主工程师有 `task_block` / `task_finish` / `backlog_add` / `task_merge` / `task_reject`、只读代码工具、shell 和 Git 检查 / 合并工具，但没有 `write` / `edit`；worker 有代码工具、自己的 worktree 分支和 `task_block` / `task_finish`，没有合并 / 推送工具。工具权限和工具目录一样左右分栏：左列第一行是「允许所有工具」，下面是分类，右列第一行是搜索框，下面是当前分类的工具；可以浏览分类和搜索，但复选框只展示状态、不响应点击，显示保持原样不做灰色禁用；MCP 工具不进入 Agent 工具权限，也不受 Agent 工具勾选限制，仍由对话的 MCP 开关控制，并继续在 tool 面板里查看
+- Manager 的主流程是 `design_write` / `backlog_list` / `iteration_add`：把用户请求整理成严谨的设计案（目标、范围、需求、约束、非目标、验收和待确认问题），写入 Agile 的「设计案」列；调度器把设计案交给主工程师，主工程师用 `task_block` 问卷向用户逐项确认需求（grill me），确认后用 `backlog_add` 拆成互相独立的 Backlog 任务；调度器把 Backlog 分配给 worker 工程师，工程师完成后任务进入 Finished，调度器再把 Finished 交回主工程师；主工程师检查代码和验收标准，用 `task_merge` 合并 Git 分支并进入 Merged，不合格时用 `task_reject` 打回 Backlog
+- 调度器详情页会记录每次扫描的设计案 / Backlog / 进行中 / 阻塞 / 待合并 / 已合并数量，以及设计派发、任务分发、阻塞恢复和主工程师合并步骤；端口不消耗模型
+- 每个管理 group 导入目录时自动检查 Git：目录已有 Git 就复用，没有就执行 `git init` 并建立初始提交；主工程师在项目根目录检查和合并，每个 worker 工程师都在独立 worktree / branch（`yah/...`）上工作，完成时自动提交自己的变更，报告里会列出使用的分支
+- Manager 的工具权限被收窄为 `design_write`、`backlog_list`、`iteration_add`、`background_list`、`background_stop`；它不读文件、不搜索、不执行命令、不写代码，也不拆实现任务，所有执行和拆解都交给主工程师 / worker
+- Manager 配置里可以设置工程师数量，默认 2、最少 2：编号 1 固定是主工程师，编号 2 是第一个 worker，这两个写死不能删除；编号 2 以后可以继续增加。调度器把设计案和 Finished 检查交给主工程师，把 Backlog 任务派给编号 2 及以后的空闲 worker，并按任务角色切换对应 worker profile
 - 输入框底部从左到右是：当前 Agent 名字（如 `程序员`，琥珀色、左对齐，可点击展开暖色磨砂下拉菜单）、写死的模型名 `deepseek-v4.1-flash-1017`（带下拉箭头，目前只有这一个选项）、思考强度滑条、极简回车图标发送按钮；输入框默认不显示 placeholder。每个对话必须有一个 Agent，新对话默认使用「程序员」；按对话保存选择，新对话继承同项目上一个对话的 Agent；对话开始（有第一条消息）后 Agent 固定，选择器变灰锁定，不能再切换；排队消息会保存自己的 Agent
 - 思考强度滑条是一条极简平面细线 + 小圆点，不显示「思考强度」文字和 low/high/max 挡位文字，鼠标指针保持默认；拖动时圆点自由跟随指针、没有吸附阈限，松开后自动吸附到最近的 `low` / `high` / `max` 挡位；也可以用方向键切换，选择保存在 `settings.json`，发送时作为 `reasoning_effort` 传给 DeepSeek
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
@@ -151,7 +151,7 @@ server/runner.js   agent 主循环、工具执行、消息/事件持久化
 server/subagents.js 子代理服务：新建/分叉只读对话、启动 run、完成后把结果排回父对话
 server/system-nodes.js 系统 node 服务：调度器、Report Hub、审批、问卷、Agile 分发循环
 server/git-worktrees.js Git 仓库初始化、专家 worktree 和分支、完成时提交
-src/tools/tasks.js Manager 的 backlog_list / backlog_add / iteration_add 和 worker 的 task_block / task_finish
+src/tools/tasks.js design_write / backlog_list / backlog_add / iteration_add / task_block / task_finish / task_merge / task_reject
 server/skills.js   Skill 发现（skills/ + %APPDATA%\yah\skills）与 MCP prompts 转 Skill
 server/agents.js   Agent 配置：固定内置角色列表，只读，不接受新增、删除或修改
 src/agent-defaults.js 内置 Manager / Agent / Subagent 角色的 id、名称、提示词和工具权限
@@ -258,10 +258,10 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 - Git（结构化、无 shell，统一放在工具的 Git 菜单）：`git_status`、`git_diff`、`git_log`、`git_show`、`git_blame`、`git_branch`、`git_checkout`、`git_add`、`git_commit`、`git_stash`、`git_fetch`、`git_pull`、`git_push`、`git_merge`、`git_remote`、`git_tag`、`git_restore`、`git_reset`、`git_revert`、`git_cherry_pick`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）
 - OMO 常驻 / 条件工具：`background_start/list/stop`、`monitor_start/stop/list`
-- 任务闭环：`backlog_list` / `backlog_add` / `iteration_add`（Manager 管理 Agile 任务）、`task_block`（worker 阻塞并创建审批或问卷）、`task_finish`（worker 提交结果并完成）
+- 任务闭环：`design_write`（Manager 写入设计案）、`backlog_add`（主工程师拆解设计案）、`backlog_list`（查看设计案、任务、分支和检查状态）、`iteration_add`（新建迭代）、`task_block`（worker 或主工程师阻塞并创建审批或问卷）、`task_finish`（worker 提交结果 / 主工程师标记设计已拆解）、`task_merge`（主工程师合并 worker 分支并进入 Merged）、`task_reject`（主工程师打回 Finished 任务）
 - 兼容别名：`hashline_edit`；`read_file`、`web_search`、`interactive_bash`、`SystemInfo`、`system_info` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
-- `background_*`、`monitor_*` 是按项目绑定的常驻服务管理：必须填写备注，只暴露运行 / 停止状态，不提供输出，也不会把完成结果送回对话；创建者或 Manager 可以停止。调度器把 Backlog 任务直接分配给对应角色的 worker；`interactive_bash` 已合并为 `shell` 的隐藏别名
+- `background_*`、`monitor_*` 是按项目绑定的常驻服务管理：必须填写备注，只暴露运行 / 停止状态，不提供输出，也不会把完成结果送回对话；创建者或 Manager 可以停止。调度器只把 Backlog 任务分配给编号 2 及以后的 worker，主工程师保留给设计确认和合并检查；`interactive_bash` 已合并为 `shell` 的隐藏别名
 
 ## Tool calling
 

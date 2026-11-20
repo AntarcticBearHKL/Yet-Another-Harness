@@ -206,6 +206,10 @@ const systemNodeService = createSystemNodeService({
     worknodeTools.createGroupEngineer(manager, index),
   closeEngineer: (manager, id) =>
     worknodeTools.worknodeClose({ id }, { sessionId: manager.id }),
+  ensureWorktree: (manager, session) =>
+    worknodeTools.ensureSessionWorktree(manager, session),
+  commitWorktree: gitWorktrees.commitWorktree,
+  branchSummary: gitWorktrees.branchSummary,
   getAgent: (agentId) => getAgent(AGENTS_FILE, agentId),
   notify: (event) => runner.publishGlobal(event),
 });
@@ -215,6 +219,7 @@ tools.configure({
   subagentService,
   systemNodeService,
   getAgileStore: (managerId) => resolveAgileStore(managerId),
+  mergeTaskBranches: gitWorktrees.mergeBranches,
   prepareWorktree: gitWorktrees.prepareWorktree,
   branchSummary: gitWorktrees.branchSummary,
   store,

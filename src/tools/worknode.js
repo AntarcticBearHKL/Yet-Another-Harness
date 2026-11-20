@@ -4,7 +4,10 @@ const crypto = require('node:crypto');
 const store = require('../store');
 const { mergedDefinitions } = require('./definitions');
 const { DEFAULT_SYSTEM_PROMPT } = store;
-const { DEFAULT_WORKER_AGENT_ID } = require('../agent-defaults');
+const {
+  DEFAULT_WORKER_AGENT_ID,
+  LEAD_ENGINEER_AGENT_ID,
+} = require('../agent-defaults');
 
 let providers = {
   canvasStore: null,
@@ -316,15 +319,14 @@ async function createManagedWorkNode(manager, options = {}) {
   if (isManagerAgent(agent)) {
     throw new Error('manager Agents cannot run as work nodes');
   }
+  const engineerIndex = Math.max(0, Number(options.engineerIndex) || 0);
+  const isLead = options.engineer === true && engineerIndex === 1;
   const tools = normalizeToolsForAgent(agent, options.tools);
   const skills = normalizeSkills(options.skills);
   const mcpDisabled = mcpDisabledFor(options.mcp) || [];
   const id = crypto.randomUUID();
   let worktree = null;
-  if (
-    options.engineer !== true &&
-    typeof providers.prepareWorktree === 'function'
-  ) {
+  if (!isLead && typeof providers.prepareWorktree === 'function') {
     try {
       worktree = providers.prepareWorktree({
         baseDirectories: managerDirectories(manager),
@@ -345,7 +347,8 @@ async function createManagedWorkNode(manager, options = {}) {
     directories,
     branches,
     engineer: options.engineer === true,
-    engineerIndex: Number(options.engineerIndex) || 0,
+    engineerIndex,
+    lead: isLead,
     files: managerFiles(manager),
     task,
     taskId: options.taskId ? String(options.taskId) : null,
@@ -411,10 +414,41 @@ async function createGroupEngineer(manager, index) {
   return createManagedWorkNode(manager, {
     title: engineerIndex === 1 ? '主工程师' : `工程师 ${engineerIndex}`,
     task: '',
-    agentId: DEFAULT_WORKER_AGENT_ID,
+    agentId:
+      engineerIndex === 1
+        ? LEAD_ENGINEER_AGENT_ID
+        : DEFAULT_WORKER_AGENT_ID,
     start: false,
     engineer: true,
     engineerIndex,
+  });
+}
+
+function ensureSessionWorktree(manager, session) {
+  if (!manager || !session) return session;
+  const existing = Array.isArray(session.nodeConfig?.branches)
+    ? session.nodeConfig.branches
+    : [];
+  if (existing.length > 0) return session;
+  if (typeof providers.prepareWorktree !== 'function') return session;
+  let worktree;
+  try {
+    worktree = providers.prepareWorktree({
+      baseDirectories: managerDirectories(manager),
+      sessionId: session.id,
+      label: session.title || 'engineer',
+    });
+  } catch (worktreeError) {
+    console.error('prepare engineer worktree failed', worktreeError);
+    return session;
+  }
+  if (!worktree?.directories?.length) return session;
+  return store.updateSessionNode(session.id, {
+    nodeConfig: {
+      ...(session.nodeConfig || {}),
+      directories: worktree.directories,
+      branches: worktree.branches || [],
+    },
   });
 }
 
@@ -445,6 +479,12 @@ function worknodeClose(args = {}, context = null) {
   if (!manager) return error('only a manager node can close work nodes');
   const workNode = workNodeFor(manager, args.id);
   if (!workNode) return error(`work node not found: ${args.id || '(missing)'}`);
+  if (
+    workNode.nodeConfig?.engineer === true &&
+    Number(workNode.nodeConfig?.engineerIndex) <= 2
+  ) {
+    return error('the lead engineer and first engineer are permanent');
+  }
 
   const ids = store.sessionSubtreeIds(workNode.id);
   const stoppedIds = [];
@@ -492,6 +532,7 @@ module.exports = {
   configure,
   createGroupEngineer,
   createManagedWorkNode,
+  ensureSessionWorktree,
   worknodeCreate,
   worknodeClose,
 };

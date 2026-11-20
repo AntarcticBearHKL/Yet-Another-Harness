@@ -713,8 +713,8 @@ function openManagerComposer(managerId = null) {
             ?.directories || [])]
       : [],
     engineerCount: manager
-      ? Math.max(1, Number(manager.nodeConfig?.engineerCount) || 1)
-      : 1,
+      ? Math.max(2, Number(manager.nodeConfig?.engineerCount) || 2)
+      : 2,
   };
   if (dom.managerComposerError) dom.managerComposerError.hidden = true;
   if (dom.managerComposerTitle) {
@@ -787,10 +787,10 @@ async function createManagerFromComposer() {
   const editingId = managerComposerState.editingId;
   const engineerCount = editingId
     ? Math.max(
-        1,
-        Math.min(12, Math.round(Number(dom.managerEngineerCount?.value) || 1))
+        2,
+        Math.min(12, Math.round(Number(dom.managerEngineerCount?.value) || 2))
       )
-    : 1;
+    : 2;
   if (directories.length === 0) {
     if (dom.managerComposerError) {
       dom.managerComposerError.textContent = '先拖入至少一个文件夹';
@@ -5308,6 +5308,15 @@ async function clearCurrentSession(session) {
 }
 
 function deleteSessionById(sessionId) {
+  const target = state.sessions.find(
+    (session) => session.id === String(sessionId || '')
+  );
+  if (
+    target?.nodeConfig?.engineer === true &&
+    Number(target.nodeConfig?.engineerIndex) <= 2
+  ) {
+    return;
+  }
   const ids = new Set([String(sessionId || '')]);
   let changed = true;
   while (changed) {
