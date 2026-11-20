@@ -171,3 +171,24 @@ body.chat-window.chat-compact .message-card.compact-latest.streaming .card-text 
   max-height: calc(5 * 1.8em);
   overflow: hidden;
 }
+
+.compact-process-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0 14px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-row);
+  color: var(--faint);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.compact-process-link:hover {
+  background: var(--hover);
+  color: var(--text);
+}
