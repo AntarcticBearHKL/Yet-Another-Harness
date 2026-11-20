@@ -20,7 +20,8 @@ const CANVAS_GROUP_WIDTH = 300;
 const CANVAS_GROUP_HEIGHT = 120;
 const CANVAS_MANAGER_LEFT_WIDTH = 200;
 const CANVAS_MANAGER_RIGHT_WIDTH = 240;
-const CANVAS_MANAGER_GROUP_PADDING = 20;
+// The group is one solid frame; 1px keeps the columns inside its border.
+const CANVAS_MANAGER_GROUP_PADDING = 1;
 const CANVAS_MANAGER_COLUMN_GAP = 32;
 const CANVAS_MANAGER_COLUMNS = 3;
 const CANVAS_GROUP_DRAG_GAP = 16;
@@ -1422,12 +1423,22 @@ function managerGroupColumns(manager, team, systemNodes) {
   const byOrder = (left, right) =>
     (order[left.type] ?? 9) - (order[right.type] ?? 9) ||
     (left.createdAt || 0) - (right.createdAt || 0);
+  const engineerRank = (session) => {
+    const index = Number(session.nodeConfig?.engineerIndex) || 0;
+    return index > 0 ? index : 999;
+  };
   return {
     left: [
       manager,
       ...systemNodes.filter((node) => leftTypes.has(node.type)).sort(byOrder),
     ],
-    middle: team,
+    middle: team
+      .slice()
+      .sort(
+        (left, right) =>
+          engineerRank(left) - engineerRank(right) ||
+          (left.createdAt || 0) - (right.createdAt || 0)
+      ),
     right: systemNodes.filter((node) => rightTypes.has(node.type)).sort(byOrder),
   };
 }
@@ -1437,19 +1448,16 @@ function managerGroupColumnSpecs(manager, team, systemNodes) {
   return [
     {
       key: 'left',
-      label: '管理',
       width: CANVAS_MANAGER_LEFT_WIDTH,
       entries: entries.left,
     },
     {
       key: 'middle',
-      label: '工程师',
       width: CANVAS_GROUP_WIDTH,
       entries: entries.middle,
     },
     {
       key: 'right',
-      label: '输出',
       width: CANVAS_MANAGER_RIGHT_WIDTH,
       entries: entries.right,
     },
@@ -1467,7 +1475,6 @@ function layoutManagerGroupColumns(manager, team, systemNodes = []) {
   const columns = specs.map((spec) => {
     const column = {
       key: spec.key,
-      label: spec.label,
       width: spec.width,
       entries: spec.entries,
       x: cursor,
@@ -1584,33 +1591,6 @@ function canvasSvgNode(tag, attrs = {}) {
   return node;
 }
 
-function buildCanvasManagerOutline() {
-  const svg = canvasSvgNode('svg', {
-    class: 'canvas-manager-outline',
-    width: '100%',
-    height: '100%',
-    preserveAspectRatio: 'none',
-    'aria-hidden': 'true',
-  });
-  svg.append(
-    canvasSvgNode('rect', {
-      class: 'canvas-manager-outline-rect',
-      x: '0',
-      y: '0',
-      width: '100%',
-      height: '100%',
-      rx: '26',
-      ry: '26',
-      fill: 'none',
-      stroke: 'currentColor',
-      'stroke-width': '1',
-      'stroke-dasharray': '7 6',
-      'shape-rendering': 'geometricPrecision',
-    })
-  );
-  return svg;
-}
-
 function buildCanvasManagerDividerLine() {
   const svg = canvasSvgNode('svg', {
     class: 'canvas-manager-divider-svg',
@@ -1639,17 +1619,6 @@ function applyCanvasDashScale(zoom) {
   if (!canvasDom.nodes) return;
   const scale = Number(zoom) > 0 ? 1 / Number(zoom) : 1;
   const key = String(Number(zoom) || 1);
-  for (const rect of canvasDom.nodes.querySelectorAll(
-    '.canvas-manager-outline-rect'
-  )) {
-    if (rect.dataset.dashScale === key) continue;
-    rect.dataset.dashScale = key;
-    rect.setAttribute('stroke-width', (scale).toFixed(3));
-    rect.setAttribute(
-      'stroke-dasharray',
-      `${(7 * scale).toFixed(3)} ${(6 * scale).toFixed(3)}`
-    );
-  }
   for (const line of canvasDom.nodes.querySelectorAll(
     '.canvas-manager-divider-line'
   )) {
@@ -1666,15 +1635,6 @@ function applyCanvasDashScale(zoom) {
 function buildCanvasManagerColumn(column, rows) {
   const columnEl = el('section', 'canvas-manager-column');
   columnEl.dataset.column = column.key;
-  const head = el('header', 'canvas-manager-column-head');
-  head.append(el('span', 'canvas-manager-column-label', column.label));
-  head.append(el('span', 'canvas-manager-column-count', String(rows.length)));
-  const grip = el('span', 'canvas-manager-column-grip');
-  grip.setAttribute('aria-hidden', 'true');
-  grip.innerHTML =
-    '<svg viewBox="0 0 16 16"><circle cx="6" cy="4" r="1.1"/><circle cx="10" cy="4" r="1.1"/><circle cx="6" cy="8" r="1.1"/><circle cx="10" cy="8" r="1.1"/><circle cx="6" cy="12" r="1.1"/><circle cx="10" cy="12" r="1.1"/></svg>';
-  head.append(grip);
-  columnEl.append(head);
   const list = el('div', 'canvas-manager-column-list');
   if (rows.length === 0) {
     list.append(el('div', 'canvas-manager-column-empty', '暂无'));
@@ -1688,7 +1648,6 @@ function buildCanvasManagerColumn(column, rows) {
 function buildCanvasManagerGroup(manager, layout, columnEls) {
   const groupEl = el('div', 'canvas-manager-group');
   groupEl.dataset.sessionId = manager.id;
-  groupEl.append(buildCanvasManagerOutline());
   const project = state.projects.find((item) => item.id === manager.projectId);
   const projectName = String(project?.name || '').trim();
   if (projectName) {
@@ -1722,6 +1681,30 @@ function buildCanvasManagerGroup(manager, layout, columnEls) {
     );
   });
   return groupEl;
+}
+
+function canvasLeadEngineerTitle(title) {
+  const text = String(title || '').trim();
+  if (!text) return '主工程师';
+  const parts = text.split(' · ');
+  if ((parts[0] || '') === '工程师 1') {
+    parts[0] = '主工程师';
+    return parts.join(' · ');
+  }
+  return text;
+}
+
+function buildCanvasEngineerPlaceholder() {
+  const row = el('div', 'canvas-group canvas-engineer-placeholder');
+  const head = el('div', 'canvas-group-head');
+  const heading = el('div', 'canvas-group-heading');
+  heading.append(el('span', 'canvas-group-title', '主工程师'));
+  const subline = el('div', 'canvas-group-subline');
+  subline.append(el('span', 'canvas-group-manager', '等待创建'));
+  heading.append(subline);
+  head.append(heading);
+  row.append(head);
+  return row;
 }
 
 function buildCanvasGroup(root, children, node) {
@@ -1866,12 +1849,24 @@ function renderCanvasNodes(index) {
       canvasState.visibleIds.add(entry.id);
       leftRows.push(buildCanvasSystemNode(entry));
     }
+    const leadEngineer =
+      entries.middle.find(
+        (session) => Number(session.nodeConfig?.engineerIndex) === 1
+      ) || null;
+    if (!leadEngineer) middleRows.push(buildCanvasEngineerPlaceholder());
     for (const session of entries.middle) {
       const teamNode = canvasState.nodes[session.id];
       if (!teamNode) continue;
       canvasState.visibleIds.add(session.id);
       const children = childrenByRoot.get(session.id) || [];
-      middleRows.push(buildCanvasGroup(session, children, teamNode));
+      const displaySession =
+        session === leadEngineer
+          ? {
+              ...session,
+              title: canvasLeadEngineerTitle(session.title),
+            }
+          : session;
+      middleRows.push(buildCanvasGroup(displaySession, children, teamNode));
     }
     for (const systemNode of entries.right) {
       canvasState.visibleIds.add(systemNode.id);

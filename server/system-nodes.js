@@ -300,6 +300,24 @@ function createSystemNodeService({
           (Number(left.nodeConfig?.engineerIndex) || 0) -
           (Number(right.nodeConfig?.engineerIndex) || 0)
       );
+    const lead = engineers.find(
+      (session) => Number(session.nodeConfig?.engineerIndex) === 1
+    );
+    if (lead) {
+      const title = String(lead.title || '').trim();
+      const separator = title.indexOf(' · ');
+      const baseTitle =
+        separator >= 0 ? title.slice(0, separator) : title;
+      if (!baseTitle || baseTitle === '工程师 1') {
+        const suffix = separator >= 0 ? title.slice(separator) : '';
+        const nextTitle = `主工程师${suffix}`.slice(0, 120);
+        if (nextTitle !== title) {
+          store.updateSessionNode(lead.id, { title: nextTitle });
+          lead.title = nextTitle;
+          notify?.({ managerId: manager.id, nodeId: lead.id });
+        }
+      }
+    }
     const extras = store
       .listWorkNodesMeta(manager.id)
       .filter(

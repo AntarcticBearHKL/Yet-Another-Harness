@@ -1493,33 +1493,27 @@ body.canvas-space .canvas-stage.panning {
 
 .canvas-manager-group {
   position: absolute;
-  border: 0;
-  border-radius: 26px;
-  background: transparent;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 252, 247, 0.84);
+  box-shadow: 0 6px 18px rgba(74, 54, 40, 0.07);
   color: rgba(185, 111, 61, 0.42);
   pointer-events: auto;
   cursor: grab;
   user-select: none;
-  transition: color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.canvas-manager-group:hover {
+  border-color: rgba(185, 111, 61, 0.32);
 }
 
 .canvas-manager-group.dragging,
 .canvas-manager-group.dragging * {
   cursor: grabbing !important;
-}
-
-.canvas-manager-outline {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.canvas-manager-outline-rect {
-  fill: none;
-  stroke: currentColor;
 }
 
 .canvas-manager-group-title {
@@ -1537,7 +1531,7 @@ body.canvas-space .canvas-stage.panning {
 .canvas-manager-group-title-text {
   max-width: 100%;
   overflow: hidden;
-  color: rgba(185, 111, 61, 0.17);
+  color: rgba(185, 111, 61, 0.1);
   font-size: clamp(64px, 9vw, 168px);
   font-weight: 800;
   line-height: 1;
@@ -1572,69 +1566,13 @@ body.canvas-space .canvas-stage.panning {
   display: none;
 }
 
-/* Each category is one compact panel: nodes become gap-free rows. */
+/* The three categories are plain columns inside one shared group frame. */
 .canvas-manager-column {
   position: absolute;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 252, 247, 0.84);
-  box-shadow: 0 4px 12px rgba(74, 54, 40, 0.05);
   user-select: none;
-}
-
-.canvas-manager-column-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: none;
-  min-height: 28px;
-  padding: 6px 9px 6px 11px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(74, 54, 40, 0.025);
-  color: var(--faint);
-  cursor: grab;
-}
-
-.canvas-manager-column-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.canvas-manager-column-count {
-  padding: 1px 5px;
-  border-radius: 99px;
-  background: rgba(74, 54, 40, 0.055);
-  color: var(--dim);
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.canvas-manager-column-grip {
-  display: grid;
-  place-items: center;
-  width: 14px;
-  height: 14px;
-  flex: none;
-  color: var(--faint);
-  opacity: 0.7;
-}
-
-.canvas-manager-column-grip svg {
-  width: 12px;
-  height: 12px;
-  fill: currentColor;
 }
 
 .canvas-manager-column-list {
@@ -1759,6 +1697,19 @@ body.canvas-space .canvas-stage.panning {
   color: var(--faint);
   font-size: 9.5px;
   line-height: 1.4;
+}
+
+.canvas-engineer-placeholder {
+  cursor: default;
+}
+
+.canvas-engineer-placeholder .canvas-group-title {
+  color: var(--dim);
+  font-weight: 600;
+}
+
+.canvas-engineer-placeholder .canvas-group-manager {
+  color: var(--faint);
 }
 
 /* Manager system lane: orchestrator, report hub, approvals and questionnaires */

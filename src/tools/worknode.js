@@ -407,13 +407,14 @@ async function createManagedWorkNode(manager, options = {}) {
 
 async function createGroupEngineer(manager, index) {
   if (!manager) throw new Error('manager is required');
+  const engineerIndex = Math.max(1, Number(index) || 1);
   return createManagedWorkNode(manager, {
-    title: `工程师 ${Math.max(1, Number(index) || 1)}`,
+    title: engineerIndex === 1 ? '主工程师' : `工程师 ${engineerIndex}`,
     task: '',
     agentId: DEFAULT_WORKER_AGENT_ID,
     start: false,
     engineer: true,
-    engineerIndex: Math.max(1, Number(index) || 1),
+    engineerIndex,
   });
 }
 
