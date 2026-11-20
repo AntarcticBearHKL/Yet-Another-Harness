@@ -1497,9 +1497,15 @@ body.canvas-space .canvas-stage.panning {
   border-radius: 26px;
   background: transparent;
   color: rgba(185, 111, 61, 0.42);
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: grab;
   user-select: none;
   transition: color 120ms ease;
+}
+
+.canvas-manager-group.dragging,
+.canvas-manager-group.dragging * {
+  cursor: grabbing !important;
 }
 
 .canvas-manager-outline {
@@ -1564,6 +1570,195 @@ body.canvas-space .canvas-stage.panning {
 
 .canvas-manager-divider.hidden {
   display: none;
+}
+
+/* Each category is one compact panel: nodes become gap-free rows. */
+.canvas-manager-column {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 252, 247, 0.84);
+  box-shadow: 0 4px 12px rgba(74, 54, 40, 0.05);
+  user-select: none;
+}
+
+.canvas-manager-column-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 28px;
+  padding: 6px 9px 6px 11px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(74, 54, 40, 0.025);
+  color: var(--faint);
+  cursor: grab;
+}
+
+.canvas-manager-column-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.canvas-manager-column-count {
+  padding: 1px 5px;
+  border-radius: 99px;
+  background: rgba(74, 54, 40, 0.055);
+  color: var(--dim);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-manager-column-grip {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--faint);
+  opacity: 0.7;
+}
+
+.canvas-manager-column-grip svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+.canvas-manager-column-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.canvas-manager-column-list > * {
+  position: relative;
+  left: auto;
+  top: auto;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.canvas-manager-column-list > * + *::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: rgba(74, 54, 40, 0.2);
+  pointer-events: none;
+}
+
+.canvas-manager-column-list > *:hover {
+  background: rgba(185, 111, 61, 0.055);
+}
+
+.canvas-manager-column-list > .selected {
+  background: var(--selected);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.canvas-manager-column-list > .selected:hover {
+  background: var(--selected);
+}
+
+.canvas-manager-column .canvas-manager-panel,
+.canvas-manager-column .canvas-system-node,
+.canvas-manager-column .canvas-group {
+  position: relative;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: default;
+}
+
+.canvas-manager-column .canvas-manager-panel.selected,
+.canvas-manager-column .canvas-system-node.selected,
+.canvas-manager-column .canvas-group.selected {
+  outline: none;
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.canvas-manager-column .canvas-group-head {
+  padding: 0;
+}
+
+.canvas-manager-column .canvas-group-title {
+  font-size: 12.5px;
+  -webkit-line-clamp: 1;
+}
+
+.canvas-manager-column .canvas-group-subline {
+  margin-top: 2px;
+}
+
+.canvas-manager-column .canvas-group-task {
+  margin-top: 3px;
+  font-size: 9px;
+}
+
+.canvas-manager-column .canvas-group-columns {
+  display: none;
+}
+
+.canvas-manager-column .canvas-management-card-head {
+  gap: 7px;
+}
+
+.canvas-manager-column .canvas-management-card-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+
+.canvas-manager-column .canvas-management-card-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.canvas-manager-column .canvas-management-card-title {
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.canvas-manager-column .canvas-management-card-subtitle {
+  margin-top: 4px;
+  font-size: 9px;
+  line-height: 1.4;
+  -webkit-line-clamp: 2;
+}
+
+.canvas-manager-column-empty {
+  padding: 11px;
+  color: var(--faint);
+  font-size: 9.5px;
+  line-height: 1.4;
 }
 
 /* Manager system lane: orchestrator, report hub, approvals and questionnaires */
