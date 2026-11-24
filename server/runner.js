@@ -27,6 +27,7 @@ const backgroundSubscribers = new Set();
 const pendingApprovals = new Map();
 const pendingQuestions = new Map();
 const sessionAgentConfigs = new Map();
+let questionnaireHandler = null;
 
 function gatewayFor(settings, agentConfig, sessionId, task = '') {
   let config;
@@ -259,6 +260,10 @@ function resolveQuestions(questionId, body) {
     timedOut: body?.timedOut === true,
   });
   return true;
+}
+
+function setQuestionnaireHandler(handler) {
+  questionnaireHandler = typeof handler === 'function' ? handler : null;
 }
 
 function denyRunQuestions(runId) {
@@ -787,6 +792,16 @@ function startRun({
     approve: (request) => requestToolApproval(sessionId, id, request),
     askQuestions: (questions, options) =>
       requestQuestions(sessionId, id, questions, options),
+    askQuestionnaire: (questions, options) =>
+      questionnaireHandler
+        ? questionnaireHandler({
+            sessionId,
+            session,
+            runId: id,
+            questions,
+            options,
+          })
+        : null,
   };
 
   let goalAction = null;
@@ -1038,6 +1053,7 @@ module.exports = {
   isApprovalPending,
   resolveApproval,
   resolveQuestions,
+  setQuestionnaireHandler,
   heartbeatQuestion,
   activeRunForSession: (sessionId) => sessionRuns.get(sessionId) || null,
 };

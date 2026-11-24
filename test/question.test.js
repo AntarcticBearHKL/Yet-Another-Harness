@@ -2,7 +2,11 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizeQuestions, questionTool } = require('../src/tools/agent');
+const {
+  normalizeQuestions,
+  questionTool,
+  QUESTIONNAIRE_PAUSE,
+} = require('../src/tools/agent');
 
 test('normalizeQuestions keeps at most five and trims fields', () => {
   const raw = Array.from({ length: 7 }, (_, index) => ({
@@ -128,6 +132,37 @@ test('questionTool defaults to blocking and reports an empty timeout', async () 
   assert.match(result, /did not answer within 15 seconds/);
   assert.match(result, /No answer was provided/);
   assert.match(result, /best judgment/);
+});
+
+test('questionTool pauses the product manager with an interaction-lane questionnaire', async () => {
+  let received = null;
+  const result = await questionTool(
+    {
+      questions: [
+        {
+          question: 'Which database?',
+          header: 'Database',
+          options: [{ label: 'SQLite' }],
+        },
+      ],
+      mode: 'timed',
+      timeout_seconds: 30,
+    },
+    {
+      nodeRole: 'manager',
+      askQuestionnaire: async (questions, options) => {
+        received = { questions, options };
+        return { ok: true, id: 'sys-questionnaire', questionId: 'q1' };
+      },
+      askQuestions: async () => {
+        throw new Error('the manager must not block inside the run');
+      },
+    }
+  );
+  assert.ok(result.startsWith(QUESTIONNAIRE_PAUSE));
+  assert.match(result, /交互/);
+  assert.equal(received.questions.length, 1);
+  assert.deepEqual(received.options, { mode: 'blocking', timeoutSeconds: 0 });
 });
 
 test('questionTool reports dismissal and missing clients as tool errors', async () => {

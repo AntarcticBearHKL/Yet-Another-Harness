@@ -3649,43 +3649,6 @@ function contextBlock(title, text, key) {
   return block;
 }
 
-function nodeRoleText(session) {
-  if (!session) return '';
-  if (session.nodeRole === 'manager') {
-    const team = state.sessions.filter(
-      (item) => item.managerId === session.id && !item.archivedAt
-    );
-    const dirs = Array.isArray(session.nodeConfig?.directories)
-      ? session.nodeConfig.directories
-      : [];
-    const files = Array.isArray(session.nodeConfig?.files)
-      ? session.nodeConfig.files
-      : [];
-    return [
-      `Agent: ${agentForSession(session)?.name || session.agentId}`,
-      `目录: ${dirs.join(' · ') || '无'}`,
-      `文件: ${files.join(' · ') || '无'}`,
-      `工作 node: ${team.length}`,
-      '先与用户确认并挖掘清楚需求，再把需求清单提交到 Agile 的「需求清单」列；调度器会在架构师空闲时把需求交给架构师。',
-    ].join('\n');
-  }
-  if (session.nodeRole === 'work') {
-    const manager = state.sessions.find(
-      (item) => item.id === session.managerId
-    );
-    const config = session.nodeConfig || {};
-    return [
-      `管理 node: ${manager?.title || session.managerId || '未归属'}`,
-      `Agent: ${agentForSession(session)?.name || session.agentId}`,
-      `任务: ${config.task || '未设置'}`,
-      `工具: ${Array.isArray(config.tools) ? config.tools.length : '跟随 Agent'}`,
-      `Skill: ${Array.isArray(config.skills) ? config.skills.length : '跟随 Agent'}`,
-      `MCP 关闭: ${(session.mcpDisabled || []).join(', ') || '无'}`,
-    ].join('\n');
-  }
-  return '';
-}
-
 function buildContextGroup(blocks) {
   const collapsed = state.contextGroupCollapsed;
   const group = el('div', 'context-group');
@@ -3716,16 +3679,6 @@ function buildContextGroup(blocks) {
 function buildContextStack(session) {
   const stack = el('div', 'context-stack');
   renderMcpSummary(session, stack);
-  const roleText = nodeRoleText(session);
-  if (roleText) {
-    stack.append(
-      contextBlock(
-        session.nodeRole === 'manager' ? '产品经理' : 'WORK NODE',
-        roleText,
-        'role'
-      )
-    );
-  }
   stack.append(
     buildContextGroup([
       contextBlock('SYSTEM PROMPT', systemPromptText(session), 'system'),

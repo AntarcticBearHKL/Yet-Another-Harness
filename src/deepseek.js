@@ -5,6 +5,7 @@
 // 执行工具、把结果塞回下一轮。
 
 const tools = require('./tools');
+const { QUESTIONNAIRE_PAUSE } = require('./tools/agent');
 const attachments = require('./attachments');
 const { createGateway } = require('../llm-gateway/src/gateway');
 const { normalizeReasoningEffort } = require('./reasoning');
@@ -864,6 +865,7 @@ async function runAgent({
   let currentCompaction = normalizeCompaction(compaction);
   const systemCount = messages[0]?.role === 'system' ? 1 : 0;
   let finalText = '';
+  let pauseText = '';
   let activeRound = 0;
   let measuredTokens = null;
   let sentLength = messages.length;
@@ -1022,10 +1024,13 @@ async function runAgent({
         call.arguments,
         toolContext
       );
+      const questionnairePause = output.startsWith(QUESTIONNAIRE_PAUSE);
       onToolResult?.({
         name: call.name,
         arguments: call.arguments,
-        output,
+        output: questionnairePause
+          ? output.slice(QUESTIONNAIRE_PAUSE.length).trim()
+          : output,
         ok: !/^tool error/i.test(output),
         round,
         startedAt,
@@ -1036,7 +1041,14 @@ async function runAgent({
         tool_call_id: call.id,
         content: output,
       });
+      if (questionnairePause) {
+        const note = output.slice(QUESTIONNAIRE_PAUSE.length).trim();
+        const head = finalText.trim();
+        pauseText = head ? `${head}\n\n${note}` : note;
+        break;
+      }
     }
+    if (pauseText) return pauseText;
   }
 
   return finalText;

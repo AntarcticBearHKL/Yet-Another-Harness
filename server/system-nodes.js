@@ -202,6 +202,33 @@ function reportPrompt(goal, tasks, report = null) {
   return lines.join('\n');
 }
 
+function managerQuestionnairePrompt(node) {
+  const payload = node?.payload || {};
+  const questions = Array.isArray(payload.questions) ? payload.questions : [];
+  const answers = Array.isArray(payload.answers) ? payload.answers : [];
+  const lines = ['用户已经填写完你发出的问卷。', '', '# 问卷与回答'];
+  questions.forEach((question, index) => {
+    const values = Array.isArray(answers[index])
+      ? answers[index].map(String).filter(Boolean)
+      : [];
+    lines.push(`- 问题：${question.question || `问题 ${index + 1}`}`);
+    lines.push(`  回答：${values.length ? values.join(', ') : '未回答'}`);
+  });
+  lines.push('');
+  if (node?.status === 'dismissed') {
+    lines.push(
+      '用户关闭了问卷，没有提供回答。请基于现有信息继续；如果仍然无法确认关键需求，再发一份更聚焦的问卷。'
+    );
+  } else {
+    lines.push('请根据这些回答继续梳理需求，不要重复询问已经回答清楚的内容。');
+  }
+  lines.push(
+    '如果需求已经明确、可以验收，调用 design_write 把需求清单写入「需求清单」列，然后结束本轮；架构师会接手技术方案和 Backlog。',
+    '如果还有关键点不清楚，调用 question 再发一份问卷并结束本轮，等待用户填写。'
+  );
+  return lines.join('\n');
+}
+
 function buildReportMarkdown(goal, tasks) {
   const statusLabel = (column) => {
     if (column === 'design') return '需求清单';
@@ -1652,6 +1679,60 @@ function createSystemNodeService({
     };
   }
 
+  function resumeManagerQuestionnaire(manager, orchestrator) {
+    if (!manager || manager.nodeRole !== 'manager') return false;
+    if (runner.activeRunForSession?.(manager.id)) return false;
+    let nodes = [];
+    try {
+      nodes = store.listSystemNodes(manager.id);
+    } catch {
+      return false;
+    }
+    const node = nodes
+      .filter(
+        (item) =>
+          item.type === 'questionnaire' &&
+          item.payload?.managerQuestion === true &&
+          !item.payload?.deliveredAt &&
+          (item.status === 'answered' || item.status === 'dismissed')
+      )
+      .sort((left, right) => (left.createdAt || 0) - (right.createdAt || 0))[0];
+    if (!node) return false;
+    const runId = crypto.randomUUID();
+    try {
+      runner.startRun({
+        sessionId: manager.id,
+        text: managerQuestionnairePrompt(node),
+        runId,
+        agentConfig: getAgent?.('manager') || null,
+        reasoningEffort: store.loadSettings().reasoningEffort,
+      });
+    } catch (resumeError) {
+      appendStep(orchestrator, `问卷回复交还失败：${resumeError.message}`, {
+        kind: 'error',
+        nodeId: node.id,
+      });
+      return false;
+    }
+    updateNode(node.id, {
+      payload: {
+        ...(node.payload || {}),
+        deliveredAt: Date.now(),
+        deliveredRunId: runId,
+      },
+    });
+    appendStep(
+      store.getSystemNode(node.id),
+      '已交还产品经理，等待产品经理继续',
+      { kind: 'delivery' }
+    );
+    appendStep(orchestrator, '已把问卷回复交还产品经理', {
+      kind: 'questionnaire',
+      nodeId: node.id,
+    });
+    return true;
+  }
+
   function blockTask(session, input = {}) {
     const kind = String(input.kind || '').trim().toLowerCase();
     if (kind !== 'approval' && kind !== 'question') {
@@ -1832,8 +1913,10 @@ function createSystemNodeService({
   }
 
   function createQuestionNode(session, payload = {}) {
-    if (!session?.managerId) return null;
-    const manager = managerSession(session.managerId);
+    const manager =
+      session?.nodeRole === 'manager'
+        ? session
+        : managerSession(session?.managerId);
     if (!manager) return null;
     const questionId = String(payload.id || '').trim();
     if (!questionId) return null;
@@ -1843,23 +1926,35 @@ function createSystemNodeService({
       (node) => node.payload?.questionId === questionId
     );
     if (existing) return existing;
-    const mode = payload.mode === 'timed' ? 'timed' : 'blocking';
-    const timeoutSeconds = Number(payload.timeoutSeconds) || 0;
+    const managerQuestion = session.nodeRole === 'manager';
+    const mode = managerQuestion
+      ? 'blocking'
+      : payload.mode === 'timed'
+        ? 'timed'
+        : 'blocking';
+    const timeoutSeconds = managerQuestion
+      ? 0
+      : Number(payload.timeoutSeconds) || 0;
     const node = createNode({
       managerId: manager.id,
       type: 'questionnaire',
       status: 'pending',
       title: '问卷',
-      taskId: session.nodeConfig?.taskId || null,
+      taskId: managerQuestion ? null : session.nodeConfig?.taskId || null,
       sessionId: session.id,
       payload: {
         questionId,
         questions: Array.isArray(payload.questions) ? payload.questions : [],
         mode,
         timeoutSeconds,
+        reason: text(payload.reason || '', 2000),
+        managerQuestion,
+        managerSessionId: manager.id,
         blockedBy: {
           sessionId: session.id,
-          title: session.title || 'worker',
+          title:
+            session.title || (managerQuestion ? '产品经理' : 'worker'),
+          role: session.nodeRole || 'work',
         },
         requestedAt: Date.now(),
         sourceTitle: session.title || '',
@@ -1871,7 +1966,7 @@ function createSystemNodeService({
         ],
       },
     });
-    if (mode === 'timed' && timeoutSeconds > 0) {
+    if (!managerQuestion && mode === 'timed' && timeoutSeconds > 0) {
       const timerKey = node.id;
       const timeout = setTimeout(() => {
         questionTimers.delete(timerKey);
@@ -1883,6 +1978,31 @@ function createSystemNodeService({
       questionTimers.set(timerKey, timeout);
     }
     return node;
+  }
+
+  function askQuestionnaire(input = {}) {
+    const session = store.getSession(input.sessionId);
+    if (!session || session.nodeRole !== 'manager') {
+      return { ok: false, error: 'questionnaire requires a manager session' };
+    }
+    const questions = Array.isArray(input.questions) ? input.questions : [];
+    if (questions.length === 0) {
+      return { ok: false, error: 'questionnaire requires at least one question' };
+    }
+    const node = createQuestionNode(session, {
+      id: `manager-${crypto.randomUUID()}`,
+      questions,
+      mode: 'blocking',
+      timeoutSeconds: 0,
+    });
+    if (!node) {
+      return { ok: false, error: 'failed to create questionnaire' };
+    }
+    return {
+      ok: true,
+      id: node.id,
+      questionId: node.payload?.questionId || '',
+    };
   }
 
   function updateApprovalNode(payload = {}) {
@@ -2613,6 +2733,7 @@ function createSystemNodeService({
         }
         if (!orchestrator || orchestrator.status !== 'running') continue;
         try {
+          resumeManagerQuestionnaire(manager, orchestrator);
           await tickManager(manager, orchestrator);
           refreshAgileNode(manager);
         } catch (error) {
@@ -2762,12 +2883,14 @@ function createSystemNodeService({
       if (name === 'answer' || name === 'dismiss') {
         const answers = name === 'dismiss' ? [] : input.answers;
         const blockedTask = node.payload?.blockedTask === true;
-        const ok = blockedTask
-          ? true
-          : runner.resolveQuestions(node.payload?.questionId, {
-              answers: Array.isArray(answers) ? answers : [],
-              cancelled: name === 'dismiss',
-            });
+        const managerQuestion = node.payload?.managerQuestion === true;
+        const ok =
+          blockedTask || managerQuestion
+            ? true
+            : runner.resolveQuestions(node.payload?.questionId, {
+                answers: Array.isArray(answers) ? answers : [],
+                cancelled: name === 'dismiss',
+              });
         const updated = updateNode(node.id, {
           status: ok
             ? name === 'dismiss'
@@ -2791,6 +2914,15 @@ function createSystemNodeService({
           } catch (resumeError) {
             console.error('resume blocked question failed', resumeError);
           }
+        }
+        if (managerQuestion) {
+          return appendStep(
+            updated,
+            name === 'dismiss'
+              ? '用户关闭了问卷，等待调度器交还产品经理'
+              : '问卷已提交，等待调度器交还产品经理',
+            { kind: 'decision' }
+          );
         }
         return updated;
       }
@@ -2834,6 +2966,7 @@ function createSystemNodeService({
     submitTestResult,
     writeHumanReport,
     blockTask,
+    askQuestionnaire,
     resumeBlockedTask,
     watchWorkNode,
     unwatchWorkNode,
@@ -2850,6 +2983,7 @@ module.exports = {
   taskPrompt,
   testPrompt,
   reportPrompt,
+  managerQuestionnairePrompt,
   buildReportMarkdown,
   buildHumanReportMarkdown,
   reportCounts,

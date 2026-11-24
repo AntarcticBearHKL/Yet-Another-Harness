@@ -97,11 +97,10 @@ function normalizeQuestionTimeout(value) {
   return Math.max(5, Math.min(600, Math.round(seconds)));
 }
 
+const QUESTIONNAIRE_PAUSE = '__YAH_QUESTIONNAIRE_PAUSE__';
+
 async function questionTool(args, context = null) {
   const questions = normalizeQuestions(args);
-  if (typeof context?.askQuestions !== 'function') {
-    return 'tool error: interactive questions are not available in this client';
-  }
   const requestedTimeout = Number(
     args?.timeout_seconds ?? args?.timeoutSeconds
   );
@@ -112,6 +111,24 @@ async function questionTool(args, context = null) {
     mode === 'timed'
       ? normalizeQuestionTimeout(args?.timeout_seconds ?? args?.timeoutSeconds)
       : 0;
+  if (
+    context?.nodeRole === 'manager' &&
+    typeof context.askQuestionnaire === 'function'
+  ) {
+    const questionnaire = await context.askQuestionnaire(questions, {
+      mode: 'blocking',
+      timeoutSeconds: 0,
+    });
+    if (!questionnaire || questionnaire.ok === false) {
+      return `tool error: failed to send questionnaire${
+        questionnaire?.error ? `: ${questionnaire.error}` : ''
+      }`;
+    }
+    return `${QUESTIONNAIRE_PAUSE}问卷已发送到「交互」列。本轮到此结束，等待用户填写后继续。`;
+  }
+  if (typeof context?.askQuestions !== 'function') {
+    return 'tool error: interactive questions are not available in this client';
+  }
   const result = await context.askQuestions(questions, {
     mode,
     timeoutSeconds,
@@ -153,4 +170,5 @@ module.exports = {
   subagentCloseTool,
   questionTool,
   normalizeQuestions,
+  QUESTIONNAIRE_PAUSE,
 };

@@ -664,7 +664,7 @@ const GIT_TOOLS = [
 
 const QUESTION = fn(
   'question',
-  'Ask the user one or more questions and wait for answers. Use this when a decision or missing detail cannot be inferred safely. Up to five questions; options are optional.',
+  'Ask the user one or more questions. For the product manager (产品经理), this sends a questionnaire to the Interaction column and ends the current turn; the scheduler resumes the manager with the answers after the user fills it in. Other agents wait for answers in place. Use this when a decision or missing detail cannot be inferred safely. Up to five questions; options are optional.',
   {
     questions: arr('Questions to ask', {
       type: 'object',

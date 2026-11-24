@@ -215,6 +215,7 @@ const systemNodeService = createSystemNodeService({
   getAgent: (agentId) => getAgent(AGENTS_FILE, agentId),
   notify: (event) => runner.publishGlobal(event),
 });
+runner.setQuestionnaireHandler((input) => systemNodeService.askQuestionnaire(input));
 tools.configure({
   skillService,
   mcpManager,
