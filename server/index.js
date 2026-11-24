@@ -16,6 +16,7 @@ const worknodeTools = require('../src/tools/worknode');
 const { createAgileStore } = require('../src/agile-store');
 const { createCanvasStore } = require('../src/canvas-store');
 const runner = require('./runner');
+const llm = require('./llm');
 const usage = require('./usage');
 const { McpManager } = require('./mcp/manager');
 const { createSkillService } = require('./skills');
@@ -392,8 +393,6 @@ function settingsView() {
     hasApiKey,
     apiKey: '',
     reasoningEffort: normalizeReasoningEffort(settings.reasoningEffort),
-    llmGatewayUrl: settings.llmGatewayUrl,
-    llmGatewayEnabled: settings.llmGatewayEnabled === true,
     sessionModels: settings.sessionModels,
   };
 }
@@ -556,27 +555,39 @@ function handleApi(req, res, url) {
         }
         if (
           body &&
-          Object.prototype.hasOwnProperty.call(body, 'llmGatewayUrl')
-        ) {
-          next.llmGatewayUrl = String(body.llmGatewayUrl || '').trim();
-        }
-        if (
-          body &&
           Object.prototype.hasOwnProperty.call(body, 'sessionModels')
         ) {
           next.sessionModels = body.sessionModels;
-        }
-        if (
-          body &&
-          Object.prototype.hasOwnProperty.call(body, 'llmGatewayEnabled')
-        ) {
-          next.llmGatewayEnabled = body.llmGatewayEnabled === true;
         }
         store.saveSettings(next);
         sendJson(res, 200, settingsView());
       })
       .catch((error) =>
         sendJson(res, error.status || 400, { error: error.message })
+      );
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/llm-config') {
+    try {
+      sendJson(res, 200, llm.view());
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return true;
+  }
+
+  if (req.method === 'PUT' && pathname === '/api/llm-config') {
+    readJson(req)
+      .then((body) => sendJson(res, 200, llm.save(body)))
+      .catch((error) =>
+        sendJson(res, error.status || 400, {
+          ok: false,
+          error: error.message,
+        })
       );
     return true;
   }

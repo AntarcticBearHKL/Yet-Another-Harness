@@ -4,7 +4,11 @@ Standalone multi-provider LLM gateway for YAH. It accepts YAH's canonical chat r
 
 The provider catalog is generated from `https://models.dev/api.json` — the same catalog OpenCode/OpenChamber use — and contains **326 providers**. Protocol adapters normalize the provider-specific wire formats; everything else uses the OpenAI-compatible adapter.
 
-## Run
+## Optional HTTP service
+
+YAH itself uses this package as an in-process library: it reads the model config, resolves the task route and calls the provider directly. No gateway process or port is required for normal YAH use.
+
+The HTTP service is optional, for external clients or manual testing:
 
 ```bash
 cd llm-gateway
@@ -27,7 +31,7 @@ Set keys with provider environment variables (for example `DEEPSEEK_API_KEY`, `O
 
 ## Model exposure and task routing
 
-YAH only shows the models listed in `config.json`. A model is exposed when it has an `id`, `label`, `provider` and `model`. The gateway falls back to `config.example.json` when `config.json` does not exist yet; saving from YAH creates `config.json`. Example:
+YAH only shows the models listed in its model config. The config lives at `%APPDATA%\yah\llm.json` by default (`YAH_LLM_CONFIG` overrides it); on first run YAH seeds it from `config.example.json`. The standalone HTTP service reads `llm-gateway/config.json`, falling back to `config.example.json`. A model is exposed when it has an `id`, `label`, `provider` and `model`. Example:
 
 ```json
 {
@@ -66,7 +70,7 @@ Task names are `chat`, `manager`, `lead`, `research`, `programmer`, `tester`, `w
 
 `apiKeyFromRequest` lets the gateway use the `apiKey` sent by YAH. OpenCode and OpenCode Go models always accept the request key. Other providers read their own environment variables (for example `OPENROUTER_API_KEY`) unless the model opts in.
 
-YAH's Settings panel edits the exposed model list and the task routes through `GET/PUT /v1/config`. The composer model picker only lists these exposed models. Selecting a model pins it to that conversation; leaving it alone follows the task route.
+YAH's Settings panel edits this config through YAH's `/api/llm-config` endpoint; no HTTP gateway process is involved. The composer model picker only lists these exposed models. Selecting a model pins it to that conversation; leaving it alone follows the task route. The optional HTTP service exposes the same data at `GET/PUT /v1/config`.
 
 ```bash
 node bin/yah-llm-gateway.js models

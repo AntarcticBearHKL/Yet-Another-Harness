@@ -3821,6 +3821,17 @@ body.ring-open #background-badge {
   gap: 8px;
 }
 
+.gateway-config-path {
+  color: var(--faint);
+  font-size: 10.5px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.gateway-config-path:empty {
+  display: none;
+}
+
 .gateway-routes {
   display: grid;
   grid-template-columns: 1fr 1fr;

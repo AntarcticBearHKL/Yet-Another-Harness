@@ -6,7 +6,7 @@
 
 const tools = require('./tools');
 const attachments = require('./attachments');
-const { streamYahChat } = require('../llm-gateway/src/client');
+const { createGateway } = require('../llm-gateway/src/gateway');
 const { normalizeReasoningEffort } = require('./reasoning');
 const {
   buildSummaryPrompt,
@@ -456,52 +456,60 @@ async function streamGatewayChat({
   let contentChars = 0;
   let reasoningChars = 0;
   let usage = null;
-  const done = await streamYahChat({
-    endpoint: gateway.url,
-    signal,
-    request: {
-      model: gateway.model || '',
-      task: gateway.task || 'chat',
-      provider: gateway.provider || '',
-      apiKey: gateway.apiKey || '',
-      sessionId,
-      messages: body.messages,
-      tools: gatewayTools(body),
-      toolChoice: body.tool_choice,
-      temperature: body.temperature,
-      maxTokens:
-        body.max_tokens !== undefined
-          ? body.max_tokens
-          : body.max_completion_tokens,
-      reasoningEffort: body.reasoning_effort,
-      stream: true,
-    },
-    onEvent(event) {
-      if (event.type === 'text.delta') {
-        const now = Date.now();
-        if (!firstContentAt) {
-          firstContentAt = now;
-          onFirstToken?.('content', now - startedAt);
-        }
-        lastContentAt = now;
-        contentChars += event.text.length;
-        content += event.text;
-        onDelta?.(event.text, false);
-      } else if (event.type === 'reasoning.delta') {
-        const now = Date.now();
-        if (!firstReasoningAt) {
-          firstReasoningAt = now;
-          onFirstToken?.('thinking', now - startedAt);
-        }
-        lastReasoningAt = now;
-        reasoningChars += event.text.length;
-        reasoning += event.text;
-        onDelta?.(event.text, true);
-      } else if (event.type === 'usage') {
-        usage = event.usage;
+  let done = null;
+  const client = createGateway({ configFile: gateway.configFile });
+  const handle = (event) => {
+    if (event.type === 'text.delta') {
+      const now = Date.now();
+      if (!firstContentAt) {
+        firstContentAt = now;
+        onFirstToken?.('content', now - startedAt);
       }
-    },
-  });
+      lastContentAt = now;
+      contentChars += event.text.length;
+      content += event.text;
+      onDelta?.(event.text, false);
+    } else if (event.type === 'reasoning.delta') {
+      const now = Date.now();
+      if (!firstReasoningAt) {
+        firstReasoningAt = now;
+        onFirstToken?.('thinking', now - startedAt);
+      }
+      lastReasoningAt = now;
+      reasoningChars += event.text.length;
+      reasoning += event.text;
+      onDelta?.(event.text, true);
+    } else if (event.type === 'usage') {
+      usage = event.usage;
+    } else if (event.type === 'done') {
+      done = event;
+    } else if (event.type === 'error') {
+      throw Object.assign(
+        new Error(event.error?.message || 'gateway error'),
+        event.error || {}
+      );
+    }
+  };
+  for await (const event of client.stream({
+    model: gateway.model || '',
+    task: gateway.task || 'chat',
+    provider: gateway.provider || '',
+    apiKey: gateway.apiKey || '',
+    sessionId,
+    messages: body.messages,
+    tools: gatewayTools(body),
+    toolChoice: body.tool_choice,
+    temperature: body.temperature,
+    maxTokens:
+      body.max_tokens !== undefined
+        ? body.max_tokens
+        : body.max_completion_tokens,
+    reasoningEffort: body.reasoning_effort,
+    stream: true,
+    signal,
+  })) {
+    handle(event);
+  }
   if (done?.usage) usage = done.usage;
   const toolCalls = Array.isArray(done?.message?.toolCalls)
     ? done.message.toolCalls.map((call) => ({
@@ -540,7 +548,7 @@ async function streamChat({
   sessionId,
   gateway,
 }) {
-  if (gateway?.url) {
+  if (gateway?.configFile) {
     return streamGatewayChat({
       gateway,
       body,

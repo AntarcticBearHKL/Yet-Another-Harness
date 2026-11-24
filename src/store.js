@@ -39,6 +39,10 @@ function file(name) {
   return path.join(dataDir, name);
 }
 
+function dataPath(name) {
+  return file(name);
+}
+
 function legacyFile(name) {
   return path.join(legacyDir, name);
 }
@@ -47,8 +51,6 @@ function defaultSettings() {
   return {
     apiKey: '',
     reasoningEffort: DEFAULT_REASONING_EFFORT,
-    llmGatewayUrl: 'http://127.0.0.1:8790',
-    llmGatewayEnabled: false,
     sessionModels: {},
     window: null,
   };
@@ -100,10 +102,6 @@ function normalizeSettings(raw) {
   return {
     apiKey: String(raw.apiKey ?? raw.api_key ?? ''),
     reasoningEffort: normalizeReasoningEffort(raw.reasoningEffort),
-    llmGatewayUrl:
-      String(raw.llmGatewayUrl || 'http://127.0.0.1:8790').trim() ||
-      'http://127.0.0.1:8790',
-    llmGatewayEnabled: raw.llmGatewayEnabled === true,
     sessionModels: normalizeSessionModels(raw.sessionModels),
     window,
   };
@@ -2686,6 +2684,7 @@ module.exports = {
   DEFAULT_SYSTEM_PROMPT,
   init,
   close,
+  dataPath,
   defaultSettings,
   defaultChats,
   normalizeSettings,

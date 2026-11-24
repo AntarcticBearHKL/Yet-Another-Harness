@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:*; object-src 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>YAH - Yet Another Harness</title>
@@ -816,26 +816,12 @@
           />
         </div>
 
-        <div class="setting-col">
-          <div class="setting-row">
-            <span>LLM Gateway</span>
-            <span class="muted small">本地模型网关</span>
-          </div>
-          <input
-            id="llm-gateway-url"
-            type="text"
-            class="text-input"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="http://127.0.0.1:8790"
-          />
-        </div>
-
         <div class="setting-col gateway-routing-col">
           <div class="setting-row">
             <span>模型路由</span>
-            <span id="gateway-state" class="muted small">未连接</span>
+            <span id="gateway-state" class="muted small">未配置</span>
           </div>
+          <div id="llm-config-file" class="gateway-config-path"></div>
           <div id="gateway-routes" class="gateway-routes"></div>
           <details class="gateway-models">
             <summary>

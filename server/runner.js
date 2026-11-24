@@ -6,6 +6,7 @@ const deepseek = require('../src/deepseek');
 const attachments = require('../src/attachments');
 const { ensureAgentsMd } = require('./context');
 const { getAgent } = require('./agents');
+const llm = require('./llm');
 const {
   DEFAULT_WORKER_AGENT_ID,
   taskForAgent,
@@ -28,12 +29,16 @@ const pendingQuestions = new Map();
 const sessionAgentConfigs = new Map();
 
 function gatewayFor(settings, agentConfig, sessionId, task = '') {
-  if (settings?.llmGatewayEnabled !== true) return null;
-  const url = String(settings.llmGatewayUrl || '').trim();
-  if (!url) return null;
+  let config;
+  try {
+    config = llm.getConfig();
+  } catch {
+    return null;
+  }
+  if (config.models.length === 0) return null;
   const pinned = settings.sessionModels?.[sessionId];
   return {
-    url,
+    configFile: llm.configFile(),
     model: String(pinned?.id || '').trim(),
     provider: String(pinned?.provider || '').trim(),
     task: task || taskForAgent(agentConfig),

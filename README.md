@@ -88,7 +88,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 每个管理 group 导入目录时自动检查 Git：目录已有 Git 就复用，没有就执行 `git init` 并建立初始提交；主工程师在项目根目录检查和合并，每个 worker 工程师都在独立 worktree / branch（`yah/...`）上工作，完成时自动提交自己的变更，报告里会列出使用的分支
 - Manager 的工具权限被收窄为 `design_write`、`backlog_list`、`iteration_add`、`background_list`、`background_stop`；它不读文件、不搜索、不执行命令、不写代码，也不拆实现任务，所有执行和拆解都交给主工程师 / worker
 - Manager 配置里可以设置工程师数量，默认 2、最少 2：内部编号 1 固定是主工程师，编号 2 是第一个 worker（显示「工程师 1」），这两个写死不能删除；编号 2 以后可以继续增加。调度器把设计案和 Finished 检查交给主工程师，把 Backlog 任务派给编号 2 及以后的空闲 worker，并按任务角色切换对应 worker profile
-- 输入框底部从左到右是：当前 Agent 名字（如 `程序员`，琥珀色、左对齐，可点击展开暖色磨砂下拉菜单）、模型选择器（只列出 LLM Gateway 暴露的模型，按任务路由，未手动选择时显示当前 Agent 任务对应的模型）、思考强度滑条、极简回车图标发送按钮；输入框默认不显示 placeholder。每个对话必须有一个 Agent，新对话默认使用「程序员」；按对话保存选择，新对话继承同项目上一个对话的 Agent；对话开始（有第一条消息）后 Agent 固定，选择器变灰锁定，不能再切换；排队消息会保存自己的 Agent
+- 输入框底部从左到右是：当前 Agent 名字（如 `程序员`，琥珀色、左对齐，可点击展开暖色磨砂下拉菜单）、模型选择器（只列出模型配置中暴露的模型，按任务路由，未手动选择时显示当前 Agent 任务对应的模型）、思考强度滑条、极简回车图标发送按钮；输入框默认不显示 placeholder。每个对话必须有一个 Agent，新对话默认使用「程序员」；按对话保存选择，新对话继承同项目上一个对话的 Agent；对话开始（有第一条消息）后 Agent 固定，选择器变灰锁定，不能再切换；排队消息会保存自己的 Agent
 - 思考强度滑条是一条极简平面细线 + 小圆点，不显示「思考强度」文字和 low/high/max 挡位文字，鼠标指针保持默认；拖动时圆点自由跟随指针、没有吸附阈限，松开后自动吸附到最近的 `low` / `high` / `max` 挡位；也可以用方向键切换，选择保存在 `settings.json`，发送时作为 `reasoning_effort` 传给 DeepSeek
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
 - tool 和 Skill 面板是无标题的左右分栏：tool 页左侧按分类列出内置工具（搜索 / 文件 / 系统），代理类工具不在 tool 面板显示（仍可用于 Agent），右侧每个工具是一张独立卡片，默认折叠，只显示名称、参数数量和 chevron；点击展开说明和参数，一次最多只展开一个工具。Skill 页使用同样的分类侧栏和折叠卡片：左侧平铺系统、本地分类（内置 / 用户 / 绘画等，由 frontmatter `category` 决定）和 MCP 服务器（显示为 `MCP · 名称`），右侧每个 Skill 是一张和工具相同的卡片，默认折叠，展开后显示说明、固定指令和 MCP 参数；MCP 工具只出现在独立的 MCP 工作区，不混进 tool 面板；MCP 工作区左侧服务器、右侧概览 / 工具 / 资源 / 提示词 / 日志，概览是第一个 tab；没有内容时显示空状态
@@ -204,7 +204,7 @@ agent 循环、工具、SQLite、API key 都在本地后端。`contextIsolation:
 - 默认直连端点：`https://opencode.ai/inference/go/openai/v1/chat/completions`
 - 默认模型：`deepseek-v4.1-flash`
 - 鉴权：OpenCode Go 的 API key（Bearer）
-- 启用 LLM Gateway 后，YAH 按任务（`chat` / `manager` / `lead` / `research` / `programmer` / `tester` / `writer` / `reviewer`）路由到 `llm-gateway/config.json` 暴露的模型；输入框的模型选择器只列出这些模型，手动选择会固定到当前对话
+- YAH 按任务（`chat` / `manager` / `lead` / `research` / `programmer` / `tester` / `writer` / `reviewer`）路由到模型配置文件（默认 `%APPDATA%\yah\llm.json`，首次运行从 `llm-gateway/config.example.json` 生成）中暴露的模型；输入框的模型选择器只列出这些模型，手动选择会固定到当前对话
 - 请求带 `User-Agent: yah/0.3.0`，并为每个会话带稳定的
   `x-opencode-session`，方便网关路由和 prompt cache
 
@@ -221,6 +221,7 @@ agent 循环、工具、SQLite、API key 都在本地后端。`contextIsolation:
   - `app_state`：当前会话 id 和标题序号
   - 运行时还会出现 `chats.db-wal` / `chats.db-shm`；备份时不要只复制 `chats.db`
 - `%APPDATA%\yah\settings.json`：API key（后端读取，网页端拿不到）
+- `%APPDATA%\yah\llm.json`：暴露的模型列表与任务路由（Settings 面板编辑，YAH 进程内直接读取）
 - `%APPDATA%\yah\mcp.json`：YAH 自己添加的 MCP 服务器配置（STDIO 命令/参数/环境变量，或远程 URL/Headers）
 - `%APPDATA%\yah\agents.json`：旧版 Agent 配置备份；当前 Agent 角色由代码固定，界面只读
 - `%APPDATA%\yah\agile.json`：Agile 看板数据（分组、迭代、任务、备注、WIP、技能、事件日志），由任务工具和 Agile 页面共用
@@ -263,7 +264,7 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 - 兼容别名：`hashline_edit`；`read_file`、`web_search`、`interactive_bash`、`SystemInfo`、`system_info` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
 - `background_*`、`monitor_*` 是按项目绑定的常驻服务管理：必须填写备注，只暴露运行 / 停止状态，不提供输出，也不会把完成结果送回对话；创建者或 Manager 可以停止。调度器只把 Backlog 任务分配给编号 2 及以后的 worker，主工程师保留给设计确认和合并检查；`interactive_bash` 已合并为 `shell` 的隐藏别名
-- 独立 LLM Gateway：`llm-gateway/` 是一个不依赖 YAH Electron 的 Node 程序，导入 OpenChamber/OpenCode 使用的 models.dev 全量 provider 目录（326 个平台），用 OpenAI Chat、OpenAI Responses、Anthropic Messages、Gemini、Cohere、Azure OpenAI、Bedrock Converse 等适配器把各平台流式格式统一成 YAH canonical 事件（`start` / `text.delta` / `reasoning.delta` / `tool_call.*` / `usage` / `done`），通过 `POST /v1/chat` SSE 或 `POST /v1/chat/complete` 使用；详见 `llm-gateway/README.md`
+- 模型适配库与可选 HTTP 服务：`llm-gateway/` 导入 OpenChamber/OpenCode 使用的 models.dev 全量 provider 目录（326 个平台），用 OpenAI Chat、OpenAI Responses、Anthropic Messages、Gemini、Cohere、Azure OpenAI、Bedrock Converse 等适配器把各平台流式格式统一成 YAH canonical 事件（`start` / `text.delta` / `reasoning.delta` / `tool_call.*` / `usage` / `done`）。YAH 默认在进程内直接使用这个库读取模型配置并调用 provider，不需要单独启动服务；HTTP 服务仅用于外部客户端或手动调试，详见 `llm-gateway/README.md`
 
 ## Tool calling
 

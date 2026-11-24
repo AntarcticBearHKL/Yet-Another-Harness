@@ -111,7 +111,6 @@ const dom = {
   modelPickerButton: $('model-picker-button'),
   modelPickerValue: $('model-picker-value'),
   modelMenu: $('model-menu'),
-  llmGatewayUrl: $('llm-gateway-url'),
   gatewayState: $('gateway-state'),
   gatewayRoutes: $('gateway-routes'),
   gatewayModelList: $('gateway-model-list'),
@@ -122,6 +121,7 @@ const dom = {
   gatewayModelAdd: $('gateway-model-add'),
   gatewaySave: $('gateway-save'),
   gatewaySaveState: $('gateway-save-state'),
+  llmConfigFile: $('llm-config-file'),
   mcpConfig: $('mcp-config'),
   mcpConfigSummary: $('mcp-config-summary'),
   mcpConfigGrid: $('mcp-config-grid'),
@@ -142,18 +142,16 @@ const state = {
     apiKey: '',
     hasApiKey: false,
     reasoningEffort: DEFAULT_EFFORT,
-    llmGatewayUrl: 'http://127.0.0.1:8790',
-    llmGatewayEnabled: false,
     sessionModels: {},
   },
   models: [],
+  llmConfigFile: '',
   gatewayRoutes: {},
   gatewayDefaultModel: '',
   gatewayTasks: [],
   gatewayDraft: null,
   gatewaySaving: false,
   modelMenuIndex: 0,
-  gatewayTimer: null,
   switcherOpen: false,
   switcherIndex: 0,
   switcherProjectId: null,
@@ -475,6 +473,9 @@ const api = {
   loadSettings: () => requestJson('/api/settings'),
   saveSettings: (settings) =>
     requestJson('/api/settings', { method: 'PUT', body: settings }),
+  loadLlmConfig: () => requestJson('/api/llm-config'),
+  saveLlmConfig: (config) =>
+    requestJson('/api/llm-config', { method: 'PUT', body: config }),
   loadChats: () => requestJson('/api/chats'),
   loadSession: (sessionId) =>
     requestJson(`/api/sessions/${encodeURIComponent(sessionId)}`),
@@ -956,10 +957,6 @@ function settingsPayload() {
   return {
     ...(key ? { apiKey: key } : {}),
     reasoningEffort: currentEffort(),
-    llmGatewayUrl: String(
-      state.settings.llmGatewayUrl || 'http://127.0.0.1:8790'
-    ).trim(),
-    llmGatewayEnabled: state.settings.llmGatewayEnabled === true,
     sessionModels: state.settings.sessionModels || {},
   };
 }
@@ -1057,11 +1054,6 @@ function applySettings() {
   dom.apiKey.placeholder = hasKey ? '输入新 key' : '';
   if (document.activeElement !== dom.apiKey) {
     dom.apiKey.value = '';
-  }
-  if (dom.llmGatewayUrl && document.activeElement !== dom.llmGatewayUrl) {
-    dom.llmGatewayUrl.value = String(
-      s.llmGatewayUrl || 'http://127.0.0.1:8790'
-    );
   }
   renderComposerEffort();
 }
@@ -5445,10 +5437,7 @@ async function startPrompt(
   if (clearInput) dom.input.value = '';
   updateSendState();
 
-  if (
-    !state.settings.hasApiKey &&
-    !(state.settings.llmGatewayEnabled && state.models.length > 0)
-  ) {
+  if (!state.settings.hasApiKey && state.models.length === 0) {
     agent.text = NO_KEY_HINT;
     agent.request = null;
     agent.steps = [
@@ -5952,12 +5941,6 @@ function closeModelMenu() {
   dom.modelPickerButton?.setAttribute('aria-expanded', 'false');
 }
 
-function gatewayBaseUrl() {
-  return String(
-    state.settings.llmGatewayUrl || 'http://127.0.0.1:8790'
-  ).replace(/\/+$/, '');
-}
-
 const GATEWAY_TASK_LABELS = {
   chat: '对话',
   manager: 'Manager',
@@ -6024,7 +6007,7 @@ function renderModelPicker() {
   if (!session || models.length === 0) {
     dom.modelPickerValue.textContent = '默认';
     dom.modelMenu.replaceChildren();
-    const empty = el('div', 'model-menu-empty', 'Gateway 未连接');
+    const empty = el('div', 'model-menu-empty', '还没有配置模型');
     dom.modelMenu.append(empty);
     dom.modelPickerButton?.setAttribute('aria-expanded', 'false');
     return;
@@ -6065,54 +6048,49 @@ function renderModelPicker() {
   });
 }
 
-async function loadGatewayModels() {
-  const url = `${gatewayBaseUrl()}/v1/models`;
+function applyLlmConfig(data) {
+  state.llmConfigFile = String(data?.configFile || '');
+  state.models = Array.isArray(data?.models) ? data.models : [];
+  state.gatewayRoutes =
+    data?.routes && typeof data.routes === 'object' ? data.routes : {};
+  state.gatewayDefaultModel = String(data?.defaultModel || '');
+  state.gatewayTasks = Array.isArray(data?.tasks) ? data.tasks : [];
+  state.gatewayDraft = {
+    models: state.models.map((model) => ({ ...model })),
+    routes: { ...state.gatewayRoutes },
+    defaultModel: state.gatewayDefaultModel,
+  };
+  const exposedIds = new Set(state.models.map((model) => model.id));
+  let pruned = false;
+  for (const [sessionId, chosen] of Object.entries(
+    state.settings.sessionModels || {}
+  )) {
+    if (!chosen?.id || exposedIds.has(chosen.id)) continue;
+    delete state.settings.sessionModels[sessionId];
+    pruned = true;
+  }
+  if (pruned) saveSettingsSoon();
+  const current = exposedModelForSession();
+  const index = state.models.findIndex((model) => model.id === current?.id);
+  state.modelMenuIndex = index >= 0 ? index : 0;
+  renderModelPicker();
+  renderGatewaySettings();
+}
+
+async function loadLlmConfig() {
   try {
-    const response = await fetch(url, { headers: { accept: 'application/json' } });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    state.models = Array.isArray(data.models) ? data.models : [];
-    state.gatewayRoutes =
-      data.routes && typeof data.routes === 'object' ? data.routes : {};
-    state.gatewayDefaultModel = String(data.defaultModel || '');
-    state.gatewayTasks = Array.isArray(data.tasks) ? data.tasks : [];
-    state.gatewayDraft = {
-      models: state.models.map((model) => ({ ...model })),
-      routes: { ...state.gatewayRoutes },
-      defaultModel: state.gatewayDefaultModel,
-    };
-    const exposedIds = new Set(state.models.map((model) => model.id));
-    let pruned = false;
-    for (const [sessionId, chosen] of Object.entries(
-      state.settings.sessionModels || {}
-    )) {
-      if (!chosen?.id || exposedIds.has(chosen.id)) continue;
-      delete state.settings.sessionModels[sessionId];
-      pruned = true;
-    }
-    if (pruned) saveSettingsSoon();
-    const current = exposedModelForSession();
-    const index = state.models.findIndex((model) => model.id === current?.id);
-    state.modelMenuIndex = index >= 0 ? index : 0;
-    const usable = state.models.length > 0;
-    if (state.settings.llmGatewayEnabled !== usable) {
-      state.settings.llmGatewayEnabled = usable;
-      saveSettingsSoon();
-    }
+    applyLlmConfig(await api.loadLlmConfig());
   } catch {
+    state.llmConfigFile = '';
     state.models = [];
     state.gatewayRoutes = {};
     state.gatewayDefaultModel = '';
     state.gatewayTasks = [];
     state.gatewayDraft = null;
     state.modelMenuIndex = 0;
-    if (state.settings.llmGatewayEnabled !== false) {
-      state.settings.llmGatewayEnabled = false;
-      saveSettingsSoon();
-    }
+    renderModelPicker();
+    renderGatewaySettings();
   }
-  renderModelPicker();
-  renderGatewaySettings();
 }
 
 function renderGatewaySettings() {
@@ -6126,12 +6104,21 @@ function renderGatewaySettings() {
   if (dom.gatewayState) {
     dom.gatewayState.textContent = draft
       ? `${models.length} 个模型`
-      : '未连接';
+      : '未配置';
+  }
+  if (dom.llmConfigFile) {
+    dom.llmConfigFile.textContent = state.llmConfigFile
+      ? `配置文件：${state.llmConfigFile}`
+      : '';
   }
   dom.gatewayRoutes.replaceChildren();
   if (!draft) {
     dom.gatewayRoutes.append(
-      el('div', 'model-menu-empty', 'Gateway 未连接，先填写地址并启动 gateway')
+      el('div', 'model-menu-empty', '无法读取模型配置')
+    );
+  } else if (models.length === 0) {
+    dom.gatewayRoutes.append(
+      el('div', 'model-menu-empty', '还没有暴露模型，添加一个即可')
     );
   } else {
     for (const task of tasks) {
@@ -6235,34 +6222,13 @@ async function saveGatewayConfig() {
   if (dom.gatewaySaveState) dom.gatewaySaveState.textContent = '保存中…';
   renderGatewaySettings();
   try {
-    const response = await fetch(`${gatewayBaseUrl()}/v1/config`, {
-      method: 'PUT',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json',
-      },
-      body: JSON.stringify({
-        models: draft.models,
-        routes: draft.routes,
-        defaultModel: draft.defaultModel,
-      }),
+    const data = await api.saveLlmConfig({
+      models: draft.models,
+      routes: draft.routes,
+      defaultModel: draft.defaultModel,
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    state.models = Array.isArray(data.models) ? data.models : [];
-    state.gatewayRoutes =
-      data.routes && typeof data.routes === 'object' ? data.routes : {};
-    state.gatewayDefaultModel = String(data.defaultModel || '');
-    state.gatewayTasks = Array.isArray(data.tasks) ? data.tasks : [];
-    state.gatewayDraft = {
-      models: state.models.map((model) => ({ ...model })),
-      routes: { ...state.gatewayRoutes },
-      defaultModel: state.gatewayDefaultModel,
-    };
-    state.settings.llmGatewayEnabled = state.models.length > 0;
-    saveSettingsSoon();
+    applyLlmConfig(data);
     if (dom.gatewaySaveState) dom.gatewaySaveState.textContent = '已保存';
-    renderModelPicker();
   } catch (error) {
     if (dom.gatewaySaveState) {
       dom.gatewaySaveState.textContent = `保存失败: ${error.message}`;
@@ -6273,21 +6239,13 @@ async function saveGatewayConfig() {
   }
 }
 
-function scheduleLoadGatewayModels() {
-  clearTimeout(state.gatewayTimer);
-  state.gatewayTimer = setTimeout(() => {
-    state.gatewayTimer = null;
-    void loadGatewayModels();
-  }, 400);
-}
-
 function toggleModelMenu() {
   if (!dom.modelMenu || !dom.modelPickerButton) return;
   if (!dom.modelMenu.classList.contains('hidden')) {
     closeModelMenu();
     return;
   }
-  if (state.models.length === 0) void loadGatewayModels();
+  if (state.models.length === 0) void loadLlmConfig();
   renderModelPicker();
   closeAgentMenu();
   dom.modelMenu.classList.remove('hidden');
@@ -7927,7 +7885,7 @@ function openSettings() {
   applySettings();
   renderGatewaySettings();
   dom.settingsOverlay.classList.remove('hidden');
-  void loadGatewayModels();
+  void loadLlmConfig();
   void loadPairing();
 }
 
@@ -10750,12 +10708,6 @@ function bindEvents() {
     saveSettingsSoon();
   });
 
-  dom.llmGatewayUrl?.addEventListener('input', () => {
-    state.settings.llmGatewayUrl = dom.llmGatewayUrl.value.trim();
-    saveSettingsSoon();
-    scheduleLoadGatewayModels();
-  });
-
   dom.gatewayModelAdd?.addEventListener('click', addGatewayModel);
   dom.gatewaySave?.addEventListener('click', () => {
     void saveGatewayConfig();
@@ -10772,8 +10724,6 @@ function bindEvents() {
       apiKey: '',
       hasApiKey: false,
       reasoningEffort: currentEffort(),
-      llmGatewayUrl: 'http://127.0.0.1:8790',
-      llmGatewayEnabled: false,
       sessionModels: {},
     };
     applySettings();
@@ -11676,7 +11626,7 @@ async function boot() {
   bindEvents();
   if (!state.archiveWindow) connectBackgroundEvents();
   applySettings();
-  void loadGatewayModels();
+  void loadLlmConfig();
   await loadAgents();
   if (systemNodeId) {
     state.systemNodeWindow = true;
