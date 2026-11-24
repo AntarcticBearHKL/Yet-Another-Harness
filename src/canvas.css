@@ -2553,19 +2553,15 @@ body.maximized .system-node-page {
   }
 }
 
-/* ---------------------------- µ¥¹¤³Ì¹¤×÷Çø ---------------------------- */
+/* ---------------------------- ï¿½ï¿½ï¿½ï¿½ï¿½Ì¹ï¿½ï¿½ï¿½ï¿½ï¿½ ---------------------------- */
 /*
- * Ö÷´°¿Ú²»ÔÙÏÔÊ¾¿ÉÆ½ÒÆ / Ëõ·ÅµÄ»­²¼£¬Ö»±£ÁôÒ»¸öÍêÕûµÄ¹ÜÀí group£º
- * ×óÁÐ¹ÜÀí¡¢ÖÐÁÐ¹¤×÷¡¢ÓÒÁÐ½»»¥¡£ËùÓÐ»­²¼½»»¥ÔÚ JS ÖÐÒÑ±»½ûÓÃ£¬
- * ÕâÀï¸ºÔð°Ñ group À­Âú´°¿Ú²¢¸ÄÔì³É¹Ì¶¨ÈýÁÐ²¼¾Ö¡£
+ * ï¿½ï¿½ï¿½ï¿½ï¿½Ú²ï¿½ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½Æ½ï¿½ï¿½ / ï¿½ï¿½ï¿½ÅµÄ»ï¿½ï¿½ï¿½ï¿½ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¹ï¿½ï¿½ï¿½ groupï¿½ï¿½
+ * ï¿½ï¿½ï¿½Ð¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ JS ï¿½ï¿½ï¿½Ñ±ï¿½ï¿½ï¿½ï¿½Ã£ï¿½
+ * ï¿½ï¿½ï¿½ï¸ºï¿½ï¿½ï¿½ group ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú²ï¿½ï¿½ï¿½ï¿½ï¿½É¹Ì¶ï¿½ï¿½ï¿½ï¿½Ð²ï¿½ï¿½Ö¡ï¿½
  */
 body.workspace-home #canvas {
-  inset: 0;
   padding: 0;
-  border-radius: 0;
-  background: var(--surface-workspace);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  border-radius: var(--radius-panel, 18px);
 }
 
 body.workspace-home #canvas .canvas-grid,
@@ -2605,12 +2601,12 @@ body.workspace-home .canvas-manager-group {
     minmax(240px, 0.85fr)
     minmax(0, 1.5fr)
     minmax(280px, 0.95fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   width: auto !important;
   height: auto !important;
   border: 0 !important;
   border-radius: 0 !important;
-  background: var(--surface-workspace) !important;
+  background: transparent !important;
   box-shadow: none !important;
   overflow: hidden !important;
   color: var(--text);
@@ -2667,6 +2663,10 @@ body.workspace-home .canvas-manager-column:last-of-type {
 
 body.workspace-home .canvas-manager-column-head {
   flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
   padding: 16px 18px 9px;
   color: var(--faint);
   font-size: 10px;
@@ -2674,6 +2674,17 @@ body.workspace-home .canvas-manager-column-head {
   letter-spacing: 0.18em;
   line-height: 1;
   text-transform: uppercase;
+}
+
+body.workspace-home .canvas-manager-project-name {
+  overflow: hidden;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
 }
 
 body.workspace-home .canvas-manager-column-list {

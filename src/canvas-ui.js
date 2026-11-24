@@ -1677,16 +1677,27 @@ function buildCanvasManagerGroup(manager, layout, columnEls) {
   groupEl.dataset.sessionId = manager.id;
   const project = state.projects.find((item) => item.id === manager.projectId);
   const projectName = String(project?.name || '').trim();
-  const title = el('div', 'canvas-manager-group-title');
-  title.setAttribute('aria-hidden', 'true');
-  title.append(
-    el(
-      'span',
-      'canvas-manager-group-title-text',
-      projectName || 'Workspace'
-    )
-  );
-  groupEl.append(title);
+  if (canvasWorkspaceMode()) {
+    const firstHead = columnEls[0]?.querySelector(
+      '.canvas-manager-column-head'
+    );
+    if (firstHead && projectName) {
+      firstHead.append(
+        el('span', 'canvas-manager-project-name', projectName)
+      );
+    }
+  } else {
+    const title = el('div', 'canvas-manager-group-title');
+    title.setAttribute('aria-hidden', 'true');
+    title.append(
+      el(
+        'span',
+        'canvas-manager-group-title-text',
+        projectName || 'Workspace'
+      )
+    );
+    groupEl.append(title);
+  }
   for (let index = 0; index < CANVAS_MANAGER_COLUMNS - 1; index += 1) {
     const dividerEl = el('div', 'canvas-manager-divider hidden');
     dividerEl.append(buildCanvasManagerDividerLine());
