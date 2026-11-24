@@ -206,7 +206,7 @@ function managerQuestionnairePrompt(node) {
   const payload = node?.payload || {};
   const questions = Array.isArray(payload.questions) ? payload.questions : [];
   const answers = Array.isArray(payload.answers) ? payload.answers : [];
-  const lines = ['用户已经填写完你发出的问卷。', '', '# 问卷与回答'];
+  const lines = ['用户已经处理了你发出的问卷。', '', '# 问卷与回答'];
   questions.forEach((question, index) => {
     const values = Array.isArray(answers[index])
       ? answers[index].map(String).filter(Boolean)
