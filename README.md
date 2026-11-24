@@ -11,7 +11,7 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 禁用 Chromium 默认的中键拖拽/自动滚动，中键不会进入滚动模式
 - 所有面板右上角都没有最小化 / 最大化 / 关闭按钮；三个窗口操作只放在 Tab 工作区空白处的右键菜单里
 - 没有聊天顶栏和底部输入框：会话内容占满整个窗口高度；按 Space 打开居中的输入框
-- 主窗口不再是画布：当前工程的管理 group 直接占满整个窗口，固定三列「管理 / 工作 / 交互」；管理列是 Manager、Agile、调度器、后台，工作列是主工程师和工程师，交互列是报告、审批和问卷。画布平移、缩放、框选、节点拖动、边框和空白创建都已移除；当前只展示一个工程，点击节点打开对应对话或页面
+- 主窗口不再是画布：当前工程的管理 group 直接占满整个窗口，固定三列「管理 / 工作 / 交互」；管理列是产品经理、Agile、调度器、后台，工作列是架构师和工程师，交互列是报告、审批和问卷。画布平移、缩放、框选、节点拖动、边框和空白创建都已移除；当前只展示一个工程，点击节点打开对应对话或页面
 - Space 输入框：透明毛玻璃高斯模糊遮罩；输入框为空时再按 Space 关闭；点击输入框外关闭，按住拖动则优先拖动窗口；Enter 发送，Shift+Enter 换行，Esc 关闭；关闭时保留草稿，新对话会清空
 - 没有侧边栏；全局屏蔽原生 Tab 焦点切换，Tab 只用于按住打开全屏工作区，松开收起，支持键盘选择和删除；Shift / Ctrl / Alt + Tab 不触发切换器
 - Tab 工作区使用和 Space 输入框一致的透明磨砂玻璃：半透明奶油底 + 18px 高斯模糊，背后的聊天内容会透出来
@@ -65,13 +65,13 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 删除项目会一次性删除项目本身以及里面的所有对话记录；删除最后一个项目后保持无项目状态，不会自动创建默认项目，需要重新点 `+` 新建；删除对话、排队消息、MCP 服务器也都遵循同样的两步确认
 - 对话面板里按 Space 总是打开输入框（焦点在按钮 / 消息块上时也一样，不会触发折叠或按钮点击）；输入框为空或只有空格、且没有挂 Skill 时，再按 Space 关闭输入框；有文字或已挂 Skill 时 Space 才作为空格
 - 所有带确认按钮的弹窗按 Space 等于点击确认按钮：删除确认的 `Delete`、重命名的 `Save`、项目的 `Create / Save`、Goal 的 `Start Goal`、Skill 参数的 `Attach`、工具授权的 `允许一次`、设置的 `Done`、MCP 服务器表单的 `Save`；焦点在输入框 / 文本域 / 下拉框里时 Space 仍然是空格，项目目录拖放区这类自己处理 Space 的控件保持原行为
-- 后台服务：LLM 用 `background_start` 在项目里启动持续运行的服务（dev server、watcher、`npm run dev` 等），每次必须附 `note` 简洁说明用途；工具只返回 id、备注和运行状态，不返回输出或执行结果，服务结束时也不会把任何内容送回对话。服务按项目保存，不属于某个对话；全屏工作区的管理列有统一的「后台」管理 node，显示每个服务的备注、创建者、命令和运行状态，创建者或管理员（Manager / 人）可以停止对应服务；`background_list` / `background_stop` 用于列出和停止，旧的 `background_output` / `background_cancel` / `monitor_output` 已删除。工具面板里是「后台」分类
-- 角色：Subagent 分组包含主工程师、信息收集、程序员、测试员、文档写作、代码审查六个固定角色，不再有通用 Build，也没有项目协调 Agent；主工程师负责需求确认、拆解和合并检查，其余 worker 直接处理 Agile 任务，使用 `task_block` / `task_finish`
+- 后台服务：LLM 用 `background_start` 在项目里启动持续运行的服务（dev server、watcher、`npm run dev` 等），每次必须附 `note` 简洁说明用途；工具只返回 id、备注和运行状态，不返回输出或执行结果，服务结束时也不会把任何内容送回对话。服务按项目保存，不属于某个对话；全屏工作区的管理列有统一的「后台」管理 node，显示每个服务的备注、创建者、命令和运行状态，创建者或管理员（产品经理 / 人）可以停止对应服务；`background_list` / `background_stop` 用于列出和停止，旧的 `background_output` / `background_cancel` / `monitor_output` 已删除。工具面板里是「后台」分类
+- 角色：Subagent 分组包含架构师、信息收集、程序员、测试员、文档写作、代码审查六个固定角色，不再有通用 Build，也没有项目协调 Agent；架构师负责需求确认、拆解和合并检查，其余 worker 直接处理 Agile 任务，使用 `task_block` / `task_finish`
 - `/fork` 系统 Skill：在当前工作目录把当前对话分叉成新的可编辑对话，命名 `#n-对话名`，原对话保持不变；在输入框输入 `/fork [名字]` 或从斜杠列表选择
-- Agile 工作区：从工作区右键菜单或节点打开；桌面端打开一个独立窗口（网页端回退为全屏页面），窗口位置和大小会记住。固定七列 设计案 / Backlog / In Progress / Blocked / Testing / Verified / Merged；左侧分组和迭代，支持折叠、改名、新建、删除；卡片可以打开任务表单，标题和描述只读，备注仍可添加，备注在 In Progress 期间锁定；Testing / Verified 任务被加备注会自动回到 Backlog 并标记返工。支持任务搜索、WIP 上限、迭代日期/目标、显示更新时间和默认 OpenAgile Skill。看板数据存在 `%APPDATA%\yah\agile.json`。Manager 写设计案，主工程师发技术方案并拆成 Backlog，worker 完成后进入 Testing，独立测试员通过后进入 Verified，主工程师检查合并后进入 Merged
+- Agile 工作区：从工作区右键菜单或节点打开；桌面端打开一个独立窗口（网页端回退为全屏页面），窗口位置和大小会记住。固定七列 需求清单 / Backlog / In Progress / Blocked / Testing / Verified / Merged；左侧分组和迭代，支持折叠、改名、新建、删除；卡片可以打开任务表单，标题和描述只读，备注仍可添加，备注在 In Progress 期间锁定；Testing / Verified 任务被加备注会自动回到 Backlog 并标记返工。支持任务搜索、WIP 上限、迭代日期/目标、显示更新时间和默认 OpenAgile Skill。看板数据存在 `%APPDATA%\yah\agile.json`。产品经理写需求清单，架构师发技术方案并拆成 Backlog，worker 完成后进入 Testing，独立测试员通过后进入 Verified，架构师检查合并后进入 Merged
 - 任务工具：工具面板的「Agile」分类包含 `question`、`design_write`、`architecture_write`、`backlog_list`、`backlog_add`、`iteration_add`、`task_block`、`task_finish`、`test_report`、`task_merge`、`task_reject`、`report_write`；旧的 `agile_*`、`mission_*`、`worknode_result` 工具已删除
-- 系统 node：全屏工作区左列显示 Manager、Agile、调度器和后台，右列显示 Report Hub、审批和问卷。每个 Manager 启动后自动出现 Agile、调度器和后台；发布设计案后自动出现 Report Hub，审批和问卷在 `task_block` 时出现。单一节点点击会打开统一风格的详情页，显示状态、执行步骤和该类型的专属内容（Agile 计数、后台服务列表、报告正文、审批详情或问卷表单）。调度器每 1.5 秒扫描设计案、Backlog、Testing、Verified 和阻塞队列：把设计案派给主工程师，把 Backlog 派给 worker 工程师，把 Testing 派给不同于实现者的测试员，把 Verified 重新交给主工程师检查合并；测试员用 `test_report` 给出通过 / 失败，Report Hub 更新 Agile 并在全部结束后生成人话报告
-- 全屏工作区固定三列：左列管理（Manager、Agile、调度器、后台），中列工作（主工程师、工程师），右列交互（Report Hub、审批、问卷）。单个 node 不能拖动或调整位置；行从上往下排列，行与行之间没有高度空隙。工程师列固定主工程师在第一位，编号 2 和 3 的两个 worker 默认存在；编号 1 不接实现任务，只负责需求确认、架构、拆解和合并检查，编号 2 起是执行任务的 worker，界面从「工程师 1」开始显示；可在「配置」里调整数量。主界面只展示一个工程，不再有画布平移、缩放、框选、节点拖动、边框和空白创建；点击节点打开对应对话或独立窗口
+- 系统 node：全屏工作区左列显示产品经理、Agile、调度器和后台，右列显示 Report Hub、审批和问卷。每个产品经理启动后自动出现 Agile、调度器和后台；发布需求清单后自动出现 Report Hub，审批和问卷在 `task_block` 时出现。单一节点点击会打开统一风格的详情页，显示状态、执行步骤和该类型的专属内容（Agile 计数、后台服务列表、报告正文、审批详情或问卷表单）。调度器每 1.5 秒扫描需求清单、Backlog、Testing、Verified 和阻塞队列：把需求清单派给架构师，把 Backlog 派给 worker 工程师，把 Testing 派给不同于实现者的测试员，把 Verified 重新交给架构师检查合并；测试员用 `test_report` 给出通过 / 失败，Report Hub 更新 Agile 并在全部结束后生成人话报告
+- 全屏工作区固定三列：左列管理（产品经理、Agile、调度器、后台），中列工作（架构师、工程师），右列交互（Report Hub、审批、问卷）。单个 node 不能拖动或调整位置；行从上往下排列，行与行之间没有高度空隙。工程师列固定架构师在第一位，编号 2 和 3 的两个 worker 默认存在；编号 1 不接实现任务，只负责需求确认、架构、拆解和合并检查，编号 2 起是执行任务的 worker，界面从「工程师 1」开始显示；可在「配置」里调整数量。主界面只展示一个工程，不再有画布平移、缩放、框选、节点拖动、边框和空白创建；点击节点打开对应对话或独立窗口
 - 每个对话顶部只显示一个 MCP 摘要按钮（如 `MCP 5/12`）；点击打开居中的磨砂玻璃配置页，以 grid 按钮墙列出所有服务器，点击按钮切换该对话的开启 / 关闭；开关按会话持久化，关闭的服务器不会出现在该对话的工具列表里（会让 prompt cache 失效）
 - 输入框（Space）里：新对话（还没有任何消息）上方只显示 MCP 摘要按钮；已有消息的对话上方只显示排队消息框。生成中仍可继续输入，消息按顺序排队、一行一条，左侧拖动排序，行尾是编辑 / 立即发送 / 删除三个纯图标按钮；当前生成结束后自动按顺序处理队列；这两块都是和输入框同宽的圆角矩形
 - 新建对话默认关闭所有 MCP 服务器：MCP 摘要显示 `0/总数`，需要时在对话顶部的 MCP 配置页里手动打开；开关按会话持久化
@@ -82,13 +82,13 @@ YAH 是 `D:\Dev\Harness\yah` 里的 Electron 聊天 harness，保留原来 minih
 - 在输入框开头输入 `/` 会在光标位置弹出搜索式 Skill 联想：按名称、描述、关键词匹配当前对话可用的 Skill，上下键移动、回车或点击选择；输入完整的 Skill 名称或 id 后会自动识别并关闭联想，后面可以直接跟空格、参数或正文，不需要回车选择；只有部分匹配时才需要上下键 / 回车选择。选中后输入框本身不变色，只在输入框上方显示一个带颜色的 `/ Skill` 标记，按 Backspace 或点 × 整体删除；带参数的 MCP Skill 会先弹出参数表单
 - 附加的 Skill 在发送时解析并注入该次请求的 system prompt（`# Active Skills`），不会写进用户输入；排队消息会一起保存自己的 Skill
 - 已连接且当前对话启用的 MCP 服务器会把 prompts 暴露为临时 Skill；切换 MCP 开关后列表实时更新
-- Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧按「管理 / Subagent」分组列出固定配置，右侧显示名称、提示词和工具权限；管理只有一个 Manager；具体工作角色全部在 Subagent：主工程师、信息收集、程序员、测试员、文档写作、代码审查，没有通用 Build，也没有项目协调 Agent；配置完全只读，不能新增、删除或修改
-- Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；每个角色的提示词第一句都是先阅读整个项目目录、README、AGENTS.md、依赖清单和关键源码，理解开发方式后再开始工作。每个 Subagent 的工具权限按角色区分：主工程师有 `task_block` / `task_finish` / `architecture_write` / `backlog_add` / `task_merge` / `task_reject`、只读代码工具、shell 和 Git 检查 / 合并工具，但没有 `write` / `edit`；worker 有代码工具、自己的 worktree 分支和 `task_block` / `task_finish`，没有合并 / 推送工具；测试员有 `task_block` / `test_report` 和测试代码工具。工具权限和工具目录一样左右分栏：左列第一行是「允许所有工具」，下面是分类，右列第一行是搜索框，下面是当前分类的工具；可以浏览分类和搜索，但复选框只展示状态、不响应点击，显示保持原样不做灰色禁用；MCP 工具不进入 Agent 工具权限，也不受 Agent 工具勾选限制，仍由对话的 MCP 开关控制，并继续在 tool 面板里查看
-- Manager 的主流程是 `question` / `design_write` / `backlog_list` / `iteration_add` / `report_write`：先向用户发问确认需求，再把用户请求整理成严谨的产品设计（目标、范围、需求、约束、非目标、用户确认、验收和待确认问题），写入 Agile 的「设计案」列；调度器把设计案交给主工程师，主工程师用 `task_block` 只问技术问题，确认后用 `architecture_write` 发布技术方案，再用 `backlog_add` 拆成带验收标准和测试计划的 Backlog 任务；调度器把 Backlog 分配给 worker 工程师，工程师完成后任务进入 Testing，调度器把 Testing 交给独立测试员；测试员用 `test_report` 给出通过 / 失败，通过后任务进入 Verified，失败则回到原工程师返工；主工程师检查代码和测试报告，用 `task_merge` 合并实现与测试分支并进入 Merged，不合格时用 `task_reject` 打回 Backlog；任务全部结束后 Manager 用 `report_write` 生成给非技术读者看的人话报告
-- 调度器详情页会记录每次扫描的设计案 / Backlog / 进行中 / 阻塞 / 待测试 / 待合并 / 已合并数量，以及设计派发、测试派发、任务分发、阻塞恢复、主工程师合并和人话报告步骤；端口不消耗模型
-- 每个管理 group 导入目录时自动检查 Git：目录已有 Git 就复用，没有就执行 `git init` 并建立初始提交；主工程师在项目根目录检查和合并，每个 worker 工程师都在独立 worktree / branch（`yah/...`）上工作，完成时自动提交自己的变更；测试员从实现分支创建独立的测试分支（`yah/test-...`），可以在不污染实现分支的情况下补测试，报告里会列出实现与测试分支
-- Manager 的工具权限被收窄为 `design_write`、`backlog_list`、`iteration_add`、`background_list`、`background_stop`、`question`、`report_write`；它不读文件、不搜索、不执行命令、不写代码，也不拆实现任务，所有执行和拆解都交给主工程师 / worker
-- Manager 配置里可以设置工程师数量，默认 3、最少 3：内部编号 1 固定是主工程师，编号 2 是第一个 worker（显示「工程师 1」），编号 3 是第二个 worker（显示「工程师 2」），这两个写死不能删除；编号 3 以后可以继续增加。调度器把设计案和 Verified 检查交给主工程师，把 Backlog 任务派给编号 2 及以后的空闲 worker，把 Testing 交给不同于实现者的空闲 worker 作为独立测试员，并按任务角色切换对应 worker profile
+- Agent 面板从右键菜单的 Agent 入口打开，左右分栏：左侧按「管理 / Subagent」分组列出固定配置，右侧显示名称、提示词和工具权限；管理只有一个产品经理；具体工作角色全部在 Subagent：架构师、信息收集、程序员、测试员、文档写作、代码审查，没有通用 Build，也没有项目协调 Agent；配置完全只读，不能新增、删除或修改
+- Agent 提示词会以 `# Agent Context · 名称` 的形式插入该次请求的 system prompt（在对话上下文之前）；每个角色的提示词第一句都是先阅读整个项目目录、README、AGENTS.md、依赖清单和关键源码，理解开发方式后再开始工作。每个 Subagent 的工具权限按角色区分：架构师有 `task_block` / `task_finish` / `architecture_write` / `backlog_add` / `task_merge` / `task_reject`、只读代码工具、shell 和 Git 检查 / 合并工具，但没有 `write` / `edit`；worker 有代码工具、自己的 worktree 分支和 `task_block` / `task_finish`，没有合并 / 推送工具；测试员有 `task_block` / `test_report` 和测试代码工具。工具权限和工具目录一样左右分栏：左列第一行是「允许所有工具」，下面是分类，右列第一行是搜索框，下面是当前分类的工具；可以浏览分类和搜索，但复选框只展示状态、不响应点击，显示保持原样不做灰色禁用；MCP 工具不进入 Agent 工具权限，也不受 Agent 工具勾选限制，仍由对话的 MCP 开关控制，并继续在 tool 面板里查看
+- 产品经理的主流程是 `question` / `design_write` / `backlog_list` / `iteration_add` / `report_write`：先向用户发问确认需求，再把用户请求整理成严谨的产品设计（目标、范围、需求、约束、非目标、用户确认、验收和待确认问题），写入 Agile 的「需求清单」列；调度器把需求清单交给架构师，架构师用 `task_block` 只问技术问题，确认后用 `architecture_write` 发布技术方案，再用 `backlog_add` 拆成带验收标准和测试计划的 Backlog 任务；调度器把 Backlog 分配给 worker 工程师，工程师完成后任务进入 Testing，调度器把 Testing 交给独立测试员；测试员用 `test_report` 给出通过 / 失败，通过后任务进入 Verified，失败则回到原工程师返工；架构师检查代码和测试报告，用 `task_merge` 合并实现与测试分支并进入 Merged，不合格时用 `task_reject` 打回 Backlog；任务全部结束后产品经理用 `report_write` 生成给非技术读者看的人话报告
+- 调度器详情页会记录每次扫描的需求清单 / Backlog / 进行中 / 阻塞 / 待测试 / 待合并 / 已合并数量，以及需求派发、测试派发、任务分发、阻塞恢复、架构师合并和人话报告步骤；端口不消耗模型
+- 每个管理 group 导入目录时自动检查 Git：目录已有 Git 就复用，没有就执行 `git init` 并建立初始提交；架构师在项目根目录检查和合并，每个 worker 工程师都在独立 worktree / branch（`yah/...`）上工作，完成时自动提交自己的变更；测试员从实现分支创建独立的测试分支（`yah/test-...`），可以在不污染实现分支的情况下补测试，报告里会列出实现与测试分支
+- 产品经理的工具权限被收窄为 `design_write`、`backlog_list`、`iteration_add`、`question`、`report_write`；它不读文件、不搜索、不执行命令、不写代码，也不拆实现任务，也没有后台服务工具，所有执行和拆解都交给架构师 / worker
+- 产品经理配置里可以设置工程师数量，默认 3、最少 3：内部编号 1 固定是架构师，编号 2 是第一个 worker（显示「工程师 1」），编号 3 是第二个 worker（显示「工程师 2」），这两个写死不能删除；编号 3 以后可以继续增加。调度器把需求清单和 Verified 检查交给架构师，把 Backlog 任务派给编号 2 及以后的空闲 worker，把 Testing 交给不同于实现者的空闲 worker 作为独立测试员，并按任务角色切换对应 worker profile
 - 输入框底部从左到右是：当前 Agent 名字（如 `程序员`，琥珀色、左对齐，可点击展开暖色磨砂下拉菜单）、模型选择器（只列出模型配置中暴露的模型，按任务路由，未手动选择时显示当前 Agent 任务对应的模型）、思考强度滑条、极简回车图标发送按钮；输入框默认不显示 placeholder。每个对话必须有一个 Agent，新对话默认使用「程序员」；按对话保存选择，新对话继承同项目上一个对话的 Agent；对话开始（有第一条消息）后 Agent 固定，选择器变灰锁定，不能再切换；排队消息会保存自己的 Agent
 - 思考强度滑条是一条极简平面细线 + 小圆点，不显示「思考强度」文字和 low/high/max 挡位文字，鼠标指针保持默认；拖动时圆点自由跟随指针、没有吸附阈限，松开后自动吸附到最近的 `low` / `high` / `max` 挡位；也可以用方向键切换，选择保存在 `settings.json`，发送时作为 `reasoning_effort` 传给 DeepSeek
 - 圆环外侧第一个位置是一个只读的 `usage` 圆角面板：显示 OpenCode Go 的 5 小时 / 本周 / 本月额度百分比和重置时间，不参与鼠标交互；数据由后端 `/api/usage` 获取并缓存 60 秒
@@ -155,7 +155,7 @@ server/git-worktrees.js Git 仓库初始化、专家 worktree 和分支、完成
 src/tools/tasks.js design_write / backlog_list / backlog_add / iteration_add / task_block / task_finish / task_merge / task_reject
 server/skills.js   Skill 发现（skills/ + %APPDATA%\yah\skills）与 MCP prompts 转 Skill
 server/agents.js   Agent 配置：固定内置角色列表，只读，不接受新增、删除或修改
-src/agent-defaults.js 内置 Manager / Agent / Subagent 角色的 id、名称、提示词和工具权限
+src/agent-defaults.js 内置产品经理 / Agent / Subagent 角色的 id、名称、提示词和工具权限
 server/context.js  项目 AGENTS.md / agent.md 读取与一次性快照
 skills/            内置 Skill Markdown（当前为空，系统 Skill 由 server/skills.js 提供）
 server/mcp/config.js   MCP 自定义配置存储、JSON 配置解析
@@ -261,10 +261,10 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 - Git（结构化、无 shell，统一放在工具的 Git 菜单）：`git_status`、`git_diff`、`git_log`、`git_show`、`git_blame`、`git_branch`、`git_checkout`、`git_add`、`git_commit`、`git_stash`、`git_fetch`、`git_pull`、`git_push`、`git_merge`、`git_remote`、`git_tag`、`git_restore`、`git_reset`、`git_revert`、`git_cherry_pick`、`worktree_*`
 - OMO 优先：`glob`、`grep`、`edit`（LINE#ID hashline）
 - OMO 常驻 / 条件工具：`background_start/list/stop`、`monitor_start/stop/list`
-- 任务闭环：`design_write`（Manager 写入设计案）、`backlog_add`（主工程师拆解设计案）、`backlog_list`（查看设计案、任务、分支和检查状态）、`iteration_add`（新建迭代）、`task_block`（worker 或主工程师阻塞并创建审批或问卷）、`task_finish`（worker 提交结果 / 主工程师标记设计已拆解）、`task_merge`（主工程师合并 worker 分支并进入 Merged）、`task_reject`（主工程师打回 Finished 任务）
+- 任务闭环：`design_write`（产品经理写入需求清单）、`backlog_add`（架构师拆解需求清单）、`backlog_list`（查看需求清单、任务、分支和检查状态）、`iteration_add`（新建迭代）、`task_block`（worker 或架构师阻塞并创建审批或问卷）、`task_finish`（worker 提交结果 / 架构师标记需求已拆解）、`task_merge`（架构师合并 worker 分支并进入 Merged）、`task_reject`（架构师打回 Finished 任务）
 - 兼容别名：`hashline_edit`；`read_file`、`web_search`、`interactive_bash`、`SystemInfo`、`system_info` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
-- `background_*`、`monitor_*` 是按项目绑定的常驻服务管理：必须填写备注，只暴露运行 / 停止状态，不提供输出，也不会把完成结果送回对话；创建者或 Manager 可以停止。调度器只把 Backlog 任务分配给编号 2 及以后的 worker，主工程师保留给设计确认和合并检查；`interactive_bash` 已合并为 `shell` 的隐藏别名
+- `background_*`、`monitor_*` 是按项目绑定的常驻服务管理：必须填写备注，只暴露运行 / 停止状态，不提供输出，也不会把完成结果送回对话；创建者或产品经理可以停止。调度器只把 Backlog 任务分配给编号 2 及以后的 worker，架构师保留给需求确认和合并检查；`interactive_bash` 已合并为 `shell` 的隐藏别名
 - 模型适配库与可选 HTTP 服务：`llm-gateway/` 导入 OpenChamber/OpenCode 使用的 models.dev 全量 provider 目录（326 个平台），用 OpenAI Chat、OpenAI Responses、Anthropic Messages、Gemini、Cohere、Azure OpenAI、Bedrock Converse 等适配器把各平台流式格式统一成 YAH canonical 事件（`start` / `text.delta` / `reasoning.delta` / `tool_call.*` / `usage` / `done`）。YAH 默认在进程内直接使用这个库读取模型配置并调用 provider，不需要单独启动服务；HTTP 服务仅用于外部客户端或手动调试，详见 `llm-gateway/README.md`
 
 ## Tool calling

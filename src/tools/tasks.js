@@ -240,7 +240,7 @@ function architectureMarkdown(args = {}) {
 
 async function designWrite(args = {}, context = null) {
   const manager = managerFor(context || args.context);
-  if (!manager) return error('design_write can only be called by a manager node');
+  if (!manager) return error('design_write can only be called by a product manager node');
   let agile;
   try {
     agile = agileFor(manager);
@@ -255,7 +255,7 @@ async function designWrite(args = {}, context = null) {
       return error(`failed to create iteration: ${createError.message}`);
     }
   }
-  const title = text(args.title) || text(args.goal) || '设计案';
+  const title = text(args.title) || text(args.goal) || '需求清单';
   const markdown = designMarkdown(args);
   if (!markdown) {
     return error('design_write requires a goal, description or requirements');
@@ -336,7 +336,7 @@ async function designWrite(args = {}, context = null) {
 function architectureWrite(args = {}, context = null) {
   const planner = planningFor(context || args.context);
   if (!planner?.lead) {
-    return error('architecture_write can only be called by the lead engineer');
+    return error('architecture_write can only be called by the architect');
   }
   const { manager, lead } = planner;
   let agile;
@@ -388,7 +388,7 @@ function architectureWrite(args = {}, context = null) {
 function backlogList(args = {}, context = null) {
   const planner = planningFor(context || args.context);
   if (!planner) {
-    return error('backlog_list can only be called by a manager or lead engineer');
+    return error('backlog_list can only be called by the product manager or architect');
   }
   const { manager } = planner;
   let agile;
@@ -433,7 +433,7 @@ function backlogList(args = {}, context = null) {
 
 function iterationAdd(args = {}, context = null) {
   const manager = managerFor(context || args.context);
-  if (!manager) return error('only a manager node can add an iteration');
+  if (!manager) return error('only a product manager node can add an iteration');
   let agile;
   try {
     agile = agileFor(manager);
@@ -476,7 +476,7 @@ function iterationAdd(args = {}, context = null) {
 async function backlogAdd(args = {}, context = null) {
   const planner = planningFor(context || args.context);
   if (!planner?.lead) {
-    return error('backlog_add can only be called by the lead engineer');
+    return error('backlog_add can only be called by the architect');
   }
   const { manager, lead } = planner;
   const items = normalizeTasks(args.tasks);
@@ -625,14 +625,14 @@ function taskFinish(args = {}, context = null) {
 async function taskMerge(args = {}, context = null) {
   const lead = workSessionFor(context || args.context);
   if (!isLeadEngineer(lead)) {
-    return error('task_merge can only be called by the lead engineer');
+    return error('task_merge can only be called by the architect');
   }
   if (typeof providers.mergeTaskBranches !== 'function') {
     return error('git merge service is not configured');
   }
   const manager = store.getSession(lead.managerId);
   if (!manager || manager.nodeRole !== 'manager') {
-    return error('manager not found');
+    return error('product manager not found');
   }
   let agile;
   try {
@@ -727,11 +727,11 @@ async function taskMerge(args = {}, context = null) {
 function taskReject(args = {}, context = null) {
   const lead = workSessionFor(context || args.context);
   if (!isLeadEngineer(lead)) {
-    return error('task_reject can only be called by the lead engineer');
+    return error('task_reject can only be called by the architect');
   }
   const manager = store.getSession(lead.managerId);
   if (!manager || manager.nodeRole !== 'manager') {
-    return error('manager not found');
+    return error('product manager not found');
   }
   let agile;
   try {
@@ -815,7 +815,7 @@ function testReport(args = {}, context = null) {
 
 function reportWrite(args = {}, context = null) {
   const manager = managerFor(context || args.context);
-  if (!manager) return error('report_write can only be called by a manager node');
+  if (!manager) return error('report_write can only be called by a product manager node');
   if (!text(args.summary)) {
     return error('report_write requires a summary');
   }

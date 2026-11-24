@@ -5,7 +5,7 @@ const DEFAULT_SYSTEM_PROMPT =
 const DEFAULT_AGENT_ID = 'sub-programmer';
 const DEFAULT_AGENT_NAME = '程序员';
 const MANAGER_AGENT_ID = 'manager';
-const MANAGER_AGENT_NAME = 'Manager';
+const MANAGER_AGENT_NAME = '产品经理';
 const EFFORT_LEVELS = ['low', 'high', 'max'];
 const DEFAULT_EFFORT = 'high';
 const NO_KEY_HINT = 'No API key. Open Settings to add one.';
@@ -749,8 +749,8 @@ function openManagerComposer(managerId = null) {
   if (dom.managerComposerError) dom.managerComposerError.hidden = true;
   if (dom.managerComposerTitle) {
     dom.managerComposerTitle.textContent = manager
-      ? '配置管理 node'
-      : '新建管理 node';
+      ? '配置产品经理'
+      : '新建产品经理';
   }
   if (dom.managerName) {
     dom.managerName.value = manager
@@ -837,7 +837,7 @@ async function createManagerFromComposer() {
       closeManagerComposer();
       return;
     }
-    manager.title = 'Manager';
+    manager.title = '产品经理';
     manager.agentId = MANAGER_AGENT_ID;
     manager.nodeConfig = {
       ...(manager.nodeConfig || {}),
@@ -868,7 +868,7 @@ async function createManagerFromComposer() {
   const id = makeId();
   const session = {
     id,
-    title: 'Manager',
+    title: '产品经理',
     system: DEFAULT_SYSTEM_PROMPT,
     agentsMd: null,
     agentId,
@@ -3666,7 +3666,7 @@ function nodeRoleText(session) {
       `目录: ${dirs.join(' · ') || '无'}`,
       `文件: ${files.join(' · ') || '无'}`,
       `工作 node: ${team.length}`,
-      '在对话里拆任务，工作 node 由它创建和分配。',
+      '先与用户确认并挖掘清楚需求，再把需求清单提交到 Agile 的「需求清单」列；调度器会在架构师空闲时把需求交给架构师。',
     ].join('\n');
   }
   if (session.nodeRole === 'work') {
@@ -3720,7 +3720,7 @@ function buildContextStack(session) {
   if (roleText) {
     stack.append(
       contextBlock(
-        session.nodeRole === 'manager' ? 'MANAGER' : 'WORK NODE',
+        session.nodeRole === 'manager' ? '产品经理' : 'WORK NODE',
         roleText,
         'role'
       )
@@ -5971,8 +5971,8 @@ function closeModelMenu() {
 
 const GATEWAY_TASK_LABELS = {
   chat: '对话',
-  manager: 'Manager',
-  lead: '主工程师',
+  manager: '产品经理',
+  lead: '架构师',
   research: '信息收集',
   programmer: '程序员',
   tester: '测试员',

@@ -37,8 +37,8 @@ test('agent profiles are a fixed built-in list', () => {
       BUILTIN_IDS
     );
     assert.ok(loaded.every((agent) => agent.builtin === true));
-    assert.equal(loaded[0].name, 'Manager');
-    assert.equal(loaded[1].name, '主工程师');
+    assert.equal(loaded[0].name, '产品经理');
+    assert.equal(loaded[1].name, '架构师');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -93,7 +93,7 @@ test('subagent roles mirror the work roles without delegation tools', () => {
   assert.ok(!programmer.tools.includes('git_commit'));
   assert.ok(!programmer.tools.includes('git_merge'));
   const lead = ROLE_SUBAGENTS.find((agent) => agent.id === 'sub-lead');
-  assert.equal(lead.name, '主工程师');
+  assert.equal(lead.name, '架构师');
   assert.ok(lead.tools.includes('task_merge'));
   assert.ok(lead.tools.includes('task_reject'));
   assert.ok(lead.tools.includes('backlog_add'));
@@ -144,7 +144,7 @@ test('saving agents ignores edits and keeps the built-in list', () => {
       saved.map((agent) => agent.id),
       BUILTIN_IDS
     );
-    assert.equal(saved[0].name, 'Manager');
+    assert.equal(saved[0].name, '产品经理');
     const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
     assert.deepEqual(
       stored.agents.map((agent) => agent.id),
@@ -183,9 +183,13 @@ test('the manager profile is fixed and cannot be overridden', () => {
     assert.ok(loaded.tools.includes('backlog_list'));
     assert.ok(!loaded.tools.includes('backlog_add'));
     assert.ok(loaded.tools.includes('iteration_add'));
-    assert.ok(loaded.tools.includes('background_list'));
-    assert.ok(loaded.tools.includes('background_stop'));
-    assert.equal(loaded.tools.length, 7);
+    assert.ok(!loaded.tools.includes('background_start'));
+    assert.ok(!loaded.tools.includes('background_list'));
+    assert.ok(!loaded.tools.includes('background_stop'));
+    assert.equal(loaded.tools.length, 5);
+    assert.match(loaded.prompt, /需求清单/);
+    assert.match(loaded.prompt, /产品经理/);
+    assert.doesNotMatch(loaded.prompt, /background_list/);
     assert.ok(loaded.tools.includes('question'));
     assert.ok(loaded.tools.includes('report_write'));
     assert.ok(!loaded.tools.includes('mission_dispatch'));

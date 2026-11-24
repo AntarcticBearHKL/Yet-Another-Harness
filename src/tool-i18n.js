@@ -245,22 +245,22 @@ const TOOL_I18N = {
     durationMs: '耗时（毫秒）',
   }),
 
-  design_write: t('写入设计案', 'Manager 专用。先用 question 向用户问清需求，再把用户要求整理成严谨的设计案并写入「设计案」列；架构师会补技术方案，再拆成 Backlog。', {
+  design_write: t('写入需求清单', '产品经理专用。先用 question 向用户把所有任务的需求确认、挖掘清楚，再把完整可验收的需求清单写入「需求清单」列；调度器会在架构师空闲时交给架构师补充技术方案并拆成 Backlog。', {
     iterationId: '迭代 ID（省略时使用或创建当前迭代）',
-    designId: '要修订的设计案任务 ID（省略时新建）',
-    title: '设计案标题',
+    designId: '要修订的需求清单任务 ID（省略时新建）',
+    title: '需求清单标题',
     goal: '目标与预期结果',
-    description: '补充的精确设计上下文',
+    description: '补充的精确需求上下文',
     scope: '范围与边界',
-    requirements: '明确的功能需求',
+    requirements: '明确的用户需求',
     constraints: '技术或产品约束',
     outOfScope: '明确的非目标',
-    answers: '已确认的用户回答',
-    openQuestions: '仍待架构师确认的问题',
+    answers: '用户已确认的回答',
+    openQuestions: '仍待用户确认的问题',
     acceptance: '验收标准与完成定义',
   }),
-  architecture_write: t('写入技术方案', '主工程师专用。把技术架构追加到设计案，包含模块、接口、数据、风险、测试策略和回滚方案。', {
-    designId: '设计案任务 ID（默认当前设计案）',
+  architecture_write: t('写入技术方案', '架构师专用。把技术架构追加到需求清单，包含模块、接口、数据、风险、测试策略和回滚方案。', {
+    designId: '需求清单任务 ID（默认当前需求清单）',
     summary: '架构摘要与选择的技术方案',
     modules: '模块、职责与边界',
     interfaces: 'API、事件、数据契约和调用流程',
@@ -271,19 +271,19 @@ const TOOL_I18N = {
     risks: '风险、权衡与回滚方案',
     alternatives: '考虑过的备选方案',
   }),
-  backlog_list: t('任务列表', 'Manager 或主工程师查看当前迭代、设计案及所有任务状态、分支和结果。', {
+  backlog_list: t('任务列表', '产品经理或架构师查看当前迭代、需求清单及所有任务状态、分支和结果。', {
     iterationId: '迭代 ID（省略时查看当前迭代）',
   }),
-  backlog_add: t('添加 Backlog', '主工程师专用。把设计案拆成可独立验收的实现任务写入 Backlog，可声明依赖和测试计划。', {
-    iterationId: '迭代 ID（省略时使用设计案所在迭代）',
-    designId: '设计案任务 ID（默认当前设计案）',
+  backlog_add: t('添加 Backlog', '架构师专用。把需求清单拆成可独立验收的实现任务写入 Backlog，可声明依赖和测试计划。', {
+    iterationId: '迭代 ID（省略时使用需求清单所在迭代）',
+    designId: '需求清单任务 ID（默认当前需求清单）',
     goal: 'Mission 目标，用于 Report Hub',
     tasks: 'Backlog 任务列表',
   }),
   iteration_add: t('添加迭代', '创建一个新的 Agile 迭代并返回 ID。', {
     goal: '迭代目标 / Mission 名称',
   }),
-  task_block: t('阻塞任务', '把当前任务或设计案标记为阻塞，并创建审批或问卷；会记录发起人。解决后调度器会恢复原来的工程师或主工程师。', {
+  task_block: t('阻塞任务', '把当前任务或需求清单标记为阻塞，并创建审批或问卷；会记录发起人。解决后调度器会恢复原来的工程师或架构师。', {
     kind: '阻塞类型：approval 或 question',
     reason: '阻塞原因，显示在任务和系统 node 上',
     action: '仅审批：需要审批的动作或工具',
@@ -292,7 +292,7 @@ const TOOL_I18N = {
     mode: '仅问卷：blocking 或 timed',
     timeoutSeconds: '仅问卷：定时模式的秒数',
   }),
-  task_finish: t('完成任务', '提交当前任务结果。工程师任务会提交到自己的 Git 分支并进入 Testing，等待测试员验证；设计案则标记为已拆解。', {
+  task_finish: t('完成任务', '提交当前任务结果。工程师任务会提交到自己的 Git 分支并进入 Testing，等待测试员验证；需求清单则标记为已拆解。', {
     taskId: '任务 ID（默认当前任务）',
     summary: '完成内容摘要',
     how: '如何完成任务的步骤',
@@ -314,15 +314,15 @@ const TOOL_I18N = {
     failures: '失败现象与复现步骤',
     notes: '给架构师或工程师的说明',
   }),
-  task_merge: t('合并任务', '主工程师专用。检查 Verified 任务和测试报告后，合并实现与测试分支，并把任务移到 Merged。', {
+  task_merge: t('合并任务', '架构师专用。检查 Verified 任务和测试报告后，合并实现与测试分支，并把任务移到 Merged。', {
     taskId: 'Verified 任务 ID',
     summary: '检查与合并摘要',
   }),
-  task_reject: t('打回任务', '主工程师专用。把不满足设计或验收标准的 Verified 任务打回 Backlog 重做。', {
+  task_reject: t('打回任务', '架构师专用。把不满足需求或验收标准的 Verified 任务打回 Backlog 重做。', {
     taskId: 'Verified 任务 ID',
     reason: '不完整或不正确之处',
   }),
-  report_write: t('写人话报告', 'Manager 专用。任务完成后生成给非技术读者看的报告，包含例子、怎么试用、验证了什么和还没做什么。', {
+  report_write: t('写人话报告', '产品经理专用。任务完成后生成给非技术读者看的报告，包含例子、怎么试用、验证了什么和还没做什么。', {
     title: '报告标题',
     summary: '一句话说明发生了什么',
     requested: '用户最初的要求',

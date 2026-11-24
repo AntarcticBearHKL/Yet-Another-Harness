@@ -702,7 +702,7 @@ function startRun({
   const nodeRoleBlock =
     session.nodeRole === 'manager'
       ? [
-          '# Manager Node',
+          '# 产品经理节点',
           `Directories: ${
             Array.isArray(nodeConfig.directories) && nodeConfig.directories.length
               ? nodeConfig.directories.join(' · ')
@@ -713,12 +713,12 @@ function startRun({
               ? nodeConfig.files.join(' · ')
               : 'none'
           }`,
-          'Write a rigorous design proposal with design_write into the 设计案 column. Inspect progress with backlog_list and create iterations with iteration_add. The lead engineer grills the user and creates Backlog tasks; workers implement them.',
+          '先向用户提问，确认并挖掘清楚所有需求；需求清楚后用 design_write 提交到「需求清单」列。用 backlog_list 查看进度，用 iteration_add 新建迭代。调度器会在架构师空闲时把需求清单交给架构师，架构师补充技术方案并拆成 Backlog，工程师负责实现。',
         ].join('\n')
       : session.nodeRole === 'work'
         ? [
             '# Work Node',
-            `Manager: ${session.managerId || 'none'}`,
+            `产品经理: ${session.managerId || 'none'}`,
             `Task: ${nodeConfig.task || 'not set'}`,
             `Tools: ${
               Array.isArray(nodeConfig.tools)
@@ -744,7 +744,7 @@ function startRun({
                 : 'none'
             }`,
             'Inspect the entire project and its development conventions before starting. Keep all changes on your own engineer branch; never merge it yourself.',
-            'When you need approval or an answer, call task_block. When the task is done, call task_finish. The lead engineer reviews and merges your branch.',
+            'When you need approval or an answer, call task_block. When the task is done, call task_finish. The architect reviews and merges your branch.',
           ].join('\n')
         : '';
   const system = [

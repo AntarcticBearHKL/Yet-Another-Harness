@@ -173,7 +173,7 @@ function agileTaskCard(task) {
       done: '已拆解',
       pending: '待处理',
     }[task.designState || 'pending'];
-    foot.append(el('span', 'agile-signal digest', `设计案 · ${designState}`));
+    foot.append(el('span', 'agile-signal digest', `需求清单 · ${designState}`));
   }
   if (task.needsDigest) {
     foot.append(el('span', 'agile-signal digest', '待归并'));
@@ -371,7 +371,7 @@ function renderAgileTaskModal() {
       agileDom.taskReadonlyNote.classList.remove('hidden');
     } else if (!editable) {
       agileDom.taskReadonlyNote.textContent =
-        '任务由 Manager 和 Agent 管理，标题和描述只读；备注仍可添加。';
+        '任务由产品经理和 Agent 管理，标题和描述只读；备注仍可添加。';
       agileDom.taskReadonlyNote.classList.remove('hidden');
     } else {
       agileDom.taskReadonlyNote.classList.add('hidden');

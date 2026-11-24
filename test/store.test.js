@@ -1288,7 +1288,7 @@ test('manager and work node fields round-trip through sqlite', () => {
     const manager = store.getSession('m1');
     const work = store.getSession('w1');
     assert.equal(manager.nodeRole, 'manager');
-    assert.equal(manager.title, 'Manager');
+    assert.equal(manager.title, '产品经理');
     assert.equal(manager.managerId, null);
     assert.deepEqual(manager.nodeConfig.directories, [
       path.resolve('C:\\work'),
@@ -1308,7 +1308,7 @@ test('manager and work node fields round-trip through sqlite', () => {
     assert.equal(store.getSession('w1').nodeConfig.task, 'next task');
     assert.equal(
       store.updateSessionNode('m1', { title: 'Another name' }).title,
-      'Manager'
+      '产品经理'
     );
     assert.equal(store.detachWorkNodes('m1'), 1);
     assert.equal(store.getSession('w1').managerId, null);

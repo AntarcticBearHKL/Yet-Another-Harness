@@ -12,7 +12,7 @@
     {
       "id": "deep",
       "label": "深度",
-      "description": "Manager、主工程师、程序员和代码审查",
+      "description": "产品经理、架构师、程序员和代码审查",
       "provider": "opencode-go",
       "model": "deepseek-v4-pro",
       "apiKeyFromRequest": true,

@@ -356,7 +356,7 @@ function normalizeProjects(raw) {
   return projects;
 }
 
-const MANAGER_SESSION_TITLE = 'Manager';
+const MANAGER_SESSION_TITLE = '产品经理';
 
 function titleForNode(title, nodeRole) {
   return nodeRole === 'manager'

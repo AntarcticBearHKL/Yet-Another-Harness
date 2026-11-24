@@ -20,7 +20,7 @@ const DEFAULT_ROLE_MAP = {
   docs: '文档写作',
   reviewer: '代码审查',
   review: '代码审查',
-  lead: '主工程师',
+  lead: '架构师',
   general: '程序员',
 };
 
@@ -90,19 +90,19 @@ function taskPrompt(task, goal, roleName = '') {
 function designPrompt(design, goal, answersText = '') {
   const lines = [
     `Mission: ${goal || design.title}`,
-    'You are the 主工程师 and technical architect. Do not implement product code.',
+    'You are the 架构师 (architect). Do not implement product code.',
     '',
-    '# 设计案',
+    '# 需求清单',
     design.title,
     '',
     design.description || design.title,
     design.acceptance ? `\nAcceptance: ${design.acceptance}` : '',
     answersText ? `\n# 已确认的需求\n${answersText}` : '',
     '',
-    'First ask only the technical questions the product design cannot answer: call task_block with kind "question" and concrete questions about interfaces, data, edge cases, compatibility, performance, security and test strategy.',
+    'First ask only the technical questions the requirement list cannot answer: call task_block with kind "question" and concrete questions about interfaces, data, edge cases, compatibility, performance, security and test strategy.',
     'After the answers are confirmed, call architecture_write to publish the technical architecture. Include the chosen approach, modules, interfaces, data, security, performance, test strategy, risks and rollback.',
     'Then call backlog_add with independent tasks. Every task must have a clear title, description, role, acceptance criteria and testPlan. Use dependsOn only for real dependencies.',
-    'When the architecture and Backlog tasks are written, call task_finish for the design task with a summary of the decomposition.',
+    'When the architecture and Backlog tasks are written, call task_finish for the requirement task with a summary of the decomposition.',
     `designTaskId: ${design.id}`,
   ];
   return lines.filter(Boolean).join('\n');
@@ -140,7 +140,7 @@ function testPrompt(task, goal) {
 function leadReviewPrompt(tasks, goal) {
   const lines = [
     `Mission: ${goal || 'Mission'}`,
-    'You are the 主工程师 and technical architect. Review the Verified tasks below, check the code, acceptance criteria and test report, and merge the implementation and test branches.',
+    'You are the 架构师 (architect). Review the Verified tasks below, check the code, acceptance criteria and test report, and merge the implementation and test branches.',
     '',
   ];
   tasks.forEach((task, index) => {
@@ -178,25 +178,25 @@ function leadReviewPrompt(tasks, goal) {
 function reportPrompt(goal, tasks, report = null) {
   const lines = [
     `Mission: ${goal || 'Mission'}`,
-    'You are the product manager. The mission is complete enough to report. Write the final report for the user with report_write.',
+    '你是产品经理。mission 已经完成到可以写最终报告的程度。用 report_write 给用户写最终报告。',
     '',
-    '# Tasks',
+    '# 任务列表',
   ];
   for (const task of tasks) {
     if (task.kind === 'design') continue;
     lines.push(`## ${task.title}`);
-    lines.push(`- status: ${task.column}`);
-    lines.push(`- role: ${task.role || 'general'}`);
-    if (task.result?.summary) lines.push(`- result: ${task.result.summary}`);
-    if (task.testVerdict) lines.push(`- test: ${task.testVerdict}`);
+    lines.push(`- 状态：${task.column}`);
+    lines.push(`- 角色：${task.role || 'general'}`);
+    if (task.result?.summary) lines.push(`- 结果：${task.result.summary}`);
+    if (task.testVerdict) lines.push(`- 测试：${task.testVerdict}`);
     if (task.testReport?.summary) {
-      lines.push(`- test summary: ${task.testReport.summary}`);
+      lines.push(`- 测试总结：${task.testReport.summary}`);
     }
     lines.push('');
   }
   lines.push(
-    'Write for a non-technical reader. Use short sections, concrete examples and before/after behavior. Say what the user asked for, what now works, how to try it, what was verified, what is not done, and what comes next. Keep file paths and commands out of the main narrative; put them in technicalDetails.',
-    'Call report_write once with the final content. Do not modify code or tasks.',
+    '用非技术读者能懂的语言写：短段落、具体例子、改动前后的行为对比。说明用户原来要什么、现在能做什么、怎么试用、验证了什么、还有什么没做、下一步是什么。正文不要写文件路径和命令，把它们放进 technicalDetails。',
+    '只调用一次 report_write 写最终内容。不要修改代码或任务。',
     `reportId: ${report?.id || ''}`
   );
   return lines.join('\n');
@@ -204,7 +204,7 @@ function reportPrompt(goal, tasks, report = null) {
 
 function buildReportMarkdown(goal, tasks) {
   const statusLabel = (column) => {
-    if (column === 'design') return '设计案';
+    if (column === 'design') return '需求清单';
     if (column === 'merged') return '已合并';
     if (column === 'verified') return '测试通过，待合并';
     if (column === 'finished') return '待测试';
@@ -529,12 +529,12 @@ function createSystemNodeService({
       const index = Number(engineer.nodeConfig?.engineerIndex) || 0;
       if (index === 1) {
         const needsUpdate =
-          engineer.title !== '主工程师' ||
+          engineer.title !== '架构师' ||
           engineer.agentId !== leadAgentConfig.id ||
           engineer.nodeConfig?.lead !== true;
         if (needsUpdate) {
           const updated = store.updateSessionNode(engineer.id, {
-            title: '主工程师',
+            title: '架构师',
             agentId: leadAgentConfig.id,
             nodeConfig: {
               ...(engineer.nodeConfig || {}),
@@ -623,7 +623,7 @@ function createSystemNodeService({
           steps: [
             {
               at: Date.now(),
-              message: `调度器已启动，1 个主工程师和 ${workerCount} 个工程师待命`,
+              message: `调度器已启动，1 个架构师和 ${workerCount} 个工程师待命`,
             },
           ],
         },
@@ -1439,7 +1439,7 @@ function createSystemNodeService({
       `Task: ${task.title}`,
       task.acceptance ? `Acceptance: ${task.acceptance}` : '',
       task.kind === 'design' && task.description
-        ? `\n# 设计案\n${task.description}`
+        ? `\n# 需求清单\n${task.description}`
         : '',
     ];
     if (outcome.kind === 'approval') {
@@ -1553,7 +1553,7 @@ function createSystemNodeService({
       appendStep(
         orchestrator,
         isDesign
-          ? `解除阻塞：${task.title} → 设计案（主工程师不可用）`
+          ? `解除阻塞：${task.title} → 需求清单（架构师不可用）`
           : isTester
             ? `解除阻塞：${task.title} → Testing（测试员不可用）`
             : `解除阻塞：${task.title} → Backlog（原工程师不可用）`,
@@ -1626,7 +1626,7 @@ function createSystemNodeService({
       appendStep(
         orchestrator,
         isDesign
-          ? `恢复失败，设计案回到待处理：${task.title}`
+          ? `恢复失败，需求清单回到待处理：${task.title}`
           : `恢复失败，任务回到 Backlog：${task.title}`,
         { kind: 'error', taskId: task.id }
       );
@@ -2117,7 +2117,7 @@ function createSystemNodeService({
         tasks.filter((task) => task.kind !== 'design').map((task) => task.id)
       );
 
-      // Lead engineer: turn the design into confirmed requirements and tasks.
+      // 架构师：把需求清单变成技术方案和 Backlog 任务（仅在架构师空闲时派发）。
       if (!leadBusy && lead) {
         const designTask = tasks.find(
           (task) =>
@@ -2142,7 +2142,7 @@ function createSystemNodeService({
             const agent = leadAgent();
             store.updateSessionNode(lead.id, {
               agentId: agent.id,
-              title: '主工程师',
+              title: '架构师',
               nodeConfig: {
                 ...(lead.nodeConfig || {}),
                 lead: true,
@@ -2166,7 +2166,7 @@ function createSystemNodeService({
             leadBusy = true;
             appendStep(
               orchestrator,
-              `设计案交给主工程师：${designTask.title}`,
+              `需求清单交给架构师：${designTask.title}`,
               { kind: 'dispatch', taskId: designTask.id }
             );
           } catch (designError) {
@@ -2179,7 +2179,7 @@ function createSystemNodeService({
             });
             appendStep(
               orchestrator,
-              `设计案派发失败：${designTask.title} · ${designError.message}`,
+              `需求清单派发失败：${designTask.title} · ${designError.message}`,
               { kind: 'error', taskId: designTask.id }
             );
           }
@@ -2330,7 +2330,7 @@ function createSystemNodeService({
         }
       }
 
-      // Lead engineer: review Verified tasks and merge their branches.
+      // 架构师：检查 Verified 任务并合并分支。
       if (!leadBusy && lead) {
         const reviewing = tasks.filter(
           (task) =>
@@ -2373,7 +2373,7 @@ function createSystemNodeService({
             const agent = leadAgent();
             store.updateSessionNode(lead.id, {
               agentId: agent.id,
-              title: '主工程师',
+              title: '架构师',
               nodeConfig: {
                 ...(lead.nodeConfig || {}),
                 lead: true,
@@ -2397,7 +2397,7 @@ function createSystemNodeService({
             leadBusy = true;
             appendStep(
               orchestrator,
-              `待主工程师检查并合并：${finished.length} 个任务`,
+              `待架构师检查并合并：${finished.length} 个任务`,
               { kind: 'review' }
             );
           } catch (reviewError) {
@@ -2415,14 +2415,14 @@ function createSystemNodeService({
             });
             appendStep(
               orchestrator,
-              `主工程师检查启动失败：${reviewError.message}`,
+              `架构师检查启动失败：${reviewError.message}`,
               { kind: 'error' }
             );
           }
         }
       }
 
-      // Manager: write the final plain-language report after the mission settles.
+      // 产品经理: write the final plain-language report after the mission settles.
       const countsNow = reportCounts(tasks);
       const terminal =
         countsNow.total > 0 &&

@@ -720,21 +720,21 @@ const OMO = [
 const TASK_TOOLS = [
   fn(
     'design_write',
-    'Manager only. Turn the user request into a rigorous, well-organized design proposal and place it in the 设计案 column. Ask the user high-value questions with question first, then include the confirmed answers. The lead engineer receives this design, publishes the technical architecture, and decomposes it. Include goal, scope, explicit requirements, constraints, non-goals, answers, acceptance and open questions. Use designId to revise an existing proposal.',
+    'Product manager (产品经理) only. First use question until the requirements of every task are fully clarified and confirmed. Then write the confirmed requirement list into the 需求清单 column. The orchestrator hands it to the architect (架构师) when the architect is idle. Include goal, scope, explicit requirements, constraints, non-goals, confirmed user answers, acceptance and open questions. Use designId to revise an existing requirement list.',
     {
       iterationId: str('Iteration id; omit to use or create the active iteration'),
-      designId: str('Existing design task id to revise; omit to create a new design'),
-      title: str('Design proposal title'),
+      designId: str('Existing requirement list task id to revise; omit to create a new one'),
+      title: str('Requirement list title'),
       goal: str('Mission goal / desired outcome'),
-      description: str('Additional precise design context'),
+      description: str('Additional precise requirement context'),
       scope: str('Included scope and boundaries'),
-      requirements: arr('Explicit functional requirements', { type: 'string' }),
+      requirements: arr('Explicit user requirements', { type: 'string' }),
       constraints: arr('Technical or product constraints', { type: 'string' }),
       outOfScope: arr('Explicit non-goals', { type: 'string' }),
       answers: arr('Confirmed user answers from the question tool', {
         type: 'string',
       }),
-      openQuestions: arr('Questions still open for the architect', {
+      openQuestions: arr('Questions still open for the user', {
         type: 'string',
       }),
       acceptance: str('Definition of done and acceptance criteria'),
@@ -743,9 +743,9 @@ const TASK_TOOLS = [
   ),
   fn(
     'architecture_write',
-    'Lead engineer only. Publish the technical architecture for the current design before decomposing tasks. It is appended to the design card as a 技术方案 section, so the product design and technical design stay together.',
+    'Architect (架构师) only. Publish the technical architecture for the current requirement list before decomposing tasks. It is appended to the requirement card as a 技术方案 section, so requirements and technical design stay together.',
     {
-      designId: str('Design task id; defaults to the lead current design'),
+      designId: str('Requirement list task id; defaults to the architect current requirement list'),
       summary: str('Architecture summary and chosen approach'),
       modules: arr('Modules, responsibilities and boundaries', { type: 'string' }),
       interfaces: arr('APIs, events, data contracts and call flows', {
@@ -766,15 +766,15 @@ const TASK_TOOLS = [
   ),
   fn(
     'backlog_list',
-    'Manager or lead engineer. List the current iteration with design proposals and every task, including column, assignee, review state, blocked reason, branches and result.',
+    'Product manager or architect. List the current iteration with requirement lists and every task, including column, assignee, review state, blocked reason, branches and result.',
     { iterationId: str('Iteration id; omit to use the active iteration') }
   ),
   fn(
     'backlog_add',
-    'Lead engineer only. Decompose the current design into independent implementation tasks and add them to Backlog. Use dependsOn for real dependencies; keep tasks independently reviewable. Every task should include acceptance and a test plan.',
+    'Architect (架构师) only. Decompose the requirement list into independent implementation tasks and add them to Backlog. Use dependsOn for real dependencies; keep tasks independently reviewable. Every task should include acceptance and a test plan.',
     {
-      iterationId: str('Iteration id; omit to use the design iteration'),
-      designId: str('Design task id; defaults to the lead current design'),
+      iterationId: str('Iteration id; omit to use the requirement iteration'),
+      designId: str('Requirement list task id; defaults to the architect current requirement list'),
       goal: str('Mission goal used by the Report Hub'),
       tasks: arr('Backlog tasks', {
         type: 'object',
@@ -782,7 +782,7 @@ const TASK_TOOLS = [
           title: str('Task title'),
           description: str('Task description and context'),
           role: str('Work role: research, programmer, tester, writer or reviewer'),
-          acceptance: str('Acceptance criteria used by the lead review'),
+          acceptance: str('Acceptance criteria used by the architect review'),
           testPlan: str('What the tester should verify, with cases or commands'),
           dependsOn: arr('Task ids that must be merged first', {
             type: 'string',
@@ -795,7 +795,7 @@ const TASK_TOOLS = [
   ),
   fn(
     'iteration_add',
-    'Manager only. Create a new Agile iteration and return its id.',
+    'Product manager only. Create a new Agile iteration and return its id.',
     { goal: str('Iteration goal / mission name') }
   ),
   fn(
@@ -830,7 +830,7 @@ const TASK_TOOLS = [
   ),
   fn(
     'task_finish',
-    'Worker or lead engineer. Submit the result of the current task. Worker tasks are committed to their engineer branch and move to Testing for independent verification. Lead design tasks are marked ready after the design has been decomposed.',
+    'Worker or architect. Submit the result of the current task. Worker tasks are committed to their engineer branch and move to Testing for independent verification. Architect requirement tasks are marked ready after the requirement list has been decomposed.',
     {
       taskId: str('Task id; defaults to the current task'),
       summary: str('What was accomplished'),
@@ -879,7 +879,7 @@ const TASK_TOOLS = [
   ),
   fn(
     'task_merge',
-    'Lead engineer only. Verify a Verified task, merge its implementation and test branches into the project branch, and move the task to Merged. Call once per verified task after checking the acceptance criteria and test report.',
+    'Architect (架构师) only. Verify a Verified task, merge its implementation and test branches into the project branch, and move the task to Merged. Call once per verified task after checking the acceptance criteria and test report.',
     {
       taskId: str('Verified task id'),
       summary: str('Review summary written into the merge result'),
@@ -888,7 +888,7 @@ const TASK_TOOLS = [
   ),
   fn(
     'task_reject',
-    'Lead engineer only. Reject a Verified task that does not meet the design or acceptance criteria. The task returns to Backlog with the review reason and is assigned again.',
+    'Architect (架构师) only. Reject a Verified task that does not meet the requirements or acceptance criteria. The task returns to Backlog with the review reason and is assigned again.',
     {
       taskId: str('Verified task id'),
       reason: str('What is incomplete or incorrect and must be reworked'),
@@ -897,7 +897,7 @@ const TASK_TOOLS = [
   ),
   fn(
     'report_write',
-    'Manager only. Write the final plain-language report for the user after the mission is complete. Use short sections, concrete examples and before/after behavior. Keep file paths and commands out of the main narrative; put them in technicalDetails.',
+    'Product manager only. Write the final plain-language report for the user after the mission is complete. Use short sections, concrete examples and before/after behavior. Keep file paths and commands out of the main narrative; put them in technicalDetails.',
     {
       title: str('Report title'),
       summary: str('One-paragraph answer to what happened'),

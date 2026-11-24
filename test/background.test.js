@@ -96,7 +96,7 @@ test('only the creator or a manager can stop a project background service', asyn
     ...workerContext({
       projectId,
       sessionId: `bg-stop-manager-${Date.now()}`,
-      title: 'Manager',
+      title: '产品经理',
     }),
     nodeRole: 'manager',
   };

@@ -18,6 +18,7 @@ test('agile store covers boards, notes, digest and moves', async () => {
       store.state(board.id).columns.map((column) => column.id),
       ['design', 'backlog', 'progress', 'blocked', 'finished', 'verified', 'merged']
     );
+    assert.equal(store.state(board.id).columns[0].name, '需求清单');
 
     const design = store.createTask({
       boardId: board.id,

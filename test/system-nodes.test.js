@@ -38,7 +38,7 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
     sessions: [
       {
         id: 'm1',
-        title: 'Manager',
+        title: '产品经理',
         system: 'sys',
         agentId: 'manager',
         projectId: 'p1',
@@ -69,7 +69,7 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
     },
   };
   const workers = {
-    'sub-lead': '主工程师',
+    'sub-lead': '架构师',
     'sub-research': '信息收集',
     'sub-programmer': '程序员',
     'sub-tester': '测试员',
@@ -219,7 +219,7 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
       (node) => node.nodeConfig?.engineer
     );
     assert.equal(engineers.length, 3);
-    assert.equal(engineers.find((node) => node.id === 'e-1').title, '主工程师');
+    assert.equal(engineers.find((node) => node.id === 'e-1').title, '架构师');
 
     const board = agile.snapshot(iteration.iterationId);
     const first = board.tasks.find((task) => task.title === 'Implement login');
@@ -443,7 +443,7 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
     );
     assert.match(
       tasks.backlogList({}, { sessionId: firstEngineer.id }),
-      /manager or lead engineer/
+      /product manager or architect/
     );
   } finally {
     service.stop();

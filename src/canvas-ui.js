@@ -756,11 +756,11 @@ function buildCanvasManagerPanel(manager, team, node) {
   icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${CANVAS_MANAGER_ICON}</svg>`;
   head.append(icon);
   head.append(
-    el('span', 'canvas-management-card-title', manager.title || 'Manager')
+    el('span', 'canvas-management-card-title', manager.title || '产品经理')
   );
   const clear = el('button', 'canvas-manager-clear', '清空');
   clear.type = 'button';
-  clear.title = '清空与 Manager 的对话';
+  clear.title = '清空与产品经理的对话';
   clear.addEventListener('pointerdown', (event) => event.stopPropagation());
   clear.addEventListener('click', async (event) => {
     event.preventDefault();
@@ -770,7 +770,7 @@ function buildCanvasManagerPanel(manager, team, node) {
   head.append(clear);
   panelEl.append(head);
 
-  panelEl.title = manager.title || 'Manager';
+  panelEl.title = manager.title || '产品经理';
   panelEl.addEventListener('click', (event) => {
     if (
       event.target instanceof Element &&
@@ -887,7 +887,7 @@ function canvasSystemNodeSummary(node) {
     const boards = Array.isArray(payload.boardIds) ? payload.boardIds.length : 0;
     const engineers = Number(payload.engineerCount) || 3;
     return `${engineers} 个工程师 · ${
-      boards ? `${boards} 个 mission` : '等待 Manager 下达 mission'
+      boards ? `${boards} 个 mission` : '等待产品经理下达 mission'
     }`;
   }
   if (node?.type === 'report') {
@@ -1743,10 +1743,10 @@ function buildCanvasManagerGroup(manager, layout, columnEls) {
 
 function canvasLeadEngineerTitle(title) {
   const text = String(title || '').trim();
-  if (!text) return '主工程师';
+  if (!text) return '架构师';
   const parts = text.split(' · ');
   if ((parts[0] || '') === '工程师 1') {
-    parts[0] = '主工程师';
+    parts[0] = '架构师';
     return parts.join(' · ');
   }
   return text;
@@ -1756,7 +1756,7 @@ function buildCanvasEngineerPlaceholder() {
   const row = el('div', 'canvas-group canvas-engineer-placeholder');
   const head = el('div', 'canvas-group-head');
   const heading = el('div', 'canvas-group-heading');
-  heading.append(el('span', 'canvas-group-title', '主工程师'));
+  heading.append(el('span', 'canvas-group-title', '架构师'));
   const subline = el('div', 'canvas-group-subline');
   subline.append(el('span', 'canvas-group-manager', '等待创建'));
   heading.append(subline);

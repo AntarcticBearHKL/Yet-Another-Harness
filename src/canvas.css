@@ -1726,7 +1726,7 @@ body.canvas-space .canvas-stage.panning {
   color: var(--faint);
 }
 
-/* Manager system lane: orchestrator, report hub, approvals and questionnaires */
+/* 产品经理 system lane: orchestrator, report hub, approvals and questionnaires */
 .canvas-system-lane {
   position: absolute;
   top: 20px;

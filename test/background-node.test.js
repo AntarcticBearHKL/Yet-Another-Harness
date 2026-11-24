@@ -20,7 +20,7 @@ test('a project background service appears in the manager background node and ca
   try {
     store.createSession({
       id: 'm1',
-      title: 'Manager',
+      title: '产品经理',
       system: 'sys',
       agentId: 'manager',
       projectId: 'p1',

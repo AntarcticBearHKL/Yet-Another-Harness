@@ -33,7 +33,7 @@ test('canvas work nodes can be created and closed', async () => {
       sessions: [
         {
           id: 'm1',
-          title: 'Manager',
+          title: '产品经理',
           system: 'sys',
           agentId: 'manager',
           projectId: 'p1',

@@ -10,7 +10,7 @@ const { createAgileStore } = require('../src/agile-store');
 const { createSystemNodeService } = require('../server/system-nodes');
 const tasks = require('../src/tools/tasks');
 
-test('design flows from manager to lead, grill questions, backlog, merge', async () => {
+test('requirements flow from the product manager to the architect, grill questions, backlog, merge', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yah-design-flow-'));
   store.init({
     getPath(name) {
@@ -22,7 +22,7 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
     sessions: [
       {
         id: 'm1',
-        title: 'Manager',
+        title: '产品经理',
         system: 'sys',
         agentId: 'manager',
         projectId: 'p1',
@@ -55,7 +55,7 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
   const agentProfiles = {
     'sub-lead': {
       id: 'sub-lead',
-      name: '主工程师',
+      name: '架构师',
       kind: 'subagent',
       prompt: 'lead',
       tools: [
@@ -91,7 +91,7 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
       const id = `e-${index}`;
       store.createSession({
         id,
-        title: index === 1 ? '主工程师' : `工程师 ${index}`,
+        title: index === 1 ? '架构师' : `工程师 ${index}`,
         system: 'sys',
         agentId: index === 1 ? 'sub-lead' : 'sub-programmer',
         projectId: manager.projectId,
@@ -148,11 +148,13 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
     }),
   });
   try {
+    runner.activeRunForSession = (id) =>
+      id === 'e-1' ? { id: 'busy-run' } : null;
     const written = JSON.parse(
       await tasks.designWrite(
         {
           goal: 'Add login',
-          title: 'Login design',
+          title: 'Login requirements',
           scope: 'Web login only',
           requirements: ['Email and password sign in', 'Error states'],
           constraints: ['No third-party auth'],
@@ -169,6 +171,10 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
     assert.match(written.design.description, /## 需求/);
     assert.match(written.design.description, /Email and password/);
 
+    assert.equal(agile.getTask(written.design.id).designState, 'pending');
+    assert.ok(!runs.some((run) => run.sessionId === 'e-1'));
+
+    runner.activeRunForSession = () => null;
     await service.tick();
     const designId = written.design.id;
     let design = agile.getTask(designId);
@@ -176,7 +182,7 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
     assert.equal(design.workNodeId, 'e-1');
     const designRun = runs.find((run) => run.sessionId === 'e-1');
     assert.ok(designRun);
-    assert.match(designRun.text, /Login design/);
+    assert.match(designRun.text, /Login requirements/);
     assert.match(designRun.text, /task_block/);
 
     const question = JSON.parse(
@@ -205,7 +211,7 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
     const questionNode = service
       .list('m1')
       .find((node) => node.id === question.nodeId);
-    assert.equal(questionNode.payload.blockedBy.title, '主工程师');
+    assert.equal(questionNode.payload.blockedBy.title, '架构师');
 
     service.action(questionNode.id, 'answer', { answers: [['Yes']] });
     design = agile.getTask(designId);

@@ -104,7 +104,7 @@ function resolveAgileStore(managerId) {
     });
   }
   if (!findManagerSession(id)) {
-    throw Object.assign(new Error('Manager not found'), { status: 404 });
+    throw Object.assign(new Error('产品经理 not found'), { status: 404 });
   }
   return managerAgileStore(id);
 }
