@@ -1680,6 +1680,25 @@ body.canvas-space .canvas-stage.panning {
   line-height: 1.35;
 }
 
+.canvas-manager-clear {
+  flex: 0 0 auto;
+  margin-left: auto;
+  height: 22px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--faint);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.canvas-manager-clear:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
 .canvas-manager-column .canvas-management-card-subtitle {
   margin-top: 4px;
   font-size: 9px;

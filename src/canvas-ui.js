@@ -758,6 +758,16 @@ function buildCanvasManagerPanel(manager, team, node) {
   head.append(
     el('span', 'canvas-management-card-title', manager.title || 'Manager')
   );
+  const clear = el('button', 'canvas-manager-clear', '清空');
+  clear.type = 'button';
+  clear.title = '清空与 Manager 的对话';
+  clear.addEventListener('pointerdown', (event) => event.stopPropagation());
+  clear.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    await window.clearManagerConversation?.(manager);
+  });
+  head.append(clear);
   panelEl.append(head);
 
   panelEl.title = manager.title || 'Manager';
@@ -915,6 +925,13 @@ async function systemNodeAction(nodeId, action, payload = {}) {
       method: 'POST',
       body: { action, ...payload },
     });
+    if (action === 'delete' || action === 'remove') {
+      document.querySelector('.system-node-page')?.remove();
+      if (state.systemNodeWindow) {
+        api.close();
+        return true;
+      }
+    }
     await reloadCanvas();
     return true;
   } catch (error) {
@@ -1284,6 +1301,7 @@ async function openSystemNodePage(nodeId) {
     'div',
     `system-node-page${node.type === 'report' ? ' report-page' : ''}`
   );
+  page.dataset.nodeId = node.id;
   page.append(
     buildSystemNodeCard(node, {
       onClose: closeSystemNodeWindow,

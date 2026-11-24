@@ -328,6 +328,7 @@ function normalizeNodeConfig(raw) {
             3,
             Math.min(12, Math.round(Number(raw.engineerCount) || 3))
           ),
+          reportSuppressed: list(raw.reportSuppressed, 100),
         }
       : {}),
     tools,

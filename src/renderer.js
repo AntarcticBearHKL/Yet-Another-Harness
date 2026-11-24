@@ -5338,6 +5338,28 @@ async function clearCurrentSession(session) {
   }
 }
 
+async function clearManagerConversation(manager) {
+  if (!manager || manager.nodeRole !== 'manager') return;
+  if (currentSession() === manager) {
+    await clearCurrentSession(manager);
+    return;
+  }
+  try {
+    await api.clearSession(manager.id);
+    manager.msgs = [];
+    manager.pendingQueue = [];
+    manager.goal = null;
+    manager.compaction = null;
+    manager.foldState = null;
+    manager.title = '';
+    saveChatsSoon();
+    renderAll();
+    window.refreshCanvas?.();
+  } catch (error) {
+    console.error('clear manager conversation failed', error);
+  }
+}
+
 function deleteSessionById(sessionId) {
   const target = state.sessions.find(
     (session) => session.id === String(sessionId || '')
@@ -10163,6 +10185,7 @@ function bindEvents() {
   window.openSessionWindow = openSessionWindow;
   window.openManagerComposer = openManagerComposer;
   window.closeManagerComposer = closeManagerComposer;
+  window.clearManagerConversation = clearManagerConversation;
   window.refreshChats = refreshChats;
   window.flushChats = saveChatsNow;
 

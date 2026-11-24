@@ -779,7 +779,34 @@ function createSystemNodeService({
     });
   }
 
+  function reportSuppressed(manager, boardId) {
+    const current = managerSession(manager?.id) || manager;
+    const list = Array.isArray(current?.nodeConfig?.reportSuppressed)
+      ? current.nodeConfig.reportSuppressed
+      : [];
+    return Boolean(boardId && list.includes(String(boardId)));
+  }
+
+  function suppressReport(manager, boardId) {
+    const current = managerSession(manager?.id) || manager;
+    if (!current || !boardId) return;
+    const list = new Set(
+      Array.isArray(current.nodeConfig?.reportSuppressed)
+        ? current.nodeConfig.reportSuppressed
+        : []
+    );
+    list.add(String(boardId));
+    store.updateSessionNode(current.id, {
+      nodeConfig: {
+        ...(current.nodeConfig || {}),
+        reportSuppressed: [...list].slice(-100),
+      },
+    });
+    publish(current.id);
+  }
+
   function ensureReport(manager, boardId, goal, taskIds = []) {
+    if (reportSuppressed(manager, boardId)) return null;
     let taskTitles = [];
     try {
       const agile = getAgileStore(manager.id);
@@ -942,6 +969,9 @@ function createSystemNodeService({
 
   function refreshReport(node, boardId, goal = null) {
     if (!node) return null;
+    const current = store.getSystemNode(node.id);
+    if (!current) return null;
+    node = current;
     const manager = managerSession(node.managerId);
     if (!manager) return node;
     let tasks = [];
@@ -971,6 +1001,7 @@ function createSystemNodeService({
         generatedAt: terminal ? Date.now() : null,
       },
     });
+    if (!updated) return null;
     if (terminal && node.status !== 'ready') {
       return appendStep(updated, '报告已生成或更新，等待阅读', {
         kind: 'report',
@@ -1144,7 +1175,7 @@ function createSystemNodeService({
         kind: 'result',
         taskId: task.id,
       });
-      refreshReport(report, task.boardId, report.payload?.goal || null);
+      refreshReport(report, task.boardId, report?.payload?.goal || null);
     }
     return { ok: true, taskId, status, reportId: report?.id || null };
   }
@@ -1225,7 +1256,7 @@ function createSystemNodeService({
           verdict,
         }
       );
-      refreshReport(report, task.boardId, report.payload?.goal || null);
+      refreshReport(report, task.boardId, report?.payload?.goal || null);
     }
     return {
       ok: true,
@@ -1256,6 +1287,9 @@ function createSystemNodeService({
         []
       );
     }
+    if (!report) {
+      throw new Error('report is deleted for this mission');
+    }
     const markdown = buildHumanReportMarkdown(input);
     const updated = updateNode(report.id, {
       status: 'ready',
@@ -1268,6 +1302,9 @@ function createSystemNodeService({
         reportState: 'done',
       },
     });
+    if (!updated) {
+      throw new Error('report is no longer available');
+    }
     appendStep(updated, '人话报告已生成', { kind: 'report' });
     return {
       ok: true,
@@ -1525,7 +1562,7 @@ function createSystemNodeService({
           taskId: task.id,
         }
       );
-      if (report) refreshReport(report, task.boardId, report.payload?.goal || null);
+      if (report) refreshReport(report, task.boardId, report?.payload?.goal || null);
       return { resumed: false, requeued: true, taskId: task.id };
     }
     const workerActor = { type: 'agent', id: task.claimedBy || worker.id };
@@ -1605,7 +1642,7 @@ function createSystemNodeService({
         kind: 'unblock',
         taskId: task.id,
       });
-      refreshReport(report, task.boardId, report.payload?.goal || null);
+      refreshReport(report, task.boardId, report?.payload?.goal || null);
     }
     return {
       resumed: true,
@@ -1740,7 +1777,7 @@ function createSystemNodeService({
         kind: 'blocked',
         taskId,
       });
-      refreshReport(report, task.boardId, report.payload?.goal || null);
+      refreshReport(report, task.boardId, report?.payload?.goal || null);
     }
     return {
       ok: true,
@@ -2098,7 +2135,7 @@ function createSystemNodeService({
               claimedBy: lead.id,
               claimedAt: new Date().toISOString(),
               designState: 'working',
-              reportId: report.id,
+              reportId: report?.id || null,
               attempts: (Number(designTask.attempts) || 0) + 1,
               actor: { type: 'agent', id: lead.id },
             });
@@ -2111,14 +2148,14 @@ function createSystemNodeService({
                 lead: true,
                 task: designTask.title,
                 taskId: designTask.id,
-                reportId: report.id,
+                reportId: report?.id || null,
                 reviewTaskIds: [],
                 tools: [...(agent.tools || [])],
               },
             });
             notify?.({ managerId: manager.id, nodeId: lead.id });
             const currentLead = store.getSession(lead.id);
-            watchWorkNode(currentLead, report.id);
+            watchWorkNode(currentLead, report?.id || null);
             runner.startRun({
               sessionId: lead.id,
               text: designPrompt(designTask, goal),
@@ -2237,7 +2274,7 @@ function createSystemNodeService({
                 ...(tester.nodeConfig || {}),
                 task: task.title,
                 taskId: task.id,
-                reportId: report.id,
+                reportId: report?.id || null,
                 reviewTaskIds: [],
                 testTask: true,
                 directories: testDirectories,
@@ -2256,7 +2293,7 @@ function createSystemNodeService({
             });
             notify?.({ managerId: manager.id, nodeId: tester.id });
             const currentTester = store.getSession(tester.id);
-            watchWorkNode(currentTester, report.id);
+            watchWorkNode(currentTester, report?.id || null);
             runner.startRun({
               sessionId: tester.id,
               text: testPrompt(
@@ -2342,14 +2379,14 @@ function createSystemNodeService({
                 lead: true,
                 task: '',
                 taskId: null,
-                reportId: report.id,
+                reportId: report?.id || null,
                 reviewTaskIds: finished.map((task) => task.id),
                 tools: [...(agent.tools || [])],
               },
             });
             notify?.({ managerId: manager.id, nodeId: lead.id });
             const currentLead = store.getSession(lead.id);
-            watchWorkNode(currentLead, report.id);
+            watchWorkNode(currentLead, report?.id || null);
             runner.startRun({
               sessionId: lead.id,
               text: leadReviewPrompt(finished, goal),
@@ -2497,14 +2534,14 @@ function createSystemNodeService({
               ...(engineer.nodeConfig || {}),
               task: task.title,
               taskId: task.id,
-              reportId: report.id,
+              reportId: report?.id || null,
               reviewTaskIds: [],
               tools: agent.tools,
             },
           });
           notify?.({ managerId: manager.id, nodeId: engineer.id });
           const currentEngineer = store.getSession(engineer.id);
-          watchWorkNode(currentEngineer, report.id);
+          watchWorkNode(currentEngineer, report?.id || null);
           runner.startRun({
             sessionId: engineer.id,
             text: taskPrompt(
@@ -2518,7 +2555,7 @@ function createSystemNodeService({
           });
           agile.updateTask(task.id, {
             workNodeId: engineer.id,
-            reportId: report.id,
+            reportId: report?.id || null,
             attempts: (Number(task.attempts) || 0) + 1,
             actor: { type: 'agent', id: engineer.id },
           });
@@ -2651,17 +2688,27 @@ function createSystemNodeService({
         if (manager) {
           try {
             const agile = getAgileStore(manager.id);
-            const tasks = agile.listTasks(node.missionId || null);
-            for (const task of tasks) {
-              if (task.reportId !== node.id) continue;
-              agile.updateTask(task.id, {
-                reportId: '',
-                actor: { type: 'human', id: null },
-              });
+            const iterations = agile.listRoadmap().iterations || [];
+            const boardIds = [
+              ...new Set(
+                [node.missionId, ...iterations.map((item) => item.id)].filter(
+                  Boolean
+                )
+              ),
+            ];
+            for (const boardId of boardIds) {
+              for (const task of agile.listTasks(boardId)) {
+                if (task.reportId !== node.id) continue;
+                agile.updateTask(task.id, {
+                  reportId: '',
+                  actor: { type: 'human', id: null },
+                });
+              }
             }
           } catch (error) {
             console.error('detach deleted report from tasks failed', error);
           }
+          suppressReport(manager, node.missionId);
         }
         try {
           const state = canvasStore?.state();
