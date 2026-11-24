@@ -15,11 +15,29 @@ function json(res, status, body) {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(payload),
     'cache-control': 'no-store',
-    'access-control-allow-origin': '*',
     'access-control-allow-headers': 'content-type, authorization',
-    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-methods': 'GET, POST, PUT, OPTIONS',
   });
   res.end(payload);
+}
+
+function corsOrigin(req) {
+  const origin = String(req.headers.origin || '').trim();
+  if (!origin) return '';
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
+    if (
+      url.hostname === '127.0.0.1' ||
+      url.hostname === 'localhost' ||
+      url.hostname === '::1'
+    ) {
+      return origin;
+    }
+  } catch {
+    /* not a browser origin */
+  }
+  return '';
 }
 
 function readBody(req, limit = 20 * 1024 * 1024) {
@@ -94,11 +112,15 @@ async function listRemoteModels(providerId, request = {}) {
 function createServer(options = {}) {
   const gateway = createGateway(options);
   return http.createServer(async (req, res) => {
+    const allowOrigin = corsOrigin(req);
+    if (allowOrigin) {
+      res.setHeader('access-control-allow-origin', allowOrigin);
+      res.setHeader('vary', 'origin');
+    }
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
-        'access-control-allow-origin': '*',
         'access-control-allow-headers': 'content-type, authorization',
-        'access-control-allow-methods': 'GET, POST, OPTIONS',
+        'access-control-allow-methods': 'GET, POST, PUT, OPTIONS',
       });
       res.end();
       return;
@@ -128,7 +150,13 @@ function createServer(options = {}) {
       if (req.method === 'GET' && url.pathname === '/v1/models') {
         const providerId = String(url.searchParams.get('provider') || '').trim();
         if (!providerId) {
-          json(res, 400, { ok: false, error: 'provider is required' });
+          json(res, 200, {
+            ok: true,
+            models: gateway.models(),
+            routes: gateway.config.routes,
+            defaultModel: gateway.config.defaultModel,
+            tasks: gateway.config.tasks,
+          });
           return;
         }
         const models = await listRemoteModels(providerId, {
@@ -138,8 +166,38 @@ function createServer(options = {}) {
         json(res, 200, { ok: true, provider: providerId, data: models });
         return;
       }
+      if (req.method === 'GET' && url.pathname === '/v1/config') {
+        json(res, 200, {
+          ok: true,
+          models: gateway.models(),
+          routes: gateway.config.routes,
+          defaultModel: gateway.config.defaultModel,
+          tasks: gateway.config.tasks,
+        });
+        return;
+      }
+      if (req.method === 'PUT' && url.pathname === '/v1/config') {
+        const body = await parseJsonBody(req);
+        json(res, 200, { ok: true, ...gateway.updateConfig(body) });
+        return;
+      }
+      if (req.method === 'GET' && url.pathname === '/v1/routes') {
+        json(res, 200, {
+          ok: true,
+          models: gateway.models(),
+          routes: gateway.config.routes,
+          defaultModel: gateway.config.defaultModel,
+          tasks: gateway.config.tasks,
+        });
+        return;
+      }
       if (req.method === 'POST' && url.pathname === '/v1/chat') {
         const body = await parseJsonBody(req);
+        console.log(
+          `[chat] task=${String(body.task || '-')} model=${String(
+            body.model || 'route'
+          )}`
+        );
         const controller = new AbortController();
         req.on('close', () => controller.abort());
         res.writeHead(200, {
@@ -147,7 +205,6 @@ function createServer(options = {}) {
           'cache-control': 'no-store, no-transform',
           connection: 'keep-alive',
           'x-accel-buffering': 'no',
-          'access-control-allow-origin': '*',
         });
         res.flushHeaders?.();
         try {

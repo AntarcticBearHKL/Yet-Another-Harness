@@ -8,6 +8,7 @@ const { ensureAgentsMd } = require('./context');
 const { getAgent } = require('./agents');
 const {
   DEFAULT_WORKER_AGENT_ID,
+  taskForAgent,
 } = require('../src/agent-defaults');
 const { normalizeReasoningEffort } = require('../src/reasoning');
 const {
@@ -25,6 +26,22 @@ const backgroundSubscribers = new Set();
 const pendingApprovals = new Map();
 const pendingQuestions = new Map();
 const sessionAgentConfigs = new Map();
+
+function gatewayFor(settings, agentConfig, sessionId, task = '') {
+  if (settings?.llmGatewayEnabled !== true) return null;
+  const url = String(settings.llmGatewayUrl || '').trim();
+  if (!url) return null;
+  const pinned = settings.sessionModels?.[sessionId];
+  return {
+    url,
+    model: String(pinned?.id || '').trim(),
+    provider: String(pinned?.provider || '').trim(),
+    task: task || taskForAgent(agentConfig),
+    apiKey: String(
+      process.env.OPENCODE_API_KEY || settings.apiKey || ''
+    ).trim(),
+  };
+}
 
 function subscribe(sessionId, fn) {
   if (!subscribers.has(sessionId)) subscribers.set(sessionId, new Set());
@@ -337,6 +354,7 @@ async function evaluateGoal({
   sessionId,
   runId,
   apiKey,
+  gateway = null,
   finalText,
   usage,
   agent,
@@ -369,6 +387,7 @@ async function evaluateGoal({
     try {
       const answer = await deepseek.runAudit({
         apiKey,
+        gateway,
         prompt: buildAuditPrompt({
           objective: goal.objective,
           answer: finalText,
@@ -497,14 +516,17 @@ async function compactSession(sessionId, options = {}) {
   if (session.frozen) {
     throw Object.assign(new Error('session is frozen'), { code: 'frozen' });
   }
+  const settings = store.loadSettings();
   const apiKey = String(
-    process.env.OPENCODE_API_KEY || store.loadSettings().apiKey || ''
+    process.env.OPENCODE_API_KEY || settings.apiKey || ''
   ).trim();
-  if (!apiKey) {
+  const gateway = gatewayFor(settings, null, id, 'chat');
+  if (!apiKey && !gateway) {
     throw Object.assign(new Error('no API key configured'), { code: 'no_key' });
   }
   const result = await deepseek.compactHistory({
     apiKey,
+    gateway,
     system: session.system,
     history: session.msgs,
     compaction: session.compaction,
@@ -586,10 +608,16 @@ function startRun({
     throw Object.assign(new Error('session not found'), { code: 'not_found' });
   }
 
+  const settings = store.loadSettings();
   const apiKey = String(
-    process.env.OPENCODE_API_KEY || store.loadSettings().apiKey || ''
+    process.env.OPENCODE_API_KEY || settings.apiKey || ''
   ).trim();
-  if (!apiKey) {
+  const resolvedAgentConfig =
+    agentConfig ||
+    sessionAgentConfigs.get(sessionId) ||
+    getAgent(null, DEFAULT_WORKER_AGENT_ID);
+  const gateway = gatewayFor(settings, resolvedAgentConfig, sessionId);
+  if (!apiKey && !gateway) {
     throw Object.assign(new Error('no API key configured'), {
       code: 'no_key',
     });
@@ -606,10 +634,6 @@ function startRun({
   const agentSeq = store.appendMessage(sessionId, 'Agent', '', '');
   store.createRun(id, sessionId, 'running');
 
-  const resolvedAgentConfig =
-    agentConfig ||
-    sessionAgentConfigs.get(sessionId) ||
-    getAgent(null, DEFAULT_WORKER_AGENT_ID);
   if (agentConfig) sessionAgentConfigs.set(sessionId, agentConfig);
 
   const agent = {
@@ -775,6 +799,7 @@ function startRun({
   deepseek
     .runAgent({
       apiKey,
+      gateway,
       system,
       history,
       mcpDisabled: effectiveMcpDisabled,
@@ -911,6 +936,7 @@ function startRun({
             sessionId,
             runId: id,
             apiKey,
+            gateway,
             finalText,
             usage: agent.usage,
             agent,

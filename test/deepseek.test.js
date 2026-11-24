@@ -187,6 +187,36 @@ test('thinking is dropped when the historical route differs', () => {
   assert.equal('reasoning_content' in unknownRoute[1], false);
 });
 
+test('gateway route metadata controls reasoning replay', () => {
+  const route = { provider: 'gateway', api: 'yah', model: 'deep' };
+  const base = {
+    role: 'Agent',
+    text: 'answer',
+    request: '',
+    steps: [
+      { kind: 'thinking', text: 'reasoning', round: 0 },
+      { kind: 'text', text: 'answer', round: 1 },
+    ],
+    requests: [{ model: 'deep', route }],
+  };
+  const sameRoute = deepseek.messagesFromHistory(
+    [{ role: 'User', text: 'hi', request: null }, base],
+    '',
+    40,
+    route
+  );
+  assert.equal(sameRoute[1].reasoning_content, 'reasoning');
+
+  const otherRoute = deepseek.messagesFromHistory(
+    [{ role: 'User', text: 'hi', request: null }, base],
+    '',
+    40,
+    { provider: 'gateway', api: 'yah', model: 'fast' }
+  );
+  assert.equal(otherRoute[1].content, 'answer');
+  assert.equal('reasoning_content' in otherRoute[1], false);
+});
+
 test('tool assistant message keeps reasoning separate from content', () => {
   const message = deepseek.toolAssistantMessage({
     content: '',

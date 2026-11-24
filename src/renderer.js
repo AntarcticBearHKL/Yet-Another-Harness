@@ -109,7 +109,19 @@ const dom = {
   composerEffortLevel: $('composer-effort-level'),
   modelPicker: $('model-picker'),
   modelPickerButton: $('model-picker-button'),
+  modelPickerValue: $('model-picker-value'),
   modelMenu: $('model-menu'),
+  llmGatewayUrl: $('llm-gateway-url'),
+  gatewayState: $('gateway-state'),
+  gatewayRoutes: $('gateway-routes'),
+  gatewayModelList: $('gateway-model-list'),
+  gatewayModelCount: $('gateway-model-count'),
+  gatewayModelLabel: $('gateway-model-label'),
+  gatewayModelProvider: $('gateway-model-provider'),
+  gatewayModelId: $('gateway-model-id'),
+  gatewayModelAdd: $('gateway-model-add'),
+  gatewaySave: $('gateway-save'),
+  gatewaySaveState: $('gateway-save-state'),
   mcpConfig: $('mcp-config'),
   mcpConfigSummary: $('mcp-config-summary'),
   mcpConfigGrid: $('mcp-config-grid'),
@@ -130,7 +142,18 @@ const state = {
     apiKey: '',
     hasApiKey: false,
     reasoningEffort: DEFAULT_EFFORT,
+    llmGatewayUrl: 'http://127.0.0.1:8790',
+    llmGatewayEnabled: false,
+    sessionModels: {},
   },
+  models: [],
+  gatewayRoutes: {},
+  gatewayDefaultModel: '',
+  gatewayTasks: [],
+  gatewayDraft: null,
+  gatewaySaving: false,
+  modelMenuIndex: 0,
+  gatewayTimer: null,
   switcherOpen: false,
   switcherIndex: 0,
   switcherProjectId: null,
@@ -933,6 +956,11 @@ function settingsPayload() {
   return {
     ...(key ? { apiKey: key } : {}),
     reasoningEffort: currentEffort(),
+    llmGatewayUrl: String(
+      state.settings.llmGatewayUrl || 'http://127.0.0.1:8790'
+    ).trim(),
+    llmGatewayEnabled: state.settings.llmGatewayEnabled === true,
+    sessionModels: state.settings.sessionModels || {},
   };
 }
 
@@ -1029,6 +1057,11 @@ function applySettings() {
   dom.apiKey.placeholder = hasKey ? '输入新 key' : '';
   if (document.activeElement !== dom.apiKey) {
     dom.apiKey.value = '';
+  }
+  if (dom.llmGatewayUrl && document.activeElement !== dom.llmGatewayUrl) {
+    dom.llmGatewayUrl.value = String(
+      s.llmGatewayUrl || 'http://127.0.0.1:8790'
+    );
   }
   renderComposerEffort();
 }
@@ -5412,7 +5445,10 @@ async function startPrompt(
   if (clearInput) dom.input.value = '';
   updateSendState();
 
-  if (!state.settings.hasApiKey) {
+  if (
+    !state.settings.hasApiKey &&
+    !(state.settings.llmGatewayEnabled && state.models.length > 0)
+  ) {
     agent.text = NO_KEY_HINT;
     agent.request = null;
     agent.steps = [
@@ -5792,6 +5828,7 @@ function renderComposerContext() {
   if (!dom.composerContext) return;
   renderComposerEffort();
   renderAgentPicker();
+  renderModelPicker();
   const session = currentSession();
   if (!session) {
     dom.composerContext.replaceChildren();
@@ -5915,12 +5952,343 @@ function closeModelMenu() {
   dom.modelPickerButton?.setAttribute('aria-expanded', 'false');
 }
 
+function gatewayBaseUrl() {
+  return String(
+    state.settings.llmGatewayUrl || 'http://127.0.0.1:8790'
+  ).replace(/\/+$/, '');
+}
+
+const GATEWAY_TASK_LABELS = {
+  chat: '对话',
+  manager: 'Manager',
+  lead: '主工程师',
+  research: '信息收集',
+  programmer: '程序员',
+  tester: '测试员',
+  writer: '文档',
+  reviewer: '审查',
+};
+
+const TASK_BY_AGENT = {
+  manager: 'manager',
+  'sub-lead': 'lead',
+  lead: 'lead',
+  'sub-research': 'research',
+  research: 'research',
+  'sub-programmer': 'programmer',
+  programmer: 'programmer',
+  code: 'programmer',
+  implement: 'programmer',
+  general: 'programmer',
+  'sub-tester': 'tester',
+  tester: 'tester',
+  test: 'tester',
+  'sub-writer': 'writer',
+  writer: 'writer',
+  docs: 'writer',
+  'sub-reviewer': 'reviewer',
+  reviewer: 'reviewer',
+  review: 'reviewer',
+};
+
+function sessionTask(session) {
+  return TASK_BY_AGENT[session?.agentId] || 'chat';
+}
+
+function exposedModelForSession(session = currentSession()) {
+  const models = Array.isArray(state.models) ? state.models : [];
+  if (models.length === 0) return null;
+  const chosen = session
+    ? state.settings.sessionModels?.[session.id]
+    : null;
+  if (chosen?.id) {
+    const match = models.find((model) => model.id === chosen.id);
+    if (match) return match;
+  }
+  const routedId = state.gatewayRoutes[sessionTask(session)];
+  const routed = routedId
+    ? models.find((model) => model.id === routedId)
+    : null;
+  if (routed) return routed;
+  const fallback = state.gatewayDefaultModel
+    ? models.find((model) => model.id === state.gatewayDefaultModel)
+    : null;
+  return fallback || models[0];
+}
+
+function renderModelPicker() {
+  if (!dom.modelPickerValue || !dom.modelMenu) return;
+  const models = Array.isArray(state.models) ? state.models : [];
+  const session = currentSession();
+  const current = exposedModelForSession(session);
+  if (!session || models.length === 0) {
+    dom.modelPickerValue.textContent = '默认';
+    dom.modelMenu.replaceChildren();
+    const empty = el('div', 'model-menu-empty', 'Gateway 未连接');
+    dom.modelMenu.append(empty);
+    dom.modelPickerButton?.setAttribute('aria-expanded', 'false');
+    return;
+  }
+  dom.modelPickerValue.textContent = current?.label || current?.id || '默认';
+  dom.modelMenu.replaceChildren();
+  models.forEach((model, index) => {
+    const item = el('button', 'model-menu-item');
+    item.type = 'button';
+    item.dataset.modelId = model.id;
+    item.setAttribute('role', 'option');
+    if (model.id === current?.id) {
+      item.classList.add('selected');
+      item.setAttribute('aria-selected', 'true');
+    }
+    if (index === state.modelMenuIndex) item.classList.add('active');
+    item.append(el('span', 'model-menu-item-label', model.label || model.id));
+    if (model.description) item.title = model.description;
+    const check = el('span', 'model-menu-check');
+    check.setAttribute('aria-hidden', 'true');
+    check.textContent = model.id === current?.id ? '✓' : '';
+    item.append(check);
+    item.addEventListener('click', () => {
+      state.settings.sessionModels = {
+        ...(state.settings.sessionModels || {}),
+        [session.id]: {
+          id: model.id,
+          label: model.label || model.id,
+          provider: model.provider || '',
+        },
+      };
+      state.modelMenuIndex = index;
+      saveSettingsSoon();
+      closeModelMenu();
+      renderModelPicker();
+    });
+    dom.modelMenu.append(item);
+  });
+}
+
+async function loadGatewayModels() {
+  const url = `${gatewayBaseUrl()}/v1/models`;
+  try {
+    const response = await fetch(url, { headers: { accept: 'application/json' } });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    state.models = Array.isArray(data.models) ? data.models : [];
+    state.gatewayRoutes =
+      data.routes && typeof data.routes === 'object' ? data.routes : {};
+    state.gatewayDefaultModel = String(data.defaultModel || '');
+    state.gatewayTasks = Array.isArray(data.tasks) ? data.tasks : [];
+    state.gatewayDraft = {
+      models: state.models.map((model) => ({ ...model })),
+      routes: { ...state.gatewayRoutes },
+      defaultModel: state.gatewayDefaultModel,
+    };
+    const exposedIds = new Set(state.models.map((model) => model.id));
+    let pruned = false;
+    for (const [sessionId, chosen] of Object.entries(
+      state.settings.sessionModels || {}
+    )) {
+      if (!chosen?.id || exposedIds.has(chosen.id)) continue;
+      delete state.settings.sessionModels[sessionId];
+      pruned = true;
+    }
+    if (pruned) saveSettingsSoon();
+    const current = exposedModelForSession();
+    const index = state.models.findIndex((model) => model.id === current?.id);
+    state.modelMenuIndex = index >= 0 ? index : 0;
+    const usable = state.models.length > 0;
+    if (state.settings.llmGatewayEnabled !== usable) {
+      state.settings.llmGatewayEnabled = usable;
+      saveSettingsSoon();
+    }
+  } catch {
+    state.models = [];
+    state.gatewayRoutes = {};
+    state.gatewayDefaultModel = '';
+    state.gatewayTasks = [];
+    state.gatewayDraft = null;
+    state.modelMenuIndex = 0;
+    if (state.settings.llmGatewayEnabled !== false) {
+      state.settings.llmGatewayEnabled = false;
+      saveSettingsSoon();
+    }
+  }
+  renderModelPicker();
+  renderGatewaySettings();
+}
+
+function renderGatewaySettings() {
+  if (!dom.gatewayRoutes || !dom.gatewayModelList) return;
+  const draft = state.gatewayDraft;
+  const models = Array.isArray(draft?.models) ? draft.models : [];
+  const tasks =
+    Array.isArray(state.gatewayTasks) && state.gatewayTasks.length > 0
+      ? state.gatewayTasks
+      : Object.keys(GATEWAY_TASK_LABELS);
+  if (dom.gatewayState) {
+    dom.gatewayState.textContent = draft
+      ? `${models.length} 个模型`
+      : '未连接';
+  }
+  dom.gatewayRoutes.replaceChildren();
+  if (!draft) {
+    dom.gatewayRoutes.append(
+      el('div', 'model-menu-empty', 'Gateway 未连接，先填写地址并启动 gateway')
+    );
+  } else {
+    for (const task of tasks) {
+      const row = el('div', 'gateway-route-row');
+      row.append(
+        el('span', 'gateway-route-label', GATEWAY_TASK_LABELS[task] || task)
+      );
+      const select = el('select', 'text-input gateway-route-select');
+      select.dataset.task = task;
+      const inherit = el('option', '', '跟随默认');
+      inherit.value = '';
+      select.append(inherit);
+      for (const model of models) {
+        const option = el('option', '', model.label || model.id);
+        option.value = model.id;
+        select.append(option);
+      }
+      select.value = draft.routes[task] || '';
+      select.addEventListener('change', () => {
+        if (select.value) draft.routes[task] = select.value;
+        else delete draft.routes[task];
+      });
+      row.append(select);
+      dom.gatewayRoutes.append(row);
+    }
+  }
+
+  dom.gatewayModelList.replaceChildren();
+  if (dom.gatewayModelCount) {
+    dom.gatewayModelCount.textContent = draft ? `${models.length}` : '';
+  }
+  for (const model of models) {
+    const row = el('div', 'gateway-model-row');
+    const copy = el('div', 'gateway-model-copy');
+    copy.append(el('span', 'gateway-model-name', model.label || model.id));
+    copy.append(
+      el('span', 'gateway-model-id', `${model.provider}/${model.model}`)
+    );
+    row.append(copy);
+    const remove = el('button', 'gateway-model-remove', '×');
+    remove.type = 'button';
+    remove.title = '移除模型';
+    remove.addEventListener('click', () => {
+      draft.models = draft.models.filter((item) => item.id !== model.id);
+      if (draft.defaultModel === model.id) {
+        draft.defaultModel = draft.models[0]?.id || '';
+      }
+      for (const [task, modelId] of Object.entries(draft.routes)) {
+        if (modelId === model.id) delete draft.routes[task];
+      }
+      renderGatewaySettings();
+    });
+    row.append(remove);
+    dom.gatewayModelList.append(row);
+  }
+  if (dom.gatewaySave) {
+    dom.gatewaySave.disabled = !draft || state.gatewaySaving;
+  }
+}
+
+function addGatewayModel() {
+  const draft = state.gatewayDraft;
+  if (!draft || !dom.gatewayModelLabel) return;
+  const label = dom.gatewayModelLabel.value.trim();
+  const provider = dom.gatewayModelProvider.value.trim();
+  const model = dom.gatewayModelId.value.trim();
+  if (!label || !provider || !model) {
+    if (dom.gatewaySaveState) {
+      dom.gatewaySaveState.textContent = '需要显示名、provider 和模型 ID';
+    }
+    return;
+  }
+  const id = `${provider}/${model}`;
+  const existing = draft.models.find((item) => item.id === id);
+  if (existing) {
+    existing.label = label;
+    existing.provider = provider;
+    existing.model = model;
+  } else {
+    draft.models.push({
+      id,
+      label,
+      description: '',
+      provider,
+      model,
+      tasks: [],
+    });
+  }
+  if (!draft.defaultModel) draft.defaultModel = id;
+  dom.gatewayModelLabel.value = '';
+  dom.gatewayModelProvider.value = '';
+  dom.gatewayModelId.value = '';
+  if (dom.gatewaySaveState) dom.gatewaySaveState.textContent = '';
+  renderGatewaySettings();
+}
+
+async function saveGatewayConfig() {
+  if (state.gatewaySaving || !state.gatewayDraft) return;
+  const draft = state.gatewayDraft;
+  state.gatewaySaving = true;
+  if (dom.gatewaySaveState) dom.gatewaySaveState.textContent = '保存中…';
+  renderGatewaySettings();
+  try {
+    const response = await fetch(`${gatewayBaseUrl()}/v1/config`, {
+      method: 'PUT',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        models: draft.models,
+        routes: draft.routes,
+        defaultModel: draft.defaultModel,
+      }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    state.models = Array.isArray(data.models) ? data.models : [];
+    state.gatewayRoutes =
+      data.routes && typeof data.routes === 'object' ? data.routes : {};
+    state.gatewayDefaultModel = String(data.defaultModel || '');
+    state.gatewayTasks = Array.isArray(data.tasks) ? data.tasks : [];
+    state.gatewayDraft = {
+      models: state.models.map((model) => ({ ...model })),
+      routes: { ...state.gatewayRoutes },
+      defaultModel: state.gatewayDefaultModel,
+    };
+    state.settings.llmGatewayEnabled = state.models.length > 0;
+    saveSettingsSoon();
+    if (dom.gatewaySaveState) dom.gatewaySaveState.textContent = '已保存';
+    renderModelPicker();
+  } catch (error) {
+    if (dom.gatewaySaveState) {
+      dom.gatewaySaveState.textContent = `保存失败: ${error.message}`;
+    }
+  } finally {
+    state.gatewaySaving = false;
+    renderGatewaySettings();
+  }
+}
+
+function scheduleLoadGatewayModels() {
+  clearTimeout(state.gatewayTimer);
+  state.gatewayTimer = setTimeout(() => {
+    state.gatewayTimer = null;
+    void loadGatewayModels();
+  }, 400);
+}
+
 function toggleModelMenu() {
   if (!dom.modelMenu || !dom.modelPickerButton) return;
   if (!dom.modelMenu.classList.contains('hidden')) {
     closeModelMenu();
     return;
   }
+  if (state.models.length === 0) void loadGatewayModels();
+  renderModelPicker();
   closeAgentMenu();
   dom.modelMenu.classList.remove('hidden');
   dom.modelPickerButton.setAttribute('aria-expanded', 'true');
@@ -7557,7 +7925,9 @@ async function loadPairing() {
 function openSettings() {
   closeComposer();
   applySettings();
+  renderGatewaySettings();
   dom.settingsOverlay.classList.remove('hidden');
+  void loadGatewayModels();
   void loadPairing();
 }
 
@@ -10380,11 +10750,31 @@ function bindEvents() {
     saveSettingsSoon();
   });
 
+  dom.llmGatewayUrl?.addEventListener('input', () => {
+    state.settings.llmGatewayUrl = dom.llmGatewayUrl.value.trim();
+    saveSettingsSoon();
+    scheduleLoadGatewayModels();
+  });
+
+  dom.gatewayModelAdd?.addEventListener('click', addGatewayModel);
+  dom.gatewaySave?.addEventListener('click', () => {
+    void saveGatewayConfig();
+  });
+  dom.gatewayModelId?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addGatewayModel();
+    }
+  });
+
   $('reset-settings').addEventListener('click', () => {
     state.settings = {
       apiKey: '',
       hasApiKey: false,
       reasoningEffort: currentEffort(),
+      llmGatewayUrl: 'http://127.0.0.1:8790',
+      llmGatewayEnabled: false,
+      sessionModels: {},
     };
     applySettings();
     api
@@ -11286,6 +11676,7 @@ async function boot() {
   bindEvents();
   if (!state.archiveWindow) connectBackgroundEvents();
   applySettings();
+  void loadGatewayModels();
   await loadAgents();
   if (systemNodeId) {
     state.systemNodeWindow = true;

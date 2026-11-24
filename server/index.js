@@ -392,6 +392,9 @@ function settingsView() {
     hasApiKey,
     apiKey: '',
     reasoningEffort: normalizeReasoningEffort(settings.reasoningEffort),
+    llmGatewayUrl: settings.llmGatewayUrl,
+    llmGatewayEnabled: settings.llmGatewayEnabled === true,
+    sessionModels: settings.sessionModels,
   };
 }
 
@@ -550,6 +553,24 @@ function handleApi(req, res, url) {
           next.reasoningEffort = normalizeReasoningEffort(
             body.reasoningEffort
           );
+        }
+        if (
+          body &&
+          Object.prototype.hasOwnProperty.call(body, 'llmGatewayUrl')
+        ) {
+          next.llmGatewayUrl = String(body.llmGatewayUrl || '').trim();
+        }
+        if (
+          body &&
+          Object.prototype.hasOwnProperty.call(body, 'sessionModels')
+        ) {
+          next.sessionModels = body.sessionModels;
+        }
+        if (
+          body &&
+          Object.prototype.hasOwnProperty.call(body, 'llmGatewayEnabled')
+        ) {
+          next.llmGatewayEnabled = body.llmGatewayEnabled === true;
         }
         store.saveSettings(next);
         sendJson(res, 200, settingsView());

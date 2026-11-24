@@ -14,6 +14,7 @@ const {
 const {
   MANAGER_AGENT,
   ROLE_SUBAGENTS,
+  taskForAgent,
 } = require('../src/agent-defaults');
 
 const BUILTIN_IDS = [
@@ -97,6 +98,18 @@ test('subagent roles mirror the work roles without delegation tools', () => {
   assert.ok(lead.tools.includes('git_merge'));
   assert.ok(!lead.tools.includes('write'));
   assert.ok(!lead.tools.includes('edit'));
+});
+
+test('agent profiles map to gateway task routes', () => {
+  assert.equal(taskForAgent({ id: 'manager' }), 'manager');
+  assert.equal(taskForAgent({ id: 'sub-lead' }), 'lead');
+  assert.equal(taskForAgent({ id: 'sub-research' }), 'research');
+  assert.equal(taskForAgent({ id: 'sub-programmer' }), 'programmer');
+  assert.equal(taskForAgent({ id: 'sub-tester' }), 'tester');
+  assert.equal(taskForAgent({ id: 'sub-writer' }), 'writer');
+  assert.equal(taskForAgent({ id: 'sub-reviewer' }), 'reviewer');
+  assert.equal(taskForAgent(null), 'chat');
+  assert.equal(taskForAgent({ id: 'custom' }), 'chat');
 });
 
 test('getAgent resolves ids and role names', () => {

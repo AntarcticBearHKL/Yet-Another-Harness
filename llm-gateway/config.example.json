@@ -1,0 +1,33 @@
+{
+  "models": [
+    {
+      "id": "fast",
+      "label": "快速",
+      "description": "日常对话、信息收集、测试和文档",
+      "provider": "opencode-go",
+      "model": "deepseek-v4.1-flash",
+      "apiKeyFromRequest": true,
+      "tasks": ["chat", "research", "tester", "writer"]
+    },
+    {
+      "id": "deep",
+      "label": "深度",
+      "description": "Manager、主工程师、程序员和代码审查",
+      "provider": "opencode-go",
+      "model": "deepseek-v4-pro",
+      "apiKeyFromRequest": true,
+      "tasks": ["manager", "lead", "programmer", "reviewer"]
+    }
+  ],
+  "routes": {
+    "chat": "fast",
+    "manager": "deep",
+    "lead": "deep",
+    "research": "fast",
+    "programmer": "deep",
+    "tester": "fast",
+    "writer": "fast",
+    "reviewer": "deep"
+  },
+  "defaultModel": "fast"
+}

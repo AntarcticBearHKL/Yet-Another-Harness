@@ -5,6 +5,21 @@ const assert = require('node:assert/strict');
 const { createGateway } = require('../src/gateway');
 const { createServer } = require('../src/server');
 
+const TEST_CONFIG = {
+  models: [
+    {
+      id: 'test',
+      label: 'Test',
+      provider: 'deepseek',
+      model: 'deepseek-chat',
+      apiKeyFromRequest: true,
+      tasks: ['chat'],
+    },
+  ],
+  routes: { chat: 'test' },
+  defaultModel: 'test',
+};
+
 function sseResponse(chunks, contentType = 'text/event-stream') {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -35,11 +50,10 @@ test('gateway streams OpenAI-compatible chunks as YAH events', async () => {
     ]);
   };
   try {
-    const gateway = createGateway();
+    const gateway = createGateway({ config: TEST_CONFIG });
     const events = [];
     for await (const event of gateway.stream({
-      provider: 'deepseek',
-      model: 'deepseek-chat',
+      model: 'test',
       apiKey: 'test-key',
       messages: [
         { role: 'system', content: 'be brief' },
@@ -80,10 +94,9 @@ test('gateway returns a final message from chat()', async () => {
       'data: [DONE]\n\n',
     ]);
   try {
-    const gateway = createGateway();
+    const gateway = createGateway({ config: TEST_CONFIG });
     const result = await gateway.chat({
-      provider: 'deepseek',
-      model: 'deepseek-chat',
+      model: 'test',
       apiKey: 'test-key',
       messages: [{ role: 'user', content: 'hi' }],
     });
@@ -95,12 +108,11 @@ test('gateway returns a final message from chat()', async () => {
 });
 
 test('gateway reports missing API keys before calling the provider', async () => {
-  const gateway = createGateway();
+  const gateway = createGateway({ config: TEST_CONFIG });
   await assert.rejects(
     async () => {
       for await (const _event of gateway.stream({
-        provider: 'deepseek',
-        model: 'deepseek-chat',
+        model: 'test',
         messages: [{ role: 'user', content: 'hi' }],
       })) {
         // no-op
@@ -117,7 +129,7 @@ test('HTTP server exposes health, providers and chat endpoints', async () => {
       'data: {"choices":[{"delta":{"content":"pong"},"finish_reason":"stop"}]}\n\n',
       'data: [DONE]\n\n',
     ]);
-  const server = createServer();
+  const server = createServer({ config: TEST_CONFIG });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;
   try {
@@ -132,12 +144,30 @@ test('HTTP server exposes health, providers and chat endpoints', async () => {
     );
     assert.ok(providers.providers.some((provider) => provider.id === 'anthropic'));
 
+    const exposed = await originalFetch(`http://127.0.0.1:${port}/v1/models`).then(
+      (response) => response.json()
+    );
+    assert.equal(exposed.models.length, 1);
+    assert.equal(exposed.models[0].id, 'test');
+    assert.equal(exposed.routes.chat, 'test');
+
+    const localCors = await originalFetch(`http://127.0.0.1:${port}/v1/models`, {
+      headers: { origin: 'http://127.0.0.1:3789' },
+    });
+    assert.equal(
+      localCors.headers.get('access-control-allow-origin'),
+      'http://127.0.0.1:3789'
+    );
+    const remoteCors = await originalFetch(`http://127.0.0.1:${port}/v1/models`, {
+      headers: { origin: 'https://example.com' },
+    });
+    assert.equal(remoteCors.headers.get('access-control-allow-origin'), null);
+
     const response = await originalFetch(`http://127.0.0.1:${port}/v1/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        provider: 'deepseek',
-        model: 'deepseek-chat',
+        model: 'test',
         apiKey: 'test-key',
         messages: [{ role: 'user', content: 'ping' }],
       }),

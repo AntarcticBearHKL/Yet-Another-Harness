@@ -22,6 +22,19 @@ const ROLE_WORKER_AGENT_MAP = {
   review: 'sub-reviewer',
   lead: 'sub-lead',
 };
+const AGENT_TASK_MAP = {
+  [MANAGER_AGENT_ID]: 'manager',
+  [LEAD_ENGINEER_AGENT_ID]: 'lead',
+  'sub-research': 'research',
+  'sub-programmer': 'programmer',
+  'sub-tester': 'tester',
+  'sub-writer': 'writer',
+  'sub-reviewer': 'reviewer',
+};
+function taskForAgent(agent) {
+  const id = String(agent?.id || agent || '').trim();
+  return AGENT_TASK_MAP[id] || 'chat';
+}
 const PROJECT_REVIEW_PREFIX =
   'Before doing anything else, inspect the entire project directory: read the README, AGENTS.md, package manifests, directory layout and key source files so you understand how the project is developed. Only after that start the assigned work.';
 
@@ -250,6 +263,8 @@ module.exports = {
   MANAGER_AGENT_PROMPT,
   TASK_TOOL_NAMES,
   ROLE_WORKER_AGENT_MAP,
+  AGENT_TASK_MAP,
+  taskForAgent,
   ROLE_SUBAGENTS,
   MANAGER_AGENT,
   LEAD_TOOLS,

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:*; object-src 'none'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>YAH - Yet Another Harness</title>
@@ -56,17 +56,12 @@
                         aria-expanded="false"
                         aria-controls="model-menu"
                       >
-                        <span id="model-picker-value" class="model-picker-value">deepseek-v4.1-flash-1017</span>
+                        <span id="model-picker-value" class="model-picker-value">默认</span>
                         <svg class="model-picker-chevron" viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M6 9l6 6 6-6" />
                         </svg>
                       </button>
-                      <div id="model-menu" class="model-menu hidden" role="listbox" aria-label="Model">
-                        <button class="model-menu-item selected" type="button" role="option" aria-selected="true">
-                          <span>deepseek-v4.1-flash-1017</span>
-                          <span class="model-menu-check" aria-hidden="true">✓</span>
-                        </button>
-                      </div>
+                      <div id="model-menu" class="model-menu hidden" role="listbox" aria-label="Model"></div>
                     </div>
                   </div>
                   <div id="composer-effort" class="composer-effort">
@@ -819,6 +814,67 @@
             autocomplete="off"
             spellcheck="false"
           />
+        </div>
+
+        <div class="setting-col">
+          <div class="setting-row">
+            <span>LLM Gateway</span>
+            <span class="muted small">本地模型网关</span>
+          </div>
+          <input
+            id="llm-gateway-url"
+            type="text"
+            class="text-input"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="http://127.0.0.1:8790"
+          />
+        </div>
+
+        <div class="setting-col gateway-routing-col">
+          <div class="setting-row">
+            <span>模型路由</span>
+            <span id="gateway-state" class="muted small">未连接</span>
+          </div>
+          <div id="gateway-routes" class="gateway-routes"></div>
+          <details class="gateway-models">
+            <summary>
+              <span>暴露的模型</span>
+              <span id="gateway-model-count" class="muted small"></span>
+            </summary>
+            <div id="gateway-model-list" class="gateway-model-list"></div>
+            <div class="gateway-model-add">
+              <input
+                id="gateway-model-label"
+                class="text-input"
+                type="text"
+                placeholder="显示名"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <input
+                id="gateway-model-provider"
+                class="text-input"
+                type="text"
+                placeholder="provider"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <input
+                id="gateway-model-id"
+                class="text-input"
+                type="text"
+                placeholder="模型 ID"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button id="gateway-model-add" class="pill" type="button">添加</button>
+            </div>
+          </details>
+          <div class="setting-row">
+            <span id="gateway-save-state" class="muted small"></span>
+            <button id="gateway-save" class="pill" type="button">保存模型配置</button>
+          </div>
         </div>
 
         <div class="divider"></div>

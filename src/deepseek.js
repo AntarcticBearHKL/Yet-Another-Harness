@@ -6,6 +6,7 @@
 
 const tools = require('./tools');
 const attachments = require('./attachments');
+const { streamYahChat } = require('../llm-gateway/src/client');
 const { normalizeReasoningEffort } = require('./reasoning');
 const {
   buildSummaryPrompt,
@@ -65,6 +66,15 @@ function messageRoute(msg) {
   const requests = Array.isArray(msg?.requests) ? msg.requests : [];
   const body = requests.find((item) => item && typeof item === 'object');
   if (!body || typeof body.model !== 'string' || !body.model) return null;
+  if (
+    body.route &&
+    typeof body.route === 'object' &&
+    typeof body.route.provider === 'string' &&
+    typeof body.route.api === 'string' &&
+    typeof body.route.model === 'string'
+  ) {
+    return body.route;
+  }
   return { provider: PROVIDER, api: API, model: body.model };
 }
 
@@ -228,7 +238,7 @@ function messagesFromHistory(
 
 function requestBody(messages, options = {}) {
   const body = {
-    model: MODEL,
+    model: options.model !== undefined ? String(options.model) : MODEL,
     messages,
     stream: true,
     stream_options: { include_usage: true },
@@ -399,6 +409,128 @@ class ToolCallBuilder {
   }
 }
 
+function gatewayUsage(usage) {
+  return {
+    prompt_tokens: Number(usage?.inputTokens) || 0,
+    completion_tokens: Number(usage?.outputTokens) || 0,
+    total_tokens: Number(usage?.totalTokens) || 0,
+    prompt_tokens_details: {
+      cached_tokens: Number(usage?.cachedInputTokens) || 0,
+    },
+    completion_tokens_details: {
+      reasoning_tokens: Number(usage?.reasoningTokens) || 0,
+    },
+  };
+}
+
+function gatewayTools(body) {
+  return (Array.isArray(body?.tools) ? body.tools : [])
+    .map((tool) => {
+      const fn = tool?.function || tool;
+      const name = String(fn?.name || '').trim();
+      if (!name) return null;
+      return {
+        name,
+        description: String(fn.description || ''),
+        parameters: fn.parameters || { type: 'object', properties: {} },
+      };
+    })
+    .filter(Boolean);
+}
+
+async function streamGatewayChat({
+  gateway,
+  body,
+  onDelta,
+  onFirstToken,
+  signal,
+  sessionId,
+}) {
+  const startedAt = Date.now();
+  let content = '';
+  let reasoning = '';
+  let firstContentAt = 0;
+  let firstReasoningAt = 0;
+  let lastContentAt = 0;
+  let lastReasoningAt = 0;
+  let contentChars = 0;
+  let reasoningChars = 0;
+  let usage = null;
+  const done = await streamYahChat({
+    endpoint: gateway.url,
+    signal,
+    request: {
+      model: gateway.model || '',
+      task: gateway.task || 'chat',
+      provider: gateway.provider || '',
+      apiKey: gateway.apiKey || '',
+      sessionId,
+      messages: body.messages,
+      tools: gatewayTools(body),
+      toolChoice: body.tool_choice,
+      temperature: body.temperature,
+      maxTokens:
+        body.max_tokens !== undefined
+          ? body.max_tokens
+          : body.max_completion_tokens,
+      reasoningEffort: body.reasoning_effort,
+      stream: true,
+    },
+    onEvent(event) {
+      if (event.type === 'text.delta') {
+        const now = Date.now();
+        if (!firstContentAt) {
+          firstContentAt = now;
+          onFirstToken?.('content', now - startedAt);
+        }
+        lastContentAt = now;
+        contentChars += event.text.length;
+        content += event.text;
+        onDelta?.(event.text, false);
+      } else if (event.type === 'reasoning.delta') {
+        const now = Date.now();
+        if (!firstReasoningAt) {
+          firstReasoningAt = now;
+          onFirstToken?.('thinking', now - startedAt);
+        }
+        lastReasoningAt = now;
+        reasoningChars += event.text.length;
+        reasoning += event.text;
+        onDelta?.(event.text, true);
+      } else if (event.type === 'usage') {
+        usage = event.usage;
+      }
+    },
+  });
+  if (done?.usage) usage = done.usage;
+  const toolCalls = Array.isArray(done?.message?.toolCalls)
+    ? done.message.toolCalls.map((call) => ({
+        id: call.id,
+        name: call.name,
+        arguments: call.arguments,
+      }))
+    : [];
+  if (!content && !reasoning && toolCalls.length === 0) {
+    throw new Error('model returned an empty reply');
+  }
+  return {
+    content,
+    reasoning,
+    toolCalls,
+    usage: gatewayUsage(usage),
+    timing: {
+      startedAt,
+      finishedAt: Date.now(),
+      firstContentAt,
+      firstReasoningAt,
+      lastContentAt,
+      lastReasoningAt,
+      contentChars,
+      reasoningChars,
+    },
+  };
+}
+
 async function streamChat({
   apiKey,
   body,
@@ -406,7 +538,18 @@ async function streamChat({
   onFirstToken,
   signal,
   sessionId,
+  gateway,
 }) {
+  if (gateway?.url) {
+    return streamGatewayChat({
+      gateway,
+      body,
+      onDelta,
+      onFirstToken,
+      signal,
+      sessionId,
+    });
+  }
   const key = String(apiKey || '').trim();
   if (!key) throw new Error('missing API key');
 
@@ -569,6 +712,7 @@ async function summarizeMessages({
   update = false,
   signal,
   sessionId,
+  gateway = null,
 }) {
   const prompt = buildSummaryPrompt(update);
   const base = [
@@ -580,6 +724,7 @@ async function summarizeMessages({
     body: messageRequest(base),
     signal,
     sessionId,
+    gateway,
   });
   let text = String(first.content || '').trim();
   if (hasSummaryHeadings(text)) return text;
@@ -593,6 +738,7 @@ async function summarizeMessages({
     ]),
     signal,
     sessionId,
+    gateway,
   });
   text = String(retry.content || '').trim();
   if (hasSummaryHeadings(text)) return text;
@@ -615,6 +761,7 @@ async function compactHistory({
   signal,
   keep = KEEP_TOKENS,
   sessionId,
+  gateway = null,
 }) {
   const messages = messagesFromHistory(
     history,
@@ -637,6 +784,7 @@ async function compactHistory({
     update: Boolean(normalizeCompaction(compaction)),
     signal,
     sessionId,
+    gateway,
   });
   const recent = split.recentText;
   const through = Array.isArray(history) ? history.length : 0;
@@ -657,12 +805,13 @@ async function compactHistory({
   };
 }
 
-async function runAudit({ apiKey, prompt, signal, sessionId }) {
+async function runAudit({ apiKey, prompt, signal, sessionId, gateway = null }) {
   const result = await streamChat({
     apiKey,
     body: messageRequest([{ role: 'user', content: String(prompt || '') }]),
     signal,
     sessionId,
+    gateway,
   });
   return String(result.content || result.reasoning || '').trim();
 }
@@ -694,12 +843,16 @@ async function runAgent({
   onToolResult,
   signal,
   sessionId,
+  gateway = null,
 }) {
-  const messages = messagesFromHistory(history, system, MAX_HISTORY, {
-    provider: PROVIDER,
-    api: API,
-    model: MODEL,
-  }, compaction);
+  const routeModel = gateway
+    ? gateway.model || `task:${gateway.task || 'chat'}`
+    : MODEL;
+  const route = gateway
+    ? { provider: 'gateway', api: 'yah', model: routeModel }
+    : { provider: PROVIDER, api: API, model: MODEL };
+  const messages = messagesFromHistory(history, system, MAX_HISTORY, route, compaction);
+  const utilityGateway = gateway ? { ...gateway, task: 'chat' } : null;
   let currentCompaction = normalizeCompaction(compaction);
   const systemCount = messages[0]?.role === 'system' ? 1 : 0;
   let finalText = '';
@@ -730,17 +883,20 @@ async function runAgent({
   const send = async (round, requestMessages, options = {}) => {
     activeRound = round;
     const body = requestBody(requestMessages, {
+      model: routeModel,
       mcpDisabled,
       allowedTools,
       ...(reasoningEffort ? { reasoningEffort } : {}),
       ...options,
     });
+    if (gateway) body.route = route;
     onRequest?.(structuredClone(body), round);
     const result = await streamChat({
       apiKey,
       body,
       signal,
       sessionId,
+      gateway,
       onDelta: emitDelta,
       onFirstToken: (channel, firstTokenMs) =>
         onTiming?.({ round, channel, firstTokenMs }),
@@ -763,6 +919,7 @@ async function runAgent({
         update: Boolean(currentCompaction),
         signal,
         sessionId,
+        gateway: utilityGateway,
       });
       const checkpoint = normalizeCompaction({
         summary,

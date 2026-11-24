@@ -4,6 +4,7 @@
 const { createServer } = require('../src/server');
 const { createGateway } = require('../src/gateway');
 const { listProviders } = require('../src/catalog');
+const { loadConfig, publicModels } = require('../src/config');
 const { VERSION } = require('../src/server');
 
 function parseArgs(argv) {
@@ -30,17 +31,23 @@ function help() {
   console.log(`yah-llm-gateway ${VERSION}
 
 Usage:
-  yah-llm-gateway serve [--port 8790] [--host 127.0.0.1] [--default-provider openai]
+  yah-llm-gateway serve [--port 8790] [--host 127.0.0.1] [--config config.json]
   yah-llm-gateway providers [--json] [query]
-  yah-llm-gateway chat --provider <id> --model <id> --message <text> [options]
+  yah-llm-gateway models [--json]
+  yah-llm-gateway chat --model <alias> --message <text> [options]
+  yah-llm-gateway chat --task <task> --message <text> [options]
 
 Options:
   --system <text>        System prompt for chat
+  --task <name>          Route by task: chat, manager, lead, research,
+                         programmer, tester, writer, reviewer
+  --provider <id>        Provider for unlisted/custom models
   --api-key <key>        Provider API key (or use the provider environment variable)
   --base-url <url>       Override the provider base URL
   --protocol <name>      Force a protocol: openai-chat, openai-responses,
                          anthropic-messages, gemini, cohere-chat, azure-openai,
                          bedrock-converse
+  --config <file>        Gateway config file (default llm-gateway/config.json)
   --json                 Print the final message as JSON
   --allow-no-key         Allow keyless local endpoints
 `);
@@ -50,12 +57,34 @@ async function serve(args) {
   const port = Number(args.port || process.env.YAH_LLM_GATEWAY_PORT || 8790);
   const host = String(args.host || process.env.YAH_LLM_GATEWAY_HOST || '127.0.0.1');
   const server = createServer({
-    defaultProvider: String(args['default-provider'] || process.env.YAH_LLM_GATEWAY_PROVIDER || 'openai'),
+    configFile: args.config ? String(args.config) : undefined,
+    defaultProvider: String(
+      args['default-provider'] || process.env.YAH_LLM_GATEWAY_PROVIDER || ''
+    ) || undefined,
   });
   server.listen(port, host, () => {
     console.log(`yah-llm-gateway listening on http://${host}:${port}`);
     console.log(`providers: ${listProviders().length}`);
   });
+}
+
+function models(args) {
+  const config = loadConfig(args.config ? String(args.config) : undefined);
+  const rows = publicModels(config);
+  if (args.json) {
+    console.log(JSON.stringify({ models: rows, routes: config.routes, defaultModel: config.defaultModel }, null, 2));
+    return;
+  }
+  for (const model of rows) {
+    console.log(
+      `${model.id.padEnd(18)} ${model.label.padEnd(24)} ${model.provider}/${model.model}`
+    );
+    if (model.tasks.length > 0) console.log(`  tasks: ${model.tasks.join(', ')}`);
+  }
+  console.log('\nroutes:');
+  for (const [task, modelId] of Object.entries(config.routes)) {
+    console.log(`  ${task.padEnd(14)} -> ${modelId}`);
+  }
 }
 
 function providers(args) {
@@ -81,11 +110,15 @@ function providers(args) {
 async function chat(args) {
   const provider = String(args.provider || '').trim();
   const model = String(args.model || '').trim();
+  const task = String(args.task || '').trim();
   const message = String(args.message || '').trim();
-  if (!provider || !model || !message) {
-    throw new Error('chat requires --provider, --model and --message');
+  if ((!model && !task) || !message) {
+    throw new Error('chat requires --model or --task, plus --message');
   }
-  const gateway = createGateway({ defaultProvider: provider });
+  const gateway = createGateway({
+    configFile: args.config ? String(args.config) : undefined,
+    defaultProvider: provider || undefined,
+  });
   const messages = [];
   if (args.system) messages.push({ role: 'system', content: String(args.system) });
   messages.push({ role: 'user', content: message });
@@ -93,11 +126,13 @@ async function chat(args) {
   for await (const event of gateway.stream({
     provider,
     model,
+    task,
     messages,
     apiKey: args['api-key'] ? String(args['api-key']) : undefined,
     baseURL: args['base-url'] ? String(args['base-url']) : undefined,
     protocol: args.protocol ? String(args.protocol) : undefined,
     allowNoKey: args['allow-no-key'] === true,
+    allowUnlisted: args['allow-unlisted'] === true,
   })) {
     if (event.type === 'text.delta') {
       if (!args.json) process.stdout.write(event.text);
@@ -126,6 +161,7 @@ async function main() {
   if (command === 'help' || args.help) return help();
   if (command === 'serve') return serve(args);
   if (command === 'providers') return providers(args);
+  if (command === 'models') return models(args);
   if (command === 'chat') return chat(args);
   throw new Error(`unknown command: ${command}`);
 }

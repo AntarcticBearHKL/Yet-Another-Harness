@@ -1,6 +1,14 @@
 'use strict';
 
 const { resolveProvider, providerApiKey } = require('./catalog');
+const {
+  DEFAULT_CONFIG_FILE,
+  normalizeConfig,
+  loadConfig,
+  saveConfig,
+  resolveModel,
+  publicModels,
+} = require('./config');
 const { createStream, errorEvent } = require('./events');
 const openaiChat = require('./protocols/openai-chat');
 const openaiResponses = require('./protocols/openai-responses');
@@ -165,10 +173,68 @@ function createEventQueue() {
 }
 
 function createGateway(options = {}) {
-  const defaultProvider = String(options.defaultProvider || 'openai');
+  const configFile =
+    String(options.configFile || process.env.YAH_LLM_CONFIG || '').trim() ||
+    DEFAULT_CONFIG_FILE;
+  const config = normalizeConfig(
+    options.config || loadConfig(configFile)
+  );
+  const defaultProvider = String(
+    options.defaultProvider || config.models[0]?.provider || 'openai'
+  );
 
-  async function* stream(request = {}) {
-    const providerId = String(request.provider || defaultProvider).trim();
+  function updateConfig(raw) {
+    const next = options.config
+      ? normalizeConfig(raw)
+      : saveConfig(configFile, raw, config);
+    Object.assign(config, next);
+    return {
+      models: publicModels(config),
+      routes: { ...config.routes },
+      defaultModel: config.defaultModel,
+      tasks: [...config.tasks],
+    };
+  }
+
+  async function* stream(input = {}) {
+    const exposed = resolveModel(config, input);
+    if (
+      config.models.length > 0 &&
+      !exposed &&
+      !input.allowUnlisted
+    ) {
+      throw Object.assign(
+        new Error(
+          `model "${input.model || input.task || ''}" is not exposed by the gateway config`
+        ),
+        { code: 'model_not_exposed' }
+      );
+    }
+    const request = {
+      ...input,
+      provider: String(
+        exposed?.provider || input.provider || defaultProvider
+      ).trim(),
+      model: String(exposed?.model || input.model || '').trim(),
+      baseURL: exposed?.baseURL || input.baseURL,
+      protocol: exposed?.protocol || input.protocol,
+      headers: {
+        ...(exposed?.headers || {}),
+        ...(input.headers || {}),
+      },
+      providerOptions: {
+        ...(exposed?.providerOptions || {}),
+        ...(input.providerOptions || {}),
+      },
+      modelAlias: exposed?.id || input.model || '',
+      task: String(input.task || '').trim(),
+    };
+    if (!request.model) {
+      throw Object.assign(new Error('model is required'), {
+        code: 'missing_model',
+      });
+    }
+    const providerId = request.provider;
     const provider = resolveProvider(providerId, {
       baseURL: request.baseURL,
       protocol: request.protocol,
@@ -183,10 +249,15 @@ function createGateway(options = {}) {
         { code: 'unsupported_protocol' }
       );
     }
+    const allowRequestKey =
+      !exposed ||
+      exposed.apiKeyFromRequest === true ||
+      provider.id === 'opencode' ||
+      provider.id === 'opencode-go';
     const apiKey =
       provider.auth === 'aws-sigv4'
         ? ''
-        : providerApiKey(provider, request);
+        : providerApiKey(provider, allowRequestKey ? request : { ...request, apiKey: '' });
     if (
       !apiKey &&
       provider.auth !== 'aws-sigv4' &&
@@ -255,6 +326,10 @@ function createGateway(options = {}) {
     stream,
     chat,
     resolveProvider,
+    config,
+    updateConfig,
+    models: () => publicModels(config),
+    resolveModel: (request) => resolveModel(config, request),
   };
 }
 

@@ -47,6 +47,9 @@ function defaultSettings() {
   return {
     apiKey: '',
     reasoningEffort: DEFAULT_REASONING_EFFORT,
+    llmGatewayUrl: 'http://127.0.0.1:8790',
+    llmGatewayEnabled: false,
+    sessionModels: {},
     window: null,
   };
 }
@@ -59,6 +62,23 @@ function defaultChats() {
     current: 0,
     seq: 0,
   };
+}
+
+function normalizeSessionModels(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const out = {};
+  for (const [sessionId, value] of Object.entries(raw).slice(0, 1000)) {
+    const id = String(sessionId || '').trim();
+    if (!id || !value || typeof value !== 'object') continue;
+    const modelId = String(value.id || value.modelId || '').trim();
+    if (!modelId) continue;
+    out[id] = {
+      id: modelId,
+      label: String(value.label || modelId).trim() || modelId,
+      provider: String(value.provider || '').trim(),
+    };
+  }
+  return out;
 }
 
 function normalizeSettings(raw) {
@@ -80,6 +100,11 @@ function normalizeSettings(raw) {
   return {
     apiKey: String(raw.apiKey ?? raw.api_key ?? ''),
     reasoningEffort: normalizeReasoningEffort(raw.reasoningEffort),
+    llmGatewayUrl:
+      String(raw.llmGatewayUrl || 'http://127.0.0.1:8790').trim() ||
+      'http://127.0.0.1:8790',
+    llmGatewayEnabled: raw.llmGatewayEnabled === true,
+    sessionModels: normalizeSessionModels(raw.sessionModels),
     window,
   };
 }

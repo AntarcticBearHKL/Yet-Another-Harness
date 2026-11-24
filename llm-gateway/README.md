@@ -17,13 +17,61 @@ Or use the CLI directly:
 ```bash
 node bin/yah-llm-gateway.js providers
 node bin/yah-llm-gateway.js providers anthropic
+node bin/yah-llm-gateway.js models
 node bin/yah-llm-gateway.js chat \
-  --provider deepseek \
-  --model deepseek-chat \
+  --task chat \
   --message "Say hello"
 ```
 
 Set keys with provider environment variables (for example `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) or pass `apiKey` in the request.
+
+## Model exposure and task routing
+
+YAH only shows the models listed in `config.json`. A model is exposed when it has an `id`, `label`, `provider` and `model`. The gateway falls back to `config.example.json` when `config.json` does not exist yet; saving from YAH creates `config.json`. Example:
+
+```json
+{
+  "models": [
+    {
+      "id": "fast",
+      "label": "快速",
+      "description": "日常对话、信息收集、测试和文档",
+      "provider": "opencode-go",
+      "model": "deepseek-v4.1-flash",
+      "apiKeyFromRequest": true
+    },
+    {
+      "id": "deep",
+      "label": "深度",
+      "provider": "opencode-go",
+      "model": "deepseek-v4-pro",
+      "apiKeyFromRequest": true
+    }
+  ],
+  "routes": {
+    "chat": "fast",
+    "manager": "deep",
+    "lead": "deep",
+    "research": "fast",
+    "programmer": "deep",
+    "tester": "fast",
+    "writer": "fast",
+    "reviewer": "deep"
+  },
+  "defaultModel": "fast"
+}
+```
+
+Task names are `chat`, `manager`, `lead`, `research`, `programmer`, `tester`, `writer` and `reviewer`. YAH sends the task that matches the active agent profile, so each role can use a different model. A request with an explicit `model` alias overrides the task route; a request with no alias uses the route for its task, then `defaultModel`.
+
+`apiKeyFromRequest` lets the gateway use the `apiKey` sent by YAH. OpenCode and OpenCode Go models always accept the request key. Other providers read their own environment variables (for example `OPENROUTER_API_KEY`) unless the model opts in.
+
+YAH's Settings panel edits the exposed model list and the task routes through `GET/PUT /v1/config`. The composer model picker only lists these exposed models. Selecting a model pins it to that conversation; leaving it alone follows the task route.
+
+```bash
+node bin/yah-llm-gateway.js models
+node bin/yah-llm-gateway.js chat --task programmer --message "Review this diff"
+```
 
 ## HTTP API
 
@@ -31,7 +79,10 @@ Set keys with provider environment variables (for example `DEEPSEEK_API_KEY`, `O
 | --- | --- | --- |
 | `GET` | `/health` | Health, catalog size and catalog source |
 | `GET` | `/v1/providers?q=` | Full provider catalog with protocol and env names |
+| `GET` | `/v1/models` | Exposed models, task routes and default model |
 | `GET` | `/v1/models?provider=deepseek` | Proxy the provider's model list when it exposes one |
+| `GET` | `/v1/config` | Exposed models, task routes and default model |
+| `PUT` | `/v1/config` | Replace exposed models and task routes |
 | `POST` | `/v1/chat` | Canonical YAH request, SSE stream of YAH events |
 | `POST` | `/v1/chat/complete` | Same request, returns the final message as JSON |
 
@@ -39,8 +90,9 @@ Set keys with provider environment variables (for example `DEEPSEEK_API_KEY`, `O
 
 ```json
 {
+  "model": "fast",
+  "task": "programmer",
   "provider": "openrouter",
-  "model": "anthropic/claude-sonnet-4",
   "apiKey": "optional; otherwise use the provider env var",
   "sessionId": "optional stable session id; OpenCode Go uses x-opencode-session",
   "baseURL": "optional override",
