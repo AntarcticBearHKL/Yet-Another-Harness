@@ -24,11 +24,20 @@ const CANVAS_MANAGER_RIGHT_WIDTH = 240;
 const CANVAS_MANAGER_GROUP_PADDING = 1;
 const CANVAS_MANAGER_COLUMN_GAP = 32;
 const CANVAS_MANAGER_COLUMNS = 3;
+const CANVAS_MANAGER_COLUMN_LABELS = {
+  left: '管理',
+  middle: '工作',
+  right: '交互',
+};
 const CANVAS_GROUP_DRAG_GAP = 16;
 const CANVAS_DRAG_STEP = 12;
 const CANVAS_FRAME_PADDING = 32;
 const CANVAS_MIN_ZOOM = 0.2;
 const CANVAS_MAX_ZOOM = 3;
+
+function canvasWorkspaceMode() {
+  return Boolean(state?.homeWindow);
+}
 const CANVAS_WORKSPACE_COLORS = [
   '#b96f3d',
   '#6f8a5c',
@@ -763,6 +772,10 @@ function buildCanvasManagerPanel(manager, team, node) {
       canvasState.suppressClick = false;
       return;
     }
+    if (canvasWorkspaceMode()) {
+      openCanvasSession(manager.id);
+      return;
+    }
     if (event.shiftKey) {
       canvasToggleGroupSelection(manager.id);
       return;
@@ -1310,6 +1323,11 @@ function buildCanvasSystemNode(node) {
       canvasState.suppressClick = false;
       return;
     }
+    if (canvasWorkspaceMode()) {
+      if (node.type === 'agile') openManagerAgile(node.managerId);
+      else openSystemNodeWindow(node.id);
+      return;
+    }
     canvasState.selectedIds = new Set([node.id]);
     canvasState.selectedId = node.id;
     canvasState.selectedChildId = null;
@@ -1637,6 +1655,13 @@ function applyCanvasDashScale(zoom) {
 function buildCanvasManagerColumn(column, rows) {
   const columnEl = el('section', 'canvas-manager-column');
   columnEl.dataset.column = column.key;
+  columnEl.append(
+    el(
+      'div',
+      'canvas-manager-column-head',
+      CANVAS_MANAGER_COLUMN_LABELS[column.key] || ''
+    )
+  );
   const list = el('div', 'canvas-manager-column-list');
   if (rows.length === 0) {
     list.append(el('div', 'canvas-manager-column-empty', '暂无'));
@@ -1652,14 +1677,16 @@ function buildCanvasManagerGroup(manager, layout, columnEls) {
   groupEl.dataset.sessionId = manager.id;
   const project = state.projects.find((item) => item.id === manager.projectId);
   const projectName = String(project?.name || '').trim();
-  if (projectName) {
-    const title = el('div', 'canvas-manager-group-title');
-    title.setAttribute('aria-hidden', 'true');
-    title.append(
-      el('span', 'canvas-manager-group-title-text', projectName)
-    );
-    groupEl.append(title);
-  }
+  const title = el('div', 'canvas-manager-group-title');
+  title.setAttribute('aria-hidden', 'true');
+  title.append(
+    el(
+      'span',
+      'canvas-manager-group-title-text',
+      projectName || 'Workspace'
+    )
+  );
+  groupEl.append(title);
   for (let index = 0; index < CANVAS_MANAGER_COLUMNS - 1; index += 1) {
     const dividerEl = el('div', 'canvas-manager-divider hidden');
     dividerEl.append(buildCanvasManagerDividerLine());
@@ -1783,6 +1810,10 @@ function buildCanvasGroup(root, children, node) {
       canvasState.suppressClick = false;
       return;
     }
+    if (canvasWorkspaceMode()) {
+      openCanvasSession(root.id);
+      return;
+    }
     if (event.shiftKey) {
       canvasToggleGroupSelection(root.id);
       return;
@@ -1814,6 +1845,16 @@ function renderCanvasNodes(index) {
   let resized = false;
   const measured = [];
   const managers = roots.filter((root) => root.nodeRole === 'manager');
+  const currentSession = state.sessions?.[state.current] || null;
+  const preferredManager =
+    currentSession?.projectId
+      ? managers.find(
+          (manager) => manager.projectId === currentSession.projectId
+        )
+      : null;
+  const visibleManagers = canvasWorkspaceMode()
+    ? [preferredManager || managers[0]].filter(Boolean)
+    : managers;
   const managerIds = new Set(managers.map((manager) => manager.id));
   const teamRootsByManager = new Map();
   const regularRoots = [];
@@ -1831,7 +1872,7 @@ function renderCanvasNodes(index) {
       regularRoots.push(root);
     }
   }
-  for (const manager of managers) {
+  for (const manager of visibleManagers) {
     const node = canvasState.nodes[manager.id];
     if (!node) continue;
     canvasState.visibleIds.add(manager.id);
@@ -1886,6 +1927,7 @@ function renderCanvasNodes(index) {
     );
     const groupEl = buildCanvasManagerGroup(manager, layout, columnEls);
     canvasDom.nodes.append(groupEl);
+    if (canvasWorkspaceMode()) return;
     const maxHeight = Math.max(
       0,
       ...columnEls.map((columnEl) => columnEl.offsetHeight)
@@ -1965,6 +2007,13 @@ function renderCanvasNodes(index) {
 }
 
 function applyCanvasView() {
+  if (canvasWorkspaceMode()) {
+    if (canvasDom.zoomLayer) canvasDom.zoomLayer.style.zoom = '1';
+    if (canvasDom.world) canvasDom.world.style.transform = 'none';
+    if (canvasDom.grid) canvasDom.grid.style.backgroundPosition = '0 0';
+    canvasDom.zoomIndicator?.classList.remove('visible');
+    return;
+  }
   const view = canvasState.view;
   const x = Math.round(view.x);
   const y = Math.round(view.y);
@@ -1988,7 +2037,13 @@ function renderCanvas() {
   renderCanvasNodes(index);
   applyCanvasView();
   if (canvasDom.empty) {
-    canvasDom.empty.classList.toggle('hidden', index.roots.length > 0);
+    const hasManager = index.roots.some(
+      (root) => root.nodeRole === 'manager'
+    );
+    canvasDom.empty.classList.toggle(
+      'hidden',
+      canvasWorkspaceMode() ? hasManager : index.roots.length > 0
+    );
   }
 }
 
@@ -2395,6 +2450,7 @@ function canvasLimitedGroupDrag(rect, dx, dy, obstacles) {
 }
 
 function startCanvasGroupDrag(event, groupEl, node, managerId = '') {
+  if (canvasWorkspaceMode()) return;
   if (event.button !== 0) return;
   if (
     event.target instanceof Element &&
@@ -2941,6 +2997,9 @@ function createCanvasManagerNode(sessionId) {
 function openCanvas() {
   if (!canvasDom.overlay) return;
   if (typeof closeComposer === 'function') closeComposer();
+  if (canvasWorkspaceMode()) {
+    document.body.classList.add('workspace-home');
+  }
   canvasState.open = true;
   canvasDom.overlay.classList.remove('hidden');
   canvasDom.overlay.setAttribute('aria-hidden', 'false');
@@ -3106,7 +3165,16 @@ function bindCanvasEvents() {
     openProjectDialog('new');
   });
 
+  canvasDom.empty?.addEventListener('click', () => {
+    if (!canvasWorkspaceMode()) return;
+    const manager = state.sessions.find(
+      (session) => session.nodeRole === 'manager' && !session.archivedAt
+    );
+    window.openManagerComposer?.(manager?.id || null);
+  });
+
   canvasDom.stage?.addEventListener('pointerdown', (event) => {
+    if (canvasWorkspaceMode()) return;
     if (event.button === 1) {
       if (
         event.target instanceof Element &&
@@ -3170,6 +3238,7 @@ function bindCanvasEvents() {
   canvasDom.stage?.addEventListener(
     'wheel',
     (event) => {
+      if (canvasWorkspaceMode()) return;
       if (canvasState.pageOpen) return;
       event.preventDefault();
       const rect = canvasDom.stage.getBoundingClientRect();
