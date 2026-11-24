@@ -1,0 +1,20 @@
+{
+  "name": "yah-llm-gateway",
+  "version": "1.0.0",
+  "description": "Standalone multi-provider LLM gateway that normalizes every provider stream into YAH's canonical chat format.",
+  "private": true,
+  "type": "commonjs",
+  "main": "src/index.js",
+  "bin": {
+    "yah-llm-gateway": "bin/yah-llm-gateway.js"
+  },
+  "scripts": {
+    "start": "node bin/yah-llm-gateway.js serve",
+    "providers": "node bin/yah-llm-gateway.js providers",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

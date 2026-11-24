@@ -262,6 +262,7 @@ YAH 的本地工具注册表合并了 OpenCode 内置工具和 oh-my-opencode（
 - 兼容别名：`hashline_edit`；`read_file`、`web_search`、`interactive_bash`、`SystemInfo`、`system_info` 只保留为旧调用的隐藏执行别名，不再作为工具暴露
 - `read` 输出 `LINE#ID|content`；`edit` 用 LINE#ID 锚点批量修改，也支持 `path` + `oldString` + `newString`
 - `background_*`、`monitor_*` 是按项目绑定的常驻服务管理：必须填写备注，只暴露运行 / 停止状态，不提供输出，也不会把完成结果送回对话；创建者或 Manager 可以停止。调度器只把 Backlog 任务分配给编号 2 及以后的 worker，主工程师保留给设计确认和合并检查；`interactive_bash` 已合并为 `shell` 的隐藏别名
+- 独立 LLM Gateway：`llm-gateway/` 是一个不依赖 YAH Electron 的 Node 程序，导入 OpenChamber/OpenCode 使用的 models.dev 全量 provider 目录（326 个平台），用 OpenAI Chat、OpenAI Responses、Anthropic Messages、Gemini、Cohere、Azure OpenAI、Bedrock Converse 等适配器把各平台流式格式统一成 YAH canonical 事件（`start` / `text.delta` / `reasoning.delta` / `tool_call.*` / `usage` / `done`），通过 `POST /v1/chat` SSE 或 `POST /v1/chat/complete` 使用；详见 `llm-gateway/README.md`
 
 ## Tool calling
 

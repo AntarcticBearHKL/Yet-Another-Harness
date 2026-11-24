@@ -10,6 +10,9 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "server": "node server/index.js",
+    "gateway": "node llm-gateway/bin/yah-llm-gateway.js serve",
+    "gateway:providers": "node llm-gateway/bin/yah-llm-gateway.js providers",
+    "gateway:test": "node --test llm-gateway/test/*.test.js",
     "test": "node --test"
   },
   "devDependencies": {
