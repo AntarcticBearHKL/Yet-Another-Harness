@@ -74,6 +74,13 @@ function normalizeTasks(raw) {
         description: text(item.description),
         role: text(item.role) || 'programmer',
         acceptance: text(item.acceptance),
+        testPlan: text(item.testPlan),
+        dependsOn: Array.isArray(item.dependsOn)
+          ? [...new Set(item.dependsOn.map((id) => text(id)).filter(Boolean))].slice(
+              0,
+              50
+            )
+          : [],
       };
     })
     .filter(Boolean);
@@ -87,6 +94,15 @@ function normalizeStringList(raw, limit = 40) {
 }
 
 function taskView(task) {
+  const branches = (list) =>
+    Array.isArray(list)
+      ? list.map((branch) => ({
+          repo: branch.repo,
+          branch: branch.branch,
+          baseBranch: branch.baseBranch || '',
+          worktree: branch.worktree || '',
+        }))
+      : [];
   return {
     id: task.id,
     kind: task.kind,
@@ -94,6 +110,8 @@ function taskView(task) {
     description: task.description,
     role: task.role,
     acceptance: task.acceptance,
+    testPlan: task.testPlan || '',
+    dependsOn: Array.isArray(task.dependsOn) ? [...task.dependsOn] : [],
     column: task.column,
     designId: task.designId || null,
     designState: task.designState || null,
@@ -101,14 +119,14 @@ function taskView(task) {
     reviewNote: task.reviewNote || null,
     assignee: task.assignee || null,
     workNodeId: task.workNodeId || null,
-    branches: Array.isArray(task.gitBranches)
-      ? task.gitBranches.map((branch) => ({
-          repo: branch.repo,
-          branch: branch.branch,
-          baseBranch: branch.baseBranch || '',
-          worktree: branch.worktree || '',
-        }))
-      : [],
+    branches: branches(task.gitBranches),
+    testBranches: branches(task.testBranches),
+    testVerdict: task.testVerdict || null,
+    testReport: task.testReport || null,
+    testState: task.testState || null,
+    testedBy: task.testedBy || null,
+    testedAt: task.testedAt || null,
+    testAttempts: Number(task.testAttempts) || 0,
     blockedReason: task.blockedReason || null,
     blockedBy: task.blockedBy || null,
     blockedKind: task.blockedKind || null,
@@ -161,6 +179,12 @@ function designMarkdown(args = {}) {
       `## 非目标\n${outOfScope.map((item) => `- ${item}`).join('\n')}`
     );
   }
+  const answers = normalizeStringList(args.answers, 40);
+  if (answers.length > 0) {
+    sections.push(
+      `## 用户确认\n${answers.map((item) => `- ${item}`).join('\n')}`
+    );
+  }
   const openQuestions = normalizeStringList(args.openQuestions, 40);
   if (openQuestions.length > 0) {
     sections.push(
@@ -168,6 +192,50 @@ function designMarkdown(args = {}) {
     );
   }
   return sections.join('\n\n').slice(0, 20000);
+}
+
+function sectionText(markdown, heading) {
+  const text = String(markdown || '');
+  const marker = `## ${heading}`;
+  const start = text.indexOf(marker);
+  if (start < 0) return '';
+  const after = start + marker.length;
+  const next = text.indexOf('\n## ', after);
+  return text.slice(after, next < 0 ? text.length : next).trim();
+}
+
+function replaceSection(markdown, heading, body) {
+  const text = String(markdown || '').trimEnd();
+  const block = `## ${heading}\n\n${String(body || '').trim()}`;
+  const marker = `## ${heading}`;
+  const start = text.indexOf(marker);
+  if (start < 0) return text ? `${text}\n\n${block}` : block;
+  const after = start + marker.length;
+  const next = text.indexOf('\n## ', after);
+  const before = text.slice(0, start).trimEnd();
+  const rest = next < 0 ? '' : text.slice(next).trimStart();
+  return [before, block, rest].filter(Boolean).join('\n\n');
+}
+
+function architectureMarkdown(args = {}) {
+  const sections = [];
+  const summary = text(args.summary || args.description);
+  if (summary) sections.push(`### 方案概述\n${summary}`);
+  const list = (heading, items, limit = 40) => {
+    const values = normalizeStringList(items, limit);
+    if (values.length > 0) {
+      sections.push(`### ${heading}\n${values.map((item) => `- ${item}`).join('\n')}`);
+    }
+  };
+  list('模块与职责', args.modules);
+  list('接口与调用流程', args.interfaces);
+  list('数据与存储', args.data);
+  list('安全与权限', args.security);
+  list('性能与扩展', args.performance);
+  list('测试策略', args.testStrategy);
+  list('风险与回滚', args.risks);
+  list('备选方案', args.alternatives);
+  return sections.join('\n\n').slice(0, 16000);
 }
 
 async function designWrite(args = {}, context = null) {
@@ -201,9 +269,13 @@ async function designWrite(args = {}, context = null) {
       if (current.kind !== 'design') {
         return error('designId does not point to a design task');
       }
+      const technical = sectionText(current.description, '技术方案');
+      const description = technical
+        ? replaceSection(markdown, '技术方案', technical)
+        : markdown;
       design = agile.updateTask(existingId, {
         title,
-        description: markdown,
+        description,
         acceptance,
         designState: 'pending',
         workNodeId: '',
@@ -259,6 +331,58 @@ async function designWrite(args = {}, context = null) {
     null,
     2
   );
+}
+
+function architectureWrite(args = {}, context = null) {
+  const planner = planningFor(context || args.context);
+  if (!planner?.lead) {
+    return error('architecture_write can only be called by the lead engineer');
+  }
+  const { manager, lead } = planner;
+  let agile;
+  try {
+    agile = agileFor(manager);
+  } catch (architectureError) {
+    return error(architectureError.message);
+  }
+  const designId =
+    text(args.designId) || text(lead?.nodeConfig?.taskId);
+  if (!designId) return error('architecture_write requires a design task');
+  let design;
+  try {
+    design = agile.getTask(designId);
+  } catch {
+    return error('design task not found');
+  }
+  if (design.kind !== 'design') {
+    return error('architecture_write requires a design task');
+  }
+  const body = architectureMarkdown(args);
+  if (!body) return error('architecture_write requires a summary');
+  try {
+    const description = replaceSection(
+      design.description,
+      '技术方案',
+      body
+    );
+    const updated = agile.updateTask(design.id, {
+      description,
+      designState: 'working',
+      actor: { type: 'agent', id: lead.id },
+    });
+    return JSON.stringify(
+      {
+        ok: true,
+        designId: updated.id,
+        title: updated.title,
+        architecture: body,
+      },
+      null,
+      2
+    );
+  } catch (architectureError) {
+    return error(`failed to write architecture: ${architectureError.message}`);
+  }
 }
 
 function backlogList(args = {}, context = null) {
@@ -405,6 +529,8 @@ async function backlogAdd(args = {}, context = null) {
           description: item.description,
           role: item.role,
           acceptance: item.acceptance,
+          testPlan: item.testPlan,
+          dependsOn: item.dependsOn,
           autoDispatch: true,
           actor,
         })
@@ -525,10 +651,23 @@ async function taskMerge(args = {}, context = null) {
   if (task.kind === 'design') {
     return error('design tasks are not merged');
   }
-  if (task.column !== 'finished') {
-    return error('task_merge requires a task in Finished');
+  if (task.column !== 'verified') {
+    return error('task_merge requires a task in Verified');
   }
-  const branches = Array.isArray(task.gitBranches) ? task.gitBranches : [];
+  if (task.testVerdict !== 'pass') {
+    return error('task_merge requires a passed test report');
+  }
+  const branches = [
+    ...(Array.isArray(task.gitBranches) ? task.gitBranches : []),
+    ...(Array.isArray(task.testBranches) ? task.testBranches : []),
+  ].filter(
+    (branch, index, list) =>
+      branch &&
+      branch.branch &&
+      list.findIndex(
+        (item) => item.branch === branch.branch && item.repo === branch.repo
+      ) === index
+  );
   if (branches.length === 0) {
     return error('task has no Git branches to merge');
   }
@@ -610,8 +749,8 @@ function taskReject(args = {}, context = null) {
   } catch {
     return error('task not found');
   }
-  if (task.column !== 'finished') {
-    return error('task_reject requires a task in Finished');
+  if (task.column !== 'verified') {
+    return error('task_reject requires a task in Verified');
   }
   const actor = { type: 'agent', id: lead.id };
   try {
@@ -622,8 +761,7 @@ function taskReject(args = {}, context = null) {
       reviewStartedAt: null,
       reviewNote: reason,
       isRework: true,
-      workNodeId: '',
-      attempts: 0,
+      testState: 'rework',
       actor,
     });
   } catch (rejectError) {
@@ -651,14 +789,58 @@ function taskReject(args = {}, context = null) {
   );
 }
 
+function testReport(args = {}, context = null) {
+  const session = workSessionFor(context || args.context);
+  if (!session) return error('test_report can only be called by a work node');
+  const verdict = text(args.verdict).toLowerCase();
+  if (verdict !== 'pass' && verdict !== 'fail') {
+    return error('test_report verdict must be pass or fail');
+  }
+  if (!text(args.summary)) {
+    return error('test_report requires a summary');
+  }
+  if (!providers.systemNodeService?.submitTestResult) {
+    return error('system node service is not configured');
+  }
+  try {
+    const result = providers.systemNodeService.submitTestResult(session, {
+      ...args,
+      verdict,
+    });
+    return JSON.stringify(result, null, 2);
+  } catch (testError) {
+    return error(testError.message);
+  }
+}
+
+function reportWrite(args = {}, context = null) {
+  const manager = managerFor(context || args.context);
+  if (!manager) return error('report_write can only be called by a manager node');
+  if (!text(args.summary)) {
+    return error('report_write requires a summary');
+  }
+  if (!providers.systemNodeService?.writeHumanReport) {
+    return error('system node service is not configured');
+  }
+  try {
+    const result = providers.systemNodeService.writeHumanReport(manager, args);
+    return JSON.stringify(result, null, 2);
+  } catch (reportError) {
+    return error(reportError.message);
+  }
+}
+
 module.exports = {
   configure,
   designWrite,
+  architectureWrite,
   backlogList,
   backlogAdd,
   iterationAdd,
   taskBlock,
   taskFinish,
+  testReport,
   taskMerge,
   taskReject,
+  reportWrite,
 };

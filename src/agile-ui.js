@@ -178,15 +178,27 @@ function agileTaskCard(task) {
   if (task.needsDigest) {
     foot.append(el('span', 'agile-signal digest', '待归并'));
   }
+  if (task.testVerdict) {
+    foot.append(
+      el(
+        'span',
+        `agile-signal ${task.testVerdict === 'pass' ? 'digest' : 'rework'}`,
+        task.testVerdict === 'pass' ? '测试通过' : '测试未通过'
+      )
+    );
+  }
   if (task.isRework) {
     foot.append(el('span', 'agile-signal rework', '返工'));
   }
-  if (task.column === 'finished' && task.reviewState !== 'merged') {
+  if (task.column === 'finished' && !task.testVerdict) {
+    foot.append(el('span', 'agile-signal digest', '待测试'));
+  }
+  if (task.column === 'verified') {
     foot.append(
       el(
         'span',
         'agile-signal digest',
-        task.reviewState === 'reviewing' ? '检查中' : '待主工程师检查'
+        task.reviewState === 'reviewing' ? '架构师检查中' : '待架构师合并'
       )
     );
   }
@@ -437,9 +449,19 @@ function renderAgileTaskModal() {
       }[task.designState || 'pending'];
       info.push(`设计状态：${designState}`);
     }
-    if (task.column === 'finished' && task.reviewState) {
+    if (task.column === 'finished') {
       info.push(
-        `主工程师检查：${task.reviewState === 'reviewing' ? '进行中' : '待处理'}`
+        `测试状态：${task.testState === 'testing' ? '测试中' : '待测试'}`
+      );
+    }
+    if (task.column === 'verified') {
+      info.push('测试：通过 · 待架构师合并');
+    }
+    if (task.testVerdict) {
+      info.push(
+        `测试：${task.testVerdict === 'pass' ? '通过' : '未通过'}${
+          task.testedBy ? ` · ${task.testedBy}` : ''
+        }`
       );
     }
     if (task.reviewNote) info.push(`打回原因：${task.reviewNote}`);
@@ -453,7 +475,17 @@ function renderAgileTaskModal() {
     if (task.updatedAt) {
       info.push(`更新：${agileDate(task.updatedAt, true)}`);
     }
-    if (task.isRework) info.push('返工任务：人添加备注后从 Finished 回到 Backlog');
+    if (task.isRework) info.push('返工任务：测试或架构师打回后回到 Backlog');
+    if (Array.isArray(task.testBranches) && task.testBranches.length > 0) {
+      info.push(
+        `测试分支：${task.testBranches
+          .map((branch) => branch.branch)
+          .join(', ')}`
+      );
+    }
+    if (task.testReport?.summary) {
+      info.push(`测试摘要：${task.testReport.summary}`);
+    }
     agileDom.taskInfo.replaceChildren();
     for (const line of info) {
       agileDom.taskInfo.append(el('div', '', line));
@@ -462,7 +494,10 @@ function renderAgileTaskModal() {
   if (agileDom.taskDelete) {
     agileDom.taskDelete.classList.toggle(
       'hidden',
-      !task.id || task.column === 'finished' || task.column === 'merged'
+      !task.id ||
+        task.column === 'finished' ||
+        task.column === 'verified' ||
+        task.column === 'merged'
     );
   }
   if (agileDom.taskSave) {

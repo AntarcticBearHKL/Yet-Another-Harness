@@ -74,6 +74,13 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
       prompt: 'worker',
       tools: ['read', 'write', 'shell', 'task_block', 'task_finish'],
     },
+    'sub-tester': {
+      id: 'sub-tester',
+      name: '测试员',
+      kind: 'subagent',
+      prompt: 'tester',
+      tools: ['read', 'write', 'shell', 'task_block', 'test_report'],
+    },
   };
   const service = createSystemNodeService({
     store,
@@ -98,7 +105,14 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
           directories: [dir],
           branches:
             index >= 2
-              ? [{ repo: dir, branch: `yah/engineer-${index}`, baseBranch: 'master' }]
+              ? [
+                  {
+                    repo: dir,
+                    branch: `yah/engineer-${index}`,
+                    baseBranch: 'master',
+                    worktree: dir,
+                  },
+                ]
               : [],
         },
         pendingQueue: [],
@@ -108,6 +122,15 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
       return { ok: true, id, workNode };
     },
     createWorkNode: async () => ({ ok: false }),
+    prepareTestWorktree: ({ branches, sessionId, attempt }) => ({
+      directories: [dir],
+      branches: (Array.isArray(branches) ? branches : []).map((branch) => ({
+        ...branch,
+        branch: `yah/test-${sessionId}-${attempt}`,
+        baseBranch: branch.branch,
+        worktree: dir,
+      })),
+    }),
     notify: () => {},
   });
   tasks.configure({
@@ -193,6 +216,29 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
     assert.ok(resumed);
     assert.match(resumed.text, /backlog_add/);
 
+    const architecture = JSON.parse(
+      tasks.architectureWrite(
+        {
+          designId,
+          summary: 'Use a session cookie and a small auth service',
+          modules: ['AuthService', 'LoginForm'],
+          interfaces: ['POST /api/login', 'GET /api/session'],
+          data: ['users table with email and password hash'],
+          security: ['Hash passwords with bcrypt'],
+          performance: ['Session lookup by indexed token'],
+          testStrategy: ['Unit tests for AuthService', 'Browser test for login form'],
+          risks: ['Session expiry edge cases'],
+          alternatives: ['JWT-only tokens'],
+        },
+        { sessionId: 'e-1' }
+      )
+    );
+    assert.equal(architecture.ok, true);
+    design = agile.getTask(designId);
+    assert.match(design.description, /## 技术方案/);
+    assert.match(design.description, /## 模块与职责/);
+    assert.match(design.description, /POST \/api\/login/);
+
     const backlog = JSON.parse(
       await tasks.backlogAdd(
         {
@@ -202,11 +248,7 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
               description: 'Email and password form',
               role: 'programmer',
               acceptance: 'Form validates and submits',
-            },
-            {
-              title: 'Test login',
-              role: 'tester',
-              acceptance: 'Login flow passes',
+              testPlan: 'Submit valid and invalid credentials',
             },
           ],
         },
@@ -219,7 +261,7 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
     const workTasks = boardAfterBacklog.tasks.filter(
       (task) => task.kind !== 'design'
     );
-    assert.equal(workTasks.length, 2);
+    assert.equal(workTasks.length, 1);
     assert.ok(workTasks.every((task) => task.column === 'progress'));
     assert.ok(workTasks.every((task) => task.designId === designId));
 
@@ -251,11 +293,36 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
     assert.equal(finishedTask.gitBranches.length, 1);
 
     await service.tick();
+    const testRun = runs.find(
+      (run) => run.sessionId === 'e-3' && /测试员/.test(run.text)
+    );
+    assert.ok(testRun);
+
+    const testResult = JSON.parse(
+      tasks.testReport(
+        {
+          verdict: 'pass',
+          summary: 'Login form works',
+          cases: [
+            {
+              name: 'valid credentials',
+              status: 'passed',
+            },
+          ],
+        },
+        { sessionId: 'e-3' }
+      )
+    );
+    assert.equal(testResult.ok, true);
+    assert.equal(agile.getTask(firstTask.id).column, 'verified');
+
+    await service.tick();
     const reviewRun = runs.find(
-      (run) => run.sessionId === 'e-1' && /Review the Finished tasks/.test(run.text)
+      (run) => run.sessionId === 'e-1' && /Review the Verified tasks/.test(run.text)
     );
     assert.ok(reviewRun);
     assert.match(reviewRun.text, /task_merge/);
+    assert.match(reviewRun.text, /testVerdict: pass/);
 
     const merged = JSON.parse(
       await tasks.taskMerge({ taskId: firstTask.id }, { sessionId: 'e-1' })
@@ -266,6 +333,36 @@ test('design flows from manager to lead, grill questions, backlog, merge', async
     assert.equal(mergedTask.reviewState, 'merged');
     assert.ok(mergedTask.mergedAt);
     assert.equal(agile.getTask(designId).column, 'design');
+
+    const reportRun = runs.find(
+      (run) => run.sessionId === 'm1' && /report_write/.test(run.text)
+    );
+    assert.ok(reportRun);
+
+    const human = JSON.parse(
+      tasks.reportWrite(
+        {
+          title: 'Login is ready',
+          summary: 'Users can now sign in and sign out.',
+          requested: 'Add a login form.',
+          changes: ['The login form validates email and password.'],
+          examples: ['Enter a valid email and password, then press Sign in.'],
+          howToTry: ['Open the app', 'Enter your credentials', 'Press Sign in'],
+          verification: ['The login form was tested in the browser.'],
+          notDone: ['Social login is still out of scope.'],
+          nextSteps: ['Add password reset.'],
+          technicalDetails: 'POST /api/login; AuthService; session cookie.',
+        },
+        { sessionId: 'm1' }
+      )
+    );
+    assert.equal(human.ok, true);
+    const reportNode = service
+      .list('m1')
+      .find((node) => node.id === human.reportId);
+    assert.match(reportNode.payload.humanReport, /## 一句话/);
+    assert.match(reportNode.payload.humanReport, /## 例子/);
+    assert.match(reportNode.payload.reportMarkdown, /Login is ready/);
   } finally {
     service.stop();
     store.close();

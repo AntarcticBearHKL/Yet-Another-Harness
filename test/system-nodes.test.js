@@ -111,6 +111,15 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
       createdWorkNodes.push(workNode);
       return { ok: true, id, workNode };
     },
+    prepareTestWorktree: ({ branches, sessionId, attempt }) => ({
+      directories: [dir],
+      branches: (Array.isArray(branches) ? branches : []).map((branch) => ({
+        ...branch,
+        branch: `yah/test-${sessionId}-${attempt}`,
+        baseBranch: branch.branch,
+        worktree: dir,
+      })),
+    }),
     createEngineer: async (manager, index) => {
       const id = `e-${index}`;
       store.createSession({
@@ -134,6 +143,7 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
                     repo: dir,
                     branch: `yah/engineer-${index}`,
                     baseBranch: 'master',
+                    worktree: dir,
                   },
                 ]
               : [],
@@ -343,6 +353,49 @@ test('manager publishes parallel backlog and workers block, resume and finish', 
       service.list('m1').find((node) => node.type === 'report').status,
       'collecting'
     );
+
+    await service.tick();
+    const testRunFirst = runs.find(
+      (run) => run.sessionId === 'e-3' && /测试员/.test(run.text)
+    );
+    assert.ok(testRunFirst);
+    const testFirst = JSON.parse(
+      tasks.testReport(
+        {
+          verdict: 'pass',
+          summary: 'Login form verified',
+          cases: [{ name: 'submit', status: 'passed' }],
+        },
+        { sessionId: 'e-3' }
+      )
+    );
+    assert.equal(testFirst.ok, true);
+    assert.equal(agile.getTask(first.id).column, 'verified');
+
+    await service.tick();
+    const testRunSecond = runs.find(
+      (run) => run.sessionId === 'e-2' && /测试员/.test(run.text)
+    );
+    assert.ok(testRunSecond);
+    const testSecond = JSON.parse(
+      tasks.testReport(
+        {
+          verdict: 'pass',
+          summary: 'Login flow verified',
+          cases: [{ name: 'login flow', status: 'passed' }],
+        },
+        { sessionId: 'e-2' }
+      )
+    );
+    assert.equal(testSecond.ok, true);
+    assert.equal(agile.getTask(second.id).column, 'verified');
+
+    await service.tick();
+    const reviewRun = runs.find(
+      (run) => run.sessionId === 'e-1' && /Review the Verified tasks/.test(run.text)
+    );
+    assert.ok(reviewRun);
+    assert.match(reviewRun.text, /testVerdict: pass/);
 
     const mergedFirst = JSON.parse(
       await tasks.taskMerge({ taskId: first.id }, { sessionId: 'e-1' })

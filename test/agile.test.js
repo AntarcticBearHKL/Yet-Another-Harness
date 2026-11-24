@@ -16,7 +16,7 @@ test('agile store covers boards, notes, digest and moves', async () => {
     assert.match(board.label, /^Iteration /);
     assert.deepEqual(
       store.state(board.id).columns.map((column) => column.id),
-      ['design', 'backlog', 'progress', 'blocked', 'finished', 'merged']
+      ['design', 'backlog', 'progress', 'blocked', 'finished', 'verified', 'merged']
     );
 
     const design = store.createTask({
@@ -70,8 +70,14 @@ test('agile store covers boards, notes, digest and moves', async () => {
     assert.equal(finished.reviewState, 'pending');
     assert.throws(
       () => store.deleteTask(task.id, { actor: { type: 'human', id: null } }),
-      /Finished or merged tasks cannot be deleted/i
+      /Finished, verified or merged tasks cannot be deleted/i
     );
+
+    const verified = store.moveTask(task.id, 'verified', {
+      actor: { type: 'agent', id: 'tester' },
+    });
+    assert.equal(verified.column, 'verified');
+    assert.equal(verified.reviewState, 'pending');
 
     const merged = store.moveTask(task.id, 'merged', {
       actor: { type: 'agent', id: 'lead' },
@@ -86,7 +92,7 @@ test('agile store covers boards, notes, digest and moves', async () => {
     );
     assert.throws(
       () => store.deleteTask(task.id, { actor: { type: 'human', id: null } }),
-      /Finished or merged tasks cannot be deleted/i
+      /Finished, verified or merged tasks cannot be deleted/i
     );
 
     const rework = store.addNote(
@@ -147,13 +153,17 @@ test('the model catalog exposes only the simplified task tools', () => {
   const names = tools.definitions().map((definition) => definition.function.name);
   for (const name of [
     'design_write',
+    'architecture_write',
     'backlog_list',
     'backlog_add',
     'iteration_add',
     'task_block',
     'task_finish',
+    'test_report',
     'task_merge',
     'task_reject',
+    'report_write',
+    'question',
   ]) {
     assert.ok(names.includes(name), `${name} is exposed`);
   }
@@ -166,7 +176,6 @@ test('the model catalog exposes only the simplified task tools', () => {
     'mission_status',
     'mission_report',
     'worknode_result',
-    'question',
   ]) {
     assert.ok(!names.includes(removed), `${removed} should be removed`);
   }

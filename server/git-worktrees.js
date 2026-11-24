@@ -129,6 +129,59 @@ function createGitWorktreeService({ root }) {
     return { directories, branches };
   }
 
+  function prepareTestWorktree({ branches, sessionId, label, attempt = 1 }) {
+    const id = String(sessionId || '').trim();
+    const directories = [];
+    const resultBranches = [];
+    if (!id) return { directories, branches: resultBranches };
+    for (const item of Array.isArray(branches) ? branches : []) {
+      const repo = repoRoot(item?.repo) || ensureRepo(item?.repo);
+      const sourceBranch = String(item?.branch || '').trim();
+      if (!repo || !sourceBranch) continue;
+      const baseName = path.basename(repo) || 'repo';
+      const testBranch = `yah/test-${slug(label)}-${id.slice(0, 8)}-${Math.max(
+        1,
+        Number(attempt) || 1
+      )}`;
+      const worktree = path.join(
+        baseRoot,
+        `test-${id}`,
+        `${slug(baseName)}-${Math.max(1, Number(attempt) || 1)}`
+      );
+      if (fs.existsSync(worktree)) {
+        directories.push(worktree);
+        resultBranches.push({
+          repo,
+          branch: testBranch,
+          baseBranch: sourceBranch,
+          worktree,
+        });
+        continue;
+      }
+      fs.mkdirSync(path.dirname(worktree), { recursive: true });
+      const add = git(
+        ['worktree', 'add', '-b', testBranch, worktree, sourceBranch],
+        repo
+      );
+      if (add.status === 0) {
+        directories.push(worktree);
+        resultBranches.push({
+          repo,
+          branch: testBranch,
+          baseBranch: sourceBranch,
+          worktree,
+        });
+      } else {
+        console.error(
+          'git test worktree add failed',
+          repo,
+          add.stderr || add.error
+        );
+      }
+    }
+    return { directories, branches: resultBranches };
+  }
+
   function commitWorktree(directories, message) {
     const results = [];
     for (const directory of Array.isArray(directories) ? directories : []) {
@@ -237,6 +290,7 @@ function createGitWorktreeService({ root }) {
     ensureRepo,
     ensureRepositories,
     prepareWorktree,
+    prepareTestWorktree,
     commitWorktree,
     branchSummary,
     mergeBranches,

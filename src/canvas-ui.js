@@ -815,7 +815,7 @@ function canvasSystemNodeStatus(node) {
     if (status === 'read') return { label: '已阅读', tone: 'idle' };
     if (status === 'archived') return { label: '已归档', tone: 'idle' };
     return {
-      label: `收集中 ${counts.finished || 0}/${counts.total || 0}`,
+      label: `收集中 ${counts.merged || 0}/${counts.total || 0}`,
       tone: 'running',
     };
   }
@@ -857,19 +857,19 @@ function canvasSystemNodeSummary(node) {
   if (node?.type === 'agile') {
     const counts = node.payload?.counts || {};
     const label = node.payload?.boardLabel || 'Agile';
-    return `${label} · Backlog ${counts.backlog || 0} · 进行 ${counts.progress || 0} · 阻塞 ${counts.blocked || 0} · 完成 ${counts.finished || 0}`;
+    return `${label} · Backlog ${counts.backlog || 0} · 进行 ${counts.progress || 0} · 阻塞 ${counts.blocked || 0} · 待测试 ${counts.finished || 0} · 待合并 ${counts.verified || 0}`;
   }
   if (node?.type === 'orchestrator') {
     const payload = node.payload || {};
     const boards = Array.isArray(payload.boardIds) ? payload.boardIds.length : 0;
-    const engineers = Number(payload.engineerCount) || 2;
+    const engineers = Number(payload.engineerCount) || 3;
     return `${engineers} 个工程师 · ${
       boards ? `${boards} 个 mission` : '等待 Manager 下达 mission'
     }`;
   }
   if (node?.type === 'report') {
     const counts = node.payload?.counts || {};
-    return `${counts.finished || 0}/${counts.total || 0} 完成 · ${
+    return `${counts.merged || 0}/${counts.total || 0} 已合并 · ${
       counts.blocked || 0
     } 阻塞`;
   }
@@ -1045,7 +1045,9 @@ function buildSystemNodeCard(node, options = {}) {
       ['Backlog', String(counts.backlog || 0)],
       ['In Progress', String(counts.progress || 0)],
       ['Blocked', String(counts.blocked || 0)],
-      ['Finished', String(counts.finished || 0)],
+      ['Testing', String(counts.finished || 0)],
+      ['Verified', String(counts.verified || 0)],
+      ['Merged', String(counts.merged || 0)],
     ]) {
       const row = el('div', 'system-node-field');
       row.append(el('span', 'system-node-field-label', label));
@@ -2695,8 +2697,8 @@ async function addManagerEngineer(managerId) {
   );
   if (!manager) return;
   const current = Math.max(
-    2,
-    Math.min(12, Math.round(Number(manager.nodeConfig?.engineerCount) || 2))
+    3,
+    Math.min(12, Math.round(Number(manager.nodeConfig?.engineerCount) || 3))
   );
   if (current >= 12) return;
   manager.nodeConfig = {
@@ -2788,10 +2790,10 @@ function openCanvasNodeMenu(sessionId, x, y) {
       },
     ];
     const engineerCount = Math.max(
-      2,
+      3,
       Math.min(
         12,
-        Math.round(Number(session.nodeConfig?.engineerCount) || 2)
+        Math.round(Number(session.nodeConfig?.engineerCount) || 3)
       )
     );
     if (engineerCount < 12) {

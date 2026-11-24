@@ -196,6 +196,7 @@ const TOOL_I18N = {
     mode: '模式：blocking 等待用户回答；timed 超时后自动提交',
     questions: '要提问的问题（1-5 个）',
     timeout_seconds: '定时模式：自动提交前的秒数（5-600，默认 60）',
+    timeoutSeconds: '定时模式：自动提交前的秒数（5-600，默认 60）',
   }),
   glob: t('文件匹配', '按 glob 模式快速匹配文件（如 **/*.js），按修改时间排序返回路径。'),
   grep: t('内容搜索', '使用正则表达式在文件内容中搜索；可用 include 过滤文件，支持 content、files_with_matches、count 三种输出。', {
@@ -244,7 +245,7 @@ const TOOL_I18N = {
     durationMs: '耗时（毫秒）',
   }),
 
-  design_write: t('写入设计案', 'Manager 专用。把用户要求整理成严谨的设计案并写入「设计案」列；主工程师会先向用户确认需求，再拆成 Backlog。', {
+  design_write: t('写入设计案', 'Manager 专用。先用 question 向用户问清需求，再把用户要求整理成严谨的设计案并写入「设计案」列；架构师会补技术方案，再拆成 Backlog。', {
     iterationId: '迭代 ID（省略时使用或创建当前迭代）',
     designId: '要修订的设计案任务 ID（省略时新建）',
     title: '设计案标题',
@@ -254,17 +255,30 @@ const TOOL_I18N = {
     requirements: '明确的功能需求',
     constraints: '技术或产品约束',
     outOfScope: '明确的非目标',
-    openQuestions: '需要主工程师向用户确认的问题',
+    answers: '已确认的用户回答',
+    openQuestions: '仍待架构师确认的问题',
     acceptance: '验收标准与完成定义',
+  }),
+  architecture_write: t('写入技术方案', '主工程师专用。把技术架构追加到设计案，包含模块、接口、数据、风险、测试策略和回滚方案。', {
+    designId: '设计案任务 ID（默认当前设计案）',
+    summary: '架构摘要与选择的技术方案',
+    modules: '模块、职责与边界',
+    interfaces: 'API、事件、数据契约和调用流程',
+    data: '数据模型、存储与迁移',
+    security: '安全、权限与隐私',
+    performance: '性能与扩展性',
+    testStrategy: '测试策略、环境与验收检查',
+    risks: '风险、权衡与回滚方案',
+    alternatives: '考虑过的备选方案',
   }),
   backlog_list: t('任务列表', 'Manager 或主工程师查看当前迭代、设计案及所有任务状态、分支和结果。', {
     iterationId: '迭代 ID（省略时查看当前迭代）',
   }),
-  backlog_add: t('添加 Backlog', '主工程师专用。把设计案拆成互相独立的实现任务写入 Backlog；需求必须先确认。', {
+  backlog_add: t('添加 Backlog', '主工程师专用。把设计案拆成可独立验收的实现任务写入 Backlog，可声明依赖和测试计划。', {
     iterationId: '迭代 ID（省略时使用设计案所在迭代）',
     designId: '设计案任务 ID（默认当前设计案）',
     goal: 'Mission 目标，用于 Report Hub',
-    tasks: '独立的 Backlog 任务列表',
+    tasks: 'Backlog 任务列表',
   }),
   iteration_add: t('添加迭代', '创建一个新的 Agile 迭代并返回 ID。', {
     goal: '迭代目标 / Mission 名称',
@@ -278,7 +292,7 @@ const TOOL_I18N = {
     mode: '仅问卷：blocking 或 timed',
     timeoutSeconds: '仅问卷：定时模式的秒数',
   }),
-  task_finish: t('完成任务', '提交当前任务结果。工程师任务会提交到自己的 Git 分支并进入 Finished，等待主工程师检查与合并；设计案则标记为已拆解。', {
+  task_finish: t('完成任务', '提交当前任务结果。工程师任务会提交到自己的 Git 分支并进入 Testing，等待测试员验证；设计案则标记为已拆解。', {
     taskId: '任务 ID（默认当前任务）',
     summary: '完成内容摘要',
     how: '如何完成任务的步骤',
@@ -290,13 +304,35 @@ const TOOL_I18N = {
     blockers: '仍然存在的阻塞',
     followUps: '建议的后续工作',
   }),
-  task_merge: t('合并任务', '主工程师专用。检查 Finished 任务后合并其 Git 分支，并把任务移到 Merged。', {
-    taskId: 'Finished 任务 ID',
+  test_report: t('提交测试报告', '测试员专用。记录独立验证结果：通过则进入 Verified 等待架构师合并，失败则回到 Backlog 由原工程师返工。', {
+    taskId: '任务 ID（默认当前测试任务）',
+    verdict: '结论：pass 或 fail',
+    summary: '一句话结论',
+    cases: '测试用例与结果',
+    commands: '执行过的命令',
+    evidence: '日志、截图或链接等证据',
+    failures: '失败现象与复现步骤',
+    notes: '给架构师或工程师的说明',
+  }),
+  task_merge: t('合并任务', '主工程师专用。检查 Verified 任务和测试报告后，合并实现与测试分支，并把任务移到 Merged。', {
+    taskId: 'Verified 任务 ID',
     summary: '检查与合并摘要',
   }),
-  task_reject: t('打回任务', '主工程师专用。把不满足设计或验收标准的 Finished 任务打回 Backlog 重做。', {
-    taskId: 'Finished 任务 ID',
+  task_reject: t('打回任务', '主工程师专用。把不满足设计或验收标准的 Verified 任务打回 Backlog 重做。', {
+    taskId: 'Verified 任务 ID',
     reason: '不完整或不正确之处',
+  }),
+  report_write: t('写人话报告', 'Manager 专用。任务完成后生成给非技术读者看的报告，包含例子、怎么试用、验证了什么和还没做什么。', {
+    title: '报告标题',
+    summary: '一句话说明发生了什么',
+    requested: '用户最初的要求',
+    changes: '现在能做什么',
+    examples: '具体例子或前后对比',
+    howToTry: '用户试用步骤',
+    verification: '验证了什么（用非技术语言）',
+    notDone: '还没做或仍有风险的部分',
+    nextSteps: '建议的下一步',
+    technicalDetails: '给工程师看的技术细节',
   }),
 
   agile_list_boards: t('敏捷迭代列表', '列出所有迭代及任务数和日期。'),
@@ -304,17 +340,17 @@ const TOOL_I18N = {
   agile_create_board: t('创建敏捷迭代', '在唯一的主线中创建下一个空白迭代，自动编号。'),
   agile_delete_board: t('删除敏捷迭代', '删除迭代及其任务。'),
   agile_list_tasks: t('敏捷任务列表', '列出迭代中的任务，可按列、搜索、领取人、待消化备注或就绪状态过滤。', {
-    column: '列 ID 或名称：backlog、progress、blocked、finished',
+    column: '列 ID 或名称：backlog、progress、blocked、testing、verified、merged',
   }),
   agile_get_task: t('获取敏捷任务', '获取任务描述、备注、领取状态、阻塞原因和列历史。'),
   agile_create_task: t('创建敏捷任务', '在 Backlog 中创建任务；备注只能由人添加。'),
   agile_create_tasks: t('批量创建敏捷任务', '一次创建多个 Backlog 任务。'),
   agile_update_task: t('更新敏捷任务', '修改标题、描述、负责人、角色、验收标准、依赖或阻塞原因；不能修改备注。'),
-  agile_move_task: t('移动敏捷任务', '把任务移动到四个固定列之一；有未消化备注时不能进入进行中。', {
-    column: '目标列：backlog、progress、blocked、finished',
+  agile_move_task: t('移动敏捷任务', '把任务移动到固定列之一；有未消化备注时不能进入进行中。', {
+    column: '目标列：backlog、progress、blocked、testing、verified、merged',
   }),
   agile_move_tasks: t('批量移动敏捷任务', '把多个任务移动到同一列，逐项检查备注和领取状态。', {
-    column: '目标列：backlog、progress、blocked、finished',
+    column: '目标列：backlog、progress、blocked、testing、verified、merged',
   }),
   agile_delete_task: t('删除敏捷任务', '删除任务；已完成任务不能删除。'),
   agile_set_blocked_reason: t('设置阻塞原因', '记录任务阻塞原因，传空字符串可清除。'),
@@ -324,7 +360,7 @@ const TOOL_I18N = {
   agile_claim_next: t('领取下一个任务', '领取下一个就绪的 Backlog 任务。'),
   agile_digest_notes: t('消化任务备注', '把人的备注折叠进描述并标记为已消化；这是清除待消化状态的唯一方式。'),
   agile_undigest_notes: t('取消消化备注', '移除消化标记并重新设为待消化。'),
-  agile_list_columns: t('敏捷列列表', '列出四个固定列及其顺序。'),
+  agile_list_columns: t('敏捷列列表', '列出固定列及其顺序。'),
   agile_get_board_snapshot: t('敏捷看板快照', '获取完整看板快照：迭代、列、任务、设置和序列号。'),
   agile_list_events: t('敏捷事件列表', '按时间从旧到新列出最近的敏捷事件（审计记录）。'),
   agile_wait_for_event: t('等待敏捷事件', '等待指定序列号之后的下一个敏捷事件，最多 30 秒。'),

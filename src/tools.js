@@ -76,18 +76,22 @@ async function execute(name, args, context = null) {
       patch: files.patchTool,
       shell: processTools.shellTool,
       interactive_bash: processTools.shellTool,
+      question: agentTools.questionTool,
       webfetch: webTools.webfetchTool,
       background_start: processTools.backgroundStart,
       background_list: processTools.backgroundList,
       background_stop: processTools.backgroundStop,
       design_write: taskTools.designWrite,
+      architecture_write: taskTools.architectureWrite,
       backlog_list: taskTools.backlogList,
       backlog_add: taskTools.backlogAdd,
       iteration_add: taskTools.iterationAdd,
       task_block: taskTools.taskBlock,
       task_finish: taskTools.taskFinish,
+      test_report: taskTools.testReport,
       task_merge: taskTools.taskMerge,
       task_reject: taskTools.taskReject,
+      report_write: taskTools.reportWrite,
       monitor_start: processTools.monitorStart,
       monitor_stop: processTools.monitorStop,
       monitor_list: processTools.monitorList,
@@ -214,6 +218,21 @@ function statusLabel(name, args) {
     return value.title
       ? `design_write: ${String(value.title).slice(0, 50)}`
       : 'design_write';
+  }
+  if (name === 'architecture_write') {
+    return value.designId
+      ? `architecture_write: ${String(value.designId).slice(0, 50)}`
+      : 'architecture_write';
+  }
+  if (name === 'test_report') {
+    return value.verdict
+      ? `test_report: ${String(value.verdict).slice(0, 20)}`
+      : 'test_report';
+  }
+  if (name === 'report_write') {
+    return value.title
+      ? `report_write: ${String(value.title).slice(0, 50)}`
+      : 'report_write';
   }
   if (name === 'backlog_add') {
     const count = Array.isArray(value.tasks) ? value.tasks.length : 0;

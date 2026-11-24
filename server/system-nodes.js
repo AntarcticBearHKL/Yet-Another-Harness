@@ -56,8 +56,19 @@ function taskPrompt(task, goal, roleName = '') {
   if (task.acceptance) {
     lines.push('', `Acceptance: ${task.acceptance}`);
   }
+  if (task.testPlan) {
+    lines.push('', `Test plan: ${task.testPlan}`);
+  }
   if (task.reviewNote) {
     lines.push('', `Lead review rejected the previous attempt: ${task.reviewNote}`);
+  }
+  if (task.testVerdict === 'fail' && task.testReport) {
+    lines.push('', '# Tester feedback');
+    if (task.testReport.summary) lines.push(task.testReport.summary);
+    const failures = Array.isArray(task.testReport.failures)
+      ? task.testReport.failures
+      : [];
+    for (const failure of failures) lines.push(`- ${failure}`);
   }
   if (Array.isArray(task.keyPoints) && task.keyPoints.length > 0) {
     lines.push('', 'Notes:');
@@ -67,8 +78,9 @@ function taskPrompt(task, goal, roleName = '') {
   }
   lines.push(
     '',
-    'Work only in your assigned Git worktree and branch. Do not merge or switch the integration branch; the lead engineer merges your branch after review.',
-    'When the task is complete, call task_finish with summary, how, files, commands, tests and artifacts.',
+    'Work only in your assigned Git worktree and branch. Do not merge or switch the integration branch; the architect merges your branch after review.',
+    'When the task is complete, call task_finish with summary, how, files, commands, tests and artifacts. The task then moves to Testing for independent verification.',
+    'If the tester returns failures, fix them on the same branch and call task_finish again.',
     'If you need approval or an answer before continuing, call task_block with kind approval or question. The task becomes blocked, the user sees who sent it, and the orchestrator resumes this conversation after it is resolved.',
     `taskId: ${task.id}`
   );
@@ -78,7 +90,7 @@ function taskPrompt(task, goal, roleName = '') {
 function designPrompt(design, goal, answersText = '') {
   const lines = [
     `Mission: ${goal || design.title}`,
-    'You are the 主工程师. Do not implement product code.',
+    'You are the 主工程师 and technical architect. Do not implement product code.',
     '',
     '# 设计案',
     design.title,
@@ -87,18 +99,48 @@ function designPrompt(design, goal, answersText = '') {
     design.acceptance ? `\nAcceptance: ${design.acceptance}` : '',
     answersText ? `\n# 已确认的需求\n${answersText}` : '',
     '',
-    'First grill the user: call task_block with kind "question" and concrete questions about anything still ambiguous (scope, edge cases, UX, data, acceptance). Ask only high-value questions.',
-    'After the answers are confirmed, call backlog_add with a set of independent tasks. Every task must have a clear title, description, role and acceptance criteria. Do not create dependencies or leave implementation work in the design.',
-    'When the Backlog tasks are written, call task_finish for the design task with a summary of the decomposition.',
+    'First ask only the technical questions the product design cannot answer: call task_block with kind "question" and concrete questions about interfaces, data, edge cases, compatibility, performance, security and test strategy.',
+    'After the answers are confirmed, call architecture_write to publish the technical architecture. Include the chosen approach, modules, interfaces, data, security, performance, test strategy, risks and rollback.',
+    'Then call backlog_add with independent tasks. Every task must have a clear title, description, role, acceptance criteria and testPlan. Use dependsOn only for real dependencies.',
+    'When the architecture and Backlog tasks are written, call task_finish for the design task with a summary of the decomposition.',
     `designTaskId: ${design.id}`,
   ];
+  return lines.filter(Boolean).join('\n');
+}
+
+function testPrompt(task, goal) {
+  const lines = [
+    `Mission: ${goal || task.title}`,
+    'You are the 测试员. Verify the implementation independently; do not change product code unless the task explicitly asks for it.',
+    '',
+    `Task: ${task.title}`,
+    task.description || '(no description)',
+    task.acceptance ? `\nAcceptance: ${task.acceptance}` : '',
+    task.testPlan ? `\nTest plan: ${task.testPlan}` : '',
+    '',
+    '# Implementation',
+  ];
+  const branches = Array.isArray(task.gitBranches) ? task.gitBranches : [];
+  for (const branch of branches) {
+    lines.push(`- ${branch.branch}${branch.worktree ? ` (${branch.worktree})` : ''}`);
+  }
+  if (task.result?.summary) {
+    lines.push('', `Engineer summary: ${task.result.summary}`);
+  }
+  lines.push(
+    '',
+    'The implementation branch is checked out in the test worktree provided to you. Run the relevant tests and commands, inspect the code, and try the acceptance criteria.',
+    'You may add or adjust test files. Do not merge or switch the integration branch.',
+    'Call test_report with verdict pass or fail, summary, cases, commands, evidence and failures. Pass moves the task to Verified; fail returns it to the original engineer.',
+    `taskId: ${task.id}`
+  );
   return lines.filter(Boolean).join('\n');
 }
 
 function leadReviewPrompt(tasks, goal) {
   const lines = [
     `Mission: ${goal || 'Mission'}`,
-    'You are the 主工程师. Review the Finished tasks below, check the code and acceptance criteria, and merge the worker branches.',
+    'You are the 主工程师 and technical architect. Review the Verified tasks below, check the code, acceptance criteria and test report, and merge the implementation and test branches.',
     '',
   ];
   tasks.forEach((task, index) => {
@@ -107,7 +149,16 @@ function leadReviewPrompt(tasks, goal) {
     if (task.acceptance) lines.push(`- acceptance: ${task.acceptance}`);
     const result = task.result || {};
     if (result.summary) lines.push(`- summary: ${result.summary}`);
-    const branches = Array.isArray(task.gitBranches) ? task.gitBranches : [];
+    const test = task.testReport || {};
+    if (task.testVerdict) lines.push(`- testVerdict: ${task.testVerdict}`);
+    if (test.summary) lines.push(`- testSummary: ${test.summary}`);
+    if (Array.isArray(test.failures) && test.failures.length > 0) {
+      lines.push(`- testFailures: ${test.failures.join('; ')}`);
+    }
+    const branches = [
+      ...(Array.isArray(task.gitBranches) ? task.gitBranches : []),
+      ...(Array.isArray(task.testBranches) ? task.testBranches : []),
+    ];
     if (branches.length > 0) {
       lines.push(
         `- branches: ${branches.map((branch) => branch.branch).join(', ')}`
@@ -116,10 +167,37 @@ function leadReviewPrompt(tasks, goal) {
     lines.push('');
   });
   lines.push(
-    'For each task, inspect the relevant code and run tests or builds with shell when useful.',
-    'If it meets the design and acceptance, call task_merge with its taskId. The tool merges the branch and moves the task to Merged.',
+    'For each task, inspect the relevant code, the test report, and run tests or builds with shell when useful.',
+    'If it meets the design, acceptance criteria and test report, call task_merge with its taskId. The tool merges the implementation and test branches and moves the task to Merged.',
     'If it is incomplete or incorrect, call task_reject with a concrete reason; it returns to Backlog.',
     'Do not modify product code. Do not call task_merge without checking.'
+  );
+  return lines.join('\n');
+}
+
+function reportPrompt(goal, tasks, report = null) {
+  const lines = [
+    `Mission: ${goal || 'Mission'}`,
+    'You are the product manager. The mission is complete enough to report. Write the final report for the user with report_write.',
+    '',
+    '# Tasks',
+  ];
+  for (const task of tasks) {
+    if (task.kind === 'design') continue;
+    lines.push(`## ${task.title}`);
+    lines.push(`- status: ${task.column}`);
+    lines.push(`- role: ${task.role || 'general'}`);
+    if (task.result?.summary) lines.push(`- result: ${task.result.summary}`);
+    if (task.testVerdict) lines.push(`- test: ${task.testVerdict}`);
+    if (task.testReport?.summary) {
+      lines.push(`- test summary: ${task.testReport.summary}`);
+    }
+    lines.push('');
+  }
+  lines.push(
+    'Write for a non-technical reader. Use short sections, concrete examples and before/after behavior. Say what the user asked for, what now works, how to try it, what was verified, what is not done, and what comes next. Keep file paths and commands out of the main narrative; put them in technicalDetails.',
+    'Call report_write once with the final content. Do not modify code or tasks.',
+    `reportId: ${report?.id || ''}`
   );
   return lines.join('\n');
 }
@@ -128,7 +206,8 @@ function buildReportMarkdown(goal, tasks) {
   const statusLabel = (column) => {
     if (column === 'design') return '设计案';
     if (column === 'merged') return '已合并';
-    if (column === 'finished') return '待主工程师检查';
+    if (column === 'verified') return '测试通过，待合并';
+    if (column === 'finished') return '待测试';
     if (column === 'blocked') return '阻塞';
     if (column === 'progress') return '进行中';
     return '待处理';
@@ -185,6 +264,33 @@ function buildReportMarkdown(goal, tasks) {
         ...result.branches.map((item) => `- ${item}`)
       );
     }
+    const test = task.testReport && typeof task.testReport === 'object'
+      ? task.testReport
+      : null;
+    if (test) {
+      lines.push(
+        '',
+        '### 独立测试',
+        `- 结论：${task.testVerdict === 'pass' ? '通过' : '未通过'}`
+      );
+      if (test.summary) lines.push('', test.summary);
+      const cases = Array.isArray(test.cases) ? test.cases : [];
+      if (cases.length > 0) {
+        lines.push(
+          '',
+          ...cases.map((item) => {
+            if (item && typeof item === 'object') {
+              return `- ${item.name || 'case'}: ${item.status || 'unknown'}`;
+            }
+            return `- ${item}`;
+          })
+        );
+      }
+      const failures = Array.isArray(test.failures) ? test.failures : [];
+      if (failures.length > 0) {
+        lines.push('', '失败：', ...failures.map((item) => `- ${item}`));
+      }
+    }
     if (Array.isArray(result.blockers) && result.blockers.length > 0) {
       lines.push(
         '',
@@ -200,16 +306,65 @@ function buildReportMarkdown(goal, tasks) {
   return lines.join('\n');
 }
 
+function buildHumanReportMarkdown(input = {}) {
+  const lines = [`# ${text(input.title || '完成报告', 200)}`, ''];
+  const section = (heading, body) => {
+    if (body) lines.push(`## ${heading}`, '', body, '');
+  };
+  const list = (heading, values) => {
+    const items = strings(values, 50);
+    if (items.length > 0) {
+      lines.push(`## ${heading}`, '', ...items.map((item) => `- ${item}`), '');
+    }
+  };
+  section('一句话', text(input.summary || '', 4000));
+  section('你之前要什么', text(input.requested || '', 4000));
+  list('现在能做什么', input.changes);
+  list('例子', input.examples);
+  const howToTry = strings(input.howToTry, 30);
+  if (howToTry.length > 0) {
+    lines.push(
+      '## 怎么试',
+      '',
+      ...howToTry.map((item, index) => `${index + 1}. ${item}`),
+      ''
+    );
+  }
+  list('验证了什么', input.verification);
+  list('还没做 / 已知问题', input.notDone);
+  list('下一步', input.nextSteps);
+  const technical = text(input.technicalDetails || '', 12000).trim();
+  if (technical) {
+    lines.push(
+      '## 技术细节',
+      '',
+      '<details>',
+      '<summary>展开查看</summary>',
+      '',
+      technical,
+      '',
+      '</details>',
+      ''
+    );
+  }
+  return lines.join('\n').trim();
+}
+
 function reportCounts(tasks) {
   const workTasks = tasks.filter((task) => task.kind !== 'design');
   return {
     total: workTasks.length,
     design: tasks.filter((task) => task.kind === 'design').length,
     finished: workTasks.filter((task) => task.column === 'finished').length,
+    verified: workTasks.filter((task) => task.column === 'verified').length,
     merged: workTasks.filter((task) => task.column === 'merged').length,
     blocked: workTasks.filter((task) => task.column === 'blocked').length,
     active: workTasks.filter(
-      (task) => task.column === 'progress' || task.column === 'backlog'
+      (task) =>
+        task.column === 'progress' ||
+        task.column === 'backlog' ||
+        task.column === 'finished' ||
+        task.column === 'verified'
     ).length,
   };
 }
@@ -223,6 +378,7 @@ function createSystemNodeService({
   createEngineer,
   closeEngineer,
   ensureWorktree,
+  prepareTestWorktree,
   commitWorktree,
   branchSummary,
   getAgent,
@@ -307,8 +463,8 @@ function createSystemNodeService({
 
   function managerEngineerCount(manager) {
     return Math.max(
-      2,
-      Math.min(12, Math.round(Number(manager?.nodeConfig?.engineerCount) || 2))
+      3,
+      Math.min(12, Math.round(Number(manager?.nodeConfig?.engineerCount) || 3))
     );
   }
 
@@ -507,6 +663,7 @@ function createSystemNodeService({
             progress: 0,
             blocked: 0,
             finished: 0,
+            verified: 0,
             merged: 0,
           },
           steps: [
@@ -535,6 +692,7 @@ function createSystemNodeService({
         progress: workTasks.filter((task) => task.column === 'progress').length,
         blocked: workTasks.filter((task) => task.column === 'blocked').length,
         finished: workTasks.filter((task) => task.column === 'finished').length,
+        verified: workTasks.filter((task) => task.column === 'verified').length,
         merged: workTasks.filter((task) => task.column === 'merged').length,
       };
       const boardId = snapshot.board?.id || null;
@@ -549,6 +707,7 @@ function createSystemNodeService({
         current.progress === counts.progress &&
         current.blocked === counts.blocked &&
         current.finished === counts.finished &&
+        current.verified === counts.verified &&
         current.merged === counts.merged;
       if (!same) {
         node = updateNode(node.id, {
@@ -796,7 +955,8 @@ function createSystemNodeService({
     const terminal =
       counts.total > 0 && counts.merged + counts.blocked === counts.total;
     const nextGoal = goal || node.payload?.goal || 'Mission';
-    const reportMarkdown = buildReportMarkdown(nextGoal, tasks);
+    const humanReport = String(node.payload?.humanReport || '').trim();
+    const reportMarkdown = humanReport || buildReportMarkdown(nextGoal, tasks);
     const status = terminal ? 'ready' : 'collecting';
     const updated = updateNode(node.id, {
       status,
@@ -904,7 +1064,9 @@ function createSystemNodeService({
     const isDesign = task.kind === 'design';
     if (
       task.result &&
-      (isDesign ? task.designState === 'done' : task.column === 'finished')
+      (isDesign
+        ? task.designState === 'done'
+        : task.column === 'finished' || task.column === 'verified')
     ) {
       return { ok: true, duplicate: true, taskId, reportId: task.reportId || null };
     }
@@ -946,6 +1108,14 @@ function createSystemNodeService({
       reportId: report?.id || '',
       gitBranches: committed.branches,
       attempts: (Number(task.attempts) || 0) + 1,
+      testVerdict: '',
+      testReport: null,
+      testState: 'pending',
+      testNodeId: '',
+      testedBy: '',
+      testedAt: null,
+      testBranches: [],
+      reviewNote: '',
       actor: workerActor,
     });
     if (isDesign) {
@@ -979,12 +1149,145 @@ function createSystemNodeService({
     return { ok: true, taskId, status, reportId: report?.id || null };
   }
 
+  function submitTestResult(session, input = {}) {
+    if (!session || session.nodeRole !== 'work' || !session.managerId) {
+      throw new Error('test_report can only be called by a work node');
+    }
+    const agile = getAgileStore(session.managerId);
+    const taskId = String(
+      input.taskId || session.nodeConfig?.taskId || ''
+    ).trim();
+    if (!taskId) throw new Error('test_report requires a taskId');
+    const task = agile.getTask(taskId);
+    if (!task || task.kind === 'design') {
+      throw new Error('test_report requires an implementation task');
+    }
+    if (task.column !== 'finished') {
+      throw new Error('test_report requires a task in Testing');
+    }
+    if (task.testNodeId && task.testNodeId !== session.id) {
+      throw new Error('test_report can only be called by the assigned tester');
+    }
+    const verdict = String(input.verdict || '').trim().toLowerCase();
+    if (verdict !== 'pass' && verdict !== 'fail') {
+      throw new Error('test_report verdict must be pass or fail');
+    }
+    const committed = commitSessionChanges(session, task);
+    const testReport = {
+      verdict,
+      summary: text(input.summary || '', 4000),
+      cases: Array.isArray(input.cases) ? input.cases.slice(0, 100) : [],
+      commands: strings(input.commands, 200),
+      evidence: strings(input.evidence, 200),
+      failures: strings(input.failures, 100),
+      notes: text(input.notes || '', 4000),
+      testedBy: session.id,
+      testedAt: new Date().toISOString(),
+    };
+    const actor = { type: 'agent', id: session.id };
+    agile.updateTask(taskId, {
+      testVerdict: verdict,
+      testReport,
+      testBranches: committed.branches,
+      testState: verdict === 'pass' ? 'passed' : 'failed',
+      testNodeId: session.id,
+      testedBy: session.id,
+      testedAt: testReport.testedAt,
+      actor,
+    });
+    if (verdict === 'pass') {
+      agile.moveTask(taskId, 'verified', { actor });
+      agile.updateTask(taskId, {
+        reviewState: 'pending',
+        reviewNote: '',
+        actor,
+      });
+    } else {
+      agile.moveTask(taskId, 'backlog', { actor });
+      agile.updateTask(taskId, {
+        reviewState: null,
+        reviewNote: `测试未通过：${testReport.summary || 'see test report'}`,
+        isRework: true,
+        actor,
+      });
+    }
+    const report = reportNodeForTask({
+      ...task,
+      managerId: session.managerId,
+    });
+    if (report) {
+      appendStep(
+        report,
+        `测试${verdict === 'pass' ? '通过' : '未通过'}：${task.title}`,
+        {
+          kind: 'test',
+          taskId: task.id,
+          verdict,
+        }
+      );
+      refreshReport(report, task.boardId, report.payload?.goal || null);
+    }
+    return {
+      ok: true,
+      taskId,
+      verdict,
+      column: verdict === 'pass' ? 'verified' : 'backlog',
+      reportId: report?.id || null,
+    };
+  }
+
+  function writeHumanReport(manager, input = {}) {
+    if (!manager || manager.nodeRole !== 'manager') {
+      throw new Error('report_write can only be called by a manager node');
+    }
+    const agile = getAgileStore(manager.id);
+    const state = agile.state();
+    const boardId = state.activeBoardId;
+    let report = findNode(
+      manager.id,
+      'report',
+      (item) => item.missionId === boardId
+    );
+    if (!report) {
+      report = ensureReport(
+        manager,
+        boardId,
+        text(input.title || state.board?.goal || 'Mission', 200),
+        []
+      );
+    }
+    const markdown = buildHumanReportMarkdown(input);
+    const updated = updateNode(report.id, {
+      status: 'ready',
+      payload: {
+        ...(report.payload || {}),
+        humanReport: markdown,
+        reportMarkdown: markdown,
+        reportGeneratedAt: Date.now(),
+        reportGeneratedBy: manager.id,
+        reportState: 'done',
+      },
+    });
+    appendStep(updated, '人话报告已生成', { kind: 'report' });
+    return {
+      ok: true,
+      reportId: updated.id,
+      title: text(input.title || '', 200),
+      reportMarkdown: markdown,
+    };
+  }
+
   function findWorkTask(session, agile) {
     const directId = String(session.nodeConfig?.taskId || '').trim();
     if (directId) {
       try {
         const direct = agile.getTask(directId);
-        if (direct && direct.workNodeId === session.id) return direct;
+        if (
+          direct &&
+          (direct.workNodeId === session.id || direct.testNodeId === session.id)
+        ) {
+          return direct;
+        }
       } catch {
         /* fall through to the workNodeId lookup */
       }
@@ -995,10 +1298,12 @@ function createSystemNodeService({
         const tasks = agile.snapshot(iteration.id).tasks || [];
         const task = tasks.find(
           (item) =>
-            item.workNodeId === session.id &&
-            (item.column === 'progress' ||
-              item.column === 'blocked' ||
-              (item.kind === 'design' && item.column === 'design'))
+            (item.workNodeId === session.id &&
+              (item.column === 'progress' ||
+                item.column === 'blocked' ||
+                (item.kind === 'design' && item.column === 'design'))) ||
+            (item.testNodeId === session.id &&
+              (item.column === 'finished' || item.column === 'blocked'))
         );
         if (task) return task;
       }
@@ -1044,14 +1349,21 @@ function createSystemNodeService({
         throw new Error('design is already blocked');
       }
     } else {
-      if (freshTask.column === 'finished') {
+      if (
+        freshTask.column === 'finished' &&
+        freshTask.testNodeId !== session.id
+      ) {
         throw new Error('task is already finished');
       }
       if (freshTask.column === 'blocked') {
         throw new Error('task is already blocked');
       }
     }
-    if (freshTask.workNodeId && freshTask.workNodeId !== session.id) {
+    if (
+      freshTask.workNodeId &&
+      freshTask.workNodeId !== session.id &&
+      freshTask.testNodeId !== session.id
+    ) {
       throw new Error('task is assigned to another worker');
     }
     rememberWorkTask(session, freshTask);
@@ -1079,6 +1391,12 @@ function createSystemNodeService({
   }
 
   function resumePrompt(task, node, outcome) {
+    const isTester = Boolean(
+      task.kind !== 'design' &&
+        task.testNodeId &&
+        node.sessionId === task.testNodeId
+    );
+    const finishTool = isTester ? 'test_report with verdict pass or fail' : 'task_finish';
     const lines = [
       '[Task resumed]',
       `Task: ${task.title}`,
@@ -1091,18 +1409,18 @@ function createSystemNodeService({
       lines.push(
         outcome.approved ? 'Approval: approved' : 'Approval: denied',
         outcome.reason ? `Reason: ${outcome.reason}` : '',
-        'Continue the task. If you still need approval or an answer, call task_block again. When done, call task_finish.'
+        `Continue the task. If you still need approval or an answer, call task_block again. When done, call ${finishTool}.`
       );
     } else {
       if (outcome.timedOut) {
         lines.push(
           'Questionnaire: no answer before the timer expired.',
-          'Continue with your best judgment. When done, call task_finish.'
+          `Continue with your best judgment. When done, call ${finishTool}.`
         );
       } else if (outcome.cancelled) {
         lines.push(
           'Questionnaire: dismissed without an answer.',
-          'Continue with your best judgment. When done, call task_finish.'
+          `Continue with your best judgment. When done, call ${finishTool}.`
         );
       } else {
         const questions = Array.isArray(node.payload?.questions)
@@ -1120,13 +1438,13 @@ function createSystemNodeService({
           );
         });
         lines.push(
-          'Continue the task with these answers. If you still need input, call task_block again. When done, call task_finish.'
+          `Continue the task with these answers. If you still need input, call task_block again. When done, call ${finishTool}.`
         );
       }
     }
     if (task.kind === 'design') {
       lines.push(
-        'You are the lead engineer. After confirming the requirements, call backlog_add to create the independent Backlog tasks, then call task_finish on this design task.'
+        'You are the architect. After confirming the requirements, call architecture_write, then backlog_add to create the Backlog tasks, then call task_finish on this design task.'
       );
     }
     return lines.filter(Boolean).join('\n');
@@ -1151,39 +1469,57 @@ function createSystemNodeService({
     if (task.blockedNodeId && task.blockedNodeId !== current.id) {
       return { resumed: false };
     }
-    const worker = task.workNodeId
-      ? store.getSession(task.workNodeId)
-      : current.sessionId
-        ? store.getSession(current.sessionId)
+    const worker = current.sessionId
+      ? store.getSession(current.sessionId)
+      : task.workNodeId
+        ? store.getSession(task.workNodeId)
         : null;
     const orchestrator = findNode(manager.id, 'orchestrator');
     const report = reportNodeForTask({ ...task, managerId: manager.id });
     const resolvedOutcome = outcome || blockedOutcomeFromNode(current);
+    const isTester = Boolean(
+      !isDesign && task.testNodeId && current.sessionId === task.testNodeId
+    );
     if (!worker || worker.archivedAt) {
       const releaseActor = {
         type: 'agent',
         id: task.claimedBy || manager.id,
       };
-      if (!isDesign) {
-        agile.moveTask(task.id, 'backlog', {
+      if (isTester) {
+        agile.moveTask(task.id, 'finished', { actor: releaseActor });
+        agile.updateTask(task.id, {
+          testState: 'pending',
+          testNodeId: '',
+          blockedReason: '',
+          blockedBy: '',
+          blockedKind: '',
+          blockedNodeId: '',
           actor: releaseActor,
         });
-        agile.releaseTask(task.id, releaseActor);
+      } else {
+        if (!isDesign) {
+          agile.moveTask(task.id, 'backlog', {
+            actor: releaseActor,
+          });
+          agile.releaseTask(task.id, releaseActor);
+        }
+        agile.updateTask(task.id, {
+          designState: isDesign ? 'pending' : task.designState,
+          workNodeId: '',
+          blockedReason: '',
+          blockedBy: '',
+          blockedKind: '',
+          blockedNodeId: '',
+          actor: releaseActor,
+        });
       }
-      agile.updateTask(task.id, {
-        designState: isDesign ? 'pending' : task.designState,
-        workNodeId: '',
-        blockedReason: '',
-        blockedBy: '',
-        blockedKind: '',
-        blockedNodeId: '',
-        actor: releaseActor,
-      });
       appendStep(
         orchestrator,
         isDesign
           ? `解除阻塞：${task.title} → 设计案（主工程师不可用）`
-          : `解除阻塞：${task.title} → Backlog（原工程师不可用）`,
+          : isTester
+            ? `解除阻塞：${task.title} → Testing（测试员不可用）`
+            : `解除阻塞：${task.title} → Backlog（原工程师不可用）`,
         {
           kind: 'unblock',
           taskId: task.id,
@@ -1193,10 +1529,18 @@ function createSystemNodeService({
       return { resumed: false, requeued: true, taskId: task.id };
     }
     const workerActor = { type: 'agent', id: task.claimedBy || worker.id };
-    const agent = isDesign ? leadAgent() : workerAgentForRole(task.role);
+    const agent = isDesign
+      ? leadAgent()
+      : isTester
+        ? workerAgentForRole('tester')
+        : workerAgentForRole(task.role);
     if (isDesign) {
+      // Start the resumed run first; the orchestrator must not dispatch a
+      // second design run in the window before the run is registered.
+    } else if (isTester) {
+      agile.moveTask(task.id, 'finished', { actor: workerActor });
       agile.updateTask(task.id, {
-        designState: 'working',
+        testState: 'testing',
         blockedReason: '',
         blockedBy: '',
         blockedKind: '',
@@ -1216,8 +1560,20 @@ function createSystemNodeService({
         agentConfig: agent,
         reasoningEffort: store.loadSettings().reasoningEffort,
       });
+      if (isDesign) {
+        agile.updateTask(task.id, {
+          designState: 'working',
+          blockedReason: '',
+          blockedBy: '',
+          blockedKind: '',
+          blockedNodeId: '',
+          actor: workerActor,
+        });
+      }
     } catch (runError) {
-      if (!isDesign) {
+      if (isTester) {
+        agile.moveTask(task.id, 'finished', { actor: workerActor });
+      } else if (!isDesign) {
         agile.moveTask(task.id, 'backlog', { actor: workerActor });
         agile.releaseTask(task.id, workerActor);
       }
@@ -1596,10 +1952,11 @@ function createSystemNodeService({
             const agile = getAgileStore(current.managerId);
             const task = agile.getTask(taskId);
             if (
+              task.kind === 'design' ||
               task.column === 'blocked' ||
               task.column === 'finished' ||
-              task.column === 'merged' ||
-              (task.kind === 'design' && task.designState === 'done')
+              task.column === 'verified' ||
+              task.column === 'merged'
             ) {
               return;
             }
@@ -1685,12 +2042,13 @@ function createSystemNodeService({
           progress: workTasks.filter((task) => task.column === 'progress').length,
           blocked: workTasks.filter((task) => task.column === 'blocked').length,
           finished: workTasks.filter((task) => task.column === 'finished').length,
+          verified: workTasks.filter((task) => task.column === 'verified').length,
           merged: workTasks.filter((task) => task.column === 'merged').length,
         };
         const goal = payload.goals?.[boardId] || boardId;
         const updated = appendStep(
           orchestrator,
-          `扫描 ${goal}：设计 ${counts.design} · Backlog ${counts.backlog} · 进行 ${counts.progress} · 阻塞 ${counts.blocked} · 待合并 ${counts.finished} · 已合并 ${counts.merged}`,
+          `扫描 ${goal}：设计 ${counts.design} · Backlog ${counts.backlog} · 进行 ${counts.progress} · 阻塞 ${counts.blocked} · 待测试 ${counts.finished} · 待合并 ${counts.verified} · 已合并 ${counts.merged}`,
           { kind: 'scan' }
         );
         updateNode(updated.id, {
@@ -1791,12 +2149,156 @@ function createSystemNodeService({
         }
       }
 
-      // Lead engineer: review Finished tasks and merge their branches.
+      // Testers: verify Finished implementation tasks independently.
+      const testTasks = tasks.filter(
+        (task) =>
+          task.kind !== 'design' &&
+          task.column === 'finished' &&
+          task.autoDispatch !== false
+      );
+      for (const task of testTasks) {
+        if (
+          task.testState === 'testing' &&
+          task.testNodeId &&
+          !runner.activeRunForSession?.(task.testNodeId)
+        ) {
+          try {
+            agile.updateTask(task.id, {
+              testState: 'pending',
+              testNodeId: '',
+              claimedBy: '',
+              actor: { type: 'agent', id: orchestrator.id },
+            });
+          } catch {
+            /* ignore stale test reset failure */
+          }
+        }
+      }
+      const testable = testTasks.filter(
+        (task) => task.testState !== 'testing'
+      );
+      if (testable.length > 0) {
+        const idleTesters = workers.filter(
+          (engineer) => !runner.activeRunForSession?.(engineer.id)
+        );
+        let testerIndex = 0;
+        for (const task of testable) {
+          const tester = idleTesters.find(
+            (engineer, index) =>
+              index >= testerIndex && engineer.id !== task.workNodeId
+          );
+          if (!tester) {
+            appendStep(orchestrator, `等待独立测试员验证：${task.title}`, {
+              kind: 'scan',
+              taskId: task.id,
+            });
+            break;
+          }
+          testerIndex = idleTesters.indexOf(tester) + 1;
+          try {
+            const attempt = (Number(task.testAttempts) || 0) + 1;
+            const prepared =
+              typeof prepareTestWorktree === 'function'
+                ? prepareTestWorktree({
+                    branches: task.gitBranches,
+                    sessionId: tester.id,
+                    label: task.title,
+                    attempt,
+                  })
+                : { directories: [], branches: [] };
+            const testDirectories =
+              prepared.directories.length > 0
+                ? prepared.directories
+                : (Array.isArray(task.gitBranches) ? task.gitBranches : [])
+                    .map((branch) => branch.worktree)
+                    .filter(Boolean);
+            const testBranches =
+              prepared.branches.length > 0
+                ? prepared.branches
+                : (Array.isArray(task.gitBranches) ? task.gitBranches : []).map(
+                    (branch) => ({ ...branch })
+                  );
+            if (testDirectories.length === 0) {
+              appendStep(
+                orchestrator,
+                `无法准备测试工作区：${task.title}`,
+                { kind: 'error', taskId: task.id }
+              );
+              continue;
+            }
+            const agent = workerAgentForRole('tester');
+            const testerBaseTitle = String(
+              tester.title || `工程师 ${tester.nodeConfig?.engineerIndex || 2}`
+            ).split(' · ')[0];
+            store.updateSessionNode(tester.id, {
+              agentId: agent.id,
+              title: `测试员 · ${task.title}`.slice(0, 120),
+              nodeConfig: {
+                ...(tester.nodeConfig || {}),
+                task: task.title,
+                taskId: task.id,
+                reportId: report.id,
+                reviewTaskIds: [],
+                testTask: true,
+                directories: testDirectories,
+                branches: testBranches,
+                tools: [...(agent.tools || [])],
+              },
+            });
+            agile.updateTask(task.id, {
+              testNodeId: tester.id,
+              testState: 'testing',
+              testAttempts: attempt,
+              claimedBy: tester.id,
+              claimedAt: new Date().toISOString(),
+              reviewState: 'testing',
+              actor: { type: 'agent', id: tester.id },
+            });
+            notify?.({ managerId: manager.id, nodeId: tester.id });
+            const currentTester = store.getSession(tester.id);
+            watchWorkNode(currentTester, report.id);
+            runner.startRun({
+              sessionId: tester.id,
+              text: testPrompt(
+                { ...task, testAttempts: attempt },
+                report?.payload?.goal || 'Mission'
+              ),
+              runId: crypto.randomUUID(),
+              agentConfig: agent,
+              reasoningEffort: store.loadSettings().reasoningEffort,
+            });
+            appendStep(
+              orchestrator,
+              `测试派单：${task.title} → ${testerBaseTitle}`,
+              { kind: 'test', taskId: task.id }
+            );
+          } catch (testError) {
+            console.error('test dispatch failed', testError);
+            try {
+              agile.updateTask(task.id, {
+                testState: 'pending',
+                testNodeId: '',
+                claimedBy: '',
+                actor: { type: 'agent', id: orchestrator.id },
+              });
+            } catch {
+              /* ignore test reset failure */
+            }
+            appendStep(
+              orchestrator,
+              `测试派发失败：${task.title} · ${testError.message}`,
+              { kind: 'error', taskId: task.id }
+            );
+          }
+        }
+      }
+
+      // Lead engineer: review Verified tasks and merge their branches.
       if (!leadBusy && lead) {
         const reviewing = tasks.filter(
           (task) =>
             task.kind !== 'design' &&
-            task.column === 'finished' &&
+            task.column === 'verified' &&
             task.reviewState === 'reviewing'
         );
         if (reviewing.length > 0) {
@@ -1816,7 +2318,7 @@ function createSystemNodeService({
         const finished = tasks.filter(
           (task) =>
             task.kind !== 'design' &&
-            task.column === 'finished' &&
+            task.column === 'verified' &&
             (!task.reviewState ||
               task.reviewState === 'pending' ||
               task.reviewState === 'reviewing')
@@ -1883,6 +2385,51 @@ function createSystemNodeService({
         }
       }
 
+      // Manager: write the final plain-language report after the mission settles.
+      const countsNow = reportCounts(tasks);
+      const terminal =
+        countsNow.total > 0 &&
+        countsNow.merged + countsNow.blocked === countsNow.total;
+      if (terminal && report && !report.payload?.humanReport) {
+        const reportState = String(report.payload?.reportState || '');
+        const startedAt = Number(report.payload?.reportStartedAt) || 0;
+        const stale =
+          reportState === 'writing' &&
+          Date.now() - startedAt > 5 * 60 * 1000;
+        if (
+          (reportState !== 'writing' || stale) &&
+          !runner.activeRunForSession?.(manager.id)
+        ) {
+          try {
+            const agent = getAgent?.('manager');
+            updateNode(report.id, {
+              payload: {
+                ...(report.payload || {}),
+                reportState: 'writing',
+                reportStartedAt: Date.now(),
+              },
+            });
+            runner.startRun({
+              sessionId: manager.id,
+              text: reportPrompt(goal, tasks, report),
+              runId: crypto.randomUUID(),
+              agentConfig: agent,
+              reasoningEffort: store.loadSettings().reasoningEffort,
+            });
+            appendStep(orchestrator, `生成人话报告：${goal}`, {
+              kind: 'report',
+            });
+          } catch (reportError) {
+            console.error('report dispatch failed', reportError);
+            appendStep(
+              orchestrator,
+              `人话报告生成失败：${reportError.message}`,
+              { kind: 'error' }
+            );
+          }
+        }
+      }
+
       // Worker engineers: implement Backlog tasks only.
       const byId = new Map(tasks.map((task) => [task.id, task]));
       const eligible = tasks
@@ -1903,17 +2450,35 @@ function createSystemNodeService({
         appendStep(orchestrator, '工程师都在忙，等待空闲', { kind: 'scan' });
         continue;
       }
-      let workerIndex = 0;
+      const usedWorkers = new Set();
       for (const task of eligible) {
-        if (workerIndex >= idleWorkers.length) {
-          appendStep(
-            orchestrator,
-            `${idleWorkers.length} 个工程师都在忙，等待空闲`,
-            { kind: 'scan' }
-          );
-          break;
+        let engineer = null;
+        if (task.workNodeId) {
+          engineer =
+            idleWorkers.find(
+              (item) => item.id === task.workNodeId && !usedWorkers.has(item.id)
+            ) || null;
+          if (!engineer) {
+            appendStep(
+              orchestrator,
+              `等待原工程师返工：${task.title}`,
+              { kind: 'scan', taskId: task.id }
+            );
+            continue;
+          }
+        } else {
+          engineer =
+            idleWorkers.find((item) => !usedWorkers.has(item.id)) || null;
+          if (!engineer) {
+            appendStep(
+              orchestrator,
+              `${idleWorkers.length} 个工程师都在忙，等待空闲`,
+              { kind: 'scan' }
+            );
+            break;
+          }
         }
-        const engineer = idleWorkers[workerIndex];
+        usedWorkers.add(engineer.id);
         try {
           agile.claimTask(task.id, engineer.id);
           agile.moveTask(task.id, 'progress', {
@@ -1957,7 +2522,6 @@ function createSystemNodeService({
             attempts: (Number(task.attempts) || 0) + 1,
             actor: { type: 'agent', id: engineer.id },
           });
-          workerIndex += 1;
           appendStep(
             orchestrator,
             `派活：${task.title} → ${engineerBaseTitle} → ${roleName}`,
@@ -2220,6 +2784,8 @@ function createSystemNodeService({
     ensureMission,
     refreshReportForBoard,
     submitWorkResult,
+    submitTestResult,
+    writeHumanReport,
     blockTask,
     resumeBlockedTask,
     watchWorkNode,
@@ -2235,6 +2801,9 @@ module.exports = {
   createSystemNodeService,
   DEFAULT_ROLE_MAP,
   taskPrompt,
+  testPrompt,
+  reportPrompt,
   buildReportMarkdown,
+  buildHumanReportMarkdown,
   reportCounts,
 };

@@ -58,6 +58,9 @@ test('specialist workers own a task and can block or finish it', () => {
   assert.ok(!programmer.tools.includes('subagent_start'));
   assert.ok(!programmer.tools.includes('subagent_close'));
   assert.ok(!programmer.tools.includes('question'));
+  const tester = ROLE_SUBAGENTS.find((agent) => agent.id === 'sub-tester');
+  assert.ok(tester.tools.includes('test_report'));
+  assert.ok(!tester.tools.includes('task_finish'));
 });
 
 test('subagent roles mirror the work roles without delegation tools', () => {
@@ -182,7 +185,9 @@ test('the manager profile is fixed and cannot be overridden', () => {
     assert.ok(loaded.tools.includes('iteration_add'));
     assert.ok(loaded.tools.includes('background_list'));
     assert.ok(loaded.tools.includes('background_stop'));
-    assert.equal(loaded.tools.length, 5);
+    assert.equal(loaded.tools.length, 7);
+    assert.ok(loaded.tools.includes('question'));
+    assert.ok(loaded.tools.includes('report_write'));
     assert.ok(!loaded.tools.includes('mission_dispatch'));
     assert.ok(!loaded.tools.includes('worknode_create'));
     assert.ok(!loaded.tools.includes('worknode_close'));

@@ -35,17 +35,24 @@ const COLUMNS = [
   },
   {
     id: 'finished',
-    name: 'Finished',
+    name: 'Testing',
     order: 5,
+    color: '#d69a4a',
+    hint: '工程师已完成，等待测试员验证',
+  },
+  {
+    id: 'verified',
+    name: 'Verified',
+    order: 6,
     color: '#6f9b68',
-    hint: '工程师已完成，等待主工程师检查与合并',
+    hint: '测试通过，等待架构师检查与合并',
   },
   {
     id: 'merged',
     name: 'Merged',
-    order: 6,
+    order: 7,
     color: '#4f8f7a',
-    hint: '主工程师已检查并完成 Git 合并',
+    hint: '架构师已检查并完成 Git 合并',
     done: true,
   },
 ];
@@ -202,6 +209,10 @@ function normalizeTask(raw) {
   const taskId = String(raw.id || id('tsk'));
   const kind = raw.kind === 'design' ? 'design' : 'task';
   const gitBranches = normalizeBranches(raw.gitBranches);
+  const testBranches = normalizeBranches(raw.testBranches);
+  const testVerdict = ['pass', 'fail'].includes(raw.testVerdict)
+    ? raw.testVerdict
+    : '';
   // Tasks finished before engineer branches existed were already treated as
   // done by the old four-column workflow; keep them out of the review queue.
   if (column === 'finished' && kind !== 'design' && gitBranches.length === 0) {
@@ -211,7 +222,7 @@ function normalizeTask(raw) {
     column === 'merged'
       ? 'merged'
       : normalizeReviewState(raw.reviewState) ||
-        (column === 'finished' ? 'pending' : null);
+        (column === 'finished' || column === 'verified' ? 'pending' : null);
   return {
     id: taskId,
     boardId: String(raw.boardId || ''),
@@ -237,6 +248,20 @@ function normalizeTask(raw) {
     result:
       raw.result && typeof raw.result === 'object' ? clone(raw.result) : null,
     gitBranches,
+    testBranches,
+    testPlan: normalizeText(raw.testPlan, 8000),
+    testVerdict,
+    testReport:
+      raw.testReport && typeof raw.testReport === 'object'
+        ? clone(raw.testReport)
+        : null,
+    testState: normalizeText(raw.testState, 20),
+    testNodeId: normalizeText(raw.testNodeId, 120),
+    testedBy: normalizeText(raw.testedBy, 120),
+    testedAt: raw.testedAt ? String(raw.testedAt) : null,
+    testAttempts: Number.isFinite(Number(raw.testAttempts))
+      ? Math.max(0, Number(raw.testAttempts))
+      : 0,
     reviewState,
     reviewLeadId: normalizeText(raw.reviewLeadId, 120),
     reviewStartedAt: raw.reviewStartedAt
@@ -245,7 +270,7 @@ function normalizeTask(raw) {
     reviewNote: normalizeText(raw.reviewNote, 4000),
     finishedAt: raw.finishedAt
       ? String(raw.finishedAt)
-      : column === 'finished' || column === 'merged'
+      : column === 'finished' || column === 'verified' || column === 'merged'
         ? String(raw.updatedAt || nowIso())
         : null,
     mergedAt:
@@ -371,16 +396,18 @@ function createAgileStore(file) {
         {
           id: id('skl'),
           name: 'OpenAgile',
-          description: 'How the Manager, lead engineer, orchestrator and worker nodes use the six-column board.',
+          description: 'How the Manager, architect, orchestrator and worker nodes use the board.',
           content: [
             '# OpenAgile',
             '',
-            '- Six fixed columns: 设计案, Backlog, In Progress, Blocked, Finished, Merged.',
-            '- The Manager writes a rigorous design proposal into 设计案. It does not split implementation tasks.',
-            '- The orchestrator hands the design to the lead engineer (主工程师). The lead grills the user with a questionnaire, then decomposes the design into independent Backlog tasks.',
-            '- The orchestrator assigns Backlog tasks to worker engineers only. Each worker owns a Git worktree branch.',
-            '- Workers call task_finish when done. The task enters Finished and returns to the lead for verification and Git merge.',
-            '- The lead calls task_merge after merging the worker branch; the task enters Merged. The lead can call task_reject to return an incomplete task to Backlog.',
+            '- Fixed columns: 设计案, Backlog, In Progress, Blocked, Testing, Verified, Merged.',
+            '- The Manager asks the user questions, then writes the product design into 设计案. It does not split implementation tasks.',
+            '- The orchestrator hands the design to the architect (主工程师). The architect asks technical questions, publishes the technical architecture, then decomposes the design into Backlog tasks with test plans.',
+            '- The orchestrator assigns Backlog tasks to worker engineers. Each worker owns a Git worktree branch.',
+            '- Workers call task_finish when done. The task enters Testing for independent verification.',
+            '- Testers call test_report. Pass moves the task to Verified; fail returns it to the original engineer for rework.',
+            '- The architect calls task_merge after checking the code and test report; the task enters Merged. The architect can call task_reject to return an incomplete task to Backlog.',
+            '- After the mission settles, the Manager writes a plain-language report with report_write.',
             '- Notes (keyPoints) belong to the human. The human cannot drag cards.',
           ].join('\n'),
           createdAt,
@@ -498,6 +525,7 @@ function createAgileStore(file) {
     const workTasks = tasks.filter((task) => task.kind !== 'design');
     const merged = workTasks.filter((task) => task.column === 'merged').length;
     const finished = workTasks.filter((task) => task.column === 'finished').length;
+    const verified = workTasks.filter((task) => task.column === 'verified').length;
     const design = tasks.filter((task) => task.kind === 'design').length;
     return {
       id: board.id,
@@ -509,6 +537,7 @@ function createAgileStore(file) {
       taskCount: workTasks.length,
       designCount: design,
       finishedCount: finished,
+      verifiedCount: verified,
       mergedCount: merged,
       unfinishedCount: workTasks.length - merged,
       allFinished: workTasks.length > 0 && merged === workTasks.length,
@@ -879,6 +908,37 @@ function createAgileStore(file) {
     if (Array.isArray(patch.gitBranches)) {
       task.gitBranches = normalizeBranches(patch.gitBranches);
     }
+    if (Array.isArray(patch.testBranches)) {
+      task.testBranches = normalizeBranches(patch.testBranches);
+    }
+    if (typeof patch.testPlan === 'string') {
+      task.testPlan = normalizeText(patch.testPlan, 8000);
+    }
+    if (hasPatchField(patch, 'testVerdict')) {
+      task.testVerdict = ['pass', 'fail'].includes(patch.testVerdict)
+        ? patch.testVerdict
+        : '';
+    }
+    if (patch.testReport === null) {
+      task.testReport = null;
+    } else if (patch.testReport && typeof patch.testReport === 'object') {
+      task.testReport = clone(patch.testReport);
+    }
+    if (typeof patch.testState === 'string') {
+      task.testState = normalizeText(patch.testState, 20);
+    }
+    if (typeof patch.testNodeId === 'string') {
+      task.testNodeId = normalizeText(patch.testNodeId, 120);
+    }
+    if (typeof patch.testedBy === 'string') {
+      task.testedBy = normalizeText(patch.testedBy, 120);
+    }
+    if (hasPatchField(patch, 'testedAt')) {
+      task.testedAt = patch.testedAt ? String(patch.testedAt) : null;
+    }
+    if (Number.isFinite(Number(patch.testAttempts))) {
+      task.testAttempts = Math.max(0, Number(patch.testAttempts));
+    }
     if (hasPatchField(patch, 'reviewState')) {
       task.reviewState = normalizeReviewState(patch.reviewState);
     }
@@ -970,6 +1030,7 @@ function createAgileStore(file) {
     if (
       column === 'backlog' ||
       column === 'finished' ||
+      column === 'verified' ||
       column === 'merged'
     ) {
       task.claimedBy = '';
@@ -982,6 +1043,15 @@ function createAgileStore(file) {
       task.reviewLeadId = '';
       task.reviewStartedAt = null;
       task.reviewNote = '';
+      task.testState = 'pending';
+    } else if (column === 'verified') {
+      task.finishedAt = task.finishedAt || task.updatedAt;
+      task.doneDate = task.updatedAt;
+      task.reviewState = 'pending';
+      task.reviewLeadId = '';
+      task.reviewStartedAt = null;
+      task.reviewNote = '';
+      task.testState = 'passed';
     } else if (column === 'merged') {
       task.finishedAt = task.finishedAt || task.updatedAt;
       task.mergedAt = task.updatedAt;
@@ -1056,8 +1126,12 @@ function createAgileStore(file) {
     load();
     const task = taskById(taskId);
     if (!task) throw new Error('Task not found');
-    if (task.column === 'finished' || task.column === 'merged') {
-      throw new Error('Finished or merged tasks cannot be deleted');
+    if (
+      task.column === 'finished' ||
+      task.column === 'verified' ||
+      task.column === 'merged'
+    ) {
+      throw new Error('Finished, verified or merged tasks cannot be deleted');
     }
     const actor = normalizeActor(options.actor);
     if (actor.type !== 'human') assertClaimAvailable(task, actor);

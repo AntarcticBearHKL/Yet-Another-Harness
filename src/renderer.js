@@ -737,8 +737,8 @@ function openManagerComposer(managerId = null) {
             ?.directories || [])]
       : [],
     engineerCount: manager
-      ? Math.max(2, Number(manager.nodeConfig?.engineerCount) || 2)
-      : 2,
+      ? Math.max(3, Number(manager.nodeConfig?.engineerCount) || 3)
+      : 3,
   };
   if (dom.managerComposerError) dom.managerComposerError.hidden = true;
   if (dom.managerComposerTitle) {
@@ -811,10 +811,10 @@ async function createManagerFromComposer() {
   const editingId = managerComposerState.editingId;
   const engineerCount = editingId
     ? Math.max(
-        2,
-        Math.min(12, Math.round(Number(dom.managerEngineerCount?.value) || 2))
+        3,
+        Math.min(12, Math.round(Number(dom.managerEngineerCount?.value) || 3))
       )
-    : 2;
+    : 3;
   if (directories.length === 0) {
     if (dom.managerComposerError) {
       dom.managerComposerError.textContent = '先拖入至少一个文件夹';

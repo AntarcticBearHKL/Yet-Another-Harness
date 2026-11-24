@@ -83,13 +83,16 @@
     ['mission_status', 'agile'],
     ['mission_report', 'agile'],
     ['design_write', 'agile'],
+    ['architecture_write', 'agile'],
     ['backlog_list', 'agile'],
     ['backlog_add', 'agile'],
     ['iteration_add', 'agile'],
     ['task_block', 'agile'],
     ['task_finish', 'agile'],
+    ['test_report', 'agile'],
     ['task_merge', 'agile'],
     ['task_reject', 'agile'],
+    ['report_write', 'agile'],
     ['question', 'view'],
   ]);
 

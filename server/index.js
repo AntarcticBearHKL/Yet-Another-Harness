@@ -209,6 +209,7 @@ const systemNodeService = createSystemNodeService({
     worknodeTools.worknodeClose({ id }, { sessionId: manager.id }),
   ensureWorktree: (manager, session) =>
     worknodeTools.ensureSessionWorktree(manager, session),
+  prepareTestWorktree: gitWorktrees.prepareTestWorktree,
   commitWorktree: gitWorktrees.commitWorktree,
   branchSummary: gitWorktrees.branchSummary,
   getAgent: (agentId) => getAgent(AGENTS_FILE, agentId),
